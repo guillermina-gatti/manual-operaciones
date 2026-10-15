@@ -1,0 +1,17 @@
+{
+  "name": "manual-operaciones",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Manual de operaciones interactivo con asistente de IA",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter api start:dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  }
+}
