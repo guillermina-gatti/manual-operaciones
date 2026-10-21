@@ -43,17 +43,17 @@ Al terminar, un documento cargado queda guardado, asociado a sus áreas y listo 
 - **R1 · Quién carga.** Solo un ADMIN puede cargar documentos. Sin sesión: 401. Con otro rol: 403.
 - **R2 · Tipo de archivo.** Se aceptan PDF, texto plano (`.txt`) y Markdown (`.md`). El tipo se comprueba por el contenido del archivo, no solo por su extensión ni por lo que declare el navegador: un PDF tiene que empezar con `%PDF-`, y un `.txt` o `.md` tiene que ser texto UTF-8 válido, sin bytes nulos. Si no es un tipo aceptado: 415.
 - **R3 · Tamaño.** El archivo pesa como máximo 10 MB. Si pesa más: 413. Un archivo vacío (0 bytes) se rechaza con 400.
-- **R4 · Datos obligatorios.** Título (de 1 a 200 caracteres, sin contar espacios al principio y al final), al menos un área, el responsable y la fecha de revisión. Si falta alguno o es inválido: 400, indicando qué campo falló.
+- **R4 · Datos obligatorios.** Título (de 1 a 200 caracteres, sin contar espacios al principio y al final), al menos un área, el responsable y la fecha de revisión. La descripción es opcional, de hasta 1000 caracteres. Si falta un dato obligatorio o algún dato es inválido: 400, indicando qué campo falló.
 - **R5 · Referencias válidas.** Todas las áreas indicadas tienen que existir. El responsable tiene que ser un usuario existente que pueda ver el documento: que comparta al menos un área con él o que sea ADMIN. Puede tener cualquier rol. Si no se cumple: 400.
-- **R6 · Fecha de revisión.** Tiene que ser posterior a la fecha de carga. Si no: 400.
+- **R6 · Fecha de revisión.** Tiene que ser posterior a la fecha de carga. Se compara por día, en la zona horaria `America/Argentina/Buenos_Aires`: la fecha más temprana válida es mañana. Si no: 400.
 - **R7 · Resultado de una carga correcta.** Se crea el documento en estado `ACTIVE`, con su versión 1 en estado `CURRENT` y el procesamiento en `PENDING`. Se encola el trabajo `process-document` con el `documentVersionId`. Respuesta: 201 con el documento creado.
 - **R8 · Todo o nada.** Si falla cualquier paso de la carga, incluido el encolado del procesamiento, se deshace todo y la respuesta es 503: no queda un documento sin archivo, un archivo sin documento ni una versión que nadie va a procesar. El admin puede volver a intentar la carga.
 - **R8b · Duplicados.** No se puede cargar un archivo cuyo contenido sea idéntico (misma huella SHA-256) al de una versión vigente de un documento `ACTIVE`. Respuesta: 409, indicando el id del documento que ya lo tiene. Si el documento existente está archivado, la carga se permite.
 - **R9 · Nombre del archivo guardado.** El archivo se guarda con un nombre que genera el sistema. El nombre original se conserva solo como dato, para mostrarlo.
-- **R10 · Visibilidad.** Un usuario ve un documento si comparte al menos un área con él. Un ADMIN ve todos.
+- **R10 · Visibilidad.** Un usuario ve un documento si el documento está `ACTIVE` y comparte al menos un área con él. Un ADMIN ve todos, cualquiera sea su estado.
 - **R11 · Recurso ajeno o inexistente.** Pedir el detalle o la descarga de un documento que no existe, o que no es visible para el usuario, devuelve 404 en ambos casos. Así no se revela si el documento existe.
 - **R12 · Descarga.** La descarga devuelve un enlace al archivo que vence a los 5 minutos. El enlace se genera solo después de comprobar R10. Se puede descargar cualquiera sea el estado del procesamiento (`PENDING`, `PROCESSING`, `READY` o `FAILED`): el archivo es válido aunque el asistente todavía no lo use.
-- **R13 · Listado.** Paginado con `?page` y `?limit` (por defecto 1 y 20; máximo 100), ordenado del más nuevo al más viejo. Formato: `{ data, total, page, limit }`.
+- **R13 · Listado.** Paginado con `?page` y `?limit` (por defecto 1 y 20; máximo 100). Si `limit` es mayor a 100, o si `page` o `limit` no son válidos: 400. Ordenado del más nuevo al más viejo. Formato: `{ data, total, page, limit }`.
 - **R14 · Auditoría.** Cada carga queda registrada en la auditoría (quién, qué documento, cuándo, resultado).
 
 ## 7. Estados
@@ -94,6 +94,10 @@ Tomadas en la etapa de aclaración (clarify) el 21/10/2026.
 | P4 · ¿Qué pasa si falla el encolado? | Se deshace toda la carga y se responde 503. | R8 |
 | P5 · ¿Se descarga un documento sin procesar? | Sí, en cualquier estado del procesamiento. | R12 |
 | P6 · ¿Quién puede ser responsable? | Un usuario que pueda ver el documento (comparte un área o es ADMIN), de cualquier rol. | R5 |
+| P7 · ¿Se acepta una descripción? | Sí, opcional y de hasta 1000 caracteres. Tomada en el plan. | R4 |
+| P8 · ¿Cómo se compara la fecha de revisión con la de carga? | Por día, en `America/Argentina/Buenos_Aires`: tiene que ser al menos mañana. Tomada en el plan. | R6 |
+| P9 · ¿Quien no es ADMIN ve documentos archivados? | No: solo ve documentos `ACTIVE`. Tomada en el plan. | R10 |
+| P10 · ¿Qué pasa si `limit` es mayor a 100? | Se responde 400, no se ajusta. Tomada en el plan. | R13 |
 
 Para avisar a Guille: P1 (su procesamiento tiene que leer también `.md`) y P4 (no hace falta recuperar versiones que quedaron sin encolar).
 
