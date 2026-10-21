@@ -5,7 +5,7 @@
 - **Responsable:** Matías Fauda (pareja C)
 - **Estado:** listo para implementar. Las decisiones están en la sección 9 y lo que depende de otras personas, en la sección 10.
 
-En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D9 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
+En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D10 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
 
 ## 0. Punto de partida
 
@@ -45,7 +45,8 @@ src/
     ├── document-query.service.ts    listado, detalle y descarga (R10 a R13)
     ├── document-access.policy.ts    reglas puras de visibilidad (R5 y R10)
     ├── file-inspector.ts            reglas puras del archivo (R2 y R3) y SHA-256
-    ├── documents.repository.ts      todo el acceso a Prisma de documentos (usa el PrismaService compartido)
+    ├── documents.repository.ts      puerto: acceso a datos de documentos y runInTransaction (D10)
+    ├── prisma-documents.repository.ts implementación con Prisma (usa el PrismaService compartido; bloqueada, ver 5.6)
     ├── dto/                         create-document.dto, list-documents.query, document.response, ...
     ├── ports/                       processing-queue, areas-directory, users-directory, audit-log
     └── adapters/                    implementaciones simuladas (y después las reales) de los puertos
@@ -54,15 +55,15 @@ src/
 | Pieza | Responsabilidad |
 | --- | --- |
 | `DocumentsController` | Rutas, Swagger, `@Roles('ADMIN')` en la carga, `FileInterceptor('file')` con límites, `ParseUUIDPipe`. Llama a un método de servicio y devuelve su resultado. |
-| `DocumentUploadService` | Ejecuta la carga en el orden de la sección 4: inspecciona el archivo, valida referencias y fecha, revisa duplicados, guarda en el almacenamiento, abre la transacción, encola y compensa si algo falla. Registra la auditoría. |
+| `DocumentUploadService` | Ejecuta la carga en el orden de la sección 4: inspecciona el archivo, valida referencias y fecha, revisa duplicados, guarda en el almacenamiento, abre la transacción con `DocumentsRepository.runInTransaction`, encola y compensa si algo falla. Registra la auditoría. |
 | `DocumentQueryService` | Listado paginado, detalle y URL de descarga. Siempre filtra por visibilidad antes de devolver algo. |
 | `DocumentAccessPolicy` | Funciones puras: `canView(user, documentAreaIds)`, el `where` de Prisma para el listado según el usuario y `canBeOwner(owner, areaIds)` para R5. |
 | `FileInspector` | Funciones puras: recibe `buffer` y `originalname`, devuelve `{ kind: 'pdf' \| 'txt' \| 'md', mimeType, extension, sizeBytes, checksum }` o lanza 400 o 415. |
-| `DocumentsRepository` | `findActiveByChecksum`, `createWithFirstVersion(tx, ...)`, `list(where, page, limit)` y `findByIdWithAreas`. |
+| `DocumentsRepository` (puerto) y `PrismaDocumentsRepository` | Clase abstracta (D10) con `runInTransaction(fn)`, `findActiveByChecksum`, `createWithFirstVersion(tx, ...)`, `list(where, page, limit)` y `findByIdWithAreas`. `runInTransaction` envuelve el `prisma.$transaction` con timeout corto del paso 5 (sección 4), así los servicios no dependen de Prisma. `PrismaDocumentsRepository` la implementa con el `PrismaService` compartido y queda bloqueada hasta que exista (5.6). |
 | `FileStorage` (puerto) y `S3FileStorage` | `put(key, buffer, contentType, checksum)`, `delete(key)` y `getDownloadUrl(key, fileName)`, que vence a los 300 s. |
 | Puertos externos | `ProcessingQueue`, `AreasDirectory`, `UsersDirectory` y `AuditLog`. Se definen en la sección 5. |
 
-`DocumentsModule` importa `StorageModule` y define con qué implementación se resuelve cada puerto. Es el **único lugar** que cambia cuando lleguen las implementaciones reales.
+`DocumentsModule` importa `StorageModule` y define con qué implementación se resuelve cada puerto, incluido `DocumentsRepository`. Es el **único lugar** que cambia cuando lleguen las implementaciones reales.
 
 ## 2. Modelo de datos
 
@@ -216,7 +217,7 @@ Los guards de Nest corren **antes** que los interceptores. Por eso el 401 y el 4
 | 3e | `UsersDirectory.findById(ownerId)`: el usuario tiene que existir y además ser ADMIN o compartir al menos un área (R5) | 400 |
 | 3f | Chequeo de duplicados: `findActiveByChecksum(checksum)` busca una versión `CURRENT` cuyo documento esté `ACTIVE` (R8b) | 409, con `existingDocumentId` |
 | 4 | Se generan `documentId` y `versionId` con `crypto.randomUUID()`, la clave `documents/{documentId}/{versionId}.{ext}` (R9), y se hace `FileStorage.put` | 503. No hay nada que deshacer |
-| 5 | Se abre `prisma.$transaction(async tx => …)`, con un timeout corto | |
+| 5 | Se abre `DocumentsRepository.runInTransaction(async tx => …)`, que usa `prisma.$transaction` con un timeout corto (D10) | |
 | 5a | Se insertan `documents`, `document_areas` y `document_versions` (R7) | 503: rollback y `FileStorage.delete(key)` |
 | 5b | `AuditLog.record({ action: 'DOCUMENT_UPLOAD', actorId, documentId, result: 'SUCCESS', at }, tx)` (R14) | 503: rollback y `delete` |
 | 5c | `ProcessingQueue.enqueue(versionId)`, el **último paso dentro de la transacción**, con timeout (R7) | 503: rollback y `delete` |
@@ -276,6 +277,15 @@ Sus tablas son de otra pareja; con ellas nos relacionamos solo por ID.
 ### 5.5 Almacenamiento
 
 `FileStorage` tiene dos implementaciones: `S3FileStorage`, la real, e `InMemoryFileStorage`, para los tests y para desarrollar sin AWS. `StorageModule` elige `S3FileStorage` si está definida `S3_DOCUMENTS_BUCKET`. Si no está, en desarrollo usa la de memoria y avisa por el log; en producción falla al arrancar.
+
+### 5.6 Repositorio de documentos
+
+El `PrismaService` compartido todavía no existe (D7), y sin él no se puede escribir un repositorio concreto. Para no bloquear los servicios, el repositorio también es un puerto (D10).
+
+- Puerto: `abstract class DocumentsRepository` con `runInTransaction(fn)`, `findActiveByChecksum(checksum)`, `createWithFirstVersion(tx, data)`, `list(where, page, limit)` y `findByIdWithAreas(id)`. El `tx` que recibe `fn` es opaco para los servicios: solo lo pasan a `createWithFirstVersion` y a `AuditLog.record`.
+- Ahora: no hay simulación en memoria. Los tests unitarios de `DocumentUploadService` y `DocumentQueryService` lo reemplazan con `jest.fn()`.
+- **Bloqueado:** `PrismaDocumentsRepository`, la implementación con el `PrismaService` compartido, y por lo tanto el cableado de `DocumentsModule` y los tests de integración, hasta que exista `PrismaService`.
+- **Reemplazo:** cuando exista `PrismaService`, se agrega `PrismaDocumentsRepository` y en `DocumentsModule` se declara `{ provide: DocumentsRepository, useClass: PrismaDocumentsRepository }`. Los servicios no cambian.
 
 ## 6. Almacenamiento en S3
 
@@ -355,6 +365,7 @@ Tomadas en la revisión del plan el 21/10/2026.
 | D7 · `PrismaService`, el prefijo `/api`, `ValidationPipe` y Swagger | Son de otra pareja y el plan asume que existen. Si al implementar no existen, se crean en una tarea separada y se avisa al equipo | — |
 | D8 · Nombres de archivo con tildes (multer puede leer `originalname` como latin1) | Se cubre con un test. Si pasa, se usa la opción `defParamCharset: 'utf8'` de multer o se convierte el nombre de latin1 a UTF-8 antes de guardarlo | R9 |
 | D9 · Simplificaciones del MVP | Sin advisory lock ni test de concurrencia para duplicados; sin CHECK en la base; el índice de una sola versión `CURRENT` queda para HU16; `S3FileStorage` se verifica a mano | R8b, R7 |
+| D10 · ¿Cómo se escriben y prueban los servicios si todavía no existe `PrismaService`? | `DocumentsRepository` pasa a ser un puerto (clase abstracta) con `runInTransaction(fn)`, y los servicios se prueban con mocks. La implementación con Prisma (`PrismaDocumentsRepository`) queda bloqueada hasta que exista `PrismaService` (5.6). Tomada al dividir las tareas | R7, R8, R8b, R13 |
 
 ## 10. Preguntas abiertas
 
