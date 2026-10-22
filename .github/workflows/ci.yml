@@ -26,7 +26,7 @@ jobs:
         run: pnpm --filter api lint
 
       - name: Test API
-        run: pnpm --filter api test -- --runInBand
+        run: pnpm --filter api test
 
       - name: Build API
         run: pnpm --filter api build
