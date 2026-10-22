@@ -7,7 +7,7 @@
 Convenciones:
 
 - Una tarea = un commit. Las rutas son relativas a `apps/api/`.
-- R1 a R14 son reglas de la spec; D1 a D11, decisiones del plan; M1 a M11, correcciones del modelo (plan 2.4).
+- R1 a R14 son reglas de la spec; D1 a D12, decisiones del plan; M1 a M11, correcciones del modelo (plan 2.4).
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - Tests unitarios: `pnpm --filter api test <patrón>`. Tests de integración: `pnpm --filter api test:e2e <patrón>`.
 
@@ -188,10 +188,10 @@ Estas tareas necesitan piezas compartidas que hoy no existen en `apps/api` (`mai
 ### T18 · BLOQUEADA · `PrismaDocumentsRepository`
 
 - **Motivo del bloqueo:** se inyecta el `PrismaService` compartido, que no existe.
-- **Qué hace:** implementa el contrato de T11 con Prisma: `findActiveByChecksum` (versión `CURRENT` de un documento `ACTIVE`), `runInTransaction` (`$transaction` con timeout corto), `createWithFirstVersion` (documento, áreas y versión en el `tx`), `list` (`findMany` + `count` en un `$transaction`, orden `createdAt desc, id desc`) y `findByIdWithAreas`.
+- **Qué hace:** implementa el contrato de T11 con Prisma: `findActiveByChecksum` (versión `CURRENT` de un documento `ACTIVE`), `runInTransaction` (`$transaction` con timeout corto), `createWithFirstVersion` (documento, áreas y versión en el `tx`), `list` (`findMany` + `count` en un `$transaction`, orden `createdAt desc, id desc`) y `findByIdWithAreas`. Traduce los fallos de conexión y de timeout de Prisma (también el timeout de la transacción) a `RepositoryUnavailableError`; los demás errores no se traducen.
 - **Cubre:** R7, R8b (con archivados permitidos), R13 (orden y total), plan 2.3 y 3.2.
 - **Archivos:** `src/documents/prisma-documents.repository.ts`, `test/documents/documents.repository.e2e-spec.ts`.
-- **Verificación (test primero):** contra la base de tests (`DATABASE_URL` de tests y `prisma migrate reset --force` antes de la suite): `createWithFirstVersion` deja las filas de plan 2.3; `findActiveByChecksum` encuentra un `ACTIVE` y devuelve `null` si está `ARCHIVED`; `list` ordena del más nuevo al más viejo, desempata por `id` y `total` respeta el `where`; un error dentro de `runInTransaction` no deja filas. `pnpm --filter api test:e2e documents.repository`.
+- **Verificación (test primero):** contra la base de tests (`DATABASE_URL` de tests y `prisma migrate reset --force` antes de la suite): `createWithFirstVersion` deja las filas de plan 2.3; `findActiveByChecksum` encuentra un `ACTIVE` y devuelve `null` si está `ARCHIVED`; `list` ordena del más nuevo al más viejo, desempata por `id` y `total` respeta el `where`; un error dentro de `runInTransaction` no deja filas; una transacción que supera el timeout rechaza con `RepositoryUnavailableError`, y un error que no es de conexión ni de timeout (por ejemplo, una violación de unicidad) se propaga sin traducir. `pnpm --filter api test:e2e documents.repository`.
 - **Depende de:** T02, T11; `PrismaService`.
 - **Commit:** `feat(documents): agregar repositorio de documentos con Prisma`
 

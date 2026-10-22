@@ -5,7 +5,7 @@
 - **Responsable:** Matías Fauda (pareja C)
 - **Estado:** listo para implementar. Las decisiones están en la sección 9 y lo que depende de otras personas, en la sección 10.
 
-En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D11 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
+En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D12 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
 
 ## 0. Punto de partida
 
@@ -232,7 +232,7 @@ Los guards de Nest corren **antes** que los interceptores. Por eso el 401 y el 4
 
 **Auditoría de los fallos (R14).** Cuando la carga falla después de llegar al servicio (pasos 3 a 6), se registra `result: 'FAILURE'` con el motivo (código HTTP), **fuera** de la transacción y después del rollback, como mejor esfuerzo. Los 401, 403 y 413 no llegan al servicio; quién los audita depende de A1.
 
-**Mapeo de errores.** `FileStorage` y `ProcessingQueue` traducen sus errores técnicos a `StorageUnavailableError` y `QueueUnavailableError`. Esos errores, y los de Prisma de conexión o timeout, se convierten en `ServiceUnavailableException` (503). Las reglas de negocio lanzan directamente las excepciones de Nest (`BadRequestException`, `UnsupportedMediaTypeException`, `ConflictException`).
+**Mapeo de errores.** `FileStorage` y `ProcessingQueue` traducen sus errores técnicos a `StorageUnavailableError` y `QueueUnavailableError`. Esos errores, y `RepositoryUnavailableError`, al que el repositorio traduce los fallos de conexión o timeout de Prisma, se convierten en `ServiceUnavailableException` (503). Cualquier otro error inesperado responde 500 con un mensaje genérico; en los dos casos se compensa con `delete`, se audita `FAILURE` con el código y la causa va al log. Las reglas de negocio lanzan directamente las excepciones de Nest (`BadRequestException`, `UnsupportedMediaTypeException`, `ConflictException`).
 
 ## 5. Qué se simula y cómo se reemplaza
 
@@ -367,6 +367,7 @@ Tomadas en la revisión del plan el 21/10/2026.
 | D9 · Simplificaciones del MVP | Sin advisory lock ni test de concurrencia para duplicados; sin CHECK en la base; el índice de una sola versión `CURRENT` queda para HU16; `S3FileStorage` se verifica a mano | R8b, R7 |
 | D10 · ¿Cómo se escriben y prueban los servicios si todavía no existe `PrismaService`? | `DocumentsRepository` pasa a ser un puerto (clase abstracta) con `runInTransaction(fn)`, y los servicios se prueban con mocks. La implementación con Prisma (`PrismaDocumentsRepository`) queda bloqueada hasta que exista `PrismaService` (5.6). Tomada al dividir las tareas | R7, R8, R8b, R13 |
 | D11 · ¿Qué variable de entorno indica el bucket? El plan proponía `S3_DOCUMENTS_BUCKET`, pero `.env.example` ya tenía `S3_BUCKET` | Se reutiliza `S3_BUCKET`, sin agregar una variable nueva: es el mismo bucket privado que lee el worker de Guille, y nuestros objetos ya se separan por el prefijo `documents/` (sección 6). Dos nombres para el mismo bucket se desincronizarían. Tomada al implementar T07 | R9, R12 |
+| D12 · ¿Quién pone el timeout del encolado (paso 5c)? | El adaptador real de la cola, el de Guille (`ProcessingServiceQueueAdapter`, 5.2), no `DocumentUploadService`. El límite general lo da el timeout corto de `runInTransaction` (D10, T18). Si el encolado vence, el adaptador lanza `QueueUnavailableError`, así la carga responde 503 y se deshace todo. Se suma a A3. Tomada al implementar T15 | R7, R8 |
 
 ## 10. Preguntas abiertas
 
@@ -374,6 +375,6 @@ Dependen de otras personas.
 
 | # | Pregunta | Con quién | Propuesta |
 | --- | --- | --- | --- |
-| A1 | ¿Quién es dueño de la auditoría (R14)? ¿Va a haber una tabla `audit_logs` común? ¿Se auditan también los 401, 403 y 413? | Equipo | Que la defina la pareja de seguridad o administración como servicio común. Mientras tanto usamos el puerto `AuditLog` con `LoggerAuditLog`. Si nadie la toma, la agregamos nosotros (`actorId`, `action`, `entityId`, `result`, `detail`, `createdAt`). Los 401, 403 y 413 los audita, si hace falta, un interceptor global, no esta feature |
+| A1 | ¿Quién es dueño de la auditoría (R14)? ¿Va a haber una tabla `audit_logs` común? ¿Se auditan también los 401, 403 y 413? | Equipo | Que la defina la pareja de seguridad o administración como servicio común. Mientras tanto usamos el puerto `AuditLog` con `LoggerAuditLog`. Si nadie la toma, la agregamos nosotros (`actorId`, `action`, `entityId`, `result`, `detail`, `createdAt`). Los 401, 403 y 413 los audita, si hace falta, un interceptor global, no esta feature. Nota: la implementación real de `AuditLog` tiene que traducir sus fallos de base a `RepositoryUnavailableError` (o a un error propio equivalente que la carga reconozca) para responder 503; si no, un fallo de la auditoría responde 500 |
 | A2 | ¿`Chunk` entra en nuestra migración? | Guille | No: lo agrega Guille en su migración cuando defina la dimensión del vector (M8), junto con `CREATE EXTENSION`, HNSW y FTS. Ahí se agrega también `chunks Chunk[]` en `DocumentVersion` |
-| A3 | El worker tiene que soportar un trabajo cuya versión no existe (sección 4) | Guille | Usar `jobId = documentVersionId`, así encolar dos veces lo mismo no crea dos trabajos. Si no encuentra la versión, que reintente con backoff y después descarte el trabajo sin error. Se avisa junto con los puntos spec P1 y spec P4 |
+| A3 | El worker tiene que soportar un trabajo cuya versión no existe (sección 4) | Guille | Usar `jobId = documentVersionId`, así encolar dos veces lo mismo no crea dos trabajos. Si no encuentra la versión, que reintente con backoff y después descarte el trabajo sin error. Además (D12): el adaptador de la cola tiene que tener un timeout propio y traducir el vencimiento a `QueueUnavailableError`; si el encolado vence pero el trabajo igual llega a la cola, es este mismo caso de una versión que no existe. Se avisa junto con los puntos spec P1 y spec P4 |
