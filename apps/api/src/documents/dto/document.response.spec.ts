@@ -1,3 +1,4 @@
+//El archivo de pruebas para asegurar que el objeto de respuesta cumpla con la estructura esperada
 import type { DocumentRecord } from '../documents.repository';
 import { toDocumentResponse, toDocumentSummary } from './document.response';
 

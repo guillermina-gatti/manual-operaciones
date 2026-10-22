@@ -25,16 +25,16 @@ import { UsersDirectory } from './ports/users-directory';
 const DEFAULT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
 const MAX_ORIGINAL_FILE_NAME_LENGTH = 255;
 
-// Cuenta caracteres, no unidades UTF-16: no parte un emoji ni una letra con tilde compuesta.
+// Recorta nombres largos de archivos sin romper caracteres especiales (como emojis o tildes)
 const truncate = (text: string, maxLength: number) =>
   Array.from(text).slice(0, maxLength).join('');
 
-// Orquesta la carga en el orden del plan 4: valida sin escribir nada (3b a 3f) y después escribe todo o nada (4 a 7).
+// Servicio que orquesta todo el flujo de subida de documentos
 @Injectable()
 export class DocumentUploadService {
   private readonly logger = new Logger(DocumentUploadService.name);
 
-  // Se crea al construir el servicio: una APP_TIMEZONE inválida falla al arrancar (D1).
+  // Formateador de fecha configurado con la zona horaria del sistema
   private readonly todayFormat = new Intl.DateTimeFormat('en-US', {
     timeZone: process.env.APP_TIMEZONE || DEFAULT_TIME_ZONE,
     year: 'numeric',
@@ -42,6 +42,7 @@ export class DocumentUploadService {
     day: '2-digit',
   });
 
+  // Inyección de todas las dependencias necesarias (puertos y repositorios)
   constructor(
     private readonly areas: AreasDirectory,
     private readonly users: UsersDirectory,
@@ -51,36 +52,43 @@ export class DocumentUploadService {
     private readonly audit: AuditLog,
   ) {}
 
+  // Método principal que ejecuta el proceso completo de carga
   async upload(
     file: UploadedFileInput | undefined,
     dto: CreateDocumentDto,
     actor: AuthUser,
   ): Promise<DocumentResponse> {
     try {
+      // 1. Valida todo primero sin guardar nada
       const inspected = await this.validateBeforeWriting(file, dto);
-      // inspectFile ya rechazó un archivo ausente.
       const uploaded = file as UploadedFileInput;
+
+      // 2. Procede a escribir en almacenamiento y base de datos
       const record = await this.write(uploaded, inspected, dto, actor);
+
+      // 3. Devuelve la respuesta formateada
       return toDocumentResponse(record);
     } catch (error) {
       const failure = toHttpException(error, this.logger, 'carga');
-      // Fuera de la transacción y después del rollback y del delete (plan 4, R14).
+      // Registra el fallo en la auditoría si la carga fracasó
       await this.auditFailure(actor, failure.getStatus());
       throw failure;
     }
   }
 
-  // Pasos 4 a 6: todo o nada (R7, R8).
+  // Realiza los pasos de escritura garantizando "todo o nada"
   private async write(
     file: UploadedFileInput,
     inspected: InspectedFile,
     dto: CreateDocumentDto,
     actor: AuthUser,
   ): Promise<DocumentRecord> {
-    // 4: ids y clave los genera el sistema; el nombre original no se usa en la ruta (R9).
+    // Genera identificadores únicos y la ruta dentro del almacenamiento
     const documentId = randomUUID();
     const versionId = randomUUID();
     const key = `documents/${documentId}/${versionId}.${inspected.extension}`;
+
+    // Sube el archivo binario a S3 o memoria
     await this.storage.put(
       key,
       file.buffer,
@@ -90,15 +98,15 @@ export class DocumentUploadService {
 
     let committed = false;
     try {
-      // 5: si cualquier paso lanza, runInTransaction hace rollback.
+      // Abre transacción en la base de datos: si algo falla adentro, todo se revierte
       const record = await this.documents.runInTransaction(async (tx) => {
+        // Guarda el documento y su primera versión
         const created = await this.documents.createWithFirstVersion(tx, {
           id: documentId,
           title: dto.title,
           description: dto.description ?? null,
           areaIds: dto.areaIds,
           ownerId: dto.ownerId,
-          // Medianoche UTC, como Prisma representa las columnas @db.Date.
           reviewDate: new Date(`${dto.reviewDate}T00:00:00.000Z`),
           createdById: actor.id,
           version: {
@@ -113,7 +121,9 @@ export class DocumentUploadService {
             checksum: inspected.checksum,
             uploadedById: actor.id,
           },
-        }); // 5a
+        });
+
+        // Registra el éxito en la auditoría (dentro de la misma transacción)
         await this.audit.record(
           {
             action: 'DOCUMENT_UPLOAD',
@@ -123,19 +133,22 @@ export class DocumentUploadService {
             at: new Date(),
           },
           tx,
-        ); // 5b: se deshace con la transacción
-        // 5c: lo último, porque un aviso enviado no se puede retirar.
+        );
+
+        // Envía el evento a la cola de procesamiento en segundo plano
         await this.queue.enqueue(versionId);
         return created;
-      }); // 6: commit
-      committed = true;
+      });
+
+      committed = true; // Confirmado con éxito
       return record;
     } finally {
-      // Cualquier error entre el put y el commit deja un archivo sin documento: se borra.
+      // Si la transacción falló antes de confirmarse, elimina el archivo del almacenamiento para no dejar basura
       if (!committed) await this.deleteUploadedFile(key, documentId);
     }
   }
 
+  // Método auxiliar para eliminar archivos en caso de rollback
   private async deleteUploadedFile(
     key: string,
     documentId: string,
@@ -143,7 +156,6 @@ export class DocumentUploadService {
     try {
       await this.storage.delete(key);
     } catch (error) {
-      // Único residuo posible: un objeto que nadie puede ver ni descargar. Se limpia a mano.
       this.logger.error({
         message: 'No se pudo borrar el archivo de una carga fallida',
         key,
@@ -153,7 +165,7 @@ export class DocumentUploadService {
     }
   }
 
-  // Mejor esfuerzo: si la auditoría del fallo también falla, se responde con el error original.
+  // Registra el intento fallido en la auditoría (mejor esfuerzo)
   private async auditFailure(actor: AuthUser, status: number): Promise<void> {
     try {
       await this.audit.record({
@@ -173,20 +185,20 @@ export class DocumentUploadService {
     }
   }
 
+  // Agrupa todas las validaciones previas antes de tocar la base de datos o almacenamiento
   private async validateBeforeWriting(
     file: UploadedFileInput | undefined,
     dto: CreateDocumentDto,
   ): Promise<InspectedFile> {
-    const inspected = inspectFile(file); // 3b: 400 o 415 (R2, R3)
-    this.assertReviewDateIsAfterToday(dto.reviewDate); // 3c (R6, D1)
-    await this.assertAreasExist(dto.areaIds); // 3d (R5)
-    await this.assertOwnerCanSeeDocument(dto.ownerId, dto.areaIds); // 3e (R5)
-    await this.assertNotDuplicated(inspected.checksum); // 3f (R8b)
+    const inspected = inspectFile(file); // Valida formato y contenido binario
+    this.assertReviewDateIsAfterToday(dto.reviewDate); // Valida fecha
+    await this.assertAreasExist(dto.areaIds); // Valida que las áreas existan
+    await this.assertOwnerCanSeeDocument(dto.ownerId, dto.areaIds); // Valida que el responsable pertenezca al área
+    await this.assertNotDuplicated(inspected.checksum); // Valida que no esté repetido
     return inspected;
   }
 
-  // R6: posterior a la fecha de carga, por día y en la zona horaria de la empresa.
-  // Las dos fechas son YYYY-MM-DD, así que alcanza con comparar los textos.
+  // Comprueba que la fecha de revisión no sea hoy ni una fecha pasada
   private assertReviewDateIsAfterToday(reviewDate: string): void {
     const today = this.today();
     if (reviewDate <= today) {
@@ -196,6 +208,7 @@ export class DocumentUploadService {
     }
   }
 
+  // Obtiene la fecha actual formateada en YYYY-MM-DD
   private today(): string {
     const parts = Object.fromEntries(
       this.todayFormat
@@ -205,6 +218,7 @@ export class DocumentUploadService {
     return `${parts.year}-${parts.month}-${parts.day}`;
   }
 
+  // Valida que las áreas indicadas existan en el sistema
   private async assertAreasExist(areaIds: string[]): Promise<void> {
     const existing = new Set(await this.areas.findExistingIds(areaIds));
     const missing = areaIds.filter((id) => !existing.has(id));
@@ -215,7 +229,7 @@ export class DocumentUploadService {
     }
   }
 
-  // El responsable puede tener cualquier rol, pero tiene que poder ver el documento.
+  // Valida que el responsable exista y tenga acceso a las áreas del documento
   private async assertOwnerCanSeeDocument(
     ownerId: string,
     areaIds: string[],
@@ -231,6 +245,7 @@ export class DocumentUploadService {
     }
   }
 
+  // Valida que no exista otro documento activo con el mismo contenido (checksum)
   private async assertNotDuplicated(checksum: string): Promise<void> {
     const duplicate = await this.documents.findActiveByChecksum(checksum);
     if (duplicate) {
