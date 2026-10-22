@@ -5,7 +5,7 @@ persona ve solo los procedimientos de su área, los recorre paso a paso y puede
 consultar a un asistente de IA que responde usando únicamente los manuales
 internos, citando de qué documento sacó la información.
 
-> Proyecto final del curso [nombre del curso] · Equipo de 6 integrantes.
+> Proyecto final del curso IntegrarTec · Equipo de 6 integrantes.
 
 ## Qué hace
 
@@ -30,32 +30,41 @@ internos, citando de qué documento sacó la información.
 
 ## Estructura
 
-\`\`\`
+```
 apps/
   api/   # NestJS
   web/   # Next.js
-\`\`\`
+docs/    # justificación de herramientas y uso de IA
+specs/   # especificaciones de cada funcionalidad
+```
 
 ## Cómo correrlo localmente
 
 Requisitos: Node 24, pnpm, Git y Docker Desktop (abierto).
 
-\`\`\`bash
+```bash
 git clone https://github.com/guillermina-gatti/manual-operaciones.git
 cd manual-operaciones
 pnpm install
 cp .env.example .env      # en PowerShell: Copy-Item .env.example .env
-docker compose up -d      # levanta Postgres con pgvector
-\`\`\`
+docker compose up -d      # levanta los servicios de datos (Postgres con pgvector)
+```
 
 En dos terminales distintas:
 
-\`\`\`bash
+```bash
 pnpm dev:api                    # http://localhost:3000
 pnpm --filter web dev -p 3001   # http://localhost:3001
-\`\`\`
+```
 
 Tests: `pnpm --filter api test` y `pnpm --filter api test:e2e`.
+
+## Documentación
+
+- [Justificación de herramientas](./docs/justificacion.md): qué usamos, por qué y qué alternativas evaluamos.
+- [Uso de IA](./docs/uso-de-ia.md): cómo usamos la IA en el desarrollo y qué hace la del producto.
+- [Especificaciones](./specs/): qué se construye en cada funcionalidad y cómo.
+- Documentación de la API: Swagger en `/api/docs` con el backend corriendo.
 
 ## Cómo trabajamos
 
@@ -63,17 +72,20 @@ Tests: `pnpm --filter api test` y `pnpm --filter api test:e2e`.
 - Cada tarea va en una rama que sale de `develop` (`feat/...`, `fix/...`,
   `docs/...`) y vuelve por pull request con 1 aprobación y el CI en verde.
 - Commits con prefijo: `feat:`, `fix:`, `docs:`, `chore:`, `test:`.
+- Los pull requests los revisa alguien de otra pareja, para que todos conozcan el sistema completo.
 
 ## Equipo
 
-| Integrante | Área |
-|---|---|
-| [Nombre] | Autenticación, usuarios y CI |
-| [Nombre] | Autenticación, usuarios y CI |
-| [Nombre] | Procedimientos y frontend |
-| [Nombre] | Procedimientos y frontend |
-| [Nombre] | Documentos y asistente de IA |
-| [Nombre] | Documentos y asistente de IA |
+Tres parejas, cada una dueña de un área del sistema.
+
+| Integrante | GitHub | Área |
+|---|---|---|
+| Magali Aldana Suarez | [@Nat-magui](https://github.com/Nat-magui) | Autenticación, usuarios y CI |
+| Camila Ferro | [@camilamfrr](https://github.com/camilamfrr) | Autenticación, usuarios y CI |
+| Micaela Franco | [@MicaelaFranco](https://github.com/MicaelaFranco) | Procedimientos y frontend |
+| Mayra Limachi | [@maylimachi](https://github.com/maylimachi) | Procedimientos y frontend |
+| Matías Fauda | [@matiasfauda23](https://github.com/matiasfauda23) | Documentos y asistente de IA |
+| Guillermina Gatti | [@guillermina-gatti](https://github.com/guillermina-gatti) | Documentos y asistente de IA |
 
 ## Licencia
 
