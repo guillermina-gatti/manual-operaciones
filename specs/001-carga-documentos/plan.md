@@ -14,7 +14,7 @@ Estado actual de `apps/api`:
 - NestJS 12 recién generado: solo `AppModule`, `AppController` y `AppService`.
 - Prisma 7: generador `prisma-client` con salida en `src/generated/prisma` y `moduleFormat = "cjs"`. El `datasource` no tiene `url`, porque la URL sale de `prisma.config.ts` (`DATABASE_URL`). Todavía no hay modelos ni migraciones.
 - Ya están instaladas, entre otras: `@aws-sdk/client-s3`, `@nestjs/config`, `@nestjs/swagger`, `@prisma/adapter-pg`, `class-validator`, `class-transformer` y `@nestjs/platform-express` (trae `multer`).
-- No hay BullMQ ni Redis: son de Guille (HU14). `docker-compose.yml` solo levanta `pgvector/pgvector:pg16`.
+- BullMQ y Redis son de Guille (HU14). Redis ya está en `docker-compose.yml` (`redis:7-alpine`, junto a `pgvector/pgvector:pg16`): lo agregó Guille en C-01.
 - Tests: Jest y `ts-jest`. Los unitarios son `src/**/*.spec.ts` y los de integración, `test/**/*.e2e-spec.ts` (`pnpm --filter api test:e2e`).
 
 **Lo que el plan da por hecho (lo entrega otra pareja, D7):**
@@ -131,7 +131,7 @@ El fragmento se evaluó como si estuviera dentro de `schema.prisma`. Los tipos n
 | M5 | No hay ningún modelo de auditoría | R14 | Puerto `AuditLog`; el dueño queda abierto (A1) |
 | M6 | `storageKey` no es único | R9 | Agregar `@unique` |
 | M7 | `description` no aparece en la spec | — | Se mantiene opcional, de hasta 1000 caracteres (D4) |
-| M8 | La dimensión del vector no está decidida: el comentario y `@ai-sdk/amazon-bedrock` apuntan a Titan (1024), pero `docs/justificacion.md` dice Gemini (768) | — | Es de Guille. Bloquea la migración de `Chunk` (A2) |
+| M8 | La dimensión del vector no está decidida. El proveedor es Gemini, que por defecto devuelve 3072 dimensiones, y el índice HNSW de pgvector admite hasta 2000 | — | Se propone `outputDimensionality` 768, a confirmar con Guille (A2). Bloquea la migración de `Chunk` |
 | M9 | El comentario de `ARCHIVED` dice que "no se muestra a empleados", pero R10 solo habla de áreas | R10 | Quienes no son ADMIN solo ven documentos `ACTIVE` (D2) |
 | M10 | Las fechas se guardan como `timestamp(3)` sin zona horaria | — | Usar `@db.Timestamptz(3)` en `createdAt`, `updatedAt`, `archivedAt` y `processedAt`, para no depender de la zona horaria del servidor |
 | M11 | Sobre `Chunk`: "la carga actualiza `areaIds` e `isActive`". Al cargar todavía no hay fragmentos | — | No aplica en HU13. Queda para HU15 (cambiar áreas) y HU16 |
