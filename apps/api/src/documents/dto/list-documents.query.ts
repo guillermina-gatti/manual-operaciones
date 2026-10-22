@@ -1,3 +1,5 @@
+/*Define los parámetros de filtrado, paginación o búsqueda cuando alguien quiere listar o buscar documentos
+(lo que usualmente viaja en la URL como Query Parameters, ej: ?status=ACTIVE&page=1). */
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';

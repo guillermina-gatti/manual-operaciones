@@ -1,3 +1,5 @@
+//Define la estructura exacta de cómo se le responderá al cliente una vez que el documento es
+// consultado o creado con éxito.
 import { ApiProperty } from '@nestjs/swagger';
 import {
   DocumentStatus,

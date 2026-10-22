@@ -12,8 +12,8 @@
 // Pareja C · Documentos (Matías) — spec 001, plan 2.1
 // Con tablas de otras parejas (users, areas) nos relacionamos
 // solo por ID, sin relaciones de Prisma ni claves foráneas.
-// Pendiente: Chunk lo agrega Guille en su migración (A2) y el
-// índice de una sola versión CURRENT por documento va con HU16.
+// Chunk lo agrega Guille (A2). Pendiente: el índice de una sola
+// versión CURRENT por documento va con HU16.
 // ─────────────────────────────────────────────────────────────
 
 enum DocumentStatus {
@@ -84,10 +84,42 @@ model DocumentVersion {
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  // chunks Chunk[] → se agrega junto con Chunk (A2)
+  chunks   Chunk[]
 
   @@unique([documentId, versionNumber])
   @@index([processingStatus])
   @@index([checksum]) // duplicados (R8b)
   @@map("document_versions")
 }
+
+// HU14 · HU17 — dueña: Guille (columnas acordadas con Matías)
+// El worker inserta las filas; la carga (Matías) actualiza areaIds e isActive.
+model Chunk {
+  id                String   @id @default(uuid()) @db.Uuid
+  documentVersionId String   @map("document_version_id") @db.Uuid
+  documentId        String   @map("document_id") @db.Uuid // copia, para actualizar sin joins
+  chunkIndex        Int      @map("chunk_index") // orden dentro de la versión
+  content           String // texto del fragmento
+  pageNumber        Int?     @map("page_number") // para citar la fuente
+  tokenCount        Int?     @map("token_count")
+  areaIds           String[] @map("area_ids") @db.Uuid // copia de document_areas
+  isActive          Boolean  @default(false) @map("is_active") // true solo si documento ACTIVE + versión CURRENT + READY
+  // 768 dimensiones: gemini-embedding-001 con outputDimensionality=768
+  // (permite indexar con HNSW, que en pgvector admite hasta 2000).
+  embedding         Unsupported("vector(768)")?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([documentVersionId, chunkIndex])
+  @@index([documentId])
+  @@index([areaIds], type: Gin)
+  @@map("chunks")
+}
+
+// En la migración se agregan a mano (Prisma no los genera):
+//   CREATE EXTENSION IF NOT EXISTS vector;
+//   CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
+//   CREATE INDEX chunks_content_fts_idx ON chunks USING gin (to_tsvector('spanish', content)); -- HU36
+
+// conversations, messages y message_feedback: los define Guille (HU17, HU25).
