@@ -5,7 +5,7 @@
 - **Responsable:** Matías Fauda (pareja C)
 - **Estado:** listo para implementar. Las decisiones están en la sección 9 y lo que depende de otras personas, en la sección 10.
 
-En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D12 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
+En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D13 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
 
 ## 0. Punto de partida
 
@@ -368,6 +368,7 @@ Tomadas en la revisión del plan el 21/10/2026.
 | D10 · ¿Cómo se escriben y prueban los servicios si todavía no existe `PrismaService`? | `DocumentsRepository` pasa a ser un puerto (clase abstracta) con `runInTransaction(fn)`, y los servicios se prueban con mocks. La implementación con Prisma (`PrismaDocumentsRepository`) queda bloqueada hasta que exista `PrismaService` (5.6). Tomada al dividir las tareas | R7, R8, R8b, R13 |
 | D11 · ¿Qué variable de entorno indica el bucket? El plan proponía `S3_DOCUMENTS_BUCKET`, pero `.env.example` ya tenía `S3_BUCKET` | Se reutiliza `S3_BUCKET`, sin agregar una variable nueva: es el mismo bucket privado que lee el worker de Guille, y nuestros objetos ya se separan por el prefijo `documents/` (sección 6). Dos nombres para el mismo bucket se desincronizarían. Tomada al implementar T07 | R9, R12 |
 | D12 · ¿Quién pone el timeout del encolado (paso 5c)? | El adaptador real de la cola, el de Guille (`ProcessingServiceQueueAdapter`, 5.2), no `DocumentUploadService`. El límite general lo da el timeout corto de `runInTransaction` (D10, T18). Si el encolado vence, el adaptador lanza `QueueUnavailableError`, así la carga responde 503 y se deshace todo. Se suma a A3. Tomada al implementar T15 | R7, R8 |
+| D13 · ¿Qué responden las consultas (listado, detalle y descarga) si falla una dependencia? | Lo mismo que la carga: el mapeo de errores de la sección 4 se mueve a `src/documents/http-errors.ts` y lo usan los dos servicios. `StorageUnavailableError`, `QueueUnavailableError` y `RepositoryUnavailableError` dan 503; cualquier otro error inesperado, 500; en los dos casos con mensaje genérico y la causa en el log. El 404 de R11 pasa sin cambios. Las implementaciones reales de `AreasDirectory` y `UsersDirectory` (5.3) traducen sus fallos de conexión a `RepositoryUnavailableError`. Tomada después de T17 | R8, R10, R11, R12, R13 |
 
 ## 10. Preguntas abiertas
 

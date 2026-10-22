@@ -7,7 +7,7 @@
 Convenciones:
 
 - Una tarea = un commit. Las rutas son relativas a `apps/api/`.
-- R1 a R14 son reglas de la spec; D1 a D12, decisiones del plan; M1 a M11, correcciones del modelo (plan 2.4).
+- R1 a R14 son reglas de la spec; D1 a D13, decisiones del plan; M1 a M11, correcciones del modelo (plan 2.4).
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - Tests unitarios: `pnpm --filter api test <patrón>`. Tests de integración: `pnpm --filter api test:e2e <patrón>`.
 
