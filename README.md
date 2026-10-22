@@ -23,7 +23,7 @@ internos, citando de qué documento sacó la información.
 | Frontend | Next.js, React, TypeScript, Tailwind |
 | Backend | NestJS (API REST, Swagger) |
 | Base de datos | PostgreSQL + pgvector |
-| IA | Amazon Bedrock |
+| IA | Google Gemini API |
 | Infraestructura | AWS |
 | Testing | Jest, Supertest, Playwright |
 | CI/CD | GitHub Actions |
