@@ -1,3 +1,5 @@
+//El archivo de pruebas para verificar que los filtros de búsqueda y consultas de listas validen correctamente los
+//parámetros de entrada.
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { ListDocumentsQuery } from './list-documents.query';

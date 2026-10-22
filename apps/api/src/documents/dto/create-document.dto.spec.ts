@@ -1,3 +1,4 @@
+//Es el archivo de pruebas (test) para el DTO
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateDocumentDto } from './create-document.dto';
