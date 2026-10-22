@@ -5,6 +5,14 @@ import type {
   ProcessingStatus,
 } from '../generated/prisma/client';
 
+// La base no responde (conexión o timeout); el servicio lo convierte en 503 (R8).
+export class RepositoryUnavailableError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'RepositoryUnavailableError';
+  }
+}
+
 declare const transactionBrand: unique symbol;
 
 // Transacción opaca (D10): los servicios solo la reciben y la pasan; no pueden leerla ni crearla.
@@ -65,6 +73,8 @@ export interface DocumentPage {
 }
 
 // Puerto (D10, plan 5.6). La implementación con Prisma es T18 y está bloqueada hasta que exista PrismaService.
+// Cualquier método puede rechazar con RepositoryUnavailableError: la implementación traduce a ese error
+// los fallos de conexión y de timeout (también el de la transacción). Los demás errores no se traducen.
 export abstract class DocumentsRepository {
   // Todo o nada (R7, R8): si fn lanza, se deshace todo lo escrito con tx.
   abstract runInTransaction<T>(

@@ -1,26 +1,51 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { AuthUser } from '../common/auth';
-import { FileStorage } from '../storage/file-storage';
+import { FileStorage, StorageUnavailableError } from '../storage/file-storage';
 import { canBeOwner } from './document-access.policy';
-import { DocumentsRepository } from './documents.repository';
+import {
+  DocumentRecord,
+  DocumentsRepository,
+  RepositoryUnavailableError,
+} from './documents.repository';
 import { CreateDocumentDto } from './dto/create-document.dto';
+import { DocumentResponse, toDocumentResponse } from './dto/document.response';
 import {
   InspectedFile,
   UploadedFileInput,
   inspectFile,
 } from './file-inspector';
 import { AreasDirectory } from './ports/areas-directory';
+import { AuditLog } from './ports/audit-log';
+import {
+  ProcessingQueue,
+  QueueUnavailableError,
+} from './ports/processing-queue';
 import { UsersDirectory } from './ports/users-directory';
 
 const DEFAULT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
+const MAX_ORIGINAL_FILE_NAME_LENGTH = 255;
 
-// Orquesta la carga (plan 4). Esta parte cubre los pasos 3b a 3f: nada se escribe hasta que pasan todos.
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+// Cuenta caracteres, no unidades UTF-16: no parte un emoji ni una letra con tilde compuesta.
+const truncate = (text: string, maxLength: number) =>
+  Array.from(text).slice(0, maxLength).join('');
+
+// Orquesta la carga en el orden del plan 4: valida sin escribir nada (3b a 3f) y después escribe todo o nada (4 a 7).
 @Injectable()
 export class DocumentUploadService {
+  private readonly logger = new Logger(DocumentUploadService.name);
+
   // Se crea al construir el servicio: una APP_TIMEZONE inválida falla al arrancar (D1).
   private readonly todayFormat = new Intl.DateTimeFormat('en-US', {
     timeZone: process.env.APP_TIMEZONE || DEFAULT_TIME_ZONE,
@@ -34,15 +59,155 @@ export class DocumentUploadService {
     private readonly users: UsersDirectory,
     private readonly documents: DocumentsRepository,
     private readonly storage: FileStorage,
+    private readonly queue: ProcessingQueue,
+    private readonly audit: AuditLog,
   ) {}
 
-  // El actor lo usa la escritura (T15): createdById y auditoría.
   async upload(
     file: UploadedFileInput | undefined,
     dto: CreateDocumentDto,
-    _actor: AuthUser,
+    actor: AuthUser,
+  ): Promise<DocumentResponse> {
+    try {
+      const inspected = await this.validateBeforeWriting(file, dto);
+      // inspectFile ya rechazó un archivo ausente.
+      const uploaded = file as UploadedFileInput;
+      const record = await this.write(uploaded, inspected, dto, actor);
+      return toDocumentResponse(record);
+    } catch (error) {
+      const failure = this.toHttpException(error);
+      // Fuera de la transacción y después del rollback y del delete (plan 4, R14).
+      await this.auditFailure(actor, failure.getStatus());
+      throw failure;
+    }
+  }
+
+  // Pasos 4 a 6: todo o nada (R7, R8).
+  private async write(
+    file: UploadedFileInput,
+    inspected: InspectedFile,
+    dto: CreateDocumentDto,
+    actor: AuthUser,
+  ): Promise<DocumentRecord> {
+    // 4: ids y clave los genera el sistema; el nombre original no se usa en la ruta (R9).
+    const documentId = randomUUID();
+    const versionId = randomUUID();
+    const key = `documents/${documentId}/${versionId}.${inspected.extension}`;
+    await this.storage.put(
+      key,
+      file.buffer,
+      inspected.mimeType,
+      inspected.checksum,
+    );
+
+    let committed = false;
+    try {
+      // 5: si cualquier paso lanza, runInTransaction hace rollback.
+      const record = await this.documents.runInTransaction(async (tx) => {
+        const created = await this.documents.createWithFirstVersion(tx, {
+          id: documentId,
+          title: dto.title,
+          description: dto.description ?? null,
+          areaIds: dto.areaIds,
+          ownerId: dto.ownerId,
+          // Medianoche UTC, como Prisma representa las columnas @db.Date.
+          reviewDate: new Date(`${dto.reviewDate}T00:00:00.000Z`),
+          createdById: actor.id,
+          version: {
+            id: versionId,
+            storageKey: key,
+            originalFileName: truncate(
+              file.originalname,
+              MAX_ORIGINAL_FILE_NAME_LENGTH,
+            ),
+            mimeType: inspected.mimeType,
+            sizeBytes: inspected.sizeBytes,
+            checksum: inspected.checksum,
+            uploadedById: actor.id,
+          },
+        }); // 5a
+        await this.audit.record(
+          {
+            action: 'DOCUMENT_UPLOAD',
+            actorId: actor.id,
+            documentId,
+            result: 'SUCCESS',
+            at: new Date(),
+          },
+          tx,
+        ); // 5b: se deshace con la transacción
+        // 5c: lo último, porque un aviso enviado no se puede retirar.
+        await this.queue.enqueue(versionId);
+        return created;
+      }); // 6: commit
+      committed = true;
+      return record;
+    } finally {
+      // Cualquier error entre el put y el commit deja un archivo sin documento: se borra.
+      if (!committed) await this.deleteUploadedFile(key, documentId);
+    }
+  }
+
+  private async deleteUploadedFile(
+    key: string,
+    documentId: string,
   ): Promise<void> {
-    await this.validateBeforeWriting(file, dto);
+    try {
+      await this.storage.delete(key);
+    } catch (error) {
+      // Único residuo posible: un objeto que nadie puede ver ni descargar. Se limpia a mano.
+      this.logger.error({
+        message: 'No se pudo borrar el archivo de una carga fallida',
+        key,
+        documentId,
+        cause: errorMessage(error),
+      });
+    }
+  }
+
+  // Plan 4, "Mapeo de errores": las reglas de negocio ya son HttpException; una dependencia caída
+  // (almacenamiento, cola o base) es 503; cualquier otro error es inesperado y es 500.
+  // En los dos últimos casos la causa va al log y no a la respuesta.
+  private toHttpException(error: unknown): HttpException {
+    if (error instanceof HttpException) return error;
+    if (
+      error instanceof StorageUnavailableError ||
+      error instanceof QueueUnavailableError ||
+      error instanceof RepositoryUnavailableError
+    ) {
+      this.logger.error({
+        message: 'La carga falló por una dependencia no disponible',
+        cause: errorMessage(error),
+      });
+      return new ServiceUnavailableException(
+        'No se pudo completar la carga. Intentá de nuevo más tarde.',
+      );
+    }
+    this.logger.error({
+      message: 'La carga falló por un error inesperado',
+      cause: errorMessage(error),
+    });
+    return new InternalServerErrorException('No se pudo completar la carga.');
+  }
+
+  // Mejor esfuerzo: si la auditoría del fallo también falla, se responde con el error original.
+  private async auditFailure(actor: AuthUser, status: number): Promise<void> {
+    try {
+      await this.audit.record({
+        action: 'DOCUMENT_UPLOAD',
+        actorId: actor.id,
+        result: 'FAILURE',
+        detail: String(status),
+        at: new Date(),
+      });
+    } catch (error) {
+      this.logger.error({
+        message: 'No se pudo auditar una carga fallida',
+        actorId: actor.id,
+        status,
+        cause: errorMessage(error),
+      });
+    }
   }
 
   private async validateBeforeWriting(
