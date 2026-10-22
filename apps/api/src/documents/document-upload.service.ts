@@ -1,21 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
-  HttpException,
   Injectable,
-  InternalServerErrorException,
   Logger,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { AuthUser } from '../common/auth';
-import { FileStorage, StorageUnavailableError } from '../storage/file-storage';
+import { FileStorage } from '../storage/file-storage';
 import { canBeOwner } from './document-access.policy';
-import {
-  DocumentRecord,
-  DocumentsRepository,
-  RepositoryUnavailableError,
-} from './documents.repository';
+import { DocumentRecord, DocumentsRepository } from './documents.repository';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { DocumentResponse, toDocumentResponse } from './dto/document.response';
 import {
@@ -23,19 +16,14 @@ import {
   UploadedFileInput,
   inspectFile,
 } from './file-inspector';
+import { errorMessage, toHttpException } from './http-errors';
 import { AreasDirectory } from './ports/areas-directory';
 import { AuditLog } from './ports/audit-log';
-import {
-  ProcessingQueue,
-  QueueUnavailableError,
-} from './ports/processing-queue';
+import { ProcessingQueue } from './ports/processing-queue';
 import { UsersDirectory } from './ports/users-directory';
 
 const DEFAULT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
 const MAX_ORIGINAL_FILE_NAME_LENGTH = 255;
-
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 // Cuenta caracteres, no unidades UTF-16: no parte un emoji ni una letra con tilde compuesta.
 const truncate = (text: string, maxLength: number) =>
@@ -75,7 +63,7 @@ export class DocumentUploadService {
       const record = await this.write(uploaded, inspected, dto, actor);
       return toDocumentResponse(record);
     } catch (error) {
-      const failure = this.toHttpException(error);
+      const failure = toHttpException(error, this.logger, 'carga');
       // Fuera de la transacción y después del rollback y del delete (plan 4, R14).
       await this.auditFailure(actor, failure.getStatus());
       throw failure;
@@ -163,31 +151,6 @@ export class DocumentUploadService {
         cause: errorMessage(error),
       });
     }
-  }
-
-  // Plan 4, "Mapeo de errores": las reglas de negocio ya son HttpException; una dependencia caída
-  // (almacenamiento, cola o base) es 503; cualquier otro error es inesperado y es 500.
-  // En los dos últimos casos la causa va al log y no a la respuesta.
-  private toHttpException(error: unknown): HttpException {
-    if (error instanceof HttpException) return error;
-    if (
-      error instanceof StorageUnavailableError ||
-      error instanceof QueueUnavailableError ||
-      error instanceof RepositoryUnavailableError
-    ) {
-      this.logger.error({
-        message: 'La carga falló por una dependencia no disponible',
-        cause: errorMessage(error),
-      });
-      return new ServiceUnavailableException(
-        'No se pudo completar la carga. Intentá de nuevo más tarde.',
-      );
-    }
-    this.logger.error({
-      message: 'La carga falló por un error inesperado',
-      cause: errorMessage(error),
-    });
-    return new InternalServerErrorException('No se pudo completar la carga.');
   }
 
   // Mejor esfuerzo: si la auditoría del fallo también falla, se responde con el error original.

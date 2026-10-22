@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import { DownloadUrl, FileStorage } from '../storage/file-storage';
 import { AccessSubject, canView, listWhere } from './document-access.policy';
@@ -10,6 +10,7 @@ import {
   toDocumentSummary,
 } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
+import { toHttpException } from './http-errors';
 import { UsersDirectory } from './ports/users-directory';
 
 // Forma del listado (R13). La clase para Swagger la agrega el controller (T19).
@@ -27,23 +28,59 @@ const documentNotFound = () =>
 // Consultas de documentos (plan 1): listado, detalle y descarga.
 @Injectable()
 export class DocumentQueryService {
+  private readonly logger = new Logger(DocumentQueryService.name);
+
   constructor(
     private readonly users: UsersDirectory,
     private readonly documents: DocumentsRepository,
     private readonly storage: FileStorage,
   ) {}
 
-  async findOne(user: AuthUser, id: string): Promise<DocumentResponse> {
-    return toDocumentResponse(await this.findVisible(user, id));
+  findOne(user: AuthUser, id: string): Promise<DocumentResponse> {
+    return this.mapErrors(async () =>
+      toDocumentResponse(await this.findVisible(user, id)),
+    );
   }
 
   // R12: en cualquier processingStatus, y el enlace se pide solo después de comprobar R10.
-  async getDownloadUrl(user: AuthUser, id: string): Promise<DownloadUrl> {
-    const { currentVersion } = await this.findVisible(user, id);
-    return this.storage.getDownloadUrl(
-      currentVersion.storageKey,
-      currentVersion.originalFileName,
-    );
+  getDownloadUrl(user: AuthUser, id: string): Promise<DownloadUrl> {
+    return this.mapErrors(async () => {
+      const { currentVersion } = await this.findVisible(user, id);
+      return this.storage.getDownloadUrl(
+        currentVersion.storageKey,
+        currentVersion.originalFileName,
+      );
+    });
+  }
+
+  list(
+    user: AuthUser,
+    query: ListDocumentsQuery,
+  ): Promise<DocumentListResponse> {
+    return this.mapErrors(async () => {
+      const viewer = await this.viewerFor(user);
+      const { data, total } = await this.documents.list(
+        listWhere(viewer), // la regla de visibilidad vive en la política (R10, D2)
+        query.page,
+        query.limit,
+      );
+      return {
+        data: data.map(toDocumentSummary),
+        total,
+        page: query.page,
+        limit: query.limit,
+      };
+    });
+  }
+
+  // D13: el mismo mapeo que la carga. El 404 de R11 pasa sin cambios; una dependencia caída es 503;
+  // cualquier otro error, 500.
+  private async mapErrors<T>(run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      throw toHttpException(error, this.logger, 'consulta');
+    }
   }
 
   private async findVisible(
@@ -56,24 +93,6 @@ export class DocumentQueryService {
     const record = await this.documents.findByIdWithAreas(id);
     if (!record || !canView(viewer, record)) throw documentNotFound();
     return record;
-  }
-
-  async list(
-    user: AuthUser,
-    query: ListDocumentsQuery,
-  ): Promise<DocumentListResponse> {
-    const viewer = await this.viewerFor(user);
-    const { data, total } = await this.documents.list(
-      listWhere(viewer), // la regla de visibilidad vive en la política (R10, D2)
-      query.page,
-      query.limit,
-    );
-    return {
-      data: data.map(toDocumentSummary),
-      total,
-      page: query.page,
-      limit: query.limit,
-    };
   }
 
   // El rol sale de la sesión; las áreas, del directorio y no del token (D5).

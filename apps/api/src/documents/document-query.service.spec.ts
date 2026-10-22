@@ -1,9 +1,16 @@
-import { NotFoundException } from '@nestjs/common';
+import {
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
+import { StorageUnavailableError } from '../storage/file-storage';
 import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
 import { listWhere } from './document-access.policy';
 import { DocumentQueryService } from './document-query.service';
+import { RepositoryUnavailableError } from './documents.repository';
 import type {
   DocumentRecord,
   DocumentsRepository,
@@ -145,7 +152,7 @@ describe('DocumentQueryService.list', () => {
       users.findById.mockRejectedValue(new Error('directorio caído'));
 
       await expect(service.list(empleadoVentas, defaultQuery)).rejects.toThrow(
-        'directorio caído',
+        InternalServerErrorException,
       );
       expect(repository.list).not.toHaveBeenCalled();
     });
@@ -319,7 +326,152 @@ describe('DocumentQueryService: detalle y descarga', () => {
 
     await expect(
       service.getDownloadUrl(empleadoVentas, record.id),
-    ).rejects.toThrow('directorio caído');
+    ).rejects.toThrow(InternalServerErrorException);
     expect(storage.getDownloadUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('DocumentQueryService: dependencias no disponibles (D13)', () => {
+  let users: { findById: jest.Mock };
+  let repository: { list: jest.Mock; findByIdWithAreas: jest.Mock };
+  let storage: { getDownloadUrl: jest.Mock };
+  let loggerError: jest.SpyInstance;
+  let service: DocumentQueryService;
+
+  beforeEach(() => {
+    loggerError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => {});
+    users = {
+      findById: jest.fn().mockResolvedValue(FIXTURE_USERS.empleadoVentas),
+    };
+    repository = {
+      list: jest.fn().mockResolvedValue({ data: [record], total: 1 }),
+      findByIdWithAreas: jest.fn().mockResolvedValue(record),
+    };
+    storage = {
+      getDownloadUrl: jest.fn().mockResolvedValue({
+        url: 'https://bucket/x',
+        expiresAt: new Date(),
+      }),
+    };
+    service = new DocumentQueryService(
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      storage as unknown as FileStorage,
+    );
+  });
+
+  afterEach(() => {
+    loggerError.mockRestore();
+  });
+
+  const repositoryDown = () =>
+    new RepositoryUnavailableError('connection terminated');
+
+  describe('listado', () => {
+    it('la base no responde: 503', async () => {
+      repository.list.mockRejectedValue(repositoryDown());
+
+      await expect(service.list(empleadoVentas, defaultQuery)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('el directorio no responde: 503 y no se consultan documentos', async () => {
+      users.findById.mockRejectedValue(repositoryDown());
+
+      await expect(service.list(empleadoVentas, defaultQuery)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(repository.list).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('detalle', () => {
+    it('la base no responde: 503', async () => {
+      repository.findByIdWithAreas.mockRejectedValue(repositoryDown());
+
+      await expect(service.findOne(empleadoVentas, record.id)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('el directorio no responde: 503', async () => {
+      users.findById.mockRejectedValue(repositoryDown());
+
+      await expect(service.findOne(empleadoVentas, record.id)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+  });
+
+  describe('descarga', () => {
+    it('el almacenamiento no responde: 503', async () => {
+      storage.getDownloadUrl.mockRejectedValue(
+        new StorageUnavailableError('sin credenciales'),
+      );
+
+      await expect(
+        service.getDownloadUrl(empleadoVentas, record.id),
+      ).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('la base no responde: 503 y no se genera ningún enlace', async () => {
+      repository.findByIdWithAreas.mockRejectedValue(repositoryDown());
+
+      await expect(
+        service.getDownloadUrl(empleadoVentas, record.id),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(storage.getDownloadUrl).not.toHaveBeenCalled();
+    });
+
+    it('el directorio no responde: 503 y no se genera ningún enlace', async () => {
+      users.findById.mockRejectedValue(repositoryDown());
+
+      await expect(
+        service.getDownloadUrl(empleadoVentas, record.id),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(storage.getDownloadUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  it('el 503 tiene un mensaje genérico y la causa va al log', async () => {
+    repository.list.mockRejectedValue(repositoryDown());
+
+    const error = (await service
+      .list(empleadoVentas, defaultQuery)
+      .catch((e: unknown) => e)) as Error;
+
+    expect(error.message).not.toMatch(/connection/);
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: 'connection terminated' }),
+    );
+  });
+
+  it('un error inesperado sigue siendo 500 genérico, con la causa en el log', async () => {
+    repository.findByIdWithAreas.mockRejectedValue(
+      new TypeError("Cannot read properties of undefined (reading 'id')"),
+    );
+
+    const error = (await service
+      .findOne(empleadoVentas, record.id)
+      .catch((e: unknown) => e)) as Error;
+
+    expect(error).toBeInstanceOf(InternalServerErrorException);
+    expect(error.message).toBe('No se pudo completar la consulta.');
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cause: "Cannot read properties of undefined (reading 'id')",
+      }),
+    );
+  });
+
+  it('el 404 de R11 no se convierte en otro error', async () => {
+    repository.findByIdWithAreas.mockResolvedValue(null);
+
+    await expect(service.findOne(empleadoVentas, record.id)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });
