@@ -5,7 +5,7 @@
 - **Responsable:** Matías Fauda (pareja C)
 - **Estado:** listo para implementar. Las decisiones están en la sección 9 y lo que depende de otras personas, en la sección 10.
 
-En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D10 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
+En este plan, "spec P3" se refiere a una decisión de la spec; D1 a D11 son las decisiones del plan (sección 9) y A1 a A3, sus preguntas abiertas (sección 10).
 
 ## 0. Punto de partida
 
@@ -276,7 +276,7 @@ Sus tablas son de otra pareja; con ellas nos relacionamos solo por ID.
 
 ### 5.5 Almacenamiento
 
-`FileStorage` tiene dos implementaciones: `S3FileStorage`, la real, e `InMemoryFileStorage`, para los tests y para desarrollar sin AWS. `StorageModule` elige `S3FileStorage` si está definida `S3_DOCUMENTS_BUCKET`. Si no está, en desarrollo usa la de memoria y avisa por el log; en producción falla al arrancar.
+`FileStorage` tiene dos implementaciones: `S3FileStorage`, la real, e `InMemoryFileStorage`, para los tests y para desarrollar sin AWS. `StorageModule` elige `S3FileStorage` si está definida `S3_BUCKET` (D11). Si no está, en desarrollo usa la de memoria y avisa por el log; en producción falla al arrancar.
 
 ### 5.6 Repositorio de documentos
 
@@ -296,7 +296,7 @@ El `PrismaService` compartido todavía no existe (D7), y sin él no se puede esc
 - **Permisos de IAM** (rol de la instancia EC2): `s3:PutObject`, `s3:GetObject` y `s3:DeleteObject` sobre `arn:aws:s3:::<bucket>/documents/*`. El worker de Guille necesita `s3:GetObject`.
 - **Variables de entorno** (solo los nombres). Se validan al arrancar con `ConfigModule` y se documentan en un `.env.example` sin valores:
   - `AWS_REGION`
-  - `S3_DOCUMENTS_BUCKET`
+  - `S3_BUCKET` (D11)
   - `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: **solo para desarrollo local**. En EC2 se usa el rol de la instancia, y el SDK las encuentra solo, sin código adicional.
   - `S3_ENDPOINT` y `S3_FORCE_PATH_STYLE`: opcionales, para un S3 local como MinIO (D6).
   - `APP_TIMEZONE`: opcional; si no está, se usa `America/Argentina/Buenos_Aires` (D1).
@@ -366,6 +366,7 @@ Tomadas en la revisión del plan el 21/10/2026.
 | D8 · Nombres de archivo con tildes (multer puede leer `originalname` como latin1) | Se cubre con un test. Si pasa, se usa la opción `defParamCharset: 'utf8'` de multer o se convierte el nombre de latin1 a UTF-8 antes de guardarlo | R9 |
 | D9 · Simplificaciones del MVP | Sin advisory lock ni test de concurrencia para duplicados; sin CHECK en la base; el índice de una sola versión `CURRENT` queda para HU16; `S3FileStorage` se verifica a mano | R8b, R7 |
 | D10 · ¿Cómo se escriben y prueban los servicios si todavía no existe `PrismaService`? | `DocumentsRepository` pasa a ser un puerto (clase abstracta) con `runInTransaction(fn)`, y los servicios se prueban con mocks. La implementación con Prisma (`PrismaDocumentsRepository`) queda bloqueada hasta que exista `PrismaService` (5.6). Tomada al dividir las tareas | R7, R8, R8b, R13 |
+| D11 · ¿Qué variable de entorno indica el bucket? El plan proponía `S3_DOCUMENTS_BUCKET`, pero `.env.example` ya tenía `S3_BUCKET` | Se reutiliza `S3_BUCKET`, sin agregar una variable nueva: es el mismo bucket privado que lee el worker de Guille, y nuestros objetos ya se separan por el prefijo `documents/` (sección 6). Dos nombres para el mismo bucket se desincronizarían. Tomada al implementar T07 | R9, R12 |
 
 ## 10. Preguntas abiertas
 

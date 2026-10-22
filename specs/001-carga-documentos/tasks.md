@@ -7,7 +7,7 @@
 Convenciones:
 
 - Una tarea = un commit. Las rutas son relativas a `apps/api/`.
-- R1 a R14 son reglas de la spec; D1 a D9, decisiones del plan; M1 a M11, correcciones del modelo (plan 2.4).
+- R1 a R14 son reglas de la spec; D1 a D11, decisiones del plan; M1 a M11, correcciones del modelo (plan 2.4).
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - Tests unitarios: `pnpm --filter api test <patrón>`. Tests de integración: `pnpm --filter api test:e2e <patrón>`.
 
@@ -75,7 +75,7 @@ Según D10 (plan 5.6), `DocumentsRepository` es un puerto con `runInTransaction(
 
 ### T07 · `S3FileStorage`, `StorageModule` y variables de entorno
 
-- **Qué hace:** implementa `S3FileStorage` (`PutObjectCommand` con `ContentType`, `ContentLength` y `ChecksumSHA256` en base64; `DeleteObjectCommand`; `getSignedUrl` de `GetObjectCommand` con `ResponseContentDisposition: attachment; filename*=UTF-8''…` y `expiresIn: 300`), traduce los errores del SDK a `StorageUnavailableError`, y crea `StorageModule`: usa S3 si existe `S3_DOCUMENTS_BUCKET`; si no, en desarrollo usa la de memoria y avisa por el log, y en producción falla al arrancar. Valida las variables con `ConfigModule` y las documenta en `.env.example` sin valores.
+- **Qué hace:** implementa `S3FileStorage` (`PutObjectCommand` con `ContentType`, `ContentLength` y `ChecksumSHA256` en base64; `DeleteObjectCommand`; `getSignedUrl` de `GetObjectCommand` con `ResponseContentDisposition: attachment; filename*=UTF-8''…` y `expiresIn: 300`), traduce los errores del SDK a `StorageUnavailableError`, y crea `StorageModule`: usa S3 si existe `S3_BUCKET` (D11); si no, en desarrollo usa la de memoria y avisa por el log, y en producción falla al arrancar. Valida las variables con `ConfigModule` y las documenta en `.env.example` sin valores.
 - **Cubre:** R8, R9, R12, plan sección 6 y 5.5, D6 (`S3_ENDPOINT` y `S3_FORCE_PATH_STYLE` opcionales), spec sección 9 (ningún secreto en el repositorio).
 - **Archivos:** `src/storage/s3-file-storage.ts`, `src/storage/storage.module.ts`, `.env.example`; `.gitignore` solo si `.env` no está ignorado.
 - **Verificación:** el plan no prevé tests automáticos de `S3FileStorage` (D9). `pnpm --filter api build` y `pnpm --filter api lint` pasan; `git check-ignore apps/api/.env` confirma que `.env` está ignorado; `git grep -nE "AKIA|aws_secret"` no encuentra nada. La verificación contra el bucket real es parte de T22.
@@ -237,7 +237,7 @@ Estas tareas necesitan piezas compartidas que hoy no existen en `apps/api` (`mai
 - **Verificación:**
   1. `pnpm --filter api lint`, `pnpm --filter api build`, `pnpm --filter api test` y `pnpm --filter api test:e2e`: todo en verde.
   2. Revisar la tabla escenario → test: cada fila tiene al menos un test que existe y pasa.
-  3. Con la API levantada contra el bucket de desarrollo (`S3_DOCUMENTS_BUCKET` definida, credenciales solo en `.env` local):
+  3. Con la API levantada contra el bucket de desarrollo (`S3_BUCKET` definida, credenciales solo en `.env` local):
      1. Cargar un PDF y comprobar en S3 que el objeto está en `documents/{documentId}/{versionId}.pdf` con `ContentType: application/pdf`.
      2. Pedir la descarga, abrir la `url` y comprobar que el archivo baja con su nombre original.
      3. Pasados 5 minutos, abrir la misma `url` y comprobar que S3 la rechaza.
