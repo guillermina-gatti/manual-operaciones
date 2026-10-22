@@ -10,7 +10,8 @@ Esta declaración sigue la plantilla del Anexo C de la consigna. Es un documento
 
 ## Herramientas utilizadas
 
-- **Claude:** planificación del proyecto y documentación.
+- **Claude:** planificación del proyecto, documentación y revisión de coherencia entre documentos.
+- **Gemini (como herramienta de desarrollo):** consultas puntuales y generación de borradores de texto. Es independiente del Gemini API que usa el producto (ver "Funcionalidad de IA en el producto").
 - [Completar: otras herramientas que use cada integrante, por ejemplo ChatGPT, GitHub Copilot o Cursor, y para qué]
 
 ## Tareas en las que la usamos
