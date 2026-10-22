@@ -1,4 +1,6 @@
+import { NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
+import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
 import { listWhere } from './document-access.policy';
 import { DocumentQueryService } from './document-query.service';
@@ -60,6 +62,7 @@ describe('DocumentQueryService.list', () => {
     service = new DocumentQueryService(
       users as unknown as UsersDirectory,
       repository as unknown as DocumentsRepository,
+      { getDownloadUrl: jest.fn() } as unknown as FileStorage,
     );
   });
 
@@ -146,5 +149,177 @@ describe('DocumentQueryService.list', () => {
       );
       expect(repository.list).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('DocumentQueryService: detalle y descarga', () => {
+  const OTHER_AREA_ID = '0c000000-0000-4000-8000-000000000002';
+  const MISSING_ID = '0c000000-0000-4000-8000-000000000099';
+  const LINK = {
+    url: 'https://bucket.s3.amazonaws.com/documents/x/y.pdf?firma',
+    expiresAt: new Date('2026-10-22T12:05:00.000Z'),
+  };
+
+  const withVersion = (
+    overrides: Partial<DocumentRecord>,
+    processingStatus: DocumentRecord['currentVersion']['processingStatus'] = 'PENDING',
+  ): DocumentRecord => ({
+    ...record,
+    ...overrides,
+    currentVersion: { ...record.currentVersion, processingStatus },
+  });
+  const documents: Record<string, DocumentRecord> = {
+    [record.id]: record,
+    [OTHER_AREA_ID]: withVersion({
+      id: OTHER_AREA_ID,
+      areaIds: [AREA_IDS.operaciones],
+    }),
+  };
+
+  let users: { findById: jest.Mock };
+  let repository: { findByIdWithAreas: jest.Mock };
+  let storage: { getDownloadUrl: jest.Mock };
+  let service: DocumentQueryService;
+
+  beforeEach(() => {
+    users = {
+      findById: jest.fn((id: string) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+    };
+    repository = {
+      findByIdWithAreas: jest.fn((id: string) =>
+        Promise.resolve(documents[id] ?? null),
+      ),
+    };
+    storage = { getDownloadUrl: jest.fn().mockResolvedValue(LINK) };
+    service = new DocumentQueryService(
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      storage as unknown as FileStorage,
+    );
+  });
+
+  const errorOf = (promise: Promise<unknown>) =>
+    promise.then(
+      () => {
+        throw new Error('se esperaba un error');
+      },
+      (error: unknown) => error as NotFoundException,
+    );
+
+  describe('documento de otra área', () => {
+    it('detalle: 404', async () => {
+      await expect(
+        service.findOne(empleadoVentas, OTHER_AREA_ID),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('descarga: 404 y el almacenamiento nunca genera un enlace', async () => {
+      await expect(
+        service.getDownloadUrl(empleadoVentas, OTHER_AREA_ID),
+      ).rejects.toThrow(NotFoundException);
+      expect(storage.getDownloadUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  it('inexistente y no visible responden el mismo 404, con el mismo mensaje', async () => {
+    const missing = await errorOf(service.findOne(empleadoVentas, MISSING_ID));
+    const hidden = await errorOf(
+      service.findOne(empleadoVentas, OTHER_AREA_ID),
+    );
+    const missingDownload = await errorOf(
+      service.getDownloadUrl(empleadoVentas, MISSING_ID),
+    );
+    const hiddenDownload = await errorOf(
+      service.getDownloadUrl(empleadoVentas, OTHER_AREA_ID),
+    );
+
+    for (const error of [missing, hidden, missingDownload, hiddenDownload]) {
+      expect(error).toBeInstanceOf(NotFoundException);
+    }
+    expect(hidden.message).toBe(missing.message);
+    expect(hidden.getResponse()).toEqual(missing.getResponse());
+    expect(hiddenDownload.getResponse()).toEqual(missing.getResponse());
+    expect(missingDownload.getResponse()).toEqual(missing.getResponse());
+    expect(storage.getDownloadUrl).not.toHaveBeenCalled();
+  });
+
+  it('un EMPLOYEE no ve un documento ARCHIVED de su área', async () => {
+    repository.findByIdWithAreas.mockResolvedValue(
+      withVersion({ status: 'ARCHIVED' }),
+    );
+
+    await expect(service.findOne(empleadoVentas, record.id)).rejects.toThrow(
+      NotFoundException,
+    );
+    await expect(
+      service.getDownloadUrl(empleadoVentas, record.id),
+    ).rejects.toThrow(NotFoundException);
+    expect(storage.getDownloadUrl).not.toHaveBeenCalled();
+  });
+
+  it('detalle visible: la respuesta de T13, sin datos internos', async () => {
+    const response = await service.findOne(empleadoVentas, record.id);
+
+    expect(response).toMatchObject({
+      id: record.id,
+      reviewDate: '2027-03-01',
+      currentVersion: { id: record.currentVersion.id, versionNumber: 1 },
+    });
+    expect(JSON.stringify(response)).not.toMatch(/storageKey|checksum/);
+  });
+
+  describe('descarga permitida', () => {
+    it('con PENDING devuelve { url, expiresAt }', async () => {
+      await expect(
+        service.getDownloadUrl(empleadoVentas, record.id),
+      ).resolves.toEqual(LINK);
+      expect(storage.getDownloadUrl).toHaveBeenCalledWith(
+        record.currentVersion.storageKey,
+        'manual.pdf',
+      );
+    });
+
+    it('con FAILED también', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(withVersion({}, 'FAILED'));
+
+      await expect(
+        service.getDownloadUrl(empleadoVentas, record.id),
+      ).resolves.toEqual(LINK);
+    });
+
+    it('un ADMIN descarga un ARCHIVED', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(
+        withVersion({ status: 'ARCHIVED', areaIds: [AREA_IDS.operaciones] }),
+      );
+
+      await expect(service.getDownloadUrl(admin, record.id)).resolves.toEqual(
+        LINK,
+      );
+    });
+
+    it('el enlace se pide después de comprobar la visibilidad', async () => {
+      await service.getDownloadUrl(empleadoVentas, record.id);
+
+      const [linkOrder] = storage.getDownloadUrl.mock.invocationCallOrder;
+      expect(users.findById.mock.invocationCallOrder[0]).toBeLessThan(
+        linkOrder,
+      );
+      expect(
+        repository.findByIdWithAreas.mock.invocationCallOrder[0],
+      ).toBeLessThan(linkOrder);
+    });
+  });
+
+  it('si el directorio falla, no se genera ningún enlace', async () => {
+    users.findById.mockRejectedValue(new Error('directorio caído'));
+
+    await expect(
+      service.getDownloadUrl(empleadoVentas, record.id),
+    ).rejects.toThrow('directorio caído');
+    expect(storage.getDownloadUrl).not.toHaveBeenCalled();
   });
 });
