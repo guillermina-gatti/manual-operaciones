@@ -7,6 +7,12 @@ const apiUrl = resolveApiUrl(process.env);
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  experimental: {
+    // Next guarda en memoria el cuerpo de los pedidos que pasan por el rewrite y lo corta en 10 MB
+    // (también sin proxy.ts). Un PDF de 10 MB más el resto del formulario lo supera: la API recibía
+    // el cuerpo incompleto y la carga terminaba en 500 a los 30 s. 11 MB deja lugar al multipart (T26).
+    proxyClientMaxBodySize: "11mb",
+  },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
   },
