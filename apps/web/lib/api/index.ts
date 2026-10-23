@@ -10,3 +10,5 @@ export { createApiClient } from './client';
 export type { ApiClient, GetAuthHeaders } from './client';
 export { describeApiError } from './error-messages';
 export type { ErrorContext, ErrorDescription, UploadField } from './error-messages';
+export { useApiResource } from './use-api-resource';
+export type { ApiResource, ResourceState } from './use-api-resource';
