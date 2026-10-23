@@ -73,11 +73,11 @@ Convenciones:
 
 ### T05 · Sesión simulada
 
-- **Qué hace:** crea la interfaz de la sesión (`SessionUser`, `useSession`, `getAuthHeaders`) y su simulación con `localStorage` (`sim-session`), que lanza un error en producción. Crea los datos fijos de usuarios y áreas, con los mismos UUID que la API. Conecta la sesión al cliente HTTP y al `layout.tsx`, que pasa a `lang="es"` y a un título propio.
+- **Qué hace:** crea la interfaz de la sesión (`SessionUser`, `useSession`, `getAuthHeaders`) y su simulación con `localStorage` (`sim-session`), que queda desactivada en producción (nunca hay usuario ni cabeceras). Crea los datos fijos de usuarios y áreas, con los mismos UUID que la API. Conecta la sesión al cliente HTTP y al `layout.tsx`, que pasa a `lang="es"` y a un título propio.
 - **Cubre:** plan secciones 3.1 y 3.3 (fixtures); D2; base de F1 y F6.
 - **Archivos:** `lib/session/session.ts`, `lib/session/simulated-session.tsx`, `lib/session/index.ts`, `lib/directory/fixtures.ts`, `lib/api/index.ts` (exporta `apiClient = createApiClient(getAuthHeaders)`), `app/layout.tsx`.
 - **Verificación:** test primero, `tests/lib/session/simulated-session.test.tsx`:
-  - **no llega a producción:** con `vi.stubEnv('NODE_ENV', 'production')`, importar `simulated-session` (con `vi.resetModules()`) o montar su provider lanza un error;
+  - **no funciona en producción:** con `vi.stubEnv('NODE_ENV', 'production')` y un `sim-session` válido guardado, `useSession()` da `{ user: null, status: 'disabled' }`, `getAuthHeaders()` da `{}` y `apiClient` pide sin `x-user-id` ni `x-user-role`. No se lanza un error, porque `next build` corre en modo producción y se rompería; `API_URL=http://localhost:3000 pnpm --filter web build` tiene que seguir pasando;
   - sin `sim-session`, `useSession()` da `user: null` y `getAuthHeaders()` da `{}`;
   - con el ID del EMPLOYEE de Ventas, da ese usuario y `{ 'x-user-id', 'x-user-role': 'EMPLOYEE' }`;
   - un ID que no está en los fixtures se trata como sin sesión;

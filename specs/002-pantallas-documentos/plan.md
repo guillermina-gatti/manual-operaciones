@@ -142,10 +142,10 @@ Mismo patrón que el plan 001 (sección 5): los componentes dependen de una **in
 
 ### 3.1 Sesión del usuario
 
-- Interfaz (`lib/session/session.ts`): `SessionUser = { id, name, role }`, con `Role = 'ADMIN' | 'SUPERVISOR' | 'EMPLOYEE'`; `useSession(): { user: SessionUser | null; status: 'loading' | 'ready' }`; y `getAuthHeaders(): Record<string, string>`, que usa `apiClient`.
+- Interfaz (`lib/session/session.ts`): `SessionUser = { id, name, role }`, con `Role = 'ADMIN' | 'SUPERVISOR' | 'EMPLOYEE'`; `useSession(): { user: SessionUser | null; status: 'loading' | 'ready' | 'disabled' }`; y `getAuthHeaders(): Record<string, string>`, que usa `apiClient`.
 - Ahora (`lib/session/simulated-session.tsx`): el usuario elegido se guarda en `localStorage` con la clave `sim-session` (el ID de un usuario de `lib/directory/fixtures.ts`). `getAuthHeaders()` devuelve `{ 'x-user-id': id, 'x-user-role': role }`. `DevSessionSwitcher` permite cambiar de usuario y Playwright lo fija con `page.addInitScript`.
 - Sin sesión, las pantallas muestran "Elegí un usuario de prueba" en desarrollo; la API respondería 401.
-- **Protección:** `simulated-session.tsx` lanza un error si `process.env.NODE_ENV === 'production'`, y `DevSessionSwitcher` no se renderiza en producción. Igual que en el backend, la sesión simulada no puede llegar a producción por descuido.
+- **Protección:** si `process.env.NODE_ENV === 'production'`, la sesión simulada queda **desactivada**: `useSession()` da `{ user: null, status: 'disabled' }` y `getAuthHeaders()` da `{}` aunque haya un `sim-session` guardado, así que la API responde 401. `DevSessionSwitcher` no se renderiza en producción. No se lanza un error porque `next build` corre en modo producción y el layout usa la sesión en todas las páginas: el build (y el CI) fallarían. Igual que en el backend, la sesión simulada no puede funcionar en producción por descuido.
 - **Reemplazo:** `lib/session/index.ts` pasa a reexportar el `SessionProvider`, `useSession` y `getAuthHeaders` de la pareja A (por ejemplo, `Authorization: Bearer <access token>` y la renovación con el refresh token). Se borran `simulated-session.tsx` y `DevSessionSwitcher`, y se saca este último de `layout.tsx`.
 
 ### 3.2 Cliente HTTP
