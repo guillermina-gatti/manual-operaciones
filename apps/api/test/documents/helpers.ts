@@ -2,8 +2,10 @@
 
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { randomUUID } from 'node:crypto';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
+import { FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
 import { FakeProcessingQueue } from '../../src/documents/adapters/fake-processing-queue';
 import { LoggerAuditLog } from '../../src/documents/adapters/logger-audit-log';
 import { AuditLog } from '../../src/documents/ports/audit-log';
@@ -49,6 +51,57 @@ export async function cleanDocuments(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
     'TRUNCATE document_versions, document_areas, documents CASCADE',
   );
+}
+
+export interface SeededDocument {
+  id: string;
+  versionId: string;
+  storageKey: string;
+  originalFileName: string;
+}
+
+// Inserta directo en la base un documento con su primera versión (PENDING), con las áreas,
+// el estado y la fecha de creación que elija el test. No pasa por la carga ni por el almacenamiento.
+export async function seedDocument(
+  prisma: PrismaService,
+  opts: {
+    areaIds: string[];
+    status?: 'ACTIVE' | 'ARCHIVED';
+    createdAt?: Date;
+    title?: string;
+  },
+): Promise<SeededDocument> {
+  const id = randomUUID();
+  const versionId = randomUUID();
+  const storageKey = `documents/${id}/${versionId}.pdf`;
+  const originalFileName = `${opts.title ?? 'documento'}.pdf`;
+  await prisma.document.create({
+    data: {
+      id,
+      title: opts.title ?? 'Documento',
+      status: opts.status ?? 'ACTIVE',
+      ownerId: FIXTURE_USERS.admin.id,
+      reviewDate: new Date('2027-01-15'),
+      createdById: FIXTURE_USERS.admin.id,
+      ...(opts.createdAt && { createdAt: opts.createdAt }),
+      areas: {
+        createMany: { data: opts.areaIds.map((areaId) => ({ areaId })) },
+      },
+      versions: {
+        create: {
+          id: versionId,
+          versionNumber: 1,
+          storageKey,
+          originalFileName,
+          mimeType: 'application/pdf',
+          sizeBytes: 1024,
+          checksum: randomUUID().replace(/-/g, '').padEnd(64, '0'),
+          uploadedById: FIXTURE_USERS.admin.id,
+        },
+      },
+    },
+  });
+  return { id, versionId, storageKey, originalFileName };
 }
 
 // Cabeceras que lee el JwtAuthGuard simulado (src/common/auth). Cuando llegue la
