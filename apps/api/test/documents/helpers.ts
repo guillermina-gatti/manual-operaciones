@@ -69,6 +69,7 @@ export async function seedDocument(
     status?: 'ACTIVE' | 'ARCHIVED';
     createdAt?: Date;
     title?: string;
+    checksum?: string;
   },
 ): Promise<SeededDocument> {
   const id = randomUUID();
@@ -95,7 +96,8 @@ export async function seedDocument(
           originalFileName,
           mimeType: 'application/pdf',
           sizeBytes: 1024,
-          checksum: randomUUID().replace(/-/g, '').padEnd(64, '0'),
+          checksum:
+            opts.checksum ?? randomUUID().replace(/-/g, '').padEnd(64, '0'),
           uploadedById: FIXTURE_USERS.admin.id,
         },
       },
