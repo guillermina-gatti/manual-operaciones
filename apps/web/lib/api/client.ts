@@ -1,43 +1,53 @@
-// Cliente HTTP de la API (plan 002, secciones 2 y 3.2). Ningún componente usa fetch directamente.
+// Cliente HTTP de la API. Ningún componente usa fetch directamente.
 import { ApiError } from './api-error';
 
+// Tipo de función para obtener los encabezados de autenticación (ej. Token JWT)
 export type GetAuthHeaders = () => Record<string, string>;
 
+// Interfaz pública del cliente de API
 export interface ApiClient {
   request<T>(path: string, init?: RequestInit): Promise<T>;
 }
 
-// Solo URLs relativas de la API: Next las reenvía al backend con el rewrite (T02).
-// Nunca la dirección del backend ni S3 (spec sección 9).
+// Prefijo obligatorio: Solo se permiten URLs relativas que pasen por el proxy de Next.js
 const API_PREFIX = '/api/';
 
+// Fábrica para crear la instancia del cliente HTTP
 export function createApiClient(getAuthHeaders: GetAuthHeaders): ApiClient {
   return {
     async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+      // Validamos que la ruta comience con '/api/'
       if (!path.startsWith(API_PREFIX)) {
         throw new Error(`Solo se puede pedir a ${API_PREFIX}…, no a "${path}"`);
       }
 
-      // No se fija Content-Type: con FormData, el navegador agrega el boundary del multipart.
+      // Preparamos los encabezados HTTP
       const headers = new Headers(init.headers);
       headers.set('Accept', 'application/json');
+
+      // Inyectamos los encabezados de autenticación
       for (const [name, value] of Object.entries(getAuthHeaders())) {
         headers.set(name, value);
       }
 
       let response: Response;
       try {
+        // Ejecutamos la petición HTTP
         response = await fetch(path, { ...init, headers });
       } catch (error) {
-        // Una cancelación la pidió quien hizo el pedido: no es un error de conexión.
+        // Si el usuario canceló la petición a propósito, no lo tratamos como falla de red
         if (error instanceof DOMException && error.name === 'AbortError') throw error;
+        // Error de red o conexión caída (estado 0)
         throw new ApiError(0);
       }
 
+      // Intentamos parsear la respuesta como JSON
       const body = await readJson(response);
       if (body === NOT_JSON) throw new ApiError(0);
 
+      // Si el servidor devolvió un código de error (4xx o 5xx), lanzamos el ApiError procesado
       if (!response.ok) throw toApiError(response.status, body);
+
       return body as T;
     },
   };
@@ -45,18 +55,18 @@ export function createApiClient(getAuthHeaders: GetAuthHeaders): ApiClient {
 
 const NOT_JSON = Symbol('not-json');
 
-// Una respuesta vacía (por ejemplo, un 204) se lee como undefined.
+// Función auxiliar para leer el cuerpo de la respuesta como JSON o manejar respuestas vacías
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text();
-  if (text === '') return undefined;
+  if (text === '') return undefined; // Respuestas vacías (ej. 204 No Content)
   try {
     return JSON.parse(text);
   } catch {
-    return NOT_JSON;
+    return NOT_JSON; // Si no es un JSON válido
   }
 }
 
-// Formato de Nest: { statusCode, message (texto o arreglo), error } y, en el 409, existingDocumentId.
+// Procesa la estructura de error estándar de NestJS y extrae los mensajes y datos adicionales (como existingDocumentId en 409)
 function toApiError(status: number, body: unknown): ApiError {
   const fields = (typeof body === 'object' && body !== null ? body : {}) as {
     message?: unknown;

@@ -1,22 +1,29 @@
 import type { NextConfig } from "next";
 import { resolveApiUrl } from "./lib/config/api-url";
 
-// La API no habilita CORS: el navegador la llama en el mismo origen y Next reenvía /api al backend.
+// Resuelve la dirección URL del backend usando las variables de entorno
 const apiUrl = resolveApiUrl(process.env);
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
+  /* Opciones de configuración generales */
+  cacheComponents: true, // Activa la caché de componentes para mayor velocidad
+
   experimental: {
-    // Next guarda en memoria el cuerpo de los pedidos que pasan por el rewrite y lo corta en 10 MB
-    // (también sin proxy.ts). Un PDF de 10 MB más el resto del formulario lo supera: la API recibía
-    // el cuerpo incompleto y la carga terminaba en 500 a los 30 s. 11 MB deja lugar al multipart (T26).
+    // IMPORTANTE: Next.js guarda temporalmente en memoria el cuerpo de las peticiones del proxy.
+    // Como el backend acepta archivos de hasta 10 MB, aumentamos el límite a 11 MB
+    // para evitar que un PDF grande falle con error 500 al ser reenviado.
     proxyClientMaxBodySize: "11mb",
   },
+
+  // Configuración de reescrituras (Proxy inverso):
+  // Redirige todas las peticiones de `/api/...` hacia el servidor backend real.
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
   },
-  partialPrefetching: true,
+
+  partialPrefetching: true, // Precarga parcial de páginas para mejorar la navegación
+
+  // Configuración del empaquetador ultrarrápido Turbopack para manejar Tailwind CSS
   turbopack: {
     rules: {
       "*.css": {

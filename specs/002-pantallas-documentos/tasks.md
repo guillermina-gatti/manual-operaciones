@@ -2,7 +2,11 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (23/10/2026):** ninguna tarea empezada. T01 a T26 se pueden hacer ya; T27 a T30 están **bloqueadas** por piezas de la pareja A; T31 es la verificación final.
+- **Estado (23/10/2026):** T01 a T26 y T31 **hechas** (resultado de la verificación en T31). T27 a T30 siguen **bloqueadas** por piezas de la pareja A:
+  - **T27** (nombres en la respuesta): la API devuelve solo `areaIds` y `ownerId`; para agregar `areas` y `owner` con nombres, sus directorios reales de áreas y usuarios tienen que exponer los nombres (Q1).
+  - **T28** (áreas reales): nadie expone todavía `GET /api/areas` (Q2).
+  - **T29** (responsables reales): la pareja A todavía no expone `GET /api/users?areaIds=` (spec P1).
+  - **T30** (sesión real): no existen todavía el login, la sesión ni la renovación del token de la pareja A; cuando lleguen, revisar también su `proxy.ts` (Q6).
 
 Convenciones:
 
@@ -406,32 +410,58 @@ Necesitan piezas de la pareja A que todavía no existen. Se hacen cuando lleguen
 - **Depende de:** T01 a T26
 - **Commit:** `docs(specs): registrar verificación de pantallas de documentos`
 
+#### Resultado (23/10/2026)
+
+- **Paso 1: hecho, todo en verde.**
+  - `pnpm --filter web lint`: sin avisos.
+  - `pnpm --filter web build` (con `API_URL=http://localhost:3000`): compila; `/documentos` y `/documentos/nuevo` se prerenderizan y `/documentos/[id]` queda en Partial Prerender.
+  - `pnpm --filter web test`: 24 archivos, 316 tests, todos pasan.
+  - `pnpm --filter web test:e2e`: 32 tests (`escritorio` y `celular`), todos pasan.
+- **Paso 2: hecho.** Con Docker, la API en el puerto 3000 (sin `S3_BUCKET`) y la base de desarrollo, `pnpm --filter web test:e2e:integracion`: 5 tests, todos pasan, incluido el PDF de exactamente 10 MB a través del rewrite. Cada corrida deja 4 documentos `[e2e] …` en la base de desarrollo.
+- **Paso 3: hecho.** Cada test de la tabla se buscó por su nombre en la lista de Vitest (`vitest list`) y de Playwright (`playwright test --list`, los tres proyectos), y figura como pasado en las corridas de los pasos 1 y 2. ☑ = el test de componente y el de Playwright existen y pasan.
+- **Paso 4: hecho.** Revisión a 375 px de ancho en Chromium, contra la API real: **ninguna pantalla tiene desplazamiento horizontal** y ningún elemento se sale por la derecha.
+
+  | Pantalla | Ancho de la página | Desplazamiento horizontal |
+  | --- | --- | --- |
+  | Listado (ADMIN y EMPLOYEE de Ventas) | 375 px | no |
+  | Detalle con el título más largo de la base (98 caracteres, con tildes) | 375 px | no: el título y el nombre del archivo pasan a varias líneas |
+  | Formulario vacío | 375 px | no |
+  | Formulario con todos los errores de validación | 375 px | no |
+  | Formulario con un archivo de nombre largo con tildes, el título largo y las dos áreas | 375 px | no: el nombre del archivo se recorta con "…" |
+
+  En desarrollo, el indicador de Next (el círculo con la "N", abajo a la izquierda) puede tapar en parte un botón; no aparece en producción.
+- **Cambios fuera de la tarea que los descubrió**, para tenerlos en cuenta al revisar:
+  - T24: el selector de usuario de prueba tapaba la paginación en el celular; ahora queda al final de la página en pantallas chicas (`DevSessionSwitcher.tsx`).
+  - T25: si se desmarcaba Ventas antes de marcar Operaciones, el responsable se borraba sin el aviso de E4; ahora no se toca mientras no hay áreas (`OwnerField.tsx` y su test de T20).
+  - T26: Next cortaba en 10 MB el cuerpo de los pedidos que pasan por el rewrite, también sin `proxy.ts`, y la carga de 10 MB terminaba en 500; se fijó `experimental.proxyClientMaxBodySize: '11mb'` en `next.config.ts` (plan, sección 2).
+
 #### Escenario → test
 
 | Escenario | Test de componente | Test de Playwright | ✔ |
 | --- | --- | --- | --- |
-| E1 · El admin carga un documento | `UploadDocumentForm.test.tsx` (T21): 201 → `router.push`; `DocumentDetail.test.tsx` (T17): el ADMIN ve "Pendiente" | `carga.spec.ts` (T25); `integracion/documentos.spec.ts` (T26) | ☐ |
-| E2 · Un empleado no ve la opción de cargar | `DocumentList.test.tsx` (T15); `RequireRole.test.tsx` (T18) | `consulta.spec.ts` (T24) | ☐ |
-| E3 · El responsable se elige entre quienes pueden ver el documento | `owner-candidates.test.ts` (T07); `OwnerField.test.tsx` (T20) | `carga.spec.ts` (T25) | ☐ |
-| E4 · El responsable deja de ser válido al cambiar las áreas | `OwnerField.test.tsx` (T20) | `carga.spec.ts` (T25) | ☐ |
-| E5 · Archivo inválido antes de subir | `validate-upload.test.ts` (T12); `upload-fields.test.tsx` (T19); `UploadDocumentForm.test.tsx` (T21) | `carga.spec.ts` (T25) | ☐ |
-| E6 · Archivo duplicado | `error-messages.test.ts` (T04); `UploadDocumentForm.test.tsx` (T22) | `carga.spec.ts` (T25) | ☐ |
-| E7 · La API no está disponible | `error-messages.test.ts` (T04); `UploadDocumentForm.test.tsx` (T22) | `carga.spec.ts` (T25) | ☐ |
-| E8 · Listado de un empleado | `DocumentList.test.tsx` (T15) | `consulta.spec.ts` (T24); `integracion/documentos.spec.ts` (T26) | ☐ |
-| E9 · Un empleado no ve el estado del procesamiento | `DocumentDetail.test.tsx` (T17) | `consulta.spec.ts` (T24) | ☐ |
-| E10 · Lista vacía | `DocumentList.test.tsx` (T15) | `consulta.spec.ts` (T24) | ☐ |
-| E11 · Descarga | `DownloadButton.test.tsx` (T16) | `consulta.spec.ts` (T24); `integracion/documentos.spec.ts` (T26) | ☐ |
-| E12 · Documento ajeno | `DocumentDetail.test.tsx` (T17) | `consulta.spec.ts` (T24); `integracion/documentos.spec.ts` (T26) | ☐ |
+| E1 · El admin carga un documento | `UploadDocumentForm.test.tsx` (T21): "E1: con todos los campos válidos y un PDF de 2 MB, envía los valores y va al detalle"; `DocumentDetail.test.tsx` (T17): "E1: el ADMIN ve "Pendiente"" | `carga.spec.ts` (T25): "E1 · … con un PDF de 2 MB y todos los campos, va al detalle con el procesamiento "Pendiente"" (escritorio y celular); `integracion/documentos.spec.ts` (T26): "E1 de punta a punta: la ADMIN carga un PDF de 2 MB y llega al detalle con "Pendiente"" | ☑ |
+| E2 · Un empleado no ve la opción de cargar | `DocumentList.test.tsx` (T15): "E2: un EMPLOYEE no lo ve"; `RequireRole.test.tsx` (T18): "con %s muestra el mensaje y el contenido no se monta" (SUPERVISOR y EMPLOYEE) | `consulta.spec.ts` (T24): "E2 · … en el listado no está "Cargar documento"" y "… si entra a /documentos/nuevo, ve que no tiene permiso y no aparece el formulario (F1)" | ☑ |
+| E3 · El responsable se elige entre quienes pueden ver el documento | `owner-candidates.test.ts` (T07): "E3: con Ventas no aparece el EMPLOYEE de Operaciones y sí el ADMIN"; `OwnerField.test.tsx` (T20): "E3: … y sí los ADMIN" | `carga.spec.ts` (T25): "E3 · … con Ventas no aparece el EMPLOYEE de Operaciones y sí la ADMIN" | ☑ |
+| E4 · El responsable deja de ser válido al cambiar las áreas | `OwnerField.test.tsx` (T20 y T25): "E4: el responsable de Ventas se borra al pasar a Operaciones, con el aviso" y "E4 pasando por "sin áreas": …" | `carga.spec.ts` (T25): "E4 · … con Ventas y un responsable de Ventas, al pasar a Operaciones la elección se borra" | ☑ |
+| E5 · Archivo inválido antes de subir | `validate-upload.test.ts` (T12): "E5: un .docx da error en file" y "E5: un archivo de 11 MB da error en file"; `upload-fields.test.tsx` (T19): "E5: al elegir un .docx …" y "E5: al elegir un archivo de 11 MB …"; `UploadDocumentForm.test.tsx` (T21): "E5: con un .docx no se llama a uploadDocument" | `carga.spec.ts` (T25): "E5 · … un .docx y un archivo de 11 MB muestran el error junto al campo y no se envía nada" | ☑ |
+| E6 · Archivo duplicado | `error-messages.test.ts` (T04): "409: mensaje y existingDocumentId para el enlace"; `UploadDocumentForm.test.tsx` (T22): "E6: con 409, el mensaje, el enlace al documento existente y todo lo completado" | `carga.spec.ts` (T25): "E6 · … con 409, mensaje y enlace al documento existente; al volver, el formulario sigue completo" | ☑ |
+| E7 · La API no está disponible | `error-messages.test.ts` (T04): "503: probá de nuevo en unos minutos, con reintentar"; `UploadDocumentForm.test.tsx` (T22): "E7: con 503, "Probá de nuevo en unos minutos", todo sigue y un segundo envío vuelve a llamar" | `carga.spec.ts` (T25): "E7 · … con 503, "probá de nuevo en unos minutos" y el formulario sigue; un segundo envío funciona" | ☑ |
+| E8 · Listado de un empleado | `DocumentList.test.tsx` (T15): "E8: muestra exactamente las tarjetas de la respuesta y en el mismo orden" | `consulta.spec.ts` (T24): "E8 · … muestra solo los documentos que devuelve la API, en su orden, y pagina por números"; `integracion/documentos.spec.ts` (T26): "E8: la EMPLOYEE de Ventas ve el documento de Ventas y no el de Operaciones" | ☑ |
+| E9 · Un empleado no ve el estado del procesamiento | `DocumentDetail.test.tsx` (T17): "E9: un EMPLOYEE no ve el estado del procesamiento" | `consulta.spec.ts` (T24): "E9 · … el EMPLOYEE no lo ve" y "… el mismo documento, abierto por la ADMIN, sí lo muestra (F6)" | ☑ |
+| E10 · Lista vacía | `DocumentList.test.tsx` (T15): "E10: lista vacía para un EMPLOYEE, sin botón de carga" | `consulta.spec.ts` (T24): "E10 · … un usuario sin documentos en sus áreas ve "Todavía no hay documentos en tus áreas"" | ☑ |
+| E11 · Descarga | `DownloadButton.test.tsx` (T16): "E11: el clic pide el enlace a la API y lo abre" | `consulta.spec.ts` (T24): "E11 · … el enlace se pide a la API en el momento del clic y el navegador descarga el archivo (F8)"; `integracion/documentos.spec.ts` (T26): "E11: "Descargar" pide el enlace a la API real en el momento del clic" | ☑ (descarga real desde S3: pendiente, plan 001 8.3) |
+| E12 · Documento ajeno | `DocumentDetail.test.tsx` (T17): "E12: con 404, "No se encontró el documento", sin "Reintentar"" y "con un id que no es UUID, el mismo mensaje y sin llamar a la API" | `consulta.spec.ts` (T24): "E12 · … si la API responde 404, …" y "… con una dirección que no es un id válido, …"; `integracion/documentos.spec.ts` (T26): "E12: al abrir el de Operaciones por su dirección, ve "No se encontró el documento"" | ☑ |
 
 Reglas sin escenario propio, para no perderlas de vista:
 
-| Regla | Tests que la cubren |
+| Regla | Tests que la cubren (todos pasan) |
 | --- | --- |
-| F5 · Un solo envío | `UploadDocumentForm.test.tsx` (T21): doble clic → una llamada |
-| F10 · Responsive | Proyecto `celular` de Playwright (T23 a T25) y revisión manual (T31, paso 4) |
+| F5 · Un solo envío | `UploadDocumentForm.test.tsx` (T21): "mientras sube, el botón queda deshabilitado con "Cargando…"" y "dos envíos que llegan antes de que React vuelva a dibujar hacen una sola llamada"; `carga.spec.ts` (T25): E1, el botón deshabilitado con "Cargando…" |
+| F10 · Responsive | Proyecto `celular` de Playwright (T23 a T25) y la revisión a 375 px (T31, paso 4) |
 | F12 · Rutas | `pnpm --filter web build` y la navegación de T24 y T25 |
-| F14 · Salir del formulario | `UploadDocumentForm.test.tsx` (T21): sin `beforeunload` |
-| Sesión simulada fuera de producción | `simulated-session.test.tsx` (T05); `DevSessionSwitcher.test.tsx` (T06) |
+| F14 · Salir del formulario | `UploadDocumentForm.test.tsx` (T21): "no registra beforeunload y "Cancelar" vuelve a Documentos" |
+| Sesión simulada fuera de producción | `simulated-session.test.tsx` (T05): los tres tests de "la sesión simulada no funciona en producción"; `DevSessionSwitcher.test.tsx` (T06): "no se renderiza nada, aunque haya un usuario de prueba guardado" |
+| Carga de 10 MB por el rewrite (plan, sección 2) | `integracion/documentos.spec.ts` (T26): "un PDF de exactamente 10 MB pasa entero por el rewrite y la API responde 201" |
 
 ---
 
