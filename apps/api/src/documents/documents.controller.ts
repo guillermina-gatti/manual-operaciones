@@ -89,9 +89,12 @@ export class DocumentsController {
   @Post()
   @Roles('ADMIN')
   // Sin `storage` ni `dest`, multer guarda el archivo en memoria (memoryStorage): nunca toca el disco.
+  // D8: los navegadores mandan el nombre del archivo en UTF-8 sin declararlo, y multer lo lee como
+  // latin1 por defecto ("Instrucción" llegaría como "InstrucciÃ³n").
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+      defParamCharset: 'utf8',
     }),
   )
   @ApiConsumes('multipart/form-data')
