@@ -238,3 +238,135 @@ describe('áreas (plan 5.2)', () => {
     expect(await screen.findByRole('group', { name: 'Áreas' })).toBeInTheDocument();
   });
 });
+
+describe('errores de la API (F3) sin perder nada (F4)', () => {
+  const EXISTING_ID = '44444444-4444-4444-8444-444444444444';
+
+  // Todo lo completado sigue igual, incluido el mismo archivo en el mismo input.
+  function expectEverythingKept(file: File) {
+    expect(fileInput().files?.[0]).toBe(file);
+    expect(screen.getByText('manual.pdf')).toBeInTheDocument();
+    expect(titleInput()).toHaveValue('Manual de caja');
+    expect(screen.getByRole('checkbox', { name: 'Ventas' })).toBeChecked();
+    expect(ownerSelect()).toHaveValue(FIXTURE_USERS.supervisorVentas.id);
+    expect(dateInput()).toHaveValue(REVIEW_DATE);
+  }
+
+  test('E6: con 409, el mensaje, el enlace al documento existente y todo lo completado', async () => {
+    const user = setupUser();
+    mocks.uploadDocument.mockRejectedValue(
+      new ApiError(409, ['Ya hay un documento vigente con el mismo archivo'], EXISTING_ID),
+    );
+    await renderForm();
+    const file = await fillValid(user);
+    const input = fileInput();
+
+    await user.click(submitButton());
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent('Ya existe un documento con este mismo archivo.');
+    expect(within(banner).getByRole('link', { name: 'Ver el documento existente' })).toHaveAttribute(
+      'href',
+      `/documentos/${EXISTING_ID}`,
+    );
+    expect(fileInput()).toBe(input);
+    expectEverythingKept(file);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  test('E7: con 503, "Probá de nuevo en unos minutos", todo sigue y un segundo envío vuelve a llamar', async () => {
+    const user = setupUser();
+    mocks.uploadDocument
+      .mockRejectedValueOnce(new ApiError(503))
+      .mockResolvedValueOnce({ id: NEW_ID });
+    await renderForm();
+    const file = await fillValid(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'El servicio no está disponible. Probá de nuevo en unos minutos.',
+    );
+    expectEverythingKept(file);
+
+    await user.click(submitButton());
+
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(`/documentos/${NEW_ID}`));
+    expect(mocks.uploadDocument).toHaveBeenCalledTimes(2);
+    expect(mocks.uploadDocument.mock.calls[1][0].file).toBe(file);
+  });
+
+  test('400 con "ownerId: …": el error junto al responsable, con el foco ahí', async () => {
+    const user = setupUser();
+    mocks.uploadDocument.mockRejectedValue(
+      new ApiError(400, ['ownerId: el responsable no comparte ningún área con el documento']),
+    );
+    await renderForm();
+    const file = await fillValid(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Revisá los datos marcados en el formulario.',
+    );
+    expect(ownerSelect()).toHaveAccessibleDescription(
+      'El responsable tiene que pertenecer a alguna de las áreas elegidas, o ser administrador.',
+    );
+    await waitFor(() => expect(ownerSelect()).toHaveFocus());
+    expectEverythingKept(file);
+  });
+
+  test('400 sin un campo reconocible: el aviso general', async () => {
+    const user = setupUser();
+    mocks.uploadDocument.mockRejectedValue(new ApiError(400, ['property foo should not exist']));
+    await renderForm();
+    await fillValid(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Revisá los datos del formulario.');
+  });
+
+  test.each([
+    [413, 'El archivo pesa más de 10 MB.'],
+    [415, 'El archivo no es un PDF, .txt o .md válido.'],
+  ])('%i: el error junto al archivo, y el archivo sigue elegido', async (status, message) => {
+    const user = setupUser();
+    mocks.uploadDocument.mockRejectedValue(new ApiError(status));
+    await renderForm();
+    const file = await fillValid(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Revisá el archivo elegido.');
+    expect(fileInput()).toHaveAccessibleDescription(expect.stringContaining(message));
+    expectEverythingKept(file);
+  });
+
+  test('el error de la API junto al archivo se va al elegir otro archivo', async () => {
+    const user = setupUser();
+    mocks.uploadDocument.mockRejectedValue(new ApiError(415));
+    await renderForm();
+    await fillValid(user);
+    await user.click(submitButton());
+    await screen.findByText('El archivo no es un PDF, .txt o .md válido.');
+
+    await user.upload(fileInput(), fileOf('otro.pdf'));
+
+    expect(screen.queryByText('El archivo no es un PDF, .txt o .md válido.')).not.toBeInTheDocument();
+  });
+
+  test('403: "No tenés permiso para cargar documentos."', async () => {
+    const user = setupUser();
+    mocks.uploadDocument.mockRejectedValue(new ApiError(403, ['Forbidden resource']));
+    await renderForm();
+    const file = await fillValid(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No tenés permiso para cargar documentos.',
+    );
+    expectEverythingKept(file);
+  });
+});

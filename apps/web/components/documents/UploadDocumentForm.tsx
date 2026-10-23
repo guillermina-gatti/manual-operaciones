@@ -21,6 +21,7 @@ import { validateUpload } from '@/lib/documents/validate-upload';
 import type { UploadErrors, UploadFormValues } from '@/lib/documents/validate-upload';
 import { AreasField } from './AreasField';
 import { FileField } from './FileField';
+import { FormErrorBanner } from './FormErrorBanner';
 import { OwnerField } from './OwnerField';
 
 const EMPTY: UploadFormValues = {
@@ -80,7 +81,10 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
   // Después del primer intento de envío, cada campo se vuelve a validar al cambiar (plan 5.3).
   const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<{
+    message: string;
+    existingDocumentId?: string;
+  } | null>(null);
   // Corta un segundo envío que llegue antes de que React dibuje el botón deshabilitado (F5).
   const submittingRef = useRef(false);
   const [focusRequest, setFocusRequest] = useState(0);
@@ -121,8 +125,14 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
       const document = await uploadDocument({ ...values, file: values.file! });
       onUploaded(document.id);
     } catch (error) {
-      // F4: no se toca nada de lo completado. Los errores por campo y el 409 los agrega T22.
-      setSubmitError(describeApiError(error, 'upload').message);
+      // F4: no se toca ningún valor ni se vuelve a crear el formulario, así el <input type="file">
+      // conserva el archivo. Solo se agregan los errores (F3).
+      const { message, fieldErrors, existingDocumentId } = describeApiError(error, 'upload');
+      setSubmitError({ message, existingDocumentId });
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors((prev) => ({ ...prev, ...fieldErrors }));
+        setFocusRequest((n) => n + 1);
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -216,9 +226,10 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
       </div>
 
       {submitError && (
-        <p role="alert" className="text-red-700 dark:text-red-400">
-          {submitError}
-        </p>
+        <FormErrorBanner
+          message={submitError.message}
+          existingDocumentId={submitError.existingDocumentId}
+        />
       )}
 
       <div className="flex flex-wrap gap-3">
