@@ -123,3 +123,130 @@ model Chunk {
 //   CREATE INDEX chunks_content_fts_idx ON chunks USING gin (to_tsvector('spanish', content)); -- HU36
 
 // conversations, messages y message_feedback: los define Guille (HU17, HU25).
+
+// ============================================================
+// EQUIPO A — SEGURIDAD Y PLATAFORMA
+// Responsables: Magalí y Camila
+// A-03 — MODELOS DE USUARIOS Y ÁREAS
+// ============================================================
+
+// ------------------------------------------------------------
+// ROLE
+// ------------------------------------------------------------
+//
+// Un usuario posee un único rol global.
+//
+// ADMIN:
+// Administración general del sistema.
+//
+// SUPERVISOR:
+// Supervisión de las áreas asignadas.
+//
+// EMPLOYEE:
+// Ejecución de procedimientos y consulta de documentación.
+// ------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+  EMPLOYEE
+}
+
+// ------------------------------------------------------------
+// USER
+// ------------------------------------------------------------
+//
+// Representa una cuenta registrada.
+//
+// En el MVP, la cuenta se crea al aceptar una invitación
+// válida y definir una contraseña.
+//
+// El backend deberá consultar isActive y el rol vigente
+// en cada petición autenticada.
+// ------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(150)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  areas UserArea[]
+
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+// ------------------------------------------------------------
+// AREA
+// ------------------------------------------------------------
+//
+// Representa un sector organizacional.
+//
+// Ejemplos:
+// Ventas, Administración, Recursos Humanos.
+//
+// Solo ADMIN podrá gestionar áreas.
+//
+// isActive permite desactivar un área sin eliminar
+// necesariamente su información histórica.
+// ------------------------------------------------------------
+
+model Area {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(150)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  users UserArea[]
+
+  @@index([isActive])
+  @@map("areas")
+}
+
+// ------------------------------------------------------------
+// USER AREA
+// ------------------------------------------------------------
+//
+// Relación muchos a muchos entre User y Area.
+//
+// Un usuario puede pertenecer a distintas áreas.
+// Un área puede tener múltiples usuarios.
+//
+// La clave compuesta impide duplicar una asignación.
+// ------------------------------------------------------------
+
+model UserArea {
+  userId String @map("user_id") @db.Uuid
+  areaId String @map("area_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  area Area @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@id([userId, areaId])
+  @@index([areaId])
+  @@map("user_areas")
+}
+
+// ============================================================
+// FUTURAS ENTIDADES DEL EQUIPO A
+// ============================================================
+//
+// Invitation:
+// Invitaciones de un solo uso, con vencimiento de 48 horas.
+//
+// RefreshToken / Session:
+// Gestión de sesiones y revocación de refresh tokens.
+//
+// AuditLog:
+// Registro de cambios administrativos y operaciones sensibles.
+//
+// Estas entidades se implementarán en etapas posteriores,
+// coordinadas con Camila.
+// ============================================================
