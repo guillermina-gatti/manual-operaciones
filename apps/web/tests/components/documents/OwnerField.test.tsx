@@ -151,7 +151,7 @@ describe('cambiar las áreas', () => {
     expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
   });
 
-  test('al desmarcar todas las áreas, la elección se borra y vuelve "Elegí primero las áreas"', async () => {
+  test('al desmarcar todas las áreas, la elección se conserva y vuelve "Elegí primero las áreas"', async () => {
     const user = userEvent.setup();
     render(<Harness initialAreas={[AREA_IDS.ventas]} />);
     await waitForCandidates();
@@ -159,9 +159,36 @@ describe('cambiar las áreas', () => {
 
     await user.click(screen.getByRole('button', { name: 'Sin áreas' }));
 
-    await waitFor(() => expect(screen.getByTestId('responsable')).toHaveTextContent('ninguno'));
     expect(select()).toBeDisabled();
     expect(screen.getByText('Elegí primero las áreas')).toBeInTheDocument();
+    expect(screen.getByTestId('responsable')).toHaveTextContent(FIXTURE_USERS.supervisorVentas.id);
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  test('E4 pasando por "sin áreas": de Ventas a ninguna y después a Operaciones, se borra con el aviso', async () => {
+    const user = userEvent.setup();
+    render(<Harness initialAreas={[AREA_IDS.ventas]} />);
+    await waitForCandidates();
+    await user.selectOptions(select(), 'Sergio Supervisor de Ventas (Supervisor)');
+
+    await user.click(screen.getByRole('button', { name: 'Sin áreas' }));
+    await user.click(screen.getByRole('button', { name: 'Solo Operaciones' }));
+
+    await waitFor(() => expect(screen.getByTestId('responsable')).toHaveTextContent('ninguno'));
+    expect(select()).toHaveAccessibleDescription(NOTICE);
+  });
+
+  test('de Ventas a ninguna y de vuelta a Ventas, el responsable sigue elegido', async () => {
+    const user = userEvent.setup();
+    render(<Harness initialAreas={[AREA_IDS.ventas]} />);
+    await waitForCandidates();
+    await user.selectOptions(select(), 'Sergio Supervisor de Ventas (Supervisor)');
+
+    await user.click(screen.getByRole('button', { name: 'Sin áreas' }));
+    await user.click(screen.getByRole('button', { name: 'Solo Ventas' }));
+    await waitForCandidates();
+
+    expect(select()).toHaveValue(FIXTURE_USERS.supervisorVentas.id);
     expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
   });
 

@@ -40,17 +40,15 @@ export function OwnerField({ areaIds, value, error, onChange }: OwnerFieldProps)
 
   const notifyChange = useEffectEvent(onChange);
 
-  // Revisa la elección cuando cambian las áreas o llegan los candidatos nuevos. Mientras cargan, no toca nada.
+  // Revisa la elección cuando llegan los candidatos de las áreas nuevas. Mientras cargan, o mientras no
+  // hay áreas (por ejemplo, al desmarcar Ventas antes de marcar Operaciones), no toca nada: así el orden
+  // de los clics no importa y el aviso de E4 aparece cuando corresponde.
   useEffect(() => {
     if (!value) return;
-    if (areaIds.length === 0) {
-      notifyChange('', undefined);
-      return;
-    }
     if (candidates.status === 'success' && !candidates.data.some((user) => user.id === value)) {
       notifyChange('', OWNER_NO_LONGER_VALID);
     }
-  }, [value, areaIds.length, candidates.status, candidates.data]);
+  }, [value, candidates.status, candidates.data]);
 
   let hint: string | null = null;
   if (areaIds.length === 0) hint = 'Elegí primero las áreas';
