@@ -31,17 +31,17 @@ Convenciones:
 
 ## Base
 
-### T02 · Rewrite de `/api` y puerto 3001 de la API
+### T02 · Rewrite de `/api` al backend
 
-- **Qué hace:** agrega en `next.config.ts` el rewrite de `/api/:path*` a `${API_URL}/api/:path*`, con `http://localhost:3001` por defecto en desarrollo y error al arrancar en producción si falta `API_URL`. Documenta que la API corre en el puerto 3001.
+- **Qué hace:** agrega en `next.config.ts` el rewrite de `/api/:path*` a `${API_URL}/api/:path*`, con `http://localhost:3000` por defecto en desarrollo y error al arrancar (y al hacer el build) en producción si falta `API_URL`. Documenta en el README cómo se configura, con la convención de puertos que ya usa: API en el 3000 y web en el 3001.
 - **Cubre:** plan sección 2; spec sección 9 (ningún secreto en el frontend); D3.
-- **Archivos:** `next.config.ts`, `lib/config/api-url.ts` (función `resolveApiUrl(env)`, para poder probarla), `.env.example` (nuevo, con `API_URL=` sin valor), `.env.example` de la raíz (agrega `PORT=3001`), `README.md` de la raíz (cómo levantar web y API juntas).
+- **Archivos:** `next.config.ts`, `lib/config/api-url.ts` (función `resolveApiUrl(env)`, para poder probarla), `.env.example` (nuevo, con `API_URL=` sin valor), `.gitignore` (agrega `!.env.example`, porque ignora `.env*`), `README.md` de la raíz (una nota sobre el rewrite y `API_URL`).
 - **Verificación:**
-  1. Test primero, `tests/lib/config/api-url.test.ts`: con `API_URL` definida devuelve ese valor sin la barra final; sin `API_URL` en desarrollo devuelve `http://localhost:3001`; sin `API_URL` en producción lanza un error; el nombre de la variable no empieza con `NEXT_PUBLIC_`.
-  2. Manual: API con `PORT=3001 pnpm dev:api`, web con `pnpm dev:web`; `curl -i http://localhost:3000/api/documents` responde **401** (lo devuelve la API a través del rewrite, porque faltan las cabeceras).
-  3. `pnpm --filter web build` no deja `localhost:3001` en `.next/static` (`grep -r "3001" .next/static` vacío).
+  1. Test primero, `tests/lib/config/api-url.test.ts`: con `API_URL` definida devuelve ese valor sin la barra final; sin `API_URL` (o vacía) en desarrollo devuelve `http://localhost:3000`; sin `API_URL` en producción lanza un error; el nombre de la variable no empieza con `NEXT_PUBLIC_`.
+  2. Manual: Docker levantado, API con `pnpm dev:api`, web con `pnpm --filter web dev -p 3001`; `curl -i http://localhost:3001/api/documents` responde **401** con `x-powered-by: Express` (lo devuelve la API a través del rewrite, porque faltan las cabeceras), y con `x-user-id` y `x-user-role` responde 200.
+  3. `pnpm --filter web build` sin `API_URL` falla con "Falta API_URL"; con `API_URL=http://localhost:3000 pnpm --filter web build` pasa y no deja `localhost:3000` en `.next/static` (`grep -rl "localhost:3000" .next/static` vacío).
 - **Depende de:** T01
-- **Nota:** toca archivos compartidos (README.md, .env.example de la raíz, app/layout.tsx): avisar al equipo antes de mergear.
+- **Nota:** toca archivos compartidos (README.md): avisar al equipo antes de mergear. Desde esta tarea, `pnpm build` de la raíz necesita `API_URL` definida para la web.
 - **Commit:** `feat(web): reenviar /api al backend con un rewrite`
 
 ### T03 · `ApiError` y cliente HTTP
@@ -294,7 +294,7 @@ Convenciones:
 
 ### T23 · Configurar Playwright
 
-- **Qué hace:** configura Playwright con `next dev` como `webServer` y los proyectos `escritorio` (Chromium, 1280×800) y `celular` (`Pixel 7`). Agrega los helpers para fijar la sesión (`page.addInitScript` con `sim-session`), simular la API (`page.route('**/api/**')`) y generar archivos de prueba. El proyecto `integracion` se define aparte y no corre por defecto.
+- **Qué hace:** configura Playwright con `next dev -p 3001` como `webServer` (D3) y los proyectos `escritorio` (Chromium, 1280×800) y `celular` (`Pixel 7`). Agrega los helpers para fijar la sesión (`page.addInitScript` con `sim-session`), simular la API (`page.route('**/api/**')`) y generar archivos de prueba. El proyecto `integracion` se define aparte y no corre por defecto.
 - **Cubre:** F10; plan sección 7.2.
 - **Archivos:** `playwright.config.ts`, `e2e/support/session.ts`, `e2e/support/mock-api.ts`, `e2e/support/files.ts`, `e2e/smoke.spec.ts`, `package.json` (script `test:e2e`), `.gitignore` (`test-results/`, `playwright-report/`).
 - **Verificación:**
@@ -335,10 +335,10 @@ Convenciones:
 
 ### T26 · Prueba de integración con la API real
 
-- **Qué hace:** agrega unas pocas pruebas de Playwright contra la API real (PostgreSQL en Docker, API en el puerto 3001 sin `S3_BUCKET`), para comprobar el rewrite y el contrato.
+- **Qué hace:** agrega unas pocas pruebas de Playwright contra la API real (PostgreSQL en Docker, API en el puerto 3000 sin `S3_BUCKET`), para comprobar el rewrite y el contrato.
 - **Cubre:** plan sección 2 (riesgo del tamaño de la carga) y 7.2; E1, E8, E11, E12 de punta a punta.
 - **Archivos:** `e2e/integracion/documentos.spec.ts`, `playwright.config.ts` (proyecto `integracion`).
-- **Verificación:** `docker compose up -d`, `PORT=3001 pnpm dev:api` y `pnpm --filter web test:e2e --project=integracion`:
+- **Verificación:** `docker compose up -d`, `pnpm dev:api` y `pnpm --filter web test:e2e --project=integracion`:
   - ADMIN carga un PDF de 2 MB y llega al detalle con "Pendiente";
   - ADMIN carga un PDF de **exactamente 10 MB** y recibe 201;
   - EMPLOYEE de Ventas ve el documento de Ventas y no el de Operaciones; al abrir el de Operaciones por URL, "No se encontró el documento";
@@ -400,7 +400,7 @@ Necesitan piezas de la pareja A que todavía no existen. Se hacen cuando lleguen
 - **Archivos:** `specs/002-pantallas-documentos/tasks.md` (se marca la tabla y se anota el resultado).
 - **Verificación:**
   1. `pnpm --filter web lint`, `pnpm --filter web build`, `pnpm --filter web test` y `pnpm --filter web test:e2e`: todo en verde.
-  2. Con Docker y la API en el puerto 3001: `pnpm --filter web test:e2e --project=integracion` en verde.
+  2. Con Docker y la API en el puerto 3000: `pnpm --filter web test:e2e --project=integracion` en verde.
   3. Revisar la tabla: cada fila tiene un test de componente y uno de Playwright que existen y pasan.
   4. A mano, en el celular (o con las herramientas del navegador en 375 px de ancho): listado, detalle y formulario se usan sin desplazamiento horizontal (F10).
 - **Depende de:** T01 a T26

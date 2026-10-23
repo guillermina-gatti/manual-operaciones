@@ -39,7 +39,7 @@ Lo que importa de la API (`apps/api`):
 
 - Prefijo `/api`, `ValidationPipe` global y Swagger en `/api/docs` (`src/app.setup.ts`).
 - **No habilita CORS.** El frontend solo puede llamarla desde el mismo origen, o sea, a través del rewrite (sección 2).
-- Escucha en `PORT ?? 3000`, el mismo puerto por defecto que `next dev` (D3).
+- Escucha en `PORT ?? 3000`, el mismo puerto por defecto que `next dev`. El README ya levanta la web con `-p 3001` (D3).
 - Autenticación simulada (`src/common/auth/index.ts`): lee `x-user-id` y `x-user-role`, responde 401 si faltan y no arranca en producción.
 - Las respuestas traen **solo IDs** de áreas (`areaIds`) y del responsable (`ownerId`), sin nombres (Q1).
 - Los usuarios y áreas simulados del backend tienen UUID fijos en `src/documents/adapters/fixtures.ts` (Ventas, Operaciones, un ADMIN y un SUPERVISOR y un EMPLOYEE por área).
@@ -111,7 +111,7 @@ async rewrites() {
 }
 ```
 
-- `apiUrl` sale de `process.env.API_URL`, **sin** prefijo `NEXT_PUBLIC_`: la dirección del backend se usa solo en el servidor de Next y no termina en el JavaScript del navegador. En desarrollo, si falta, vale `http://localhost:3001` (D3); en producción, si falta, `next.config.ts` lanza un error al arrancar.
+- `apiUrl` sale de `process.env.API_URL`, **sin** prefijo `NEXT_PUBLIC_`: la dirección del backend se usa solo en el servidor de Next y no termina en el JavaScript del navegador. En desarrollo, si falta, vale `http://localhost:3000` (D3); en producción, si falta, `next.config.ts` lanza un error al arrancar. `next build` corre en modo producción y deja el destino del rewrite fijo en el build, así que **el build también necesita `API_URL`**.
 - `apps/web/.env.example` documenta `API_URL=` sin valor. El frontend **no tiene secretos**: ni credenciales de AWS, ni `JWT_SECRET`, ni claves de IA.
 - Por qué rewrite y no llamar directo al backend: la API no habilita CORS y, según `docs/justificacion.md`, la cookie del refresh token tiene que quedar en el mismo dominio que el frontend.
 - Las cabeceras pasan sin cambios por el rewrite, así que `x-user-id` y `x-user-role` (hoy) y `Authorization` o la cookie (después) llegan al backend.
@@ -308,7 +308,7 @@ Tomadas en la revisión del plan el 23/10/2026.
 | --- | --- | --- |
 | D1 · ¿Los datos se piden desde el servidor de Next (componentes de servidor) o desde el navegador? | Desde el navegador. Según la justificación, el access token dura 15 minutos y el refresh va en cookie: lo más probable es que el token viva en el cliente. Pedir desde el servidor obligaría a reenviar credenciales y a usar la URL absoluta del backend. Si la pareja A guarda la sesión en una cookie legible por el servidor, se puede pasar el listado a componente de servidor más adelante sin cambiar la API | F7, F8 |
 | D2 · ¿Dónde se guarda la sesión simulada? | En `localStorage` (`sim-session`), con `DevSessionSwitcher` para elegir el usuario. Es fácil de fijar en Playwright y no llega a producción (3.1) | F1, F6 |
-| D3 · La API y `next dev` usan el puerto 3000 por defecto | La web sigue en 3000 y la API se corre con `PORT=3001`. Se documenta en el `.env.example` de la raíz y en el README en la tarea del rewrite (es un cambio de documentación, no de código de la API) | — |
+| D3 · La API y `next dev` usan el puerto 3000 por defecto | Se sigue la convención que ya usa el README: la API en el 3000 (su valor por defecto) y la web en el 3001 (`pnpm --filter web dev -p 3001`). `API_URL` vale `http://localhost:3000` por defecto en desarrollo. No hace falta `PORT` en el `.env.example` de la raíz. Corregida al implementar T02: la primera versión invertía los puertos y obligaba a cambiar el README que usa todo el equipo | — |
 | D4 · Con `cacheComponents`, Next guarda la pantalla anterior oculta (`<Activity>`) y, al volver atrás, el formulario puede reaparecer con los datos | No se pide confirmación al salir, y se acepta que los datos se conserven al volver atrás, porque no le hace daño a nadie. Después de una carga correcta sí se limpia el estado (F13), para que "Cargar documento" siempre empiece vacío. La spec se ajustó en F14, en el caso borde y en P8 | F13, F14 |
 | D5 · ¿Qué muestra el responsable antes de elegir áreas? | Campo deshabilitado con "Elegí primero las áreas". Mostrar solo a los ADMIN sería válido según F11, pero invita a elegir antes de tiempo | F11 |
 | D6 · F6 oculta el estado a quien no es ADMIN, pero la API se lo devuelve igual | Alcanza para la spec (no es información sensible). Si se quiere que no viaje, que la API lo omita para quien no es ADMIN; sería un cambio de la spec 001 | F6 |

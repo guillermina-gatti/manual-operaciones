@@ -57,6 +57,10 @@ pnpm dev:api                    # http://localhost:3000
 pnpm --filter web dev -p 3001   # http://localhost:3001
 ```
 
+La web reenvía `/api` al backend (rewrite de `apps/web/next.config.ts`). Si la API no está en
+`http://localhost:3000`, definí `API_URL` en `apps/web/.env.local` (ver `apps/web/.env.example`).
+Para compilar la web (`pnpm build`) hace falta crear `apps/web/.env` con `API_URL=http://localhost:3000`: sin esa variable, el build falla.
+
 Tests: `pnpm --filter api test` y `pnpm --filter api test:e2e`.
 
 ## Documentación
