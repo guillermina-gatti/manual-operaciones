@@ -1,3 +1,5 @@
+/* Define cómo los servicios leen y escriben en la base, sin depender de Prisma */
+
 import type {
   DocumentStatus,
   DocumentVersionStatus,
@@ -5,7 +7,8 @@ import type {
   ProcessingStatus,
 } from '../generated/prisma/client';
 
-// La base no responde (conexión o timeout); el servicio lo convierte en 503 (R8).
+// 1. Error personalizado: Si la base de datos no responde por timeout o conexión,
+// el repositorio lanza esto para que el servicio lo convierta en un HTTP 503 (Regla R8).
 export class RepositoryUnavailableError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
@@ -15,12 +18,11 @@ export class RepositoryUnavailableError extends Error {
 
 declare const transactionBrand: unique symbol;
 
-// Transacción opaca (D10): los servicios solo la reciben y la pasan; no pueden leerla ni crearla.
-// PrismaDocumentsRepository (T18) convierte su Prisma.TransactionClient a este tipo.
+// 2. Transacción opaca (D10): Los servicios solo la reciben y la pasan sin poder manipularla.
+// (La implementación real con Prisma convertirá su cliente de transacción a este tipo).
 export type RepositoryTransaction = { readonly [transactionBrand]: true };
 
-// Lo que el servicio entrega para crear un documento. Los ids los genera el servicio antes de
-// subir el archivo (plan 4, paso 4); versionNumber = 1, CURRENT y PENDING los fija el repositorio.
+// 3. Estructura con los datos que entrega el servicio para dar de alta un documento nuevo.
 export interface NewDocument {
   id: string;
   title: string;
@@ -40,6 +42,7 @@ export interface NewDocument {
   };
 }
 
+// Estructura de los registros de la versión de un documento
 export interface DocumentVersionRecord {
   id: string;
   versionNumber: number;
@@ -53,7 +56,7 @@ export interface DocumentVersionRecord {
   createdAt: Date;
 }
 
-// Incluye storageKey y checksum para uso interno; la respuesta HTTP no los expone (plan 3.1).
+// Estructura completa de un documento recuperado de la base de datos
 export interface DocumentRecord {
   id: string;
   title: string;
@@ -67,38 +70,38 @@ export interface DocumentRecord {
   currentVersion: DocumentVersionRecord;
 }
 
+// Estructura para manejar resultados paginados
 export interface DocumentPage {
   data: DocumentRecord[];
   total: number;
 }
 
-// Puerto (D10, plan 5.6). La implementación con Prisma es T18 y está bloqueada hasta que exista PrismaService.
-// Cualquier método puede rechazar con RepositoryUnavailableError: la implementación traduce a ese error
-// los fallos de conexión y de timeout (también el de la transacción). Los demás errores no se traducen.
+// 4. Puerto (Contrato abstracto): Define los métodos obligatorios que debe tener
+// cualquier repositorio de base de datos que conectemos al sistema.
 export abstract class DocumentsRepository {
-  // Todo o nada (R7, R8): si fn lanza, se deshace todo lo escrito con tx.
+  // Garantiza "todo o nada" (R7, R8): si algo falla dentro del callback, la transacción se revierte.
   abstract runInTransaction<T>(
     fn: (tx: RepositoryTransaction) => Promise<T>,
   ): Promise<T>;
 
-  // Versión CURRENT de un documento ACTIVE con el mismo SHA-256 (R8b).
+  // Busca si existe un documento activo con el mismo hash (SHA-256) para evitar duplicados (R8b).
   abstract findActiveByChecksum(
     checksum: string,
   ): Promise<{ documentId: string } | null>;
 
-  // Inserta documents, document_areas y la primera document_versions (R7).
+  // Inserta el documento, sus relaciones de áreas y su primera versión de forma atómica (R7).
   abstract createWithFirstVersion(
     tx: RepositoryTransaction,
     data: NewDocument,
   ): Promise<DocumentRecord>;
 
-  // Página ordenada por createdAt descendente y, si empatan, por id; data y total con el mismo filtro (R13).
+  // Devuelve una página de documentos ordenados por fecha de creación (R13).
   abstract list(
     where: Prisma.DocumentWhereInput,
     page: number,
     limit: number,
   ): Promise<DocumentPage>;
 
-  // Documento con sus áreas y su versión vigente, o null si no existe (R10, R11, R12).
+  // Busca un documento por ID junto con sus áreas y su versión vigente (o null si no existe).
   abstract findByIdWithAreas(id: string): Promise<DocumentRecord | null>;
 }
