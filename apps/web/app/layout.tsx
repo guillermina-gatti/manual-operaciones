@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { DevSessionSwitcher } from "@/components/session/DevSessionSwitcher";
 import { SessionProvider } from "@/lib/session";
 import "./globals.css";
 
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          {children}
+          <DevSessionSwitcher />
+        </SessionProvider>
       </body>
     </html>
   );
