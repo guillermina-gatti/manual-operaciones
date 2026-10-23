@@ -33,6 +33,8 @@ export default defineConfig({
     {
       name: 'integracion',
       testMatch: INTEGRATION_DIR,
+      // La subida de 10 MB pasa por la web, el rewrite y la API: tarda más que un test simulado.
+      timeout: 60_000,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
   ],
