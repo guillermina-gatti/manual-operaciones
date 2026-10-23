@@ -3,7 +3,9 @@ import {
   Injectable,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
 
@@ -12,8 +14,9 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  constructor() {
-    const connectionString = process.env.DATABASE_URL;
+  constructor(@Optional() private readonly configService?: ConfigService) {
+    const connectionString =
+      configService?.get<string>('DATABASE_URL') ?? process.env.DATABASE_URL;
 
     if (!connectionString) {
       throw new Error(
