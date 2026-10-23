@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado:** T01 a T17 se pueden hacer ya. T18 a T21 están **BLOQUEADAS** por piezas compartidas que todavía no existen. T22 es la verificación final.
+- **Estado (23/10/2026):** T01 a T21 hechas (T18 a T21 se desbloquearon al llegar `PrismaService`, el prefijo `/api`, el `ValidationPipe` y Swagger). T22 hecha en su parte automática; la verificación manual con S3 (plan 8.3) queda **pendiente** porque todavía no hay bucket ni credenciales de desarrollo.
 
 Convenciones:
 
@@ -174,20 +174,20 @@ Según D10 (plan 5.6), `DocumentsRepository` es un puerto con `runInTransaction(
 
 ---
 
-## Tareas BLOQUEADAS
+## Tareas que dependían de piezas compartidas (desbloqueadas)
 
-Estas tareas necesitan piezas compartidas que hoy no existen en `apps/api` (`main.ts` y `AppModule` están recién generados). Según D7, las entrega otra pareja; si no llegan, se crean en una tarea separada, fuera de esta lista, y se avisa al equipo.
+Estas tareas necesitaban piezas compartidas que no existían en `apps/api` cuando se escribió este plan (`main.ts` y `AppModule` estaban recién generados). Según D7, las entregaba otra pareja. Llegaron con A-00 (`PrismaService`) y A-01 (prefijo `/api`, `ValidationPipe` y Swagger), y con eso T18 a T21 quedaron desbloqueadas y se hicieron.
 
-| Pieza que falta | La necesitan |
-| --- | --- |
-| `PrismaService` global | T18, T19, T20, T21 |
-| Prefijo `/api` en `main.ts` | T19, T20, T21 |
-| `ValidationPipe` global (`whitelist`, `forbidNonWhitelisted`, `transform`) | T19, T20, T21 |
-| Swagger configurado (`SwaggerModule`) | T19, T20 |
+| Pieza que faltaba | La necesitan | La entregó |
+| --- | --- | --- |
+| `PrismaService` global | T18, T19, T20, T21 | A-00 |
+| Prefijo `/api` en `main.ts` | T19, T20, T21 | A-01 |
+| `ValidationPipe` global (`whitelist`, `forbidNonWhitelisted`, `transform`) | T19, T20, T21 | A-01 |
+| Swagger configurado (`SwaggerModule`) | T19, T20 | A-01 |
 
-### T18 · BLOQUEADA · `PrismaDocumentsRepository`
+### T18 · `PrismaDocumentsRepository`
 
-- **Motivo del bloqueo:** se inyecta el `PrismaService` compartido, que no existe.
+- **Bloqueo (resuelto con A-00):** se inyecta el `PrismaService` compartido, que no existía.
 - **Qué hace:** implementa el contrato de T11 con Prisma: `findActiveByChecksum` (versión `CURRENT` de un documento `ACTIVE`), `runInTransaction` (`$transaction` con timeout corto), `createWithFirstVersion` (documento, áreas y versión en el `tx`), `list` (`findMany` + `count` en un `$transaction`, orden `createdAt desc, id desc`) y `findByIdWithAreas`. Traduce los fallos de conexión y de timeout de Prisma (también el timeout de la transacción) a `RepositoryUnavailableError`; los demás errores no se traducen.
 - **Cubre:** R7, R8b (con archivados permitidos), R13 (orden y total), plan 2.3 y 3.2.
 - **Archivos:** `src/documents/prisma-documents.repository.ts`, `test/documents/documents.repository.e2e-spec.ts`.
@@ -195,9 +195,9 @@ Estas tareas necesitan piezas compartidas que hoy no existen en `apps/api` (`mai
 - **Depende de:** T02, T11; `PrismaService`.
 - **Commit:** `feat(documents): agregar repositorio de documentos con Prisma`
 
-### T19 · BLOQUEADA · `DocumentsModule` y `POST /api/documents`
+### T19 · `DocumentsModule` y `POST /api/documents`
 
-- **Motivo del bloqueo:** el módulo resuelve el repositorio con T18 (`PrismaService`); la ruta depende del prefijo `/api`; la validación del DTO, del `ValidationPipe` global; y los decoradores de Swagger solo se pueden revisar con Swagger configurado.
+- **Bloqueo (resuelto con A-00 y A-01):** el módulo resuelve el repositorio con T18 (`PrismaService`); la ruta depende del prefijo `/api`; la validación del DTO, del `ValidationPipe` global; y los decoradores de Swagger solo se pueden revisar con Swagger configurado.
 - **Qué hace:** crea `DocumentsModule` (importa `StorageModule` y elige cada puerto: `FakeProcessingQueue`, directorios en memoria, `LoggerAuditLog`, `PrismaDocumentsRepository`), lo registra en `AppModule`, y crea `DocumentsController` con la carga: `JwtAuthGuard`, `RolesGuard`, `@Roles('ADMIN')`, `FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 10 MB, files: 1 } })`, Swagger (`@ApiTags`, `@ApiBearerAuth`, `@ApiConsumes('multipart/form-data')`, `@ApiResponse` por código). Sin lógica: llama a `DocumentUploadService.upload`. También el arnés de integración: crear la app, reemplazar el guard (`overrideGuard`) y los puertos por simulaciones configurables, y limpiar la base entre tests.
 - **Cubre:** R1, R3 (413 por multer), R7, plan 3.1 y paso 1 a 2 del plan 4, spec sección 9 (Swagger).
 - **Archivos:** `src/documents/documents.module.ts`, `src/documents/documents.controller.ts`, `src/app.module.ts`, `test/documents/helpers.ts`, `test/documents/upload.e2e-spec.ts`.
@@ -205,9 +205,9 @@ Estas tareas necesitan piezas compartidas que hoy no existen en `apps/api` (`mai
 - **Depende de:** T04, T07, T08, T09, T10, T15, T18; `PrismaService`, prefijo `/api`, `ValidationPipe`, Swagger.
 - **Commit:** `feat(documents): agregar endpoint de carga de documentos`
 
-### T20 · BLOQUEADA · Endpoints de consulta
+### T20 · Endpoints de consulta
 
-- **Motivo del bloqueo:** igual que T19 (módulo con `PrismaService`, `/api`, `ValidationPipe` para `ListDocumentsQuery`, Swagger).
+- **Bloqueo (resuelto con A-00 y A-01):** igual que T19 (módulo con `PrismaService`, `/api`, `ValidationPipe` para `ListDocumentsQuery`, Swagger).
 - **Qué hace:** agrega al controlador `GET /api/documents`, `GET /api/documents/:id` y `GET /api/documents/:id/download`, con `JwtAuthGuard`, `ParseUUIDPipe` y Swagger. Sin lógica: llaman a `DocumentQueryService`.
 - **Cubre:** R10, R11, R12, R13, D2, D3, plan 3.2 a 3.4.
 - **Archivos:** `src/documents/documents.controller.ts`, `test/documents/query.e2e-spec.ts`.
@@ -215,9 +215,9 @@ Estas tareas necesitan piezas compartidas que hoy no existen en `apps/api` (`mai
 - **Depende de:** T17, T19.
 - **Commit:** `feat(documents): agregar endpoints de listado, detalle y descarga`
 
-### T21 · BLOQUEADA · Escenarios de carga restantes y nombres con tildes
+### T21 · Escenarios de carga restantes y nombres con tildes
 
-- **Motivo del bloqueo:** necesita la app de T19 corriendo contra PostgreSQL con `PrismaService`, `/api` y `ValidationPipe`.
+- **Bloqueo (resuelto con A-00 y A-01):** necesita la app de T19 corriendo contra PostgreSQL con `PrismaService`, `/api` y `ValidationPipe`.
 - **Qué hace:** completa los escenarios de carga de la spec en integración. La lógica ya está en T14 y T15, así que estos tests **deberían pasar al escribirlos** (son de regresión); el que puede fallar es el de tildes (D8), que es el que justifica el cambio: `defParamCharset: 'utf8'` en el `FileInterceptor` o convertir el nombre de latin1 a UTF-8.
 - **Cubre:** R2, R3, R5, R8, R8b, R9, D8; casos borde de spec sección 8.
 - **Archivos:** `test/documents/upload.e2e-spec.ts`; `src/documents/documents.controller.ts` (o el servicio) solo si falla el test de D8.
@@ -245,25 +245,46 @@ Estas tareas necesitan piezas compartidas que hoy no existen en `apps/api` (`mai
 - **Depende de:** T01 a T21 (con T18 a T21 desbloqueadas para cerrarla del todo).
 - **Commit:** `docs(specs): registrar verificación de carga y consulta de documentos`
 
+#### Resultado (23/10/2026)
+
+- **Parte automática: hecha.**
+  - `pnpm --filter api lint`: sin avisos.
+  - `pnpm --filter api build`: compila.
+  - `pnpm --filter api test`: 13 suites, 131 tests, todos pasan.
+  - `pnpm --filter api test:e2e`: 4 suites, 46 tests, todos pasan. Corre contra la base de tests `manual_test` (`TEST_DATABASE_URL`), con `prisma migrate reset --force` antes de la suite.
+- **Verificación manual con S3 (paso 3, plan 8.3): PENDIENTE.** Todavía no hay bucket de desarrollo ni credenciales de AWS, así que no se puede levantar la API con `S3_BUCKET` definida. Sin bucket, `StorageModule` usa `InMemoryFileStorage`. Quedan sin hacer los pasos 8.3.1 a 8.3.4, y con ellos la parte manual de "Falla el encolado", "Descarga permitida" y R9. Se hace cuando el equipo tenga el bucket y las credenciales en el `.env` local.
+
 #### Escenario → test
 
 | Escenario de la spec | Test unitario | Test de integración | ✔ |
 | --- | --- | --- | --- |
-| Carga correcta | `document-upload.service.spec.ts` (T15) | `upload.e2e-spec.ts` (T19) | ☐ |
-| Rol sin permiso | `common/auth/index.spec.ts` (T04) | `upload.e2e-spec.ts` (T19) | ☐ |
-| Extensión falsa | `file-inspector.spec.ts` (T03) | `upload.e2e-spec.ts` (T21) | ☐ |
-| Archivo demasiado grande | — (lo corta multer) | `upload.e2e-spec.ts` (T21) | ☐ |
-| Archivo duplicado | `document-upload.service.spec.ts` (T14) | `upload.e2e-spec.ts` (T21), `documents.repository.e2e-spec.ts` (T18) | ☐ |
-| Carga de Markdown | `file-inspector.spec.ts` (T03) | `upload.e2e-spec.ts` (T21) | ☐ |
-| Responsable sin acceso | `document-access.policy.spec.ts` (T05), `document-upload.service.spec.ts` (T14) | `upload.e2e-spec.ts` (T21) | ☐ |
-| Área inexistente | `document-upload.service.spec.ts` (T14) | `upload.e2e-spec.ts` (T21) | ☐ |
-| Falla el almacenamiento | `document-upload.service.spec.ts` (T15) | `upload.e2e-spec.ts` (T21) | ☐ |
-| Listado filtrado por área | `document-access.policy.spec.ts` (T05), `document-query.service.spec.ts` (T16) | `query.e2e-spec.ts` (T20) | ☐ |
-| Documento de otra área | `document-query.service.spec.ts` (T17) | `query.e2e-spec.ts` (T20) | ☐ |
-| Falla el encolado | `document-upload.service.spec.ts` (T15) | `upload.e2e-spec.ts` (T21); manual 8.3.4 (T22) | ☐ |
-| Descarga permitida | `document-query.service.spec.ts` (T17) | `query.e2e-spec.ts` (T20); manual 8.3.2 y 8.3.3 (T22) | ☐ |
+Revisada el 23/10/2026: cada test se buscó por su nombre en el archivo y figura como pasado en la corrida de arriba. ☑ = el test unitario y el de integración existen y pasan. Si la fila también pide una verificación manual, esa parte sigue pendiente y se indica en la fila.
 
-Reglas sin escenario propio en la spec, para no perderlas de vista: R4 (T12, T21), R6 (T14), R9 (T15, T21, manual 8.3.1), R13 (T12, T16, T18, T20), R14 (T10, T15, T19).
+| Escenario de la spec | Test unitario | Test de integración | ✔ |
+| --- | --- | --- | --- |
+| Carga correcta | `document-upload.service.spec.ts` (T15): "carga correcta: put → transacción → alta → auditoría SUCCESS → encolado → commit" | `upload.e2e-spec.ts` (T19): "carga correcta: 201, filas de plan 2.3, objeto guardado, versión encolada y auditoría SUCCESS" | ☑ |
+| Rol sin permiso | `common/auth/index.spec.ts` (T04): "RolesGuard responde 403 si el rol no está permitido" | `upload.e2e-spec.ts` (T19): "un EMPLOYEE (rol sin permiso) recibe 403 y no escribe nada" | ☑ |
+| Extensión falsa | `file-inspector.spec.ts` (T03): "rechaza un .pdf que no empieza con %PDF- (extensión falsa)" | `upload.e2e-spec.ts` (T21): "extensión falsa (texto con nombre .pdf) responde 415" | ☑ |
+| Archivo demasiado grande | — (lo corta multer) | `upload.e2e-spec.ts` (T21): "un archivo de 11 MB responde 413 y no escribe nada" | ☑ |
+| Archivo duplicado | `document-upload.service.spec.ts` (T14): "duplicado: 409 con existingDocumentId" | `upload.e2e-spec.ts` (T21): "archivo duplicado responde 409…" y "el mismo archivo que un documento ARCHIVED se acepta: 201"; `documents.repository.e2e-spec.ts` (T18): `findActiveByChecksum` (3 tests) | ☑ |
+| Carga de Markdown | `file-inspector.spec.ts` (T03): "acepta un Markdown con texto UTF-8 válido" | `upload.e2e-spec.ts` (T21): "carga de Markdown responde 201 con text/markdown" | ☑ |
+| Responsable sin acceso | `document-access.policy.spec.ts` (T05): "canBeOwner responsable sin acceso…"; `document-upload.service.spec.ts` (T14): "responsable sin acceso: 400" | `upload.e2e-spec.ts` (T21): "responsable sin acceso a las áreas del documento responde 400…" | ☑ |
+| Área inexistente | `document-upload.service.spec.ts` (T14): "área inexistente: 400 que nombra el área" | `upload.e2e-spec.ts` (T21): "un área inexistente responde 400 y no escribe nada" | ☑ |
+| Falla el almacenamiento | `document-upload.service.spec.ts` (T15): "falla el almacenamiento: 503, sin transacción y sin nada que borrar" | `upload.e2e-spec.ts` (T21): "si falla el almacenamiento responde 503 y no deja filas" | ☑ |
+| Listado filtrado por área | `document-access.policy.spec.ts` (T05): "listWhere para un EMPLOYEE filtra por ACTIVE y por sus áreas"; `document-query.service.spec.ts` (T16): "para un EMPLOYEE usa el where de la política…" | `query.e2e-spec.ts` (T20): "listado filtrado por área: el EMPLOYEE de Ventas solo recibe el de Ventas" | ☑ |
+| Documento de otra área | `document-query.service.spec.ts` (T17): "documento de otra área detalle: 404" y "descarga: 404 y el almacenamiento nunca genera un enlace" | `query.e2e-spec.ts` (T20): "documento de otra área: 404 idéntico…" (detalle y descarga, sin enlace generado) | ☑ |
+| Falla el encolado | `document-upload.service.spec.ts` (T15): "falla el encolado: 503, rollback y delete(key)" | `upload.e2e-spec.ts` (T21): "si falla el encolado responde 503, sin filas y sin el objeto"; manual 8.3.4 (T22): **pendiente** (sin bucket) | ☑ (manual pendiente) |
+| Descarga permitida | `document-query.service.spec.ts` (T17): "descarga permitida con PENDING devuelve { url, expiresAt }" | `query.e2e-spec.ts` (T20): "descarga permitida con PENDING: url y expiresAt unos 300 s después"; manual 8.3.2 y 8.3.3 (T22): **pendiente** (sin bucket) | ☑ (manual pendiente) |
+
+Reglas sin escenario propio en la spec, para no perderlas de vista:
+
+| Regla | Tests que la cubren (todos pasan) |
+| --- | --- |
+| R4 · datos obligatorios | `create-document.dto.spec.ts` (T12): título, áreas, responsable, fecha y descripción (18 tests); `upload.e2e-spec.ts` (T21): "un campo obligatorio faltante responde 400 con un mensaje que lo nombra" |
+| R6 · revisión posterior a hoy | `document-upload.service.spec.ts` (T14): "fecha de revisión (3c)": hoy da 400, ayer da 400, mañana pasa, y "a las 23:30 de Buenos Aires…". Solo tiene test unitario, como estaba previsto |
+| R9 · clave generada por el sistema | `document-upload.service.spec.ts` (T14/T15): "un nombre original con rutas no afecta" y "un nombre original de 300 caracteres se guarda recortado a 255"; `upload.e2e-spec.ts` (T19/T21): la clave `documents/{id}/{versionId}.pdf` en la carga correcta, "../../x.pdf" y tildes (D8); manual 8.3.1: **pendiente** (sin bucket) |
+| R13 · paginación y orden | `list-documents.query.spec.ts` (T12); `document-query.service.spec.ts` (T16): página y límite; `documents.repository.e2e-spec.ts` (T18): orden, desempate por id y total; `query.e2e-spec.ts` (T20): orden, `page=2&limit=1` y `limit=101` da 400 |
+| R14 · auditoría | `logger-audit-log.spec.ts` (T10); `document-upload.service.spec.ts` (T15): SUCCESS en la transacción y FAILURE con su código; `upload.e2e-spec.ts` (T19): auditoría SUCCESS en la carga correcta. En integración solo se comprueba SUCCESS; FAILURE se cubre con tests unitarios |
 
 ---
 
@@ -281,6 +302,6 @@ T15 ◄─ T08, T10, T13, T14
 T16 ◄─ T05, T09, T11, T13
 T17 ◄─ T06, T16
 
-BLOQUEADAS: T18 ◄─ T02, T11 · T19 ◄─ T15, T18, T07 · T20 ◄─ T17, T19 · T21 ◄─ T19
+Desbloqueadas con A-00 y A-01: T18 ◄─ T02, T11 · T19 ◄─ T15, T18, T07 · T20 ◄─ T17, T19 · T21 ◄─ T19
 T22 ◄─ todas
 ```
