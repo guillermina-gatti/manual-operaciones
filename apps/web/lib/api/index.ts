@@ -2,3 +2,5 @@
 export { ApiError } from './api-error';
 export { createApiClient } from './client';
 export type { ApiClient, GetAuthHeaders } from './client';
+export { describeApiError } from './error-messages';
+export type { ErrorContext, ErrorDescription, UploadField } from './error-messages';
