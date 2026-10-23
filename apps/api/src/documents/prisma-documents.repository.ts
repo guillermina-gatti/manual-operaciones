@@ -20,6 +20,7 @@ const TRANSACTION_MAX_WAIT_MS = 2000;
 
 // Códigos de error de Prisma que indican que la base de datos NO RESPONDE (conexión caída, timeouts, etc.)
 const UNAVAILABLE_CODES = new Set([
+  'P1000', // El servidor rechazó el usuario o la contraseña (por ejemplo, otro PostgreSQL en el mismo puerto)
   'P1001', // No se alcanza el servidor
   'P1002', // Timeout al conectar
   'P1008', // Timeout de la operación
@@ -153,12 +154,24 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
   }
 }
 
+// Error del driver pg cuando el servidor corta la conexión sin que la aplicación lo pida
+// (pg/lib/client.js). No trae código, y @prisma/adapter-pg lo deja pasar sin convertir:
+// pasa, por ejemplo, si la base se cae en medio de una transacción.
+const PG_CONNECTION_LOST = 'Connection terminated unexpectedly';
+
 // Comprueba si el error de Prisma corresponde a un problema de disponibilidad del servidor
 function isUnavailable(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
-  return (
+  if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     UNAVAILABLE_CODES.has(error.code)
+  ) {
+    return true;
+  }
+  return (
+    error instanceof Error &&
+    !('code' in error) &&
+    error.message === PG_CONNECTION_LOST
   );
 }
 

@@ -1,6 +1,8 @@
 /* PrismaDocumentsRepository contra la base de tests (T18) */
 
 import { randomUUID } from 'node:crypto';
+import { connect, createServer } from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
 import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
 import {
   NewDocument,
@@ -337,4 +339,163 @@ describe('PrismaDocumentsRepository (integración)', () => {
       ).rejects.toBeInstanceOf(RepositoryUnavailableError);
     }, 15000);
   });
+
+  // El servidor responde pero rechaza el usuario o la contraseña: pasa si DATABASE_URL apunta a otro
+  // PostgreSQL en el mismo puerto (por ejemplo, uno de WSL con el Docker apagado).
+  describe('credenciales rechazadas', () => {
+    it.each([
+      ['contraseña incorrecta', { password: 'no-es-la-clave' }],
+      ['usuario inexistente', { username: 'usuario_que_no_existe' }],
+    ])(
+      '%s: una consulta y una transacción rechazan con RepositoryUnavailableError (%s)',
+      async (_case, credentials) => {
+        const client = clientWith(withCredentials(testUrl(), credentials));
+        const repo = new PrismaDocumentsRepository(client);
+        try {
+          const queryError = await errorOf(repo.findActiveByChecksum(CHECKSUM_A));
+          const transactionError = await errorOf(repo.runInTransaction(async () => 'nunca llega'));
+
+          expect(queryError).toBeInstanceOf(RepositoryUnavailableError);
+          expect(transactionError).toBeInstanceOf(RepositoryUnavailableError);
+          expect(codeOf(queryError)).toBe('P1000');
+          expect(codeOf(transactionError)).toBe('P1000');
+        } finally {
+          await client.$disconnect();
+        }
+      },
+      15000,
+    );
+  });
+
+  // La API ya estaba conectada y la base se cae: las conexiones abiertas se cortan y las nuevas se
+  // rechazan. Se simula con un intermediario TCP entre Prisma y PostgreSQL, sin tocar Docker.
+  describe('la base se cae con la API ya conectada', () => {
+    let proxy: TcpProxy;
+    let client: PrismaService;
+    let repo: PrismaDocumentsRepository;
+
+    beforeEach(async () => {
+      proxy = await startTcpProxy(new URL(testUrl()));
+      client = clientWith(throughProxy(testUrl(), proxy.port));
+      repo = new PrismaDocumentsRepository(client);
+      // Conectada y funcionando antes del corte.
+      await expect(repo.findActiveByChecksum(CHECKSUM_A)).resolves.toBeNull();
+    });
+
+    afterEach(async () => {
+      await proxy.close();
+      await client.$disconnect();
+    });
+
+    it('una consulta después del corte rechaza con RepositoryUnavailableError', async () => {
+      await proxy.close();
+
+      const error = await errorOf(repo.findActiveByChecksum(CHECKSUM_A));
+
+      expect(error).toBeInstanceOf(RepositoryUnavailableError);
+      expect(codeOf(error)).toBe('P1017');
+    }, 15000);
+
+    it('una transacción en curso cuando se corta rechaza con RepositoryUnavailableError', async () => {
+      const running = errorOf(
+        repo.runInTransaction(async (tx) => {
+          await (tx as unknown as Prisma.TransactionClient).$executeRawUnsafe(
+            'SELECT pg_sleep(3)',
+          );
+        }),
+      );
+      await sleep(300);
+      await proxy.close();
+
+      const error = await running;
+
+      expect(error).toBeInstanceOf(RepositoryUnavailableError);
+      // No es un error de Prisma: el adaptador de pg deja pasar este error del driver, que no trae código.
+      expect(codeOf(error)).toBe('Error: Connection terminated unexpectedly');
+    }, 15000);
+  });
 });
+
+// ---- Ayudas para simular fallas de la base ----
+
+const testUrl = () => process.env.DATABASE_URL as string;
+
+function withCredentials(url: string, credentials: { username?: string; password?: string }) {
+  const parsed = new URL(url);
+  if (credentials.username) parsed.username = credentials.username;
+  if (credentials.password) parsed.password = credentials.password;
+  return parsed.toString();
+}
+
+function throughProxy(url: string, port: number) {
+  const parsed = new URL(url);
+  parsed.hostname = '127.0.0.1';
+  parsed.port = String(port);
+  return parsed.toString();
+}
+
+// PrismaService lee DATABASE_URL en el constructor: se cambia solo mientras se crea.
+function clientWith(url: string): PrismaService {
+  const saved = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = url;
+  try {
+    return new PrismaService();
+  } finally {
+    process.env.DATABASE_URL = saved;
+  }
+}
+
+async function errorOf(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error('La operación no falló');
+}
+
+// El código de Prisma del error original (el que se tradujo o no).
+function codeOf(error: unknown): string {
+  const original = error instanceof RepositoryUnavailableError ? error.cause : error;
+  if (original && typeof original === 'object' && 'code' in original) {
+    return String((original as { code: unknown }).code);
+  }
+  return original instanceof Error ? `${original.name}: ${original.message}` : String(original);
+}
+
+interface TcpProxy {
+  port: number;
+  close(): Promise<void>;
+}
+
+// Pasa los bytes entre Prisma y PostgreSQL. close() corta las conexiones abiertas
+// y deja de escuchar: las conexiones nuevas se rechazan (ECONNREFUSED).
+async function startTcpProxy(target: URL): Promise<TcpProxy> {
+  const sockets = new Set<Socket>();
+  const server = createServer((incoming) => {
+    const upstream = connect(Number(target.port || 5432), target.hostname);
+    for (const socket of [incoming, upstream]) {
+      sockets.add(socket);
+      socket.on('error', () => undefined);
+      socket.on('close', () => {
+        sockets.delete(socket);
+        incoming.destroy();
+        upstream.destroy();
+      });
+    }
+    incoming.pipe(upstream);
+    upstream.pipe(incoming);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  let closed = false;
+
+  return {
+    port: (server.address() as AddressInfo).port,
+    close: () => {
+      if (closed) return Promise.resolve();
+      closed = true;
+      for (const socket of sockets) socket.destroy();
+      return new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
