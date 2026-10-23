@@ -34,10 +34,10 @@ import { DocumentResponse, DocumentSummary } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
 import type { UploadedFileInput } from './file-inspector';
 
-// R3: hasta 10 MB y un solo archivo; si se pasa, multer corta la lectura y Nest responde 413.
+// Límite máximo de tamaño de archivo: 10 Megabytes
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
-// Solo para Swagger: los campos del DTO más el archivo, como se mandan en el multipart.
+// Clase DTO exclusiva para documentar en Swagger el cuerpo multipart/form-data
 class UploadDocumentBody extends CreateDocumentDto {
   @ApiProperty({
     type: 'string',
@@ -47,7 +47,7 @@ class UploadDocumentBody extends CreateDocumentDto {
   file: unknown;
 }
 
-// Solo para Swagger: la forma del listado (plan 3.2) que devuelve DocumentQueryService.
+// Clase para documentar en Swagger la respuesta de listados paginados
 class DocumentListBody implements DocumentListResponse {
   @ApiProperty({ type: [DocumentSummary] })
   data: DocumentSummary[];
@@ -62,7 +62,7 @@ class DocumentListBody implements DocumentListResponse {
   limit: number;
 }
 
-// Solo para Swagger: la respuesta de la descarga (plan 3.4).
+// Clase para documentar en Swagger la respuesta de enlaces temporales
 class DownloadUrlBody {
   @ApiProperty({ example: 'https://…' })
   url: string;
@@ -71,30 +71,27 @@ class DownloadUrlBody {
   expiresAt: string;
 }
 
-// R11: el mismo 404 si el documento no existe o si no es visible para el usuario.
+// Mensaje descriptivo reutilizable para respuestas 404
 const NOT_FOUND_DESCRIPTION =
   'El documento no existe o no es visible para el usuario (misma respuesta en los dos casos)';
 
 @ApiTags('documents')
 @ApiBearerAuth()
 @Controller('documents')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard) // Aplica autenticación y control de roles a todas las rutas
 export class DocumentsController {
   constructor(
     private readonly uploads: DocumentUploadService,
     private readonly queries: DocumentQueryService,
   ) {}
 
-  // Los guards corren antes que el interceptor: el 401 y el 403 salen sin leer el archivo (plan 4, pasos 1 y 2).
+  // Ruta POST /documents: Carga de un nuevo documento (Solo ADMINs)
   @Post()
   @Roles('ADMIN')
-  // Sin `storage` ni `dest`, multer guarda el archivo en memoria (memoryStorage): nunca toca el disco.
-  // D8: los navegadores mandan el nombre del archivo en UTF-8 sin declararlo, y multer lo lee como
-  // latin1 por defecto ("Instrucción" llegaría como "InstrucciÃ³n").
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
-      defParamCharset: 'utf8',
+      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 }, // Máximo 10MB y 1 solo archivo
+      defParamCharset: 'utf8', // Corrige problemas de caracteres especiales en el nombre del archivo
     }),
   )
   @ApiConsumes('multipart/form-data')
@@ -134,8 +131,7 @@ export class DocumentsController {
     return this.uploads.upload(file, dto, user);
   }
 
-  // Las consultas no llevan @Roles: entra cualquier usuario con sesión (plan 3.2 a 3.4).
-  // Qué documentos ve cada uno lo decide DocumentQueryService (R10).
+  // Ruta GET /documents: Obtener lista paginada de documentos visibles para el usuario
   @Get()
   @ApiResponse({
     status: 200,
@@ -155,6 +151,7 @@ export class DocumentsController {
     return this.queries.list(user, query);
   }
 
+  // Ruta GET /documents/:id: Obtener el detalle de un documento específico por su ID
   @Get(':id')
   @ApiResponse({ status: 200, description: 'Detalle', type: DocumentResponse })
   @ApiResponse({ status: 400, description: 'El id no es un UUID' })
@@ -168,6 +165,7 @@ export class DocumentsController {
     return this.queries.findOne(user, id);
   }
 
+  // Ruta GET /documents/:id/download: Generar enlace firmado para descargar el archivo
   @Get(':id/download')
   @ApiResponse({
     status: 200,
