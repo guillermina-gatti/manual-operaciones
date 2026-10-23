@@ -281,7 +281,7 @@ En `apps/web/e2e/`. `playwright.config.ts` levanta `next dev` con `webServer` y 
 | E11 | Clic en "Descargar": se hace la petición a `/download` en ese momento y el navegador recibe la descarga (la ruta de la `url` devuelve un archivo con `Content-Disposition: attachment`; se espera el evento `download`) |
 | E12 | La ruta responde 404: "No se encontró el documento" |
 
-**Prueba de integración, con la API real** (`e2e/integracion/`, se corre aparte: `pnpm --filter web test:e2e --project=integracion`). Necesita PostgreSQL en Docker y la API levantada sin `S3_BUCKET` (usa `InMemoryFileStorage` y la cola simulada). Pocas pruebas, para comprobar el rewrite y que el contrato coincide:
+**Prueba de integración, con la API real** (`e2e/integracion/`, se corre aparte: `pnpm --filter web test:e2e:integracion`). Necesita PostgreSQL en Docker y la API levantada sin `S3_BUCKET` (usa `InMemoryFileStorage` y la cola simulada). Pocas pruebas, para comprobar el rewrite y que el contrato coincide:
 
 - ADMIN carga un PDF de 2 MB y llega al detalle con "Pendiente" (E1 de punta a punta).
 - ADMIN carga un PDF de **exactamente 10 MB** a través del rewrite y recibe 201 (riesgo de la sección 2).

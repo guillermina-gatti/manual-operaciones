@@ -296,11 +296,11 @@ Convenciones:
 
 - **Qué hace:** configura Playwright con `next dev -p 3001` como `webServer` (D3) y los proyectos `escritorio` (Chromium, 1280×800) y `celular` (`Pixel 7`). Agrega los helpers para fijar la sesión (`page.addInitScript` con `sim-session`), simular la API (`page.route('**/api/**')`) y generar archivos de prueba. El proyecto `integracion` se define aparte y no corre por defecto.
 - **Cubre:** F10; plan sección 7.2.
-- **Archivos:** `playwright.config.ts`, `e2e/support/session.ts`, `e2e/support/mock-api.ts`, `e2e/support/files.ts`, `e2e/smoke.spec.ts`, `package.json` (script `test:e2e`), `.gitignore` (`test-results/`, `playwright-report/`).
+- **Archivos:** `playwright.config.ts`, `e2e/support/session.ts`, `e2e/support/mock-api.ts`, `e2e/support/files.ts`, `e2e/smoke.spec.ts`, `package.json` (scripts `test:e2e` y `test:e2e:integracion`), `.gitignore` (`test-results/`, `playwright-report/`).
 - **Verificación:**
   1. `pnpm --filter web exec playwright install chromium`.
   2. `e2e/smoke.spec.ts`: con la sesión del ADMIN y la API simulada con un documento, `/documentos` muestra su tarjeta. Pasa en `escritorio` y en `celular`.
-  3. `pnpm --filter web test:e2e` corre solo `escritorio` y `celular`.
+  3. `pnpm --filter web test:e2e` corre solo `escritorio` y `celular` (`playwright test --project=escritorio --project=celular`). El proyecto `integracion` tiene su propio script, `pnpm --filter web test:e2e:integracion` (`playwright test --project=integracion`): Playwright corre todos los proyectos si no se le indican, así que agregar `--project=integracion` a `test:e2e` correría los tres.
 - **Depende de:** T15
 - **Commit:** `test(web): configurar Playwright`
 
@@ -338,7 +338,7 @@ Convenciones:
 - **Qué hace:** agrega unas pocas pruebas de Playwright contra la API real (PostgreSQL en Docker, API en el puerto 3000 sin `S3_BUCKET`), para comprobar el rewrite y el contrato.
 - **Cubre:** plan sección 2 (riesgo del tamaño de la carga) y 7.2; E1, E8, E11, E12 de punta a punta.
 - **Archivos:** `e2e/integracion/documentos.spec.ts`, `playwright.config.ts` (proyecto `integracion`).
-- **Verificación:** `docker compose up -d`, `pnpm dev:api` y `pnpm --filter web test:e2e --project=integracion`:
+- **Verificación:** `docker compose up -d`, `pnpm dev:api` y `pnpm --filter web test:e2e:integracion`:
   - ADMIN carga un PDF de 2 MB y llega al detalle con "Pendiente";
   - ADMIN carga un PDF de **exactamente 10 MB** y recibe 201;
   - EMPLOYEE de Ventas ve el documento de Ventas y no el de Operaciones; al abrir el de Operaciones por URL, "No se encontró el documento";
@@ -400,7 +400,7 @@ Necesitan piezas de la pareja A que todavía no existen. Se hacen cuando lleguen
 - **Archivos:** `specs/002-pantallas-documentos/tasks.md` (se marca la tabla y se anota el resultado).
 - **Verificación:**
   1. `pnpm --filter web lint`, `pnpm --filter web build`, `pnpm --filter web test` y `pnpm --filter web test:e2e`: todo en verde.
-  2. Con Docker y la API en el puerto 3000: `pnpm --filter web test:e2e --project=integracion` en verde.
+  2. Con Docker y la API en el puerto 3000: `pnpm --filter web test:e2e:integracion` en verde.
   3. Revisar la tabla: cada fila tiene un test de componente y uno de Playwright que existen y pasan.
   4. A mano, en el celular (o con las herramientas del navegador en 375 px de ancho): listado, detalle y formulario se usan sin desplazamiento horizontal (F10).
 - **Depende de:** T01 a T26
