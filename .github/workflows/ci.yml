@@ -36,3 +36,5 @@ jobs:
 
       - name: Build Web
         run: pnpm --filter web build
+        env:
+          API_URL: http://localhost:3000
