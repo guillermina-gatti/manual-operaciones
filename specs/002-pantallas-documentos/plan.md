@@ -230,12 +230,12 @@ Todo se resuelve con `describeApiError(error, context)` en `lib/api/error-messag
 | --- | --- | --- |
 | `vitest` | desarrollo | Corre los tests de componentes y de funciones puras. Es lo que recomienda la guía de testing de Next 16 (`node_modules/next/dist/docs/01-app/02-guides/testing/vitest.md`) |
 | `@vitejs/plugin-react` | desarrollo | JSX y React en Vitest |
-| `vite-tsconfig-paths` | desarrollo | Que Vitest entienda el alias `@/*` |
 | `jsdom` | desarrollo | DOM simulado para los tests de componentes |
 | `@testing-library/react` y `@testing-library/dom` | desarrollo | Renderizar y buscar elementos como los ve el usuario |
 | `@testing-library/user-event` | desarrollo | Simular clics, escritura y la elección de un archivo |
 | `@testing-library/jest-dom` | desarrollo | Comprobaciones legibles (`toBeDisabled`, `toHaveAccessibleName`, …) |
 
+- El alias `@/*` no necesita un paquete: Vite lo lee de `tsconfig.json` con la opción `resolve.tsconfigPaths: true` de `vitest.config.mts`.
 - `@playwright/test` **ya está**. Falta descargar el navegador: `pnpm --filter web exec playwright install chromium` (no es un paquete).
 - Scripts nuevos en `apps/web/package.json`: `test` (Vitest), `test:e2e` (Playwright).
 - **No** hacen falta paquetes en tiempo de ejecución: ni librería de formularios (alcanza con estado de React), ni de pedidos (alcanza con `apiClient` y un hook chico), ni de fechas (`Intl`), ni de componentes (Tailwind). Si más adelante el listado necesita caché o revalidación, se evalúa TanStack Query (D7).

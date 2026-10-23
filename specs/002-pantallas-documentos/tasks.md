@@ -19,12 +19,12 @@ Convenciones:
 
 ### T01 · Instalar y configurar Vitest con Testing Library
 
-- **Qué hace:** instala las dependencias de desarrollo para los tests de componentes, configura Vitest con jsdom y el alias `@/*`, y deja un test de ejemplo que corre.
+- **Qué hace:** instala las dependencias de desarrollo para los tests de componentes, configura Vitest con jsdom y el alias `@/*` (con la opción `resolve.tsconfigPaths` de Vite), y deja un test de ejemplo que corre.
 - **Cubre:** plan secciones 6 y 7.1.
 - **Archivos:** `package.json` (dependencias y script `test`), `pnpm-lock.yaml` (en la raíz), `vitest.config.mts`, `tests/setup.ts` (importa `@testing-library/jest-dom/vitest` y limpia el DOM después de cada test), `tests/example.test.tsx`.
 - **Verificación:**
-  1. `pnpm --filter web add -D vitest @vitejs/plugin-react vite-tsconfig-paths jsdom @testing-library/react @testing-library/dom @testing-library/user-event @testing-library/jest-dom`.
-  2. `tests/example.test.tsx` renderiza un `<button>` con texto y comprueba con `getByRole('button')` y `toBeInTheDocument()` que jsdom, React y jest-dom funcionan. Se escribe antes de la configuración: sin `vitest.config.mts` falla (no entiende JSX ni el entorno del DOM).
+  1. `pnpm --filter web add -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/dom @testing-library/user-event @testing-library/jest-dom`.
+  2. `tests/example.test.tsx` tiene dos tests: uno renderiza un `<button>` con texto y comprueba con `getByRole('button')` y `toBeInTheDocument()` que jsdom, React y jest-dom funcionan; el otro importa `@/next.config` y comprueba que el alias se resuelve. Se escriben antes de la configuración: sin `vitest.config.mts` fallan (`document is not defined` y `Failed to resolve import "@/next.config"`).
   3. `pnpm --filter web test` pasa, y `pnpm --filter web lint` y `pnpm --filter web build` siguen pasando.
 - **Depende de:** —
 - **Commit:** `chore(deps): configurar Vitest y Testing Library en web`
