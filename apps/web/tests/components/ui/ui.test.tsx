@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import Link from 'next/link';
 import type { FormEvent } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 import { Button } from '@/components/ui/Button';
@@ -31,7 +32,7 @@ describe('ScreenState', () => {
       <ScreenState
         kind="empty"
         message="Todavía no hay documentos en tus áreas"
-        action={<a href="/documentos/nuevo">Cargar el primer documento</a>}
+        action={<Link href="/documentos/nuevo">Cargar el primer documento</Link>}
       />,
     );
 
