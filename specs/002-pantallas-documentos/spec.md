@@ -49,7 +49,7 @@ La spec 001 construyó el backend de los documentos, pero nadie puede usarlo sin
 - **F11 · Elección del responsable.** El responsable se elige de una lista que muestra solo los usuarios que comparten al menos un área con las áreas elegidas, más los ADMIN. Si el ADMIN cambia las áreas y el responsable elegido deja de cumplir esa condición, la elección se borra y se pide elegir de nuevo. La lista la provee la pareja A; hasta que exista, se usa una lista simulada.
 - **F12 · Rutas.** `/documentos` (listado), `/documentos/nuevo` (carga, solo ADMIN) y `/documentos/[id]` (detalle).
 - **F13 · Después de cargar.** Si la carga sale bien, el usuario va al detalle del documento recién creado.
-- **F14 · Salir del formulario.** Si el usuario sale del formulario con datos completados, no se le pide confirmación.
+- **F14 · Salir del formulario.** Si el usuario sale del formulario con datos completados, no se le pide confirmación. Si vuelve atrás, los datos pueden seguir ahí, salvo después de una carga correcta: entonces el formulario empieza vacío.
 
 ## 7. Estados de pantalla
 
@@ -60,7 +60,7 @@ Cada pantalla contempla: cargando, con datos, vacío (por ejemplo, "Todavía no 
 - Lista vacía: mensaje y, para el ADMIN, el botón para cargar el primero.
 - Nombre de archivo muy largo o con tildes: se muestra recortado y con las tildes bien.
 - La API no responde: mensaje de error con opción de reintentar.
-- El usuario sale del formulario con datos completados: los datos se pierden, sin aviso (F14).
+- El usuario sale del formulario con datos completados: no se le avisa. Si vuelve atrás, los datos pueden conservarse, salvo después de una carga correcta (F14).
 - El ADMIN elige áreas en las que no hay ningún usuario: la lista de responsables muestra solo a los ADMIN.
 
 ## 9. Restricciones no funcionales
@@ -82,6 +82,7 @@ Tomadas en la etapa de aclaración (clarify) el 23/10/2026.
 | P5 · ¿Se avisa al salir del formulario? | No | F14 |
 | P6 · ¿Paginación con números o "Ver más"? | Números de página | F7 |
 | P7 · ¿A dónde va el usuario después de cargar? | Al detalle del documento creado | F13 |
+| P8 · ¿Qué pasa con los datos del formulario si el usuario sale y vuelve atrás? | No se pide confirmación al salir. Al volver atrás, los datos pueden conservarse, salvo después de una carga correcta, que deja el formulario vacío. Tomada en la revisión del plan el 23/10/2026 (D4 del plan) | F14 |
 
 Para la pareja A: la pantalla de carga necesita una lista de usuarios activos filtrable por área, por ejemplo `GET /api/users?areaIds=...`, que devuelva `{ id, name, role }` y sea visible para ADMIN.
 
