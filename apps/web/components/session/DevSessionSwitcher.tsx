@@ -38,7 +38,9 @@ export function DevSessionSwitcher() {
   if (process.env.NODE_ENV === 'production') return null;
 
   return (
-    <aside className="fixed bottom-4 right-4 z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950 shadow-lg dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+    // En el celular va al final de la página, sin flotar: si flotara, taparía lo de abajo (por ejemplo,
+    // la paginación). Desde sm flota en la esquina.
+    <aside className="mx-4 mb-4 mt-auto rounded-lg border sm:fixed sm:bottom-4 sm:right-4 sm:z-50 sm:m-0 sm:w-72 border-amber-400 bg-amber-50 p-3 text-sm text-amber-950 shadow-lg dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
       <label htmlFor="dev-session-switcher" className="block font-semibold">
         Usuario de prueba
       </label>
