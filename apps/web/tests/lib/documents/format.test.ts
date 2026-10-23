@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { formatCreatedAt, formatReviewDate } from '@/lib/documents/format';
+import { formatCreatedAt, formatReviewDate, formatSize } from '@/lib/documents/format';
+
+describe('formatSize', () => {
+  test.each([
+    [0, '0 B'],
+    [54, '54 B'],
+    [1536, '1,5 KB'],
+    [2 * 1024 * 1024, '2 MB'],
+    [10 * 1024 * 1024, '10 MB'],
+    [1.25 * 1024 * 1024, '1,3 MB'],
+  ])('%i bytes → %s', (bytes, expected) => {
+    expect(formatSize(bytes)).toBe(expected);
+  });
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();

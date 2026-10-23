@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { ApiError, describeApiError, getDocument, useApiResource } from '@/lib/api';
 import { areasDirectory, usersDirectory } from '@/lib/directory';
-import { formatCreatedAt, formatReviewDate } from '@/lib/documents/format';
+import { formatCreatedAt, formatReviewDate, formatSize } from '@/lib/documents/format';
 import { useSession } from '@/lib/session';
 import { DownloadButton } from './DownloadButton';
 import { ProcessingStatusBadge } from './ProcessingStatusBadge';
@@ -17,15 +17,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MISSING = '—';
 const NOT_FOUND = describeApiError(new ApiError(404), 'detail').message;
-
-const sizeFormat = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
-
-// 2097152 → "2 MB".
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${sizeFormat.format(bytes / 1024)} KB`;
-  return `${sizeFormat.format(bytes / (1024 * 1024))} MB`;
-}
 
 const LOADING = (
   <ScreenState kind="loading" label="Cargando el documento…">

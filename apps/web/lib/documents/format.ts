@@ -24,6 +24,15 @@ const createdAtFormat = new Intl.DateTimeFormat('es-AR', {
   hourCycle: 'h23',
 });
 
+const sizeFormat = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+
+// Tamaño de un archivo: 2097152 → "2 MB", 1536 → "1,5 KB".
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${sizeFormat.format(bytes / 1024)} KB`;
+  return `${sizeFormat.format(bytes / (1024 * 1024))} MB`;
+}
+
 // "2026-10-23T15:00:00.000Z" → "23/10/2026, 12:00", en la hora de Buenos Aires.
 export function formatCreatedAt(value: string): string {
   const date = new Date(value);
