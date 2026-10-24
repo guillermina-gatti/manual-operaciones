@@ -42,7 +42,8 @@ function isRealDate(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-function validateReviewDate(value: string, now: Date): string | undefined {
+// La usa también la versión nueva, donde la fecha es opcional y se valida solo si se completó (spec 003).
+export function validateReviewDate(value: string, now: Date = new Date()): string | undefined {
   if (value === '') return 'Elegí la fecha de revisión.';
   if (!isRealDate(value)) return 'La fecha de revisión no es válida.';
   // Las fechas YYYY-MM-DD se pueden comparar como texto.

@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T20 **hechas** (T01 a T16 son todo el backend). T21 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
+- **Estado (24/10/2026):** T01 a T21 **hechas** (T01 a T16 son todo el backend). T22 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
 
 Convenciones:
 
@@ -378,7 +378,7 @@ Convenciones:
   - Evita el doble envío.
   - Muestra cada 409 según su `reason` y conserva el archivo ante cualquier error.
 - **Cubre:** R6, R6b, R7, R7b, R9; D7; plan sección 6.3; E2, E3, E4, E5.
-- **Archivos:** `components/documents/NewVersionForm.tsx`, `tests/components/documents/NewVersionForm.test.tsx`.
+- **Archivos:** `components/documents/NewVersionForm.tsx`, `tests/components/documents/NewVersionForm.test.tsx`, `lib/documents/validate-upload.ts` (exporta `validateReviewDate`, la misma regla de la carga para la fecha opcional).
 - **Verificación:** test primero:
   - **E2:** con un PDF válido llama a `uploadVersion` y avisa al detalle;
   - **E4:** con fecha la manda; sin fecha no;
