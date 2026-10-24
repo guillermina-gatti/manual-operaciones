@@ -1,4 +1,9 @@
-export type AuditAction = 'DOCUMENT_UPLOAD';
+// DOCUMENT_UPLOAD: carga (spec 001, R14). Las otras tres: ciclo de vida (spec 003, R13).
+export type AuditAction =
+  | 'DOCUMENT_UPLOAD'
+  | 'DOCUMENT_AREAS_CHANGE'
+  | 'DOCUMENT_VERSION_UPLOAD'
+  | 'DOCUMENT_ARCHIVE';
 export type AuditResult = 'SUCCESS' | 'FAILURE';
 
 // Quién, qué documento, cuándo y con qué resultado (R14). Solo ids: nunca el contenido del archivo,

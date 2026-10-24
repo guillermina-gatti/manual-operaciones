@@ -175,8 +175,10 @@ Convenciones:
   2. si las áreas no cambian, responder sin escribir;
   3. validar las áreas y el responsable que va a quedar;
   4. abrir la transacción: bloqueo, nueva lectura del estado, `replaceAreas` y auditoría.
+
+  Además: `auditFailure` recibe el `documentId` opcional, y las acciones sobre un documento existente lo registran también en las fallas (R13). Es el primer servicio que lo usa, así que el cambio en `DocumentWriteSteps` va en esta tarea; la carga de la spec 001 lo sigue llamando sin `documentId`.
 - **Cubre:** R2, R3, R4, R5, R11, R13; D4; P2.
-- **Archivos:** `src/documents/document-lifecycle.service.ts`, `src/documents/document-lifecycle.service.spec.ts`, `src/documents/documents.module.ts`.
+- **Archivos:** `src/documents/document-lifecycle.service.ts`, `src/documents/document-lifecycle.service.spec.ts`, `src/documents/documents.module.ts`, `src/documents/document-write-steps.ts` y `src/documents/document-write-steps.spec.ts` (`documentId` opcional en `auditFailure`).
 - **Verificación:** test primero, con los puertos simulados con `jest.fn()`:
   - 404 si no existe;
   - 409 `ARCHIVED`, también si se archiva entre la primera lectura y el bloqueo;
@@ -184,7 +186,8 @@ Convenciones:
   - **E6:** el responsable pierde el acceso → 400 `ownerId: …` y no se abre la transacción;
   - con un `ownerId` nuevo válido → pasa y se le pasa al repositorio;
   - **D4:** las mismas áreas → devuelve el documento sin llamar a `replaceAreas` ni auditar;
-  - auditoría `SUCCESS` dentro de la transacción y `FAILURE` con el código si falla;
+  - auditoría `SUCCESS` dentro de la transacción y `FAILURE` con el código **y el `documentId`** si falla (por ejemplo, en el 409 de archivado y en el 400 de E6);
+  - `document-write-steps.spec.ts`: `auditFailure` con `documentId` lo registra; sin él (la carga) registra lo mismo que antes;
   - si la base no responde → 503.
 - **Depende de:** T02, T04, T06, T09
 - **Commit:** `feat(documents): cambiar las áreas de un documento`
@@ -197,6 +200,8 @@ Convenciones:
   - `put`;
   - transacción con bloqueo y nueva lectura, `addVersion`, auditoría y encolado al final;
   - `delete` del archivo nuevo si algo falla.
+
+  Además: `auditFailure` recibe el `documentId` opcional, y las acciones sobre un documento existente lo registran también en las fallas (R13).
 - **Cubre:** R2, R6, R6b, R7, R7b, R8, R9, R11, R13; D3, D6, D7; R8b de la spec 001.
 - **Archivos:** `src/documents/document-lifecycle.service.ts`, `src/documents/document-lifecycle.service.spec.ts`.
 - **Verificación:** test primero:
@@ -210,20 +215,23 @@ Convenciones:
   - la vigente ya tiene ese checksum bajo el bloqueo → 409 y `delete`;
   - `ConcurrentVersionError` → 409 `CONCURRENT_VERSION` y `delete`;
   - el archivo de la versión anterior **nunca** se borra (D6);
-  - auditoría `SUCCESS` y `FAILURE`.
+  - auditoría `SUCCESS`, y `FAILURE` con el código **y el `documentId`** (por ejemplo, en E3 y en E5).
 - **Depende de:** T07, T10
 - **Commit:** `feat(documents): subir una versión nueva de un documento`
 
 ### T12 · Servicio: archivar
 
 - **Qué hace:** `DocumentLifecycleService.archive`: lectura (404), estado (409), transacción con bloqueo y nueva lectura, `archive` y auditoría.
+
+  Además: `auditFailure` recibe el `documentId` opcional, y las acciones sobre un documento existente lo registran también en las fallas (R13).
 - **Cubre:** R2, R10, R11, R13; D5.
 - **Archivos:** `src/documents/document-lifecycle.service.ts`, `src/documents/document-lifecycle.service.spec.ts`.
 - **Verificación:** test primero:
   - archiva y audita `DOCUMENT_ARCHIVE` con `SUCCESS`;
   - 404 si no existe;
   - 409 `ARCHIVED` si ya está archivado, también si se archivó entre la lectura y el bloqueo;
-  - si la base no responde → 503 y auditoría `FAILURE`.
+  - si la base no responde → 503 y auditoría `FAILURE` con el código y el `documentId`;
+  - el 409 de "ya archivado" también registra `FAILURE` con el `documentId`.
 - **Depende de:** T08, T10
 - **Commit:** `feat(documents): archivar un documento`
 
