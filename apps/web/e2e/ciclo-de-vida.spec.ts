@@ -292,3 +292,105 @@ test.describe('E11 · Archivar sin confirmar', () => {
     expect(requestsTo(api.requests, 'POST', '/archive')).toHaveLength(0);
   });
 });
+
+// ---- T27: lo que ve cada rol (R1, R11, R12) ----
+
+test.describe('E8 · Un rol sin permiso no ve las acciones', () => {
+  for (const user of ['empleadoVentas', 'supervisorVentas'] as const) {
+    test(`${user}: no ve "Cambiar áreas", "Subir versión nueva" ni "Archivar"`, async ({ page }) => {
+      const { api } = await openDocument(page, { user });
+
+      await expect(page.getByRole('button', { name: 'Descargar' })).toBeVisible();
+      for (const name of ACTIONS) {
+        await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+      }
+      expect(api.unhandled).toEqual([]);
+    });
+  }
+});
+
+test.describe('E9 · Documento archivado', () => {
+  test('el ADMIN ve "Archivado desde…", sin acciones, y puede ver el historial', async ({ page }) => {
+    const { api } = await openDocument(page, {
+      document: { status: 'ARCHIVED', archivedAt: ARCHIVED_AT },
+      versions: 2,
+    });
+
+    await expect(page.getByText('Archivado desde 23/10/2026')).toBeVisible();
+    for (const name of ACTIONS) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: 'Descargar' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Historial de versiones' }).click();
+    await expect(page.getByRole('list', { name: 'Versiones' }).getByRole('listitem')).toHaveCount(2);
+    expect(api.unhandled).toEqual([]);
+  });
+});
+
+test.describe('E12 · Un empleado no ve el historial', () => {
+  test('no está "Historial de versiones" y no se pide nada a /versions', async ({ page }) => {
+    const { api } = await openDocument(page, { user: 'empleadoVentas', versions: 3 });
+
+    await expect(page.getByRole('button', { name: 'Descargar' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Historial de versiones' })).toHaveCount(0);
+    await expect(page.getByText('Versión 3')).toHaveCount(0);
+    // Si hubiera un pedido de más, ya habría salido junto con el detalle.
+    await page.waitForLoadState('networkidle');
+    expect(api.requests.filter((request) => request.path.includes('/versions'))).toEqual([]);
+  });
+});
+
+test.describe('E13 · Historial de versiones', () => {
+  test('tres versiones en orden; "Descargar" de la versión 2 pide su enlace y el navegador descarga', async ({
+    page,
+  }) => {
+    let links = 0;
+    const { api, state } = await openDocument(page, {
+      versions: 3,
+      overrides: () => ({
+        versionDownload: (_request, _id, versionId) => {
+          links += 1;
+          return {
+            status: 200,
+            body: { url: `https://archivos.example.test/${versionId}.pdf?firma=${links}`, expiresAt: ARCHIVED_AT },
+          };
+        },
+      }),
+    });
+    const v2 = versionHistory(state.document, 3).data[1];
+    // Hace de S3: responde el archivo como adjunto, igual que el enlace firmado real.
+    await page.route('https://archivos.example.test/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/pdf',
+        headers: { 'Content-Disposition': `attachment; filename="${v2.originalFileName}"` },
+        body: '%PDF-1.4\n',
+      }),
+    );
+
+    // Empieza cerrado: no se pidió el historial.
+    expect(api.requests.filter((request) => request.path.endsWith('/versions'))).toHaveLength(0);
+    await page.getByRole('button', { name: 'Historial de versiones' }).click();
+
+    const rows = page.getByRole('list', { name: 'Versiones' }).getByRole('listitem');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.getByRole('heading')).toHaveText(['Versión 3', 'Versión 2', 'Versión 1']);
+    await expect(rows.nth(0)).toContainText('Vigente');
+    await expect(rows.nth(1)).toContainText('Reemplazada');
+    await expect(rows.nth(1)).toContainText('Ana Administradora');
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Descargar la versión 2' }).click(),
+    ]);
+
+    expect(download.suggestedFilename()).toBe(v2.originalFileName);
+    const versionLinks = api.requests.filter((request) => request.path.endsWith('/download'));
+    expect(versionLinks.map((request) => request.path)).toEqual([
+      `/api/documents/${state.document.id}/versions/${v2.id}/download`,
+    ]);
+    await expect(page).toHaveURL(new RegExp(`/documentos/${state.document.id}$`));
+    expect(api.unhandled).toEqual([]);
+  });
+});
