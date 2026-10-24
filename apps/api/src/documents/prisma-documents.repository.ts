@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  ConcurrentVersionError,
   DocumentPage,
   DocumentRecord,
   DocumentsRepository,
@@ -39,6 +40,30 @@ const UNAVAILABLE_CODES = new Set([
   'P2024', // Timeout esperando una conexión libre en el pool
   'P2028', // Error de transacción (venció su timeout)
 ]);
+
+// Índices únicos que indican que otra versión nueva se confirmó al mismo tiempo (R8): el de una sola
+// CURRENT (T01) y el de (document_id, version_number). Cualquier otro P2002 (por ejemplo, storage_key)
+// no es concurrencia y pasa sin traducir.
+const CONCURRENT_VERSION_INDEXES = new Set([
+  'document_versions_one_current_idx',
+  'document_versions_document_id_version_number_key',
+]);
+
+// Con el adaptador de pg, el P2002 trae el nombre del índice que chocó en
+// meta.driverAdapterError.cause.constraint.index (lo informa PostgreSQL).
+function isConcurrentVersionConflict(error: unknown): boolean {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2002'
+  ) {
+    return false;
+  }
+  const meta = error.meta as
+    | { driverAdapterError?: { cause?: { constraint?: { index?: string } } } }
+    | undefined;
+  const index = meta?.driverAdapterError?.cause?.constraint?.index;
+  return index !== undefined && CONCURRENT_VERSION_INDEXES.has(index);
+}
 
 // Configuración de Prisma para incluir siempre las áreas y únicamente la versión vigente (CURRENT)
 const documentInclude = {
@@ -148,8 +173,8 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
     });
   }
 
-  // ── Ciclo de vida (spec 003). Pendientes del contrato (T05): T07 (addVersion) y
-  // T08 (archive, listVersions, findVersion).
+  // ── Ciclo de vida (spec 003). Pendientes del contrato (T05): T08 (archive, listVersions,
+  // findVersion).
 
   // Bloquea la fila del documento hasta el fin de la transacción y lo devuelve con sus áreas y su
   // versión vigente (plan 003, 3.3).
@@ -215,13 +240,65 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
     });
   }
 
+  // Reemplaza la versión vigente por una nueva, dentro de la transacción recibida (R7, R7b). El
+  // servicio llama antes a lockForUpdate; si alguna escritura no lo hiciera, la base rechaza la
+  // segunda CURRENT y se lanza ConcurrentVersionError (R8; plan 003, sección 5).
   addVersion(
-    _tx: RepositoryTransaction,
-    _id: string,
-    _version: NewVersion,
-    _reviewDate?: Date,
+    tx: RepositoryTransaction,
+    id: string,
+    version: NewVersion,
+    reviewDate?: Date,
   ): Promise<DocumentRecord> {
-    return notImplemented('addVersion', 'T07');
+    const client = tx as unknown as Prisma.TransactionClient;
+    return this.translate(async () => {
+      // 1. La vigente pasa a REPLACED. Una sola sentencia que además devuelve cuál era.
+      const replaced = await client.$queryRaw<{ id: string }[]>`
+        UPDATE document_versions SET status = 'REPLACED'
+        WHERE document_id = ${id}::uuid AND status = 'CURRENT'
+        RETURNING id
+      `;
+
+      // 2. Sus fragmentos dejan de estar activos: ya no es la versión vigente (R7).
+      if (replaced.length > 0) {
+        await client.chunk.updateMany({
+          where: { documentVersionId: { in: replaced.map((row) => row.id) } },
+          data: { isActive: false },
+        });
+      }
+
+      // 3. La nueva, con el número siguiente, en CURRENT y PENDING.
+      const { _max } = await client.documentVersion.aggregate({
+        where: { documentId: id },
+        _max: { versionNumber: true },
+      });
+      try {
+        await client.documentVersion.create({
+          data: {
+            ...version,
+            documentId: id,
+            versionNumber: (_max.versionNumber ?? 0) + 1,
+            status: 'CURRENT',
+            processingStatus: 'PENDING',
+          },
+        });
+      } catch (error) {
+        if (isConcurrentVersionConflict(error)) {
+          throw new ConcurrentVersionError(
+            `Otra versión nueva del documento ${id} se confirmó al mismo tiempo`,
+            { cause: error },
+          );
+        }
+        throw error;
+      }
+
+      // 4. La fecha de revisión, solo si vino (R7b).
+      const row = await client.document.update({
+        where: { id },
+        data: { ...(reviewDate && { reviewDate }), updatedAt: new Date() },
+        include: documentInclude,
+      });
+      return toRecord(row);
+    });
   }
 
   archive(

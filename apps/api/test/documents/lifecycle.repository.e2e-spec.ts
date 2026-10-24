@@ -2,7 +2,11 @@
 
 import { randomUUID } from 'node:crypto';
 import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
-import type { RepositoryTransaction } from '../../src/documents/documents.repository';
+import { ConcurrentVersionError } from '../../src/documents/documents.repository';
+import type {
+  NewVersion,
+  RepositoryTransaction,
+} from '../../src/documents/documents.repository';
 import { PrismaDocumentsRepository } from '../../src/documents/prisma-documents.repository';
 import { Prisma } from '../../src/generated/prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -59,7 +63,21 @@ async function replaceCurrentVersion(
   return id;
 }
 
-describe('PrismaDocumentsRepository: ciclo de vida (integración, T06)', () => {
+// Los datos de una versión nueva, como los armará el servicio de T11: clave única y checksum propio.
+function newVersion(documentId: string, checksum: string): NewVersion {
+  const id = randomUUID();
+  return {
+    id,
+    storageKey: `documents/${documentId}/${id}.pdf`,
+    originalFileName: 'manual-v-nueva.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 4096,
+    checksum,
+    uploadedById: FIXTURE_USERS.admin.id,
+  };
+}
+
+describe('PrismaDocumentsRepository: ciclo de vida (integración, T06 y T07)', () => {
   let prisma: PrismaService;
   let repository: PrismaDocumentsRepository;
 
@@ -316,6 +334,228 @@ describe('PrismaDocumentsRepository: ciclo de vida (integración, T06)', () => {
       for (const chunk of chunks) {
         expect(chunk.areaIds).toEqual([AREA_IDS.ventas]);
       }
+    });
+  });
+
+  describe('addVersion (R7, R7b, R8)', () => {
+    const versionsOf = (documentId: string) =>
+      prisma.documentVersion.findMany({
+        where: { documentId },
+        orderBy: { versionNumber: 'asc' },
+        select: { id: true, versionNumber: true, status: true, processingStatus: true },
+      });
+
+    it('R7: la v1 pasa a REPLACED con sus fragmentos inactivos y la v2 nace CURRENT y PENDING', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await seedProcessedVersion(prisma, {
+        documentId: seeded.id,
+        versionId: seeded.versionId,
+        areaIds: [AREA_IDS.ventas],
+      });
+      const v2 = newVersion(seeded.id, 'b'.repeat(64));
+
+      const updated = await repository.runInTransaction(async (tx) => {
+        await repository.lockForUpdate(tx, seeded.id);
+        return repository.addVersion(tx, seeded.id, v2);
+      });
+
+      // Lo que devuelve: el documento con la v2 como vigente.
+      expect(updated.currentVersion).toMatchObject({
+        id: v2.id,
+        versionNumber: 2,
+        status: 'CURRENT',
+        processingStatus: 'PENDING',
+        storageKey: v2.storageKey,
+        originalFileName: 'manual-v-nueva.pdf',
+        checksum: v2.checksum,
+      });
+
+      // Lo que quedó en la base.
+      expect(await versionsOf(seeded.id)).toEqual([
+        { id: seeded.versionId, versionNumber: 1, status: 'REPLACED', processingStatus: 'READY' },
+        { id: v2.id, versionNumber: 2, status: 'CURRENT', processingStatus: 'PENDING' },
+      ]);
+      const v1Chunks = await prisma.chunk.findMany({
+        where: { documentVersionId: seeded.versionId },
+      });
+      expect(v1Chunks).toHaveLength(2);
+      expect(v1Chunks.every((chunk) => !chunk.isActive)).toBe(true);
+      // La v2 todavía no tiene fragmentos: los crea el worker al procesarla.
+      expect(await prisma.chunk.count({ where: { documentVersionId: v2.id } })).toBe(0);
+    });
+
+    it('el número de la nueva es el máximo + 1, aunque ya haya varias versiones', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await replaceCurrentVersion(prisma, seeded.id, 2, 'c'.repeat(64));
+      const v3 = newVersion(seeded.id, 'd'.repeat(64));
+
+      const updated = await repository.runInTransaction(async (tx) => {
+        await repository.lockForUpdate(tx, seeded.id);
+        return repository.addVersion(tx, seeded.id, v3);
+      });
+
+      expect(updated.currentVersion.versionNumber).toBe(3);
+      expect((await versionsOf(seeded.id)).map((v) => `${v.versionNumber}:${v.status}`)).toEqual([
+        '1:REPLACED',
+        '2:REPLACED',
+        '3:CURRENT',
+      ]);
+    });
+
+    it('no toca los fragmentos de otro documento', async () => {
+      const target = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const other = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await seedProcessedVersion(prisma, {
+        documentId: other.id,
+        versionId: other.versionId,
+        areaIds: [AREA_IDS.ventas],
+      });
+
+      await repository.runInTransaction(async (tx) => {
+        await repository.lockForUpdate(tx, target.id);
+        return repository.addVersion(tx, target.id, newVersion(target.id, 'e'.repeat(64)));
+      });
+
+      const otherChunks = await prisma.chunk.findMany({ where: { documentId: other.id } });
+      expect(otherChunks.every((chunk) => chunk.isActive)).toBe(true);
+    });
+
+    describe('R7b: fecha de revisión', () => {
+      it('con reviewDate, el documento queda con la fecha nueva', async () => {
+        const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+        const reviewDate = new Date('2028-05-20T00:00:00.000Z');
+
+        const updated = await repository.runInTransaction(async (tx) => {
+          await repository.lockForUpdate(tx, seeded.id);
+          return repository.addVersion(tx, seeded.id, newVersion(seeded.id, 'f'.repeat(64)), reviewDate);
+        });
+
+        expect(updated.reviewDate.toISOString().slice(0, 10)).toBe('2028-05-20');
+        const stored = await prisma.document.findUniqueOrThrow({ where: { id: seeded.id } });
+        expect(stored.reviewDate.toISOString().slice(0, 10)).toBe('2028-05-20');
+      });
+
+      it('sin reviewDate, queda la que estaba', async () => {
+        const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+        const before = await prisma.document.findUniqueOrThrow({ where: { id: seeded.id } });
+
+        await repository.runInTransaction(async (tx) => {
+          await repository.lockForUpdate(tx, seeded.id);
+          return repository.addVersion(tx, seeded.id, newVersion(seeded.id, '9'.repeat(64)));
+        });
+
+        const after = await prisma.document.findUniqueOrThrow({ where: { id: seeded.id } });
+        expect(after.reviewDate.toISOString()).toBe(before.reviewDate.toISOString());
+      });
+    });
+
+    it('si la transacción se deshace, la v1 sigue CURRENT con sus fragmentos activos y no hay v2 (R9)', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await seedProcessedVersion(prisma, {
+        documentId: seeded.id,
+        versionId: seeded.versionId,
+        areaIds: [AREA_IDS.ventas],
+      });
+
+      await expect(
+        repository.runInTransaction(async (tx) => {
+          await repository.lockForUpdate(tx, seeded.id);
+          await repository.addVersion(tx, seeded.id, newVersion(seeded.id, '8'.repeat(64)));
+          throw new Error('falla la cola después de crear la versión');
+        }),
+      ).rejects.toThrow('falla la cola después de crear la versión');
+
+      expect(await versionsOf(seeded.id)).toEqual([
+        { id: seeded.versionId, versionNumber: 1, status: 'CURRENT', processingStatus: 'READY' },
+      ]);
+      const chunks = await prisma.chunk.findMany({ where: { documentId: seeded.id } });
+      expect(chunks.every((chunk) => chunk.isActive)).toBe(true);
+    });
+
+    // E10 a nivel repositorio: con el bloqueo, las dos se aplican en orden (D3).
+    it('E10: dos versiones nuevas a la vez, con bloqueo, terminan en 2 y 3 con una sola CURRENT', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const first = newVersion(seeded.id, '2'.repeat(64));
+      const second = newVersion(seeded.id, '3'.repeat(64));
+
+      const results = await Promise.all(
+        [first, second].map((version) =>
+          repository.runInTransaction(async (tx) => {
+            await repository.lockForUpdate(tx, seeded.id);
+            return repository.addVersion(tx, seeded.id, version);
+          }),
+        ),
+      );
+
+      expect(
+        results.map((r) => r.currentVersion.versionNumber).sort((a, b) => a - b),
+      ).toEqual([2, 3]);
+      const versions = await versionsOf(seeded.id);
+      expect(versions.map((v) => v.versionNumber)).toEqual([1, 2, 3]);
+      expect(versions.filter((v) => v.status === 'CURRENT')).toHaveLength(1);
+      expect(versions[2].status).toBe('CURRENT');
+    }, 15000);
+
+    // Sin bloqueo, la base es la última defensa: el índice parcial (o el número repetido) rechaza la
+    // segunda CURRENT y el repositorio lo traduce a ConcurrentVersionError (R8; plan 003, sección 5).
+    it('R8: sin bloqueo, si otra transacción ya creó la vigente, addVersion rechaza con ConcurrentVersionError', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const xWrote = deferred();
+      const releaseX = deferred();
+
+      // X: otra escritura que NO usa lockForUpdate. Reemplaza la v1 y crea la v2 CURRENT, sin confirmar.
+      const x = prisma.$transaction(
+        async (tx) => {
+          await replaceCurrentVersion(tx, seeded.id, 2, '4'.repeat(64));
+          xWrote.resolve();
+          await releaseX.promise;
+        },
+        { timeout: 10000 },
+      );
+      await untilSignalOrFailure(xWrote.promise, x);
+
+      // Y: addVersion SIN lockForUpdate. Su UPDATE de la v1 espera la fila que tiene X.
+      const y = repository.runInTransaction((tx) =>
+        repository.addVersion(tx, seeded.id, newVersion(seeded.id, '5'.repeat(64))),
+      );
+      let yError: unknown;
+      try {
+        await sleep(400);
+        releaseX.resolve();
+        await x;
+        yError = await y.then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      } finally {
+        releaseX.resolve();
+      }
+
+      expect(yError).toBeInstanceOf(ConcurrentVersionError);
+      // Quedó lo de X: v1 REPLACED y v2 CURRENT, sin una tercera.
+      expect((await versionsOf(seeded.id)).map((v) => `${v.versionNumber}:${v.status}`)).toEqual([
+        '1:REPLACED',
+        '2:CURRENT',
+      ]);
+    }, 15000);
+
+    it('una violación de unicidad que no es de versiones sigue sin traducirse', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      // La misma clave de almacenamiento que la v1: storage_key es único (M6 del plan 001).
+      const clash = { ...newVersion(seeded.id, '6'.repeat(64)), storageKey: seeded.storageKey };
+
+      const error = await repository
+        .runInTransaction(async (tx) => {
+          await repository.lockForUpdate(tx, seeded.id);
+          return repository.addVersion(tx, seeded.id, clash);
+        })
+        .then(
+          () => undefined,
+          (caught: unknown) => caught,
+        );
+
+      expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+      expect(error).not.toBeInstanceOf(ConcurrentVersionError);
     });
   });
 });
