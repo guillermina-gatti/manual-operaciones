@@ -148,23 +148,71 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
     });
   }
 
-  // ── Ciclo de vida (spec 003): declarados para cumplir el contrato (T05); se implementan
-  // en T06 (lockForUpdate, replaceAreas), T07 (addVersion) y T08 (archive, listVersions, findVersion).
+  // ── Ciclo de vida (spec 003). Pendientes del contrato (T05): T07 (addVersion) y
+  // T08 (archive, listVersions, findVersion).
 
+  // Bloquea la fila del documento hasta el fin de la transacción y lo devuelve con sus áreas y su
+  // versión vigente (plan 003, 3.3).
+  //
+  // Son DOS sentencias a propósito; no juntarlas en una. PostgreSQL trabaja en READ COMMITTED: cada
+  // sentencia ve lo confirmado en el momento en que empieza. Si el FOR UPDATE y la lectura de la
+  // versión vigente fueran una sola consulta (por ejemplo, con un JOIN a document_versions), una
+  // transacción que esperó el bloqueo podría recibir la versión vigente de antes de esperar: dejaría
+  // pasar un archivo idéntico a la vigente (R6b) o crearía una versión sobre la equivocada (R8).
+  // La segunda sentencia empieza cuando el bloqueo ya se obtuvo, así que ve lo que confirmó la otra
+  // transacción. Lo prueba "la lectura después del bloqueo ve la versión que confirmó la otra
+  // transacción (A y B)" en test/documents/lifecycle.repository.e2e-spec.ts.
   lockForUpdate(
-    _tx: RepositoryTransaction,
-    _id: string,
+    tx: RepositoryTransaction,
+    id: string,
   ): Promise<DocumentRecord | null> {
-    return notImplemented('lockForUpdate', 'T06');
+    const client = tx as unknown as Prisma.TransactionClient;
+    return this.translate(async () => {
+      // 1. El bloqueo, solo sobre documents.
+      const locked = await client.$queryRaw<{ id: string }[]>`
+        SELECT id FROM documents WHERE id = ${id}::uuid FOR UPDATE
+      `;
+      if (locked.length === 0) return null;
+
+      // 2. La lectura, después del bloqueo.
+      const row = await client.document.findUnique({
+        where: { id },
+        include: documentInclude,
+      });
+      return row ? toRecord(row) : null;
+    });
   }
 
+  // Reemplaza las áreas del documento, cambia el responsable si viene y copia las áreas nuevas a
+  // todos sus fragmentos, de todas sus versiones (R4, R5). No toca is_active: cambiar áreas no
+  // cambia qué versión es la vigente. Todo dentro de la transacción recibida.
   replaceAreas(
-    _tx: RepositoryTransaction,
-    _id: string,
-    _areaIds: string[],
-    _ownerId?: string,
+    tx: RepositoryTransaction,
+    id: string,
+    areaIds: string[],
+    ownerId?: string,
   ): Promise<DocumentRecord> {
-    return notImplemented('replaceAreas', 'T06');
+    const client = tx as unknown as Prisma.TransactionClient;
+    const uniqueAreaIds = [...new Set(areaIds)];
+    return this.translate(async () => {
+      await client.documentArea.deleteMany({ where: { documentId: id } });
+      await client.documentArea.createMany({
+        data: uniqueAreaIds.map((areaId) => ({ documentId: id, areaId })),
+      });
+
+      // R5: los fragmentos de TODAS las versiones, también las reemplazadas.
+      await client.chunk.updateMany({
+        where: { documentId: id },
+        data: { areaIds: { set: uniqueAreaIds } },
+      });
+
+      const row = await client.document.update({
+        where: { id },
+        data: { ...(ownerId && { ownerId }), updatedAt: new Date() },
+        include: documentInclude,
+      });
+      return toRecord(row);
+    });
   }
 
   addVersion(

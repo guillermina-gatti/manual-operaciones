@@ -123,3 +123,35 @@ export function pdfOfSize(bytes: number): Buffer {
 // Fecha YYYY-MM-DD a `days` días de hoy (R6 pide una fecha posterior a hoy).
 export const daysFromToday = (days: number) =>
   new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+// Spec 003: simula lo que hará el worker de Guille cuando exista (plan 003, 3.4). Deja la versión
+// en READY e inserta sus fragmentos con las áreas indicadas y activos o no. Sin embeddings: los
+// tests del ciclo de vida solo miran area_ids e is_active.
+export async function seedProcessedVersion(
+  prisma: PrismaService,
+  opts: {
+    documentId: string;
+    versionId: string;
+    areaIds: string[];
+    chunks?: number;
+    isActive?: boolean;
+  },
+): Promise<string[]> {
+  await prisma.documentVersion.update({
+    where: { id: opts.versionId },
+    data: { processingStatus: 'READY', processedAt: new Date() },
+  });
+  const ids = Array.from({ length: opts.chunks ?? 2 }, () => randomUUID());
+  await prisma.chunk.createMany({
+    data: ids.map((id, chunkIndex) => ({
+      id,
+      documentVersionId: opts.versionId,
+      documentId: opts.documentId,
+      chunkIndex,
+      content: `Fragmento ${chunkIndex + 1} de prueba`,
+      areaIds: opts.areaIds,
+      isActive: opts.isActive ?? true,
+    })),
+  });
+  return ids;
+}
