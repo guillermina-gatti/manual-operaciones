@@ -570,4 +570,114 @@ describe('Ciclo de vida de documentos (integración)', () => {
       await postVersion(randomUUID(), uniquePdf()).set(admin).expect(404);
     });
   });
+
+  describe('GET /api/documents/:id/versions y /versions/:versionId/download', () => {
+    // `ventas` ya tiene v1 REPLACED y v2 CURRENT; la v3 se sube por la API.
+    let v3Id: string;
+
+    const history = (id: string) => http().get(`/api/documents/${id}/versions`);
+    const download = (id: string, versionId: string) =>
+      http().get(`/api/documents/${id}/versions/${versionId}/download`);
+
+    beforeEach(async () => {
+      const res = await http()
+        .post(`/api/documents/${ventas.id}/versions`)
+        .set(admin)
+        .attach('file', uniquePdf(), {
+          filename: 'caja v3.pdf',
+          contentType: 'application/pdf',
+        })
+        .expect(201);
+      v3Id = (res.body as VersionResponseBody).currentVersion.id;
+      t.storage.generatedLinks.length = 0;
+    });
+
+    it('E13: el historial va de la 3 a la 1, con su estado y sin storageKey ni checksum', async () => {
+      const res = await history(ventas.id).set(admin).expect(200);
+
+      const body = res.body as {
+        data: Record<string, unknown>[];
+      };
+      expect(
+        body.data.map(({ id, versionNumber, status }) => ({
+          id,
+          versionNumber,
+          status,
+        })),
+      ).toEqual([
+        { id: v3Id, versionNumber: 3, status: 'CURRENT' },
+        { id: v2Id, versionNumber: 2, status: 'REPLACED' },
+        { id: ventas.versionId, versionNumber: 1, status: 'REPLACED' },
+      ]);
+      expect(body.data[0]).toEqual({
+        id: v3Id,
+        versionNumber: 3,
+        status: 'CURRENT',
+        originalFileName: 'caja v3.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: expect.any(Number) as number,
+        processingStatus: 'PENDING',
+        uploadedById: FIXTURE_USERS.admin.id,
+        createdAt: expect.any(String) as string,
+      });
+      expect(JSON.stringify(body)).not.toMatch(/storageKey|checksum/);
+    });
+
+    it('E13: la descarga de cada versión da url y expiresAt, para la clave de esa versión', async () => {
+      for (const versionId of [ventas.versionId, v2Id, v3Id]) {
+        const res = await download(ventas.id, versionId).set(admin).expect(200);
+
+        expect(res.body).toEqual({
+          url: expect.any(String) as string,
+          expiresAt: expect.any(String) as string,
+        });
+      }
+      const keys = t.storage.generatedLinks.map((link) => link.key);
+      expect(keys).toHaveLength(3);
+      expect(keys[0]).toBe(ventas.storageKey);
+      expect(keys[2]).toBe(`documents/${ventas.id}/${v3Id}.pdf`);
+    });
+
+    it('E12: un EMPLOYEE → 403 en los dos endpoints, aunque el documento no exista', async () => {
+      await history(ventas.id).set(empleadoVentas).expect(403);
+      await download(ventas.id, v3Id).set(empleadoVentas).expect(403);
+      await history(randomUUID()).set(empleadoVentas).expect(403);
+      await download(randomUUID(), randomUUID())
+        .set(empleadoVentas)
+        .expect(403);
+      expect(t.storage.generatedLinks).toEqual([]);
+    });
+
+    it('una versión de otro documento → 404 y no se genera enlace', async () => {
+      const otro = await seedDocument(t.prisma, {
+        title: 'Otro',
+        areaIds: [AREA_IDS.ventas],
+      });
+
+      await download(ventas.id, otro.versionId).set(admin).expect(404);
+      expect(t.storage.generatedLinks).toEqual([]);
+    });
+
+    it('un documento inexistente → 404 en el historial', async () => {
+      await history(randomUUID()).set(admin).expect(404);
+    });
+
+    it('D10: con el documento archivado, el ADMIN sigue viendo el historial y descargando', async () => {
+      await http()
+        .post(`/api/documents/${ventas.id}/archive`)
+        .set(admin)
+        .expect(200);
+
+      const res = await history(ventas.id).set(admin).expect(200);
+      expect((res.body as { data: unknown[] }).data).toHaveLength(3);
+      await download(ventas.id, ventas.versionId).set(admin).expect(200);
+    });
+
+    it('sin sesión 401; ids mal formados 400', async () => {
+      await history(ventas.id).expect(401);
+      await history('no-es-uuid').set(admin).expect(400);
+      await download(ventas.id, 'no-es-uuid').set(admin).expect(400);
+      await download('no-es-uuid', v3Id).set(admin).expect(400);
+    });
+  });
 });

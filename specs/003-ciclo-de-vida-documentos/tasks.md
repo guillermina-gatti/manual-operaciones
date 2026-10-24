@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T15 **hechas**. T16 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
+- **Estado (24/10/2026):** T01 a T16 (todo el backend) **hechas**. T17 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
 
 Convenciones:
 

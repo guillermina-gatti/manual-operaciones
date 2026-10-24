@@ -29,13 +29,18 @@ import type { DownloadUrl } from '../storage/file-storage';
 import {
   DocumentListResponse,
   DocumentQueryService,
+  VersionHistoryResponse,
 } from './document-query.service';
 import { DocumentLifecycleService } from './document-lifecycle.service';
 import { DocumentUploadService } from './document-upload.service';
 import { ChangeAreasDto } from './dto/change-areas.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
-import { DocumentResponse, DocumentSummary } from './dto/document.response';
+import {
+  DocumentResponse,
+  DocumentSummary,
+  VersionHistoryItem,
+} from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
 import type { UploadedFileInput } from './file-inspector';
 
@@ -75,6 +80,12 @@ class DocumentListBody implements DocumentListResponse {
 
   @ApiProperty({ example: 20 })
   limit: number;
+}
+
+// Clase para documentar en Swagger el historial de versiones (spec 003)
+class VersionHistoryBody implements VersionHistoryResponse {
+  @ApiProperty({ type: [VersionHistoryItem] })
+  data: VersionHistoryItem[];
 }
 
 // Clase para documentar en Swagger la respuesta de enlaces temporales
@@ -279,6 +290,58 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<DocumentResponse> {
     return this.lifecycle.addVersion(id, file, dto, user);
+  }
+
+  // Ruta GET /documents/:id/versions: Historial de versiones (spec 003, R12). El guard corre antes
+  // que nada: otro rol recibe 403 aunque el documento no exista
+  @Get(':id/versions')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Versiones, de la más nueva a la más vieja',
+    type: VersionHistoryBody,
+  })
+  @ApiResponse({ status: 400, description: 'El id no es un UUID' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo el ADMIN ve el historial',
+  })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({ status: 503, description: 'La base no responde' })
+  listVersions(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<VersionHistoryResponse> {
+    return this.queries.listVersions(id);
+  }
+
+  // Ruta GET /documents/:id/versions/:versionId/download: Enlace de una versión (spec 003, R12)
+  @Get(':id/versions/:versionId/download')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Enlace temporal de descarga de esa versión (5 minutos)',
+    type: DownloadUrlBody,
+  })
+  @ApiResponse({ status: 400, description: 'Un id no es un UUID' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo el ADMIN descarga versiones anteriores',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'El documento no existe o la versión no es de ese documento',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el almacenamiento no responden',
+  })
+  getVersionDownloadUrl(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('versionId', ParseUUIDPipe) versionId: string,
+  ): Promise<DownloadUrl> {
+    return this.queries.getVersionDownloadUrl(id, versionId);
   }
 
   // Ruta POST /documents/:id/archive: Archivar un documento (spec 003, D5)
