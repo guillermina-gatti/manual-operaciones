@@ -1,6 +1,6 @@
-/* Ciclo de vida de punta a punta (spec 003): cambiar áreas y archivar (T14) */
+/* Ciclo de vida de punta a punta (spec 003): cambiar áreas y archivar (T14) y versión nueva (T15) */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
 import {
@@ -9,9 +9,29 @@ import {
   authHeaders,
   cleanDocuments,
   createDocumentsTestApp,
+  daysFromToday,
+  pdfOfSize,
   seedDocument,
   seedProcessedVersion,
 } from './helpers';
+
+// Un PDF distinto en cada llamada (otro checksum), y su SHA-256.
+const uniquePdf = () =>
+  Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.from(randomUUID())]);
+const sha256 = (buffer: Buffer) =>
+  createHash('sha256').update(buffer).digest('hex');
+
+interface VersionResponseBody {
+  id: string;
+  status: string;
+  reviewDate: string;
+  currentVersion: {
+    id: string;
+    versionNumber: number;
+    status: string;
+    processingStatus: string;
+  };
+}
 
 interface ErrorBody {
   statusCode: number;
@@ -315,5 +335,239 @@ describe('Ciclo de vida de documentos (integración)', () => {
           .expect(404);
       },
     );
+  });
+
+  describe('POST /api/documents/:id/versions', () => {
+    // Un documento de Ventas con una sola versión, procesada y con su archivo en el almacenamiento.
+    let caja: SeededDocument;
+    let v1File: Buffer;
+    let put: jest.SpyInstance;
+
+    const postVersion = (
+      id: string,
+      file: Buffer,
+      opts: { filename?: string; reviewDate?: string } = {},
+    ) => {
+      const req = http()
+        .post(`/api/documents/${id}/versions`)
+        .attach('file', file, {
+          filename: opts.filename ?? 'manual v2.pdf',
+          contentType: 'application/pdf',
+        });
+      return opts.reviewDate ? req.field('reviewDate', opts.reviewDate) : req;
+    };
+    const versions = (documentId: string) =>
+      t.prisma.documentVersion.findMany({
+        where: { documentId },
+        orderBy: { versionNumber: 'asc' },
+      });
+
+    beforeEach(async () => {
+      v1File = uniquePdf();
+      caja = await seedDocument(t.prisma, {
+        title: 'Caja diaria',
+        areaIds: [AREA_IDS.ventas],
+        checksum: sha256(v1File),
+      });
+      await seedProcessedVersion(t.prisma, {
+        documentId: caja.id,
+        versionId: caja.versionId,
+        areaIds: [AREA_IDS.ventas],
+      });
+      await t.storage.put(
+        caja.storageKey,
+        v1File,
+        'application/pdf',
+        sha256(v1File),
+      );
+      t.queue.enqueued.length = 0;
+      put = jest.spyOn(t.storage, 'put');
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('E2: 201; v1 REPLACED con fragmentos inactivos, v2 CURRENT y PENDING, encolada; los dos archivos quedan', async () => {
+      const res = await postVersion(caja.id, uniquePdf())
+        .set(admin)
+        .expect(201);
+
+      const body = res.body as VersionResponseBody;
+      expect(body.currentVersion).toMatchObject({
+        versionNumber: 2,
+        status: 'CURRENT',
+        processingStatus: 'PENDING',
+      });
+      expect(JSON.stringify(body)).not.toMatch(/storageKey|checksum/);
+
+      const [v1, v2] = await versions(caja.id);
+      expect(v1).toMatchObject({ id: caja.versionId, status: 'REPLACED' });
+      expect(v2).toMatchObject({
+        id: body.currentVersion.id,
+        versionNumber: 2,
+        status: 'CURRENT',
+        processingStatus: 'PENDING',
+        storageKey: `documents/${caja.id}/${body.currentVersion.id}.pdf`,
+      });
+      for (const row of await chunks(caja.id)) {
+        expect(row.isActive).toBe(false);
+      }
+      expect(t.queue.enqueued).toEqual([v2.id]);
+      expect(t.storage.has(v2.storageKey)).toBe(true);
+      expect(t.storage.has(caja.storageKey)).toBe(true);
+    });
+
+    it('E3: igual a la vigente → 409 IDENTICAL_TO_CURRENT, una sola versión y ningún objeto nuevo', async () => {
+      const res = await postVersion(caja.id, v1File).set(admin).expect(409);
+
+      expect(res.body as ErrorBody).toMatchObject({
+        message: 'El archivo es igual a la versión vigente',
+        reason: 'IDENTICAL_TO_CURRENT',
+      });
+      expect(await versions(caja.id)).toHaveLength(1);
+      expect(put).not.toHaveBeenCalled();
+      expect(t.queue.enqueued).toEqual([]);
+    });
+
+    it('E4: con reviewDate futura el documento la toma; sin ella queda la anterior', async () => {
+      const reviewDate = daysFromToday(60);
+
+      const withDate = await postVersion(caja.id, uniquePdf(), { reviewDate })
+        .set(admin)
+        .expect(201);
+      expect((withDate.body as VersionResponseBody).reviewDate).toBe(
+        reviewDate,
+      );
+
+      const withoutDate = await postVersion(caja.id, uniquePdf())
+        .set(admin)
+        .expect(201);
+      expect((withoutDate.body as VersionResponseBody).reviewDate).toBe(
+        reviewDate,
+      );
+      expect(
+        (withoutDate.body as VersionResponseBody).currentVersion.versionNumber,
+      ).toBe(3);
+    });
+
+    it('reviewDate de hoy → 400', async () => {
+      await postVersion(caja.id, uniquePdf(), { reviewDate: daysFromToday(0) })
+        .set(admin)
+        .expect(400);
+
+      expect(await versions(caja.id)).toHaveLength(1);
+    });
+
+    it('E5: falla la cola → 503; v1 sigue CURRENT con sus fragmentos activos, sin v2 ni objeto nuevo', async () => {
+      t.queue.failNext();
+
+      await postVersion(caja.id, uniquePdf()).set(admin).expect(503);
+
+      const rows = await versions(caja.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ id: caja.versionId, status: 'CURRENT' });
+      for (const row of await chunks(caja.id)) {
+        expect(row.isActive).toBe(true);
+      }
+      const [newKey] = put.mock.calls[0] as [string];
+      expect(newKey).not.toBe(caja.storageKey);
+      expect(t.storage.has(newKey)).toBe(false);
+      expect(t.storage.has(caja.storageKey)).toBe(true);
+    });
+
+    it('E10: dos versiones a la vez → las dos 201, versiones 2 y 3 y una sola CURRENT', async () => {
+      const [first, second] = await Promise.all([
+        postVersion(caja.id, uniquePdf()).set(admin),
+        postVersion(caja.id, uniquePdf()).set(admin),
+      ]);
+
+      expect([first.status, second.status]).toEqual([201, 201]);
+      const rows = await versions(caja.id);
+      expect(rows.map((row) => row.versionNumber)).toEqual([1, 2, 3]);
+      expect(rows.filter((row) => row.status === 'CURRENT')).toHaveLength(1);
+      expect(rows[2].status).toBe('CURRENT');
+    });
+
+    it('archivar y subir una versión a la vez: termina ARCHIVED, una sola CURRENT y fragmentos inactivos', async () => {
+      const [version, archive] = await Promise.all([
+        postVersion(caja.id, uniquePdf()).set(admin),
+        http().post(`/api/documents/${caja.id}/archive`).set(admin),
+      ]);
+
+      expect(archive.status).toBe(200);
+      // Según quién tome el bloqueo primero: la versión entra antes de archivar, o llega tarde.
+      expect([201, 409]).toContain(version.status);
+      const document = await t.prisma.document.findUniqueOrThrow({
+        where: { id: caja.id },
+      });
+      expect(document.status).toBe('ARCHIVED');
+      const rows = await versions(caja.id);
+      expect(rows.filter((row) => row.status === 'CURRENT')).toHaveLength(1);
+      for (const row of await chunks(caja.id)) {
+        expect(row.isActive).toBe(false);
+      }
+    });
+
+    it('E8 (parte): un EMPLOYEE → 403 y nada cambia', async () => {
+      await postVersion(caja.id, uniquePdf()).set(empleadoVentas).expect(403);
+
+      expect(await versions(caja.id)).toHaveLength(1);
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it('E9 (parte): sobre un documento archivado → 409 ARCHIVED', async () => {
+      await http()
+        .post(`/api/documents/${caja.id}/archive`)
+        .set(admin)
+        .expect(200);
+
+      const res = await postVersion(caja.id, uniquePdf())
+        .set(admin)
+        .expect(409);
+
+      expect((res.body as ErrorBody).reason).toBe('ARCHIVED');
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it('igual a la vigente de otro documento → 409 DUPLICATE con existingDocumentId', async () => {
+      const other = uniquePdf();
+      const otro = await seedDocument(t.prisma, {
+        title: 'Otro',
+        areaIds: [AREA_IDS.operaciones],
+        checksum: sha256(other),
+      });
+
+      const res = await postVersion(caja.id, other).set(admin).expect(409);
+
+      expect(res.body as ErrorBody).toMatchObject({
+        reason: 'DUPLICATE',
+        existingDocumentId: otro.id,
+      });
+    });
+
+    it('11 MB → 413', async () => {
+      await postVersion(caja.id, pdfOfSize(11 * 1024 * 1024))
+        .set(admin)
+        .expect(413);
+
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it('extensión falsa → 415', async () => {
+      await postVersion(caja.id, Buffer.from('no soy un PDF'), {
+        filename: 'manual.pdf',
+      })
+        .set(admin)
+        .expect(415);
+
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it('sin sesión 401, id mal formado 400, inexistente 404', async () => {
+      await postVersion(caja.id, uniquePdf()).expect(401);
+      await postVersion('no-es-uuid', uniquePdf()).set(admin).expect(400);
+      await postVersion(randomUUID(), uniquePdf()).set(admin).expect(404);
+    });
   });
 });

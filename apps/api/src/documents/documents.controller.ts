@@ -34,6 +34,7 @@ import { DocumentLifecycleService } from './document-lifecycle.service';
 import { DocumentUploadService } from './document-upload.service';
 import { ChangeAreasDto } from './dto/change-areas.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
+import { CreateVersionDto } from './dto/create-version.dto';
 import { DocumentResponse, DocumentSummary } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
 import type { UploadedFileInput } from './file-inspector';
@@ -43,6 +44,16 @@ export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 // Clase DTO exclusiva para documentar en Swagger el cuerpo multipart/form-data
 class UploadDocumentBody extends CreateDocumentDto {
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'PDF, .txt o .md, hasta 10 MB',
+  })
+  file: unknown;
+}
+
+// Lo mismo para el cuerpo de la versión nueva (spec 003)
+class UploadVersionBody extends CreateVersionDto {
   @ApiProperty({
     type: 'string',
     format: 'binary',
@@ -223,6 +234,51 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<DocumentResponse> {
     return this.lifecycle.changeAreas(id, dto, user);
+  }
+
+  // Ruta POST /documents/:id/versions: Subir una versión nueva (spec 003). Mismos límites que la carga
+  @Post(':id/versions')
+  @Roles('ADMIN')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+      defParamCharset: 'utf8',
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: UploadVersionBody })
+  @ApiResponse({
+    status: 201,
+    description: 'Documento con la versión nueva como vigente',
+    type: DocumentResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'id inválido, falta el archivo o reviewDate mal formada o no posterior a hoy',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({ status: 403, description: ADMIN_ONLY_DESCRIPTION })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'reason: "ARCHIVED" (archivado), "IDENTICAL_TO_CURRENT" (igual a la vigente), "DUPLICATE" (igual a otro documento, con existingDocumentId) o "CONCURRENT_VERSION"',
+  })
+  @ApiResponse({ status: 413, description: 'El archivo pesa más de 10 MB' })
+  @ApiResponse({ status: 415, description: 'No es un PDF, .txt o .md real' })
+  @ApiResponse({
+    status: 503,
+    description:
+      'El almacenamiento, la base o la cola no responden; no se guardó nada',
+  })
+  addVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedFileInput | undefined,
+    @Body() dto: CreateVersionDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentResponse> {
+    return this.lifecycle.addVersion(id, file, dto, user);
   }
 
   // Ruta POST /documents/:id/archive: Archivar un documento (spec 003, D5)
