@@ -4,26 +4,47 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnsupportedMediaTypeException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { AuthUser } from '../common/auth';
+import { StorageUnavailableError } from '../storage/file-storage';
 import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
 import { DocumentLifecycleService } from './document-lifecycle.service';
-import { RepositoryUnavailableError } from './documents.repository';
+import {
+  ConcurrentVersionError,
+  RepositoryUnavailableError,
+} from './documents.repository';
 import type {
   DocumentRecord,
   DocumentsRepository,
+  NewVersion,
 } from './documents.repository';
 import type { AreasDirectory } from './ports/areas-directory';
 import type { AuditEntry, AuditLog } from './ports/audit-log';
+import { QueueUnavailableError } from './ports/processing-queue';
 import type { ProcessingQueue } from './ports/processing-queue';
 import type { UsersDirectory } from './ports/users-directory';
 
 const UNKNOWN_AREA = '0a000000-0000-4000-8000-000000000099';
 const DOCUMENT_ID = '0c000000-0000-4000-8000-000000000001';
+const OTHER_DOCUMENT = '0c000000-0000-4000-8000-000000000002';
+const UUID =
+  '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 
 // 22/10/2026 a las 12:00 en Buenos Aires (UTC−3).
 const NOON_IN_BUENOS_AIRES = new Date('2026-10-22T15:00:00.000Z');
+const TODAY = '2026-10-22';
+const TOMORROW = '2026-10-23';
+
+// El archivo de la versión nueva y su SHA-256.
+const PDF_CONTENT = Buffer.from('%PDF-1.7\nversión 2');
+const NEW_CHECKSUM = createHash('sha256').update(PDF_CONTENT).digest('hex');
+const pdf = (originalname = 'manual v2.pdf') => ({
+  originalname,
+  buffer: PDF_CONTENT,
+});
 
 // La transacción que entrega el repositorio simulado: el servicio solo la pasa.
 const TX = { transaction: 'simulada' };
@@ -384,6 +405,330 @@ describe('DocumentLifecycleService', () => {
         action: 'DOCUMENT_AREAS_CHANGE',
         documentId: DOCUMENT_ID,
         detail: '503',
+      });
+    });
+  });
+
+  describe('addVersion (R6 a R9)', () => {
+    beforeEach(() => {
+      storage.put.mockImplementation(() => {
+        events.push('put');
+        return Promise.resolve();
+      });
+      storage.delete.mockImplementation(() => {
+        events.push('delete');
+        return Promise.resolve();
+      });
+      queue.enqueue.mockImplementation(() => {
+        events.push('enqueue');
+        return Promise.resolve();
+      });
+      // Como el real: la nueva queda CURRENT y PENDING con el número siguiente.
+      repository.addVersion.mockImplementation(
+        (_tx: unknown, id: string, version: NewVersion, reviewDate?: Date) => {
+          events.push('addVersion');
+          return Promise.resolve(
+            documentRecord({
+              id,
+              ...(reviewDate && { reviewDate }),
+              currentVersion: {
+                ...version,
+                versionNumber: 2,
+                status: 'CURRENT',
+                processingStatus: 'PENDING',
+                createdAt: new Date(),
+              },
+            }),
+          );
+        },
+      );
+    });
+
+    const newVersion = () =>
+      repository.addVersion.mock.calls[0][2] as NewVersion;
+    const oldKey = documentRecord().currentVersion.storageKey;
+    const conflictBody = async (upload: Promise<unknown>) => {
+      const error = (await upload.catch((caught: unknown) => caught)) as
+        ConflictException | undefined;
+      expect(error).toBeInstanceOf(ConflictException);
+      return (error as ConflictException).getResponse();
+    };
+    const expectNewFileDeleted = () => {
+      expect(storage.delete).toHaveBeenCalledTimes(1);
+      expect(storage.delete).toHaveBeenCalledWith(newVersion().storageKey);
+      // D6: el archivo de la versión anterior nunca se borra.
+      expect(storage.delete).not.toHaveBeenCalledWith(oldKey);
+    };
+
+    it('valida, sube, bloquea, reemplaza, audita y encola al final de la transacción', async () => {
+      const result = await service.addVersion(DOCUMENT_ID, pdf(), {}, admin);
+
+      expect(events).toEqual([
+        'read',
+        'put',
+        'begin',
+        'lock',
+        'addVersion',
+        'audit:SUCCESS',
+        'enqueue',
+        'commit',
+      ]);
+      expect(result.currentVersion).toMatchObject({
+        versionNumber: 2,
+        status: 'CURRENT',
+        processingStatus: 'PENDING',
+      });
+    });
+
+    it('arma la versión nueva con su clave y encola su id', async () => {
+      await service.addVersion(
+        DOCUMENT_ID,
+        pdf(`${'a'.repeat(300)}.pdf`),
+        {},
+        admin,
+      );
+
+      const version = newVersion();
+      expect(version).toEqual({
+        id: expect.stringMatching(new RegExp(`^${UUID}$`)) as string,
+        storageKey: `documents/${DOCUMENT_ID}/${version.id}.pdf`,
+        originalFileName: 'a'.repeat(255),
+        mimeType: 'application/pdf',
+        sizeBytes: PDF_CONTENT.length,
+        checksum: NEW_CHECKSUM,
+        uploadedById: admin.id,
+      });
+      expect(storage.put).toHaveBeenCalledWith(
+        version.storageKey,
+        PDF_CONTENT,
+        'application/pdf',
+        NEW_CHECKSUM,
+      );
+      expect(queue.enqueue).toHaveBeenCalledWith(version.id);
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+
+    it('audita SUCCESS en la transacción, con el documento (R13)', async () => {
+      await service.addVersion(DOCUMENT_ID, pdf(), {}, admin);
+
+      expect(audit.record).toHaveBeenCalledTimes(1);
+      expect(audit.record).toHaveBeenCalledWith(
+        {
+          action: 'DOCUMENT_VERSION_UPLOAD',
+          actorId: admin.id,
+          documentId: DOCUMENT_ID,
+          result: 'SUCCESS',
+          at: expect.any(Date) as Date,
+        },
+        TX,
+      );
+    });
+
+    describe('antes de subir el archivo', () => {
+      it('sin archivo → 400 y no lee el documento', async () => {
+        await expect(
+          service.addVersion(DOCUMENT_ID, undefined, {}, admin),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(repository.findByIdWithAreas).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+      });
+
+      it('extensión falsa → 415', async () => {
+        const fake = { originalname: 'manual.pdf', buffer: Buffer.from('PK') };
+
+        await expect(
+          service.addVersion(DOCUMENT_ID, fake, {}, admin),
+        ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
+        expect(storage.put).not.toHaveBeenCalled();
+      });
+
+      it('404 si el documento no existe', async () => {
+        repository.findByIdWithAreas.mockResolvedValue(null);
+
+        await expect(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(storage.put).not.toHaveBeenCalled();
+        expect(failureAudit()?.[0]).not.toHaveProperty('documentId');
+      });
+
+      it('409 ARCHIVED si está archivado (R11)', async () => {
+        repository.findByIdWithAreas.mockResolvedValue(
+          documentRecord({ status: 'ARCHIVED' }),
+        );
+
+        const body = await conflictBody(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        );
+
+        expect(body).toMatchObject({ reason: 'ARCHIVED' });
+        expect(storage.put).not.toHaveBeenCalled();
+      });
+
+      it('E3: idéntico a la vigente → 409 IDENTICAL_TO_CURRENT, sin put y auditado con el documento (R6b)', async () => {
+        repository.findActiveByChecksum.mockResolvedValue({
+          documentId: DOCUMENT_ID,
+        });
+
+        const body = await conflictBody(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        );
+
+        expect(body).toMatchObject({
+          statusCode: 409,
+          message: 'El archivo es igual a la versión vigente',
+          reason: 'IDENTICAL_TO_CURRENT',
+        });
+        expect(repository.findActiveByChecksum).toHaveBeenCalledWith(
+          NEW_CHECKSUM,
+        );
+        expect(storage.put).not.toHaveBeenCalled();
+        expect(failureAudit()?.[0]).toEqual({
+          action: 'DOCUMENT_VERSION_UPLOAD',
+          actorId: admin.id,
+          documentId: DOCUMENT_ID,
+          result: 'FAILURE',
+          detail: '409',
+          at: expect.any(Date) as Date,
+        });
+      });
+
+      it('idéntico a la vigente de otro documento → 409 DUPLICATE con existingDocumentId (R8b de la spec 001)', async () => {
+        repository.findActiveByChecksum.mockResolvedValue({
+          documentId: OTHER_DOCUMENT,
+        });
+
+        const body = await conflictBody(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        );
+
+        expect(body).toMatchObject({
+          reason: 'DUPLICATE',
+          existingDocumentId: OTHER_DOCUMENT,
+        });
+        expect(storage.put).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('E4: fecha de revisión (R7b)', () => {
+      it('una fecha futura se pasa al repositorio', async () => {
+        await service.addVersion(
+          DOCUMENT_ID,
+          pdf(),
+          { reviewDate: TOMORROW },
+          admin,
+        );
+
+        expect(repository.addVersion.mock.calls[0][3]).toEqual(
+          new Date(`${TOMORROW}T00:00:00.000Z`),
+        );
+      });
+
+      it('si no viene, no se pasa', async () => {
+        await service.addVersion(DOCUMENT_ID, pdf(), {}, admin);
+
+        expect(repository.addVersion.mock.calls[0][3]).toBeUndefined();
+      });
+
+      it('la de hoy → 400 sin subir nada', async () => {
+        const upload = service.addVersion(
+          DOCUMENT_ID,
+          pdf(),
+          { reviewDate: TODAY },
+          admin,
+        );
+
+        await expect(upload).rejects.toBeInstanceOf(BadRequestException);
+        await expect(upload).rejects.toThrow(/^reviewDate/);
+        expect(storage.put).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('fallas después de subir el archivo (R9)', () => {
+      it('E5: falla la cola → 503, rollback y se borra solo el archivo nuevo', async () => {
+        queue.enqueue.mockRejectedValue(new QueueUnavailableError('caída'));
+
+        const upload = service.addVersion(DOCUMENT_ID, pdf(), {}, admin);
+
+        await expect(upload).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        );
+        await expect(upload).rejects.toThrow(
+          'No se pudo completar la carga de la versión nueva. Intentá de nuevo más tarde.',
+        );
+        expect(events.slice(-3)).toEqual([
+          'rollback',
+          'delete',
+          'audit:FAILURE',
+        ]);
+        expectNewFileDeleted();
+        expect(failureAudit()?.[0]).toMatchObject({
+          documentId: DOCUMENT_ID,
+          detail: '503',
+        });
+      });
+
+      it('falla el almacenamiento → 503 sin abrir la transacción', async () => {
+        storage.put.mockRejectedValue(new StorageUnavailableError('caído'));
+
+        await expect(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
+        expect(repository.runInTransaction).not.toHaveBeenCalled();
+      });
+
+      it('archivado bajo el bloqueo → 409 ARCHIVED y delete', async () => {
+        repository.lockForUpdate.mockResolvedValue(
+          documentRecord({ status: 'ARCHIVED' }),
+        );
+
+        const body = await conflictBody(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        );
+
+        expect(body).toMatchObject({ reason: 'ARCHIVED' });
+        expect(repository.addVersion).not.toHaveBeenCalled();
+        expect(storage.delete).toHaveBeenCalledTimes(1);
+        expect(storage.delete).not.toHaveBeenCalledWith(oldKey);
+      });
+
+      it('la vigente ya tiene ese archivo bajo el bloqueo → 409 IDENTICAL_TO_CURRENT y delete (R6b)', async () => {
+        const locked = documentRecord();
+        locked.currentVersion.checksum = NEW_CHECKSUM;
+        repository.lockForUpdate.mockResolvedValue(locked);
+
+        const body = await conflictBody(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        );
+
+        expect(body).toMatchObject({ reason: 'IDENTICAL_TO_CURRENT' });
+        expect(repository.addVersion).not.toHaveBeenCalled();
+        expect(storage.delete).toHaveBeenCalledTimes(1);
+      });
+
+      it('ConcurrentVersionError → 409 CONCURRENT_VERSION y delete (R8)', async () => {
+        repository.addVersion.mockImplementation(
+          (_tx: unknown, _id: string, version: NewVersion) => {
+            events.push(`addVersion:${version.id}`);
+            return Promise.reject(
+              new ConcurrentVersionError('otra CURRENT confirmada'),
+            );
+          },
+        );
+
+        const body = await conflictBody(
+          service.addVersion(DOCUMENT_ID, pdf(), {}, admin),
+        );
+
+        expect(body).toMatchObject({
+          statusCode: 409,
+          reason: 'CONCURRENT_VERSION',
+        });
+        expectNewFileDeleted();
+        expect(failureAudit()?.[0]).toMatchObject({
+          documentId: DOCUMENT_ID,
+          detail: '409',
+        });
       });
     });
   });

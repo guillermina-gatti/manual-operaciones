@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T10 **hechas**. T11 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
+- **Estado (24/10/2026):** T01 a T11 **hechas**. T12 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
 
 Convenciones:
 
@@ -214,7 +214,7 @@ Convenciones:
 
   Además: `auditFailure` recibe el `documentId` opcional, y las acciones sobre un documento existente lo registran también en las fallas (R13).
 - **Cubre:** R2, R6, R6b, R7, R7b, R8, R9, R11, R13; D3, D6, D7; R8b de la spec 001.
-- **Archivos:** `src/documents/document-lifecycle.service.ts`, `src/documents/document-lifecycle.service.spec.ts`.
+- **Archivos:** `src/documents/document-lifecycle.service.ts`, `src/documents/document-lifecycle.service.spec.ts`, `src/documents/document-write-steps.ts` (exporta `duplicateDocumentConflict`, el cuerpo del 409 `DUPLICATE` que comparten la carga y la versión nueva).
 - **Verificación:** test primero:
   - orden de las llamadas en la carga correcta, y `enqueue` con el `versionId` nuevo como último paso de la transacción;
   - **E3:** idéntico a la vigente → 409 `IDENTICAL_TO_CURRENT` sin `put`;

@@ -25,6 +25,17 @@ export const MAX_ORIGINAL_FILE_NAME_LENGTH = 255;
 export const truncateFileName = (text: string) =>
   Array.from(text).slice(0, MAX_ORIGINAL_FILE_NAME_LENGTH).join('');
 
+// El 409 de un archivo igual a la versión vigente de otro documento activo (R8b de la spec 001).
+// Lo usan la carga y la versión nueva (spec 003).
+export const duplicateDocumentConflict = (existingDocumentId: string) =>
+  new ConflictException({
+    statusCode: 409,
+    message: 'Ya hay un documento vigente con el mismo archivo',
+    error: 'Conflict',
+    reason: 'DUPLICATE',
+    existingDocumentId,
+  });
+
 // El archivo que se guarda antes de confirmar la transacción.
 export interface FileToStore {
   key: string;
@@ -95,15 +106,7 @@ export class DocumentWriteSteps {
   // `reason` le dice a la web qué tipo de 409 es (plan 003, D7); existingDocumentId sigue igual.
   async assertNotDuplicated(checksum: string): Promise<void> {
     const duplicate = await this.documents.findActiveByChecksum(checksum);
-    if (duplicate) {
-      throw new ConflictException({
-        statusCode: 409,
-        message: 'Ya hay un documento vigente con el mismo archivo',
-        error: 'Conflict',
-        reason: 'DUPLICATE',
-        existingDocumentId: duplicate.documentId,
-      });
-    }
+    if (duplicate) throw duplicateDocumentConflict(duplicate.documentId);
   }
 
   // Guarda el archivo y después ejecuta commit (la transacción). Si commit no termina bien,
