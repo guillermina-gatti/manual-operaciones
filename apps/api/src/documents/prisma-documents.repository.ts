@@ -17,14 +17,6 @@ import {
   VersionHistoryRecord,
 } from './documents.repository';
 
-// Para los métodos del contrato que todavía no tienen implementación (T05).
-const notImplemented = <T>(method: string, task: string): Promise<T> =>
-  Promise.reject(
-    new Error(
-      `PrismaDocumentsRepository.${method} todavía no está implementado (spec 003, ${task})`,
-    ),
-  );
-
 // 1. Configuración de tiempos límite estrictos (5 segundos máx para transacciones)
 // para evitar que la aplicación se quede colgada si la base se congela.
 export const TRANSACTION_TIMEOUT_MS = 5000;
@@ -173,8 +165,7 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
     });
   }
 
-  // ── Ciclo de vida (spec 003). Pendientes del contrato (T05): T08 (archive, listVersions,
-  // findVersion).
+  // ── Ciclo de vida (spec 003).
 
   // Bloquea la fila del documento hasta el fin de la transacción y lo devuelve con sus áreas y su
   // versión vigente (plan 003, 3.3).
@@ -301,23 +292,53 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
     });
   }
 
+  // Archiva el documento y desactiva los fragmentos de todas sus versiones (R10), dentro de la
+  // transacción recibida. No toca las versiones: la vigente sigue siendo CURRENT (spec 003, sección 7).
   archive(
-    _tx: RepositoryTransaction,
-    _id: string,
-    _at: Date,
+    tx: RepositoryTransaction,
+    id: string,
+    at: Date,
   ): Promise<DocumentRecord> {
-    return notImplemented('archive', 'T08');
+    const client = tx as unknown as Prisma.TransactionClient;
+    return this.translate(async () => {
+      await client.chunk.updateMany({
+        where: { documentId: id },
+        data: { isActive: false },
+      });
+      const row = await client.document.update({
+        where: { id },
+        data: { status: 'ARCHIVED', archivedAt: at },
+        include: documentInclude,
+      });
+      return toRecord(row);
+    });
   }
 
-  listVersions(_documentId: string): Promise<VersionHistoryRecord[]> {
-    return notImplemented('listVersions', 'T08');
+  // El historial, de la más nueva a la más vieja (R12). Vale también para documentos archivados (D10).
+  listVersions(documentId: string): Promise<VersionHistoryRecord[]> {
+    return this.translate(async () => {
+      const rows = await this.prisma.documentVersion.findMany({
+        where: { documentId },
+        orderBy: { versionNumber: 'desc' },
+      });
+      return rows.map((row) => ({
+        ...toVersionRecord(row),
+        uploadedById: row.uploadedById,
+      }));
+    });
   }
 
+  // Una versión solo si es de ese documento (R2): así un id de otro documento no se puede descargar.
   findVersion(
-    _documentId: string,
-    _versionId: string,
+    documentId: string,
+    versionId: string,
   ): Promise<DocumentVersionRecord | null> {
-    return notImplemented('findVersion', 'T08');
+    return this.translate(async () => {
+      const row = await this.prisma.documentVersion.findFirst({
+        where: { id: versionId, documentId },
+      });
+      return row ? toVersionRecord(row) : null;
+    });
   }
 
   // Función envoltorio: Si Prisma lanza un error de conexión o timeout,
@@ -375,17 +396,24 @@ function toRecord(row: DocumentRow): DocumentRecord {
     createdById: row.createdById,
     createdAt: row.createdAt,
     archivedAt: row.archivedAt,
-    currentVersion: {
-      id: version.id,
-      versionNumber: version.versionNumber,
-      status: version.status,
-      storageKey: version.storageKey,
-      originalFileName: version.originalFileName,
-      mimeType: version.mimeType,
-      sizeBytes: version.sizeBytes,
-      checksum: version.checksum,
-      processingStatus: version.processingStatus,
-      createdAt: version.createdAt,
-    },
+    currentVersion: toVersionRecord(version),
+  };
+}
+
+// Campo por campo, como toRecord: un campo interno nuevo de la tabla no llega a los servicios.
+function toVersionRecord(
+  version: DocumentRow['versions'][number],
+): DocumentVersionRecord {
+  return {
+    id: version.id,
+    versionNumber: version.versionNumber,
+    status: version.status,
+    storageKey: version.storageKey,
+    originalFileName: version.originalFileName,
+    mimeType: version.mimeType,
+    sizeBytes: version.sizeBytes,
+    checksum: version.checksum,
+    processingStatus: version.processingStatus,
+    createdAt: version.createdAt,
   };
 }

@@ -77,7 +77,7 @@ function newVersion(documentId: string, checksum: string): NewVersion {
   };
 }
 
-describe('PrismaDocumentsRepository: ciclo de vida (integración, T06 y T07)', () => {
+describe('PrismaDocumentsRepository: ciclo de vida (integración, T06 a T08)', () => {
   let prisma: PrismaService;
   let repository: PrismaDocumentsRepository;
 
@@ -556,6 +556,150 @@ describe('PrismaDocumentsRepository: ciclo de vida (integración, T06 y T07)', (
 
       expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
       expect(error).not.toBeInstanceOf(ConcurrentVersionError);
+    });
+  });
+
+  describe('archive (R10)', () => {
+    it('pasa el documento a ARCHIVED con su fecha y desactiva los fragmentos de todas sus versiones', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await seedProcessedVersion(prisma, {
+        documentId: seeded.id,
+        versionId: seeded.versionId,
+        areaIds: [AREA_IDS.ventas],
+        isActive: false,
+      });
+      const v2Id = await replaceCurrentVersion(prisma, seeded.id, 2, 'a1'.repeat(32));
+      await seedProcessedVersion(prisma, {
+        documentId: seeded.id,
+        versionId: v2Id,
+        areaIds: [AREA_IDS.ventas],
+      });
+      const at = new Date('2026-10-24T13:30:00.000Z');
+
+      const archived = await repository.runInTransaction(async (tx) => {
+        await repository.lockForUpdate(tx, seeded.id);
+        return repository.archive(tx, seeded.id, at);
+      });
+
+      expect(archived.status).toBe('ARCHIVED');
+      expect(archived.archivedAt?.toISOString()).toBe('2026-10-24T13:30:00.000Z');
+      // La versión vigente sigue siendo la misma: archivar no reemplaza versiones.
+      expect(archived.currentVersion.id).toBe(v2Id);
+
+      const stored = await prisma.document.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(stored.status).toBe('ARCHIVED');
+      expect(stored.archivedAt?.toISOString()).toBe('2026-10-24T13:30:00.000Z');
+      const chunks = await prisma.chunk.findMany({ where: { documentId: seeded.id } });
+      expect(chunks).toHaveLength(4);
+      expect(chunks.every((chunk) => !chunk.isActive)).toBe(true);
+    });
+
+    it('no toca los fragmentos de otro documento', async () => {
+      const target = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const other = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await seedProcessedVersion(prisma, {
+        documentId: other.id,
+        versionId: other.versionId,
+        areaIds: [AREA_IDS.ventas],
+      });
+
+      await repository.runInTransaction(async (tx) => {
+        await repository.lockForUpdate(tx, target.id);
+        return repository.archive(tx, target.id, new Date());
+      });
+
+      const otherChunks = await prisma.chunk.findMany({ where: { documentId: other.id } });
+      expect(otherChunks.every((chunk) => chunk.isActive)).toBe(true);
+      expect(
+        (await prisma.document.findUniqueOrThrow({ where: { id: other.id } })).status,
+      ).toBe('ACTIVE');
+    });
+
+    it('si la transacción se deshace, sigue ACTIVE y con sus fragmentos activos', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await seedProcessedVersion(prisma, {
+        documentId: seeded.id,
+        versionId: seeded.versionId,
+        areaIds: [AREA_IDS.ventas],
+      });
+
+      await expect(
+        repository.runInTransaction(async (tx) => {
+          await repository.archive(tx, seeded.id, new Date());
+          throw new Error('falla después de archivar');
+        }),
+      ).rejects.toThrow('falla después de archivar');
+
+      const stored = await prisma.document.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(stored.status).toBe('ACTIVE');
+      expect(stored.archivedAt).toBeNull();
+      const chunks = await prisma.chunk.findMany({ where: { documentId: seeded.id } });
+      expect(chunks.every((chunk) => chunk.isActive)).toBe(true);
+    });
+  });
+
+  describe('listVersions (R12)', () => {
+    it('devuelve las versiones de la más nueva a la más vieja, con quién la subió', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const v2Id = await replaceCurrentVersion(prisma, seeded.id, 2, 'b2'.repeat(32));
+      const v3Id = await replaceCurrentVersion(prisma, seeded.id, 3, 'c3'.repeat(32));
+
+      const versions = await repository.listVersions(seeded.id);
+
+      expect(versions.map((v) => [v.id, v.versionNumber, v.status])).toEqual([
+        [v3Id, 3, 'CURRENT'],
+        [v2Id, 2, 'REPLACED'],
+        [seeded.versionId, 1, 'REPLACED'],
+      ]);
+      for (const version of versions) {
+        expect(version.uploadedById).toBe(FIXTURE_USERS.admin.id);
+        expect(version.createdAt).toBeInstanceOf(Date);
+      }
+    });
+
+    it('funciona con un documento archivado (D10)', async () => {
+      const seeded = await seedDocument(prisma, {
+        areaIds: [AREA_IDS.ventas],
+        status: 'ARCHIVED',
+      });
+
+      const versions = await repository.listVersions(seeded.id);
+
+      expect(versions.map((v) => v.id)).toEqual([seeded.versionId]);
+    });
+
+    it('un documento que no existe da una lista vacía', async () => {
+      expect(await repository.listVersions(randomUUID())).toEqual([]);
+    });
+  });
+
+  describe('findVersion (R2, R12)', () => {
+    it('devuelve la versión si es de ese documento, también una reemplazada', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await replaceCurrentVersion(prisma, seeded.id, 2, 'd4'.repeat(32));
+
+      const version = await repository.findVersion(seeded.id, seeded.versionId);
+
+      expect(version).toMatchObject({
+        id: seeded.versionId,
+        versionNumber: 1,
+        status: 'REPLACED',
+        storageKey: seeded.storageKey,
+        originalFileName: seeded.originalFileName,
+      });
+    });
+
+    it('una versión de OTRO documento da null', async () => {
+      const target = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const other = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+
+      expect(await repository.findVersion(target.id, other.versionId)).toBeNull();
+    });
+
+    it('una versión que no existe da null', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+
+      expect(await repository.findVersion(seeded.id, randomUUID())).toBeNull();
     });
   });
 });
