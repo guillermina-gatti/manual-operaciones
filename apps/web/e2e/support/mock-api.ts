@@ -6,6 +6,8 @@ import type {
   DocumentResponse,
   DocumentSummary,
   DownloadUrl,
+  VersionHistoryItem,
+  VersionHistoryResponse,
 } from '../../lib/api';
 import { AREA_IDS, FIXTURE_USERS } from '../../lib/directory/fixtures';
 
@@ -22,17 +24,25 @@ export interface ApiRequest {
   path: string;
   search: URLSearchParams;
   headers: Record<string, string>;
-  // Solo en la carga: el cuerpo multipart tal como lo mandó el navegador.
+  // El cuerpo tal como lo mandó el navegador: multipart en la carga y la versión nueva, JSON en el
+  // cambio de áreas.
   body: Buffer | null;
 }
 
-type Handler = (request: ApiRequest, id?: string) => Reply | Promise<Reply>;
+// id: el documento de la ruta; versionId: solo en la descarga de una versión (spec 003).
+type Handler = (request: ApiRequest, id?: string, versionId?: string) => Reply | Promise<Reply>;
 
 export interface ApiHandlers {
   list?: Handler; // GET /api/documents
   detail?: Handler; // GET /api/documents/:id
   download?: Handler; // GET /api/documents/:id/download
   upload?: Handler; // POST /api/documents
+  // Spec 003 (T25): el ciclo de vida.
+  changeAreas?: Handler; // PATCH /api/documents/:id/areas
+  uploadVersion?: Handler; // POST /api/documents/:id/versions
+  archive?: Handler; // POST /api/documents/:id/archive
+  versions?: Handler; // GET /api/documents/:id/versions
+  versionDownload?: Handler; // GET /api/documents/:id/versions/:versionId/download
 }
 
 export interface MockedApi {
@@ -48,6 +58,15 @@ const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
   { name: 'upload', method: 'POST', path: /^\/api\/documents$/ },
   { name: 'download', method: 'GET', path: new RegExp(`^/api/documents/${ID}/download$`) },
   { name: 'detail', method: 'GET', path: new RegExp(`^/api/documents/${ID}$`) },
+  { name: 'changeAreas', method: 'PATCH', path: new RegExp(`^/api/documents/${ID}/areas$`) },
+  { name: 'uploadVersion', method: 'POST', path: new RegExp(`^/api/documents/${ID}/versions$`) },
+  { name: 'archive', method: 'POST', path: new RegExp(`^/api/documents/${ID}/archive$`) },
+  { name: 'versions', method: 'GET', path: new RegExp(`^/api/documents/${ID}/versions$`) },
+  {
+    name: 'versionDownload',
+    method: 'GET',
+    path: new RegExp(`^/api/documents/${ID}/versions/${ID}/download$`),
+  },
 ];
 
 export async function mockApi(page: Page, handlers: ApiHandlers): Promise<MockedApi> {
@@ -70,7 +89,11 @@ export async function mockApi(page: Page, handlers: ApiHandlers): Promise<Mocked
       const handler = handlers[name];
       if (!match || !handler) continue;
 
-      const reply = await handler(apiRequest, match[1] && decodeURIComponent(match[1]));
+      const reply = await handler(
+        apiRequest,
+        match[1] && decodeURIComponent(match[1]),
+        match[2] && decodeURIComponent(match[2]),
+      );
       if (reply.delayMs) await new Promise((resolve) => setTimeout(resolve, reply.delayMs));
       await route.fulfill({
         status: reply.status,
@@ -146,6 +169,29 @@ export function listResponse(
   page = 1,
 ): DocumentListResponse {
   return { data, total, page, limit: 20 };
+}
+
+// Spec 003: el historial de un documento con `count` versiones, de la más nueva a la más vieja.
+// La más nueva es la vigente del documento; las demás, reemplazadas y procesadas.
+export function versionHistory(document: DocumentResponse, count = 3): VersionHistoryResponse {
+  const current = document.currentVersion;
+  const data: VersionHistoryItem[] = [];
+  for (let number = count; number >= 1; number -= 1) {
+    const isCurrent = number === count;
+    data.push({
+      ...current,
+      id: isCurrent
+        ? current.id
+        : `33333333-3333-4333-8333-${String(number).padStart(4, '0')}${document.id.slice(-8)}`,
+      versionNumber: number,
+      status: isCurrent ? 'CURRENT' : 'REPLACED',
+      originalFileName: isCurrent ? current.originalFileName : `manual-v${number}.pdf`,
+      processingStatus: isCurrent ? current.processingStatus : 'READY',
+      uploadedById: FIXTURE_USERS.admin.id,
+      createdAt: `2026-10-${String(10 + number).padStart(2, '0')}T15:00:00.000Z`,
+    });
+  }
+  return { data };
 }
 
 export function downloadUrl(url: string): DownloadUrl {
