@@ -62,14 +62,16 @@ Todos llevan el prefijo `/api`, usan los guards de la spec 001, responden errore
 
 **Orden de los controles, igual en todos:**
 1. 401 o 403 (guards, R1);
-2. 400 de formato (pipes y DTO);
-3. 404 si no existe (R2);
-4. 409 si está archivado (R11);
-5. 400 de reglas (R3, R4, R7b);
-6. 409 de duplicados (R6b, R8b de la spec 001);
-7. escritura.
+2. 413 si el archivo pesa más de 10 MB (multer; solo la versión nueva, R6);
+3. 400 de formato (pipes y DTO);
+4. solo la versión nueva: 400 o 415 del archivo (`inspectFile`, R6) y 400 si `reviewDate` no es posterior a hoy (R7b);
+5. 404 si no existe (R2);
+6. 409 si está archivado (R11);
+7. 400 de las reglas que dependen del documento: áreas y responsable (R3, R4);
+8. 409 de duplicados (R6b, R8b de la spec 001);
+9. escritura.
 
-Así, el estado del documento se informa antes que los detalles de lo que se mandó.
+Lo que se comprueba solo con la petición (formato, archivo y fecha) va primero, sin consultar la base; es el orden de la tabla de la sección 4 (pasos 2 a 3c). De lo que depende del documento, su estado se informa antes que los detalles de lo que se mandó.
 
 ### 1.1 `PATCH /api/documents/:id/areas`: cambiar áreas (R3, R4, R5)
 
