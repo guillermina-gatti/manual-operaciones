@@ -8,10 +8,21 @@ import {
   DocumentPage,
   DocumentRecord,
   DocumentsRepository,
+  DocumentVersionRecord,
   NewDocument,
+  NewVersion,
   RepositoryTransaction,
   RepositoryUnavailableError,
+  VersionHistoryRecord,
 } from './documents.repository';
+
+// Para los métodos del contrato que todavía no tienen implementación (T05).
+const notImplemented = <T>(method: string, task: string): Promise<T> =>
+  Promise.reject(
+    new Error(
+      `PrismaDocumentsRepository.${method} todavía no está implementado (spec 003, ${task})`,
+    ),
+  );
 
 // 1. Configuración de tiempos límite estrictos (5 segundos máx para transacciones)
 // para evitar que la aplicación se quede colgada si la base se congela.
@@ -135,6 +146,53 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
       });
       return row ? toRecord(row) : null;
     });
+  }
+
+  // ── Ciclo de vida (spec 003): declarados para cumplir el contrato (T05); se implementan
+  // en T06 (lockForUpdate, replaceAreas), T07 (addVersion) y T08 (archive, listVersions, findVersion).
+
+  lockForUpdate(
+    _tx: RepositoryTransaction,
+    _id: string,
+  ): Promise<DocumentRecord | null> {
+    return notImplemented('lockForUpdate', 'T06');
+  }
+
+  replaceAreas(
+    _tx: RepositoryTransaction,
+    _id: string,
+    _areaIds: string[],
+    _ownerId?: string,
+  ): Promise<DocumentRecord> {
+    return notImplemented('replaceAreas', 'T06');
+  }
+
+  addVersion(
+    _tx: RepositoryTransaction,
+    _id: string,
+    _version: NewVersion,
+    _reviewDate?: Date,
+  ): Promise<DocumentRecord> {
+    return notImplemented('addVersion', 'T07');
+  }
+
+  archive(
+    _tx: RepositoryTransaction,
+    _id: string,
+    _at: Date,
+  ): Promise<DocumentRecord> {
+    return notImplemented('archive', 'T08');
+  }
+
+  listVersions(_documentId: string): Promise<VersionHistoryRecord[]> {
+    return notImplemented('listVersions', 'T08');
+  }
+
+  findVersion(
+    _documentId: string,
+    _versionId: string,
+  ): Promise<DocumentVersionRecord | null> {
+    return notImplemented('findVersion', 'T08');
   }
 
   // Función envoltorio: Si Prisma lanza un error de conexión o timeout,

@@ -102,17 +102,28 @@ Convenciones:
 ### T06 · Repositorio: bloqueo y cambio de áreas
 
 - **Qué hace:** implementa en `PrismaDocumentsRepository`:
-  - `lockForUpdate`: `SELECT … FOR UPDATE` del documento, y lo devuelve con sus áreas y su versión vigente;
+  - `lockForUpdate`: bloquea el documento y lo devuelve con sus áreas y su versión vigente (con su `checksum`, que T11 usa para R6b). Va en **dos sentencias** dentro de la transacción:
+    1. `tx.$queryRaw` con `SELECT id FROM documents WHERE id = ${id}::uuid FOR UPDATE`; si no devuelve filas, `null`;
+    2. **después**, `tx.document.findUnique({ where: { id }, include: documentInclude })` y `toRecord`.
+
+    Con `READ COMMITTED`, cada sentencia ve lo confirmado cuando empieza. Si fueran una sola (`FOR UPDATE` con un JOIN a `document_versions`), una transacción que esperó el bloqueo podría leer todavía la versión vigente anterior y dejar pasar un archivo idéntico (R6b) o crear una versión sobre la equivocada (R8). En dos sentencias, la lectura empieza cuando el bloqueo ya se obtuvo y ve lo que confirmó la otra transacción. **Esto va escrito en un comentario en el código**, para que nadie lo junte en una sola consulta.
   - `replaceAreas`: reemplaza `document_areas`, actualiza `ownerId` si vino, y hace `chunk.updateMany` con las áreas nuevas en **todos** los fragmentos del documento.
 
   Además agrega la ayuda `seedProcessedVersion`.
-- **Cubre:** R5; plan secciones 3.2 y 3.3.
+- **Cubre:** R5, R6b y R8 (la lectura bajo el bloqueo); plan secciones 3.2 y 3.3.
 - **Archivos:** `src/documents/prisma-documents.repository.ts`, `test/documents/helpers.ts` (`seedProcessedVersion`: la versión pasa a `READY` y se insertan fragmentos activos con sus áreas), `test/documents/lifecycle.repository.e2e-spec.ts`.
 - **Verificación:** test primero, `test/documents/lifecycle.repository.e2e-spec.ts`:
   - `replaceAreas` deja `document_areas` con las áreas nuevas, y los fragmentos de la versión vigente **y** de una `REPLACED` quedan con `area_ids` nuevas;
   - con `ownerId`, el documento queda con el nuevo;
   - `lockForUpdate` de un id que no existe da `null`;
-  - mientras una transacción tiene el bloqueo, otra que pide el mismo documento espera hasta el commit (dos transacciones con `Promise.all` y marcas de tiempo).
+  - mientras una transacción tiene el bloqueo, otra que pide el mismo documento espera hasta el commit (dos transacciones con `Promise.all` y marcas de tiempo);
+  - **la lectura después del bloqueo ve lo confirmado por la otra transacción** (transacciones A y B):
+    1. A abre una transacción, hace `lockForUpdate` y, con SQL dentro de esa misma transacción, pasa la v1 a `REPLACED` y crea una v2 `CURRENT` con otro checksum. `addVersion` llega recién en T07, por eso se hace a mano. Todavía no confirma;
+    2. B abre su transacción y pide `lockForUpdate` del mismo documento: queda esperando;
+    3. A confirma;
+    4. B obtiene el bloqueo y el registro que recibe tiene `currentVersion.versionNumber = 2` y el checksum de la v2, no los de la v1.
+
+    Antes del cambio, con una implementación en una sola sentencia, este test puede ver la v1. Es el que demuestra que el bloqueo protege R6b y R8.
 - **Depende de:** T01, T05
 - **Commit:** `feat(documents): cambiar las áreas de un documento y de sus fragmentos`
 
