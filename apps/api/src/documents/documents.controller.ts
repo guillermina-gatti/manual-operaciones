@@ -4,8 +4,10 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -28,7 +30,9 @@ import {
   DocumentListResponse,
   DocumentQueryService,
 } from './document-query.service';
+import { DocumentLifecycleService } from './document-lifecycle.service';
 import { DocumentUploadService } from './document-upload.service';
+import { ChangeAreasDto } from './dto/change-areas.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { DocumentResponse, DocumentSummary } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
@@ -75,6 +79,11 @@ class DownloadUrlBody {
 const NOT_FOUND_DESCRIPTION =
   'El documento no existe o no es visible para el usuario (misma respuesta en los dos casos)';
 
+// Ciclo de vida (spec 003): respuestas comunes a las acciones sobre un documento existente
+const ADMIN_ONLY_DESCRIPTION =
+  'El rol no puede modificar documentos (solo ADMIN)';
+const ARCHIVED_DESCRIPTION = 'El documento está archivado (reason: "ARCHIVED")';
+
 @ApiTags('documents')
 @ApiBearerAuth()
 @Controller('documents')
@@ -83,6 +92,7 @@ export class DocumentsController {
   constructor(
     private readonly uploads: DocumentUploadService,
     private readonly queries: DocumentQueryService,
+    private readonly lifecycle: DocumentLifecycleService,
   ) {}
 
   // Ruta POST /documents: Carga de un nuevo documento (Solo ADMINs)
@@ -184,5 +194,62 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<DownloadUrl> {
     return this.queries.getDownloadUrl(user, id);
+  }
+
+  // Ruta PATCH /documents/:id/areas: Cambiar las áreas y, opcionalmente, el responsable (spec 003)
+  @Patch(':id/areas')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Documento con las áreas nuevas',
+    type: DocumentResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'id o datos inválidos, área inexistente o responsable sin acceso a las áreas nuevas',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({ status: 403, description: ADMIN_ONLY_DESCRIPTION })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({ status: 409, description: ARCHIVED_DESCRIPTION })
+  @ApiResponse({
+    status: 503,
+    description: 'La base no responde; no cambió nada',
+  })
+  changeAreas(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeAreasDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentResponse> {
+    return this.lifecycle.changeAreas(id, dto, user);
+  }
+
+  // Ruta POST /documents/:id/archive: Archivar un documento (spec 003, D5)
+  @Post(':id/archive')
+  @HttpCode(200)
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Documento archivado',
+    type: DocumentResponse,
+  })
+  @ApiResponse({ status: 400, description: 'El id no es un UUID' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({ status: 403, description: ADMIN_ONLY_DESCRIPTION })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({
+    status: 409,
+    description: 'El documento ya está archivado (reason: "ARCHIVED")',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'La base no responde; no cambió nada',
+  })
+  archive(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentResponse> {
+    return this.lifecycle.archive(id, user);
   }
 }
