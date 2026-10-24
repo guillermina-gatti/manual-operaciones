@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T23 **hechas** (T01 a T16 son todo el backend). T24 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
+- **Estado (24/10/2026):** T01 a T24 **hechas** (T01 a T16 son el backend; T17 a T24, las pantallas). T25 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
 
 Convenciones:
 
@@ -435,7 +435,7 @@ Convenciones:
 
   Después de una acción correcta: vuelve a pedir el detalle, cierra el panel y muestra un aviso con `role="status"`. Los demás roles no ven nada de esto ni hacen esos pedidos.
 - **Cubre:** R1, R10, R11, R12; D8; plan sección 6.1; E7, E8, E9, E12.
-- **Archivos:** `components/documents/DocumentDetail.tsx`, `tests/components/documents/DocumentDetail.test.tsx`.
+- **Archivos:** `components/documents/DocumentDetail.tsx`, `tests/components/documents/DocumentDetail.lifecycle.test.tsx` (aparte de `DocumentDetail.test.tsx` del plan 002, para no cambiar sus mocks; ese sigue pasando sin cambios).
 - **Verificación:** test primero:
   - el ADMIN con un documento activo ve las tres acciones y el historial;
   - **E9:** con uno archivado, "Archivado desde…", sin acciones y con historial;
