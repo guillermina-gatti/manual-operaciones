@@ -126,16 +126,19 @@ export class DocumentWriteSteps {
     }
   }
 
-  // Registra el intento fallido en la auditoría (mejor esfuerzo)
+  // Registra el intento fallido en la auditoría (mejor esfuerzo). Las acciones sobre un documento
+  // existente (spec 003, R13) pasan su documentId; la carga no lo tiene todavía.
   async auditFailure(
     action: AuditAction,
     actor: AuthUser,
     status: number,
+    documentId?: string,
   ): Promise<void> {
     try {
       await this.audit.record({
         action,
         actorId: actor.id,
+        ...(documentId && { documentId }),
         result: 'FAILURE',
         detail: String(status),
         at: new Date(),
@@ -144,6 +147,7 @@ export class DocumentWriteSteps {
       this.logger.error({
         message: 'No se pudo auditar una carga fallida',
         actorId: actor.id,
+        documentId,
         status,
         cause: errorMessage(error),
       });

@@ -114,7 +114,9 @@ describe('DocumentWriteSteps', () => {
       await expect(
         steps.assertAreasExist([AREA_IDS.ventas, UNKNOWN_AREA]),
       ).rejects.toThrow(
-        new BadRequestException(`areaIds: no existen las áreas ${UNKNOWN_AREA}`),
+        new BadRequestException(
+          `areaIds: no existen las áreas ${UNKNOWN_AREA}`,
+        ),
       );
     });
   });
@@ -138,9 +140,10 @@ describe('DocumentWriteSteps', () => {
 
     it('un responsable que no existe da 400', async () => {
       await expect(
-        steps.assertOwnerCanSeeDocument('0b000000-0000-4000-8000-000000000099', [
-          AREA_IDS.ventas,
-        ]),
+        steps.assertOwnerCanSeeDocument(
+          '0b000000-0000-4000-8000-000000000099',
+          [AREA_IDS.ventas],
+        ),
       ).rejects.toThrow(
         new BadRequestException('ownerId: el responsable no existe'),
       );
@@ -263,6 +266,25 @@ describe('DocumentWriteSteps', () => {
         at: expect.any(Date) as Date,
       });
       expect(audit.record.mock.calls[0]).toHaveLength(1);
+      expect(audit.record.mock.calls[0][0]).not.toHaveProperty('documentId');
+    });
+
+    it('con documentId, lo registra también en la falla (R13 de la spec 003)', async () => {
+      await steps.auditFailure(
+        'DOCUMENT_AREAS_CHANGE',
+        admin,
+        409,
+        EXISTING_DOCUMENT,
+      );
+
+      expect(audit.record).toHaveBeenCalledWith({
+        action: 'DOCUMENT_AREAS_CHANGE',
+        actorId: admin.id,
+        documentId: EXISTING_DOCUMENT,
+        result: 'FAILURE',
+        detail: '409',
+        at: expect.any(Date) as Date,
+      });
     });
 
     it('si la auditoría falla, lo registra en el log y no lanza', async () => {
