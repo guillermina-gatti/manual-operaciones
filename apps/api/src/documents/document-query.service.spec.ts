@@ -475,3 +475,144 @@ describe('DocumentQueryService: dependencias no disponibles (D13)', () => {
     );
   });
 });
+
+describe('DocumentQueryService: historial y descarga de una versión (spec 003, R12)', () => {
+  const v2 = {
+    ...record.currentVersion,
+    id: '0d000000-0000-4000-8000-000000000002',
+    versionNumber: 2,
+    storageKey: 'documents/x/v2.pdf',
+    originalFileName: 'manual v2.pdf',
+    uploadedById: FIXTURE_USERS.admin.id,
+  };
+  const v1 = {
+    ...record.currentVersion,
+    status: 'REPLACED' as const,
+    processingStatus: 'READY' as const,
+    uploadedById: FIXTURE_USERS.admin.id,
+  };
+  const archived: DocumentRecord = {
+    ...record,
+    status: 'ARCHIVED',
+    archivedAt: new Date('2026-10-23T12:00:00.000Z'),
+  };
+  const DOWNLOAD = {
+    url: 'https://bucket.s3.amazonaws.com/firmada',
+    expiresAt: '2026-10-22T12:05:00.000Z',
+  };
+
+  let repository: {
+    findByIdWithAreas: jest.Mock;
+    listVersions: jest.Mock;
+    findVersion: jest.Mock;
+  };
+  let storage: { getDownloadUrl: jest.Mock };
+  let service: DocumentQueryService;
+
+  beforeEach(() => {
+    repository = {
+      findByIdWithAreas: jest.fn().mockResolvedValue(record),
+      listVersions: jest.fn().mockResolvedValue([v2, v1]),
+      findVersion: jest.fn().mockResolvedValue(v1),
+    };
+    storage = { getDownloadUrl: jest.fn().mockResolvedValue(DOWNLOAD) };
+    service = new DocumentQueryService(
+      { findById: jest.fn() } as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      storage as unknown as FileStorage,
+    );
+  });
+
+  describe('listVersions', () => {
+    it('devuelve las versiones en el orden del repositorio, sin storageKey ni checksum', async () => {
+      const response = await service.listVersions(record.id);
+
+      expect(repository.listVersions).toHaveBeenCalledWith(record.id);
+      expect(response).toEqual({
+        data: [
+          {
+            id: v2.id,
+            versionNumber: 2,
+            status: 'CURRENT',
+            originalFileName: 'manual v2.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 2097152,
+            processingStatus: 'PENDING',
+            uploadedById: FIXTURE_USERS.admin.id,
+            createdAt: '2026-10-22T12:00:00.000Z',
+          },
+          expect.objectContaining({ id: v1.id, status: 'REPLACED' }),
+        ],
+      });
+      expect(JSON.stringify(response)).not.toMatch(/storageKey|checksum/);
+    });
+
+    it('404 si el documento no existe, sin pedir las versiones', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(null);
+
+      await expect(service.listVersions(record.id)).rejects.toThrow(
+        new NotFoundException('No se encontró el documento'),
+      );
+      expect(repository.listVersions).not.toHaveBeenCalled();
+    });
+
+    it('funciona con un documento archivado (D10)', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(archived);
+
+      await expect(service.listVersions(record.id)).resolves.toMatchObject({
+        data: [{ id: v2.id }, { id: v1.id }],
+      });
+    });
+
+    it('si la base no responde → 503', async () => {
+      repository.listVersions.mockRejectedValue(
+        new RepositoryUnavailableError('timeout'),
+      );
+
+      await expect(service.listVersions(record.id)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+  });
+
+  describe('getVersionDownloadUrl', () => {
+    it('pide el enlace de esa versión, con su clave y su nombre', async () => {
+      await expect(
+        service.getVersionDownloadUrl(record.id, v1.id),
+      ).resolves.toEqual(DOWNLOAD);
+
+      expect(repository.findVersion).toHaveBeenCalledWith(record.id, v1.id);
+      expect(storage.getDownloadUrl).toHaveBeenCalledWith(
+        v1.storageKey,
+        v1.originalFileName,
+      );
+    });
+
+    it('una versión de otro documento (o un documento que no existe) → 404 y nunca pide el enlace', async () => {
+      repository.findVersion.mockResolvedValue(null);
+
+      await expect(
+        service.getVersionDownloadUrl(record.id, v1.id),
+      ).rejects.toThrow(new NotFoundException('No se encontró el documento'));
+      expect(storage.getDownloadUrl).not.toHaveBeenCalled();
+    });
+
+    it('funciona con un documento archivado (D10)', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(archived);
+
+      await expect(
+        service.getVersionDownloadUrl(record.id, v1.id),
+      ).resolves.toEqual(DOWNLOAD);
+    });
+
+    it('si el almacenamiento no responde → 503', async () => {
+      storage.getDownloadUrl.mockRejectedValue(
+        new StorageUnavailableError('caído'),
+      );
+
+      await expect(
+        service.getVersionDownloadUrl(record.id, v1.id),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+  });
+});

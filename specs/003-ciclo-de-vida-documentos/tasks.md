@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T12 **hechas**. T13 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
+- **Estado (24/10/2026):** T01 a T13 **hechas**. T14 a T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
 
 Convenciones:
 
@@ -254,7 +254,7 @@ Convenciones:
 
   Los dos funcionan con documentos archivados.
 - **Cubre:** R2, R12; D10.
-- **Archivos:** `src/documents/document-query.service.ts`, `src/documents/document-query.service.spec.ts`.
+- **Archivos:** `src/documents/document-query.service.ts`, `src/documents/document-query.service.spec.ts`, `src/documents/dto/document.response.ts` (`VersionHistoryItem` y `toVersionHistoryItem`, campo por campo, para que `storageKey` y `checksum` no salgan).
 - **Verificación:** test primero:
   - `listVersions` devuelve las versiones en el orden del repositorio;
   - 404 si el documento no existe;

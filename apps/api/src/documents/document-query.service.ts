@@ -6,8 +6,10 @@ import { DocumentRecord, DocumentsRepository } from './documents.repository';
 import {
   DocumentResponse,
   DocumentSummary,
+  VersionHistoryItem,
   toDocumentResponse,
   toDocumentSummary,
+  toVersionHistoryItem,
 } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
 import { toHttpException } from './http-errors';
@@ -19,6 +21,11 @@ export interface DocumentListResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+// Historial de versiones (spec 003, plan 1.4). La clase para Swagger la agrega el controller (T16).
+export interface VersionHistoryResponse {
+  data: VersionHistoryItem[];
 }
 
 // R11: el mismo error, con el mismo mensaje, para un documento inexistente y para uno no visible.
@@ -70,6 +77,30 @@ export class DocumentQueryService {
         page: query.page,
         limit: query.limit,
       };
+    });
+  }
+
+  // Spec 003, R12: solo el ADMIN llega acá (lo controla el guard), así que no hay filtro de
+  // visibilidad y funciona también con documentos archivados (D10).
+  listVersions(id: string): Promise<VersionHistoryResponse> {
+    return this.mapErrors(async () => {
+      if (!(await this.documents.findByIdWithAreas(id))) {
+        throw documentNotFound();
+      }
+      const versions = await this.documents.listVersions(id);
+      return { data: versions.map(toVersionHistoryItem) };
+    });
+  }
+
+  // Spec 003, R12: el enlace se pide solo después de comprobar que la versión es de ese documento.
+  getVersionDownloadUrl(id: string, versionId: string): Promise<DownloadUrl> {
+    return this.mapErrors(async () => {
+      const version = await this.documents.findVersion(id, versionId);
+      if (!version) throw documentNotFound();
+      return this.storage.getDownloadUrl(
+        version.storageKey,
+        version.originalFileName,
+      );
     });
   }
 

@@ -9,6 +9,7 @@ import {
 import type {
   DocumentRecord,
   DocumentVersionRecord,
+  VersionHistoryRecord,
 } from '../documents.repository';
 
 // Forma de la respuesta del plan 3.1. storageKey y checksum son internos y no forman parte de ella.
@@ -54,6 +55,12 @@ export class DocumentVersionSummary {
 
   @ApiProperty({ enum: ProcessingStatus })
   processingStatus: ProcessingStatus;
+}
+
+// Una fila del historial (spec 003, plan 1.4): la versión y quién la subió.
+export class VersionHistoryItem extends DocumentVersionResponse {
+  @ApiProperty({ format: 'uuid' })
+  uploadedById: string;
 }
 
 class DocumentFields {
@@ -153,6 +160,15 @@ export function toDocumentResponse(record: DocumentRecord): DocumentResponse {
   return {
     ...toDocumentFields(record),
     currentVersion: toVersionResponse(record.currentVersion),
+  };
+}
+
+export function toVersionHistoryItem(
+  version: VersionHistoryRecord,
+): VersionHistoryItem {
+  return {
+    ...toVersionResponse(version),
+    uploadedById: version.uploadedById,
   };
 }
 
