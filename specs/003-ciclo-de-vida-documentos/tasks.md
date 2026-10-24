@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T27 **hechas** (T01 a T16 son el backend; T17 a T24, las pantallas). T28 se pueden hacer ya; T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
+- **Estado (24/10/2026):** T01 a T28 **hechas** (T01 a T16 son el backend; T17 a T24, las pantallas; T25 a T28, Playwright). T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
 
 Convenciones:
 
@@ -496,7 +496,8 @@ Convenciones:
 - **Qué hace:** pruebas de Playwright contra la API real (Docker, API en el puerto 3000, base de desarrollo), con archivos de contenido distinto en cada corrida y títulos `[e2e] …`.
 - **Cubre:** E1, E2, E7 de punta a punta; R5 y R10 vistos desde la pantalla.
 - **Archivos:** `e2e/integracion/ciclo-de-vida.spec.ts`.
-- **Verificación:** con Docker, `pnpm dev:api` y `pnpm --filter web test:e2e:integracion`:
+- **Base:** para no escribir en la base de desarrollo, la API se levanta contra la de tests, con la URL solo en el comando (`DATABASE_URL=<TEST_DATABASE_URL> pnpm dev:api`), después de que `pnpm --filter api test:e2e` la deje migrada. Decidido con el usuario el 24/10/2026.
+- **Verificación:** con Docker, la API levantada así y `pnpm --filter web test:e2e:integracion`:
   - **E1:** el ADMIN cambia un documento de Ventas a Operaciones desde el panel; la EMPLOYEE de Ventas deja de verlo y el EMPLOYEE de Operaciones lo ve;
   - **E2:** el ADMIN sube la versión 2 desde el panel y la ve `CURRENT` en el historial, con la 1 "Reemplazada";
   - **E7:** el ADMIN archiva con confirmación; la EMPLOYEE de Ventas recibe "No se encontró el documento.".
