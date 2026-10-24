@@ -3,9 +3,9 @@
 import { Module } from '@nestjs/common';
 import { StorageModule } from '../storage/storage.module';
 import { FakeProcessingQueue } from './adapters/fake-processing-queue';
-import { InMemoryAreasDirectory } from './adapters/in-memory-areas-directory';
-import { InMemoryUsersDirectory } from './adapters/in-memory-users-directory';
 import { LoggerAuditLog } from './adapters/logger-audit-log';
+import { PrismaAreasDirectory } from './adapters/prisma-areas-directory';
+import { PrismaUsersDirectory } from './adapters/prisma-users-directory';
 import { DocumentQueryService } from './document-query.service';
 import { DocumentUploadService } from './document-upload.service';
 import { DocumentsController } from './documents.controller';
@@ -26,8 +26,8 @@ import { PrismaDocumentsRepository } from './prisma-documents.repository';
     DocumentQueryService,
     { provide: DocumentsRepository, useClass: PrismaDocumentsRepository }, // T18 (plan 5.6)
     { provide: ProcessingQueue, useClass: FakeProcessingQueue }, // hasta ProcessingService de Guille (plan 5.2)
-    { provide: AreasDirectory, useClass: InMemoryAreasDirectory }, // hasta las áreas de A (plan 5.3)
-    { provide: UsersDirectory, useClass: InMemoryUsersDirectory }, // hasta los usuarios de A (plan 5.3)
+    { provide: AreasDirectory, useClass: PrismaAreasDirectory },
+    { provide: UsersDirectory, useClass: PrismaUsersDirectory },
     { provide: AuditLog, useClass: LoggerAuditLog }, // hasta resolver A1 (plan 5.4)
   ],
 })
