@@ -78,6 +78,30 @@ Tests: `pnpm --filter api test` y `pnpm --filter api test:e2e`.
 - Commits con prefijo: `feat:`, `fix:`, `docs:`, `chore:`, `test:`.
 - Los pull requests los revisa alguien de otra pareja, para que todos conozcan el sistema completo.
 
+### Convención para migraciones de Prisma
+
+Prisma puede generar instrucciones `DROP INDEX` sobre índices de `chunks` que no
+corresponden al cambio intencional (por ejemplo, el índice HNSW de pgvector y el
+de texto completo). Para evitar perderlos, seguimos este procedimiento:
+
+1. Generar la migración sin aplicarla todavía (desde la raíz del monorepo):
+   ```bash
+   pnpm --filter api exec prisma migrate dev --create-only --name <nombre>
+   ```
+2. Revisar el SQL generado en
+   `apps/api/prisma/migrations/<timestamp>_<nombre>/migration.sql`.
+3. Eliminar cualquier instrucción `DROP INDEX "chunks_..."` que no sea un
+   cambio intencional y autorizado.
+4. Verificar que se conserven los siguientes índices:
+   - `chunks_embedding_idx` — búsqueda semántica HNSW (pgvector)
+   - `chunks_content_fts_idx` — búsqueda de texto completo en español
+   - `chunks_area_ids_idx` — GIN sobre el array de UUID de áreas
+   - `chunks_document_id_idx` — B-tree sobre `document_id`
+5. Aplicar la migración solo después de la revisión:
+   ```bash
+   pnpm --filter api exec prisma migrate dev
+   ```
+
 ## Equipo
 
 Tres parejas, cada una dueña de un área del sistema.
