@@ -7,10 +7,20 @@ import { createDocumentsApi } from './documents';
 export const apiClient = createApiClient(getAuthHeaders);
 
 // Las llamadas a /api/documents, con ese cliente.
-export const { listDocuments, getDocument, getDownloadUrl, uploadDocument } =
-  createDocumentsApi(apiClient);
+export const {
+  listDocuments,
+  getDocument,
+  getDownloadUrl,
+  uploadDocument,
+  changeAreas,
+  uploadVersion,
+  archiveDocument,
+  listVersions,
+  getVersionDownloadUrl,
+} = createDocumentsApi(apiClient);
 export { PAGE_SIZE } from './documents';
 export type {
+  ChangeAreasValues,
   DocumentListResponse,
   DocumentResponse,
   DocumentStatus,
@@ -21,6 +31,9 @@ export type {
   DownloadUrl,
   ProcessingStatus,
   UploadDocumentValues,
+  UploadVersionValues,
+  VersionHistoryItem,
+  VersionHistoryResponse,
 } from './documents';
 
 export { ApiError } from './api-error';

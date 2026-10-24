@@ -168,3 +168,29 @@ describe('envío de archivos', () => {
     expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
   });
 });
+
+describe('reason de los 409 (spec 003, D7)', () => {
+  test('un 409 con reason lo conserva en ApiError.reason', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(409, {
+        statusCode: 409,
+        message: 'El archivo es igual a la versión vigente',
+        error: 'Conflict',
+        reason: 'IDENTICAL_TO_CURRENT',
+      }),
+    );
+
+    const error = await errorOf(client.request('/api/documents/x/versions', { method: 'POST' }));
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 409, reason: 'IDENTICAL_TO_CURRENT' });
+  });
+
+  test('sin reason, o con un reason que no es texto, queda undefined', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(404, { statusCode: 404, message: 'x' }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(409, { statusCode: 409, reason: 7 }));
+
+    expect(((await errorOf(client.request('/api/documents/x'))) as ApiError).reason).toBeUndefined();
+    expect(((await errorOf(client.request('/api/documents/x'))) as ApiError).reason).toBeUndefined();
+  });
+});
