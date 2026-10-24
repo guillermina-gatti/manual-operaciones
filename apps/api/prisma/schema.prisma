@@ -2,6 +2,8 @@
      provider     = "prisma-client"
      output       = "../src/generated/prisma"
      moduleFormat = "cjs"
+     // Índices parciales (preview de Prisma 7.10): el de una sola versión CURRENT (spec 003, R8; plan 003, D2).
+     previewFeatures = ["partialIndexes"]
    }
 
    datasource db {
@@ -87,6 +89,9 @@ model DocumentVersion {
   chunks   Chunk[]
 
   @@unique([documentId, versionNumber])
+  // Como máximo una versión CURRENT por documento (spec 003, R8; M4 del plan 001). Declarado acá
+  // y no a mano en el SQL, para que Prisma no lo borre en la próxima migración (plan 003, D1 y D2).
+  @@unique([documentId], map: "document_versions_one_current_idx", where: { status: "CURRENT" })
   @@index([processingStatus])
   @@index([checksum]) // duplicados (R8b)
   @@map("document_versions")
@@ -121,5 +126,12 @@ model Chunk {
 //   CREATE EXTENSION IF NOT EXISTS vector;
 //   CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
 //   CREATE INDEX chunks_content_fts_idx ON chunks USING gin (to_tsvector('spanish', content)); -- HU36
+//
+// Como este esquema no los describe, `prisma migrate dev` los trata como sobrantes y agrega
+// DROP INDEX en la próxima migración (plan 003, D1). Por eso, toda migración nueva:
+//   1. se crea con `prisma migrate dev --create-only`;
+//   2. se revisa su migration.sql y se borra cualquier DROP INDEX de chunks_embedding_idx o
+//      chunks_content_fts_idx antes de aplicarla;
+//   3. el test test/documents/indexes.e2e-spec.ts exige que los dos sigan existiendo.
 
 // conversations, messages y message_feedback: los define Guille (HU17, HU25).
