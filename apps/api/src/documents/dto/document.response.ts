@@ -83,6 +83,10 @@ class DocumentFields {
 
   @ApiProperty({ format: 'date-time' })
   createdAt: string;
+
+  // Cuándo se archivó, o null si está activo (spec 003, plan 1.6).
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  archivedAt: string | null;
 }
 
 // Respuesta del 201 de la carga y del detalle (R7, plan 3.1 y 3.3).
@@ -114,6 +118,7 @@ function toDocumentFields(
     reviewDate: toDateOnly(record.reviewDate),
     createdById: record.createdById,
     createdAt: record.createdAt.toISOString(),
+    archivedAt: record.archivedAt ? record.archivedAt.toISOString() : null,
   };
 }
 

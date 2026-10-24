@@ -91,7 +91,8 @@ export class DocumentWriteSteps {
     }
   }
 
-  // Valida que no exista otro documento activo con el mismo contenido (checksum)
+  // Valida que no exista otro documento activo con el mismo contenido (checksum).
+  // `reason` le dice a la web qué tipo de 409 es (plan 003, D7); existingDocumentId sigue igual.
   async assertNotDuplicated(checksum: string): Promise<void> {
     const duplicate = await this.documents.findActiveByChecksum(checksum);
     if (duplicate) {
@@ -99,6 +100,7 @@ export class DocumentWriteSteps {
         statusCode: 409,
         message: 'Ya hay un documento vigente con el mismo archivo',
         error: 'Conflict',
+        reason: 'DUPLICATE',
         existingDocumentId: duplicate.documentId,
       });
     }

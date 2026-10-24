@@ -165,7 +165,7 @@ El campo `reason` en los 409 permite que la web muestre un mensaje distinto para
 
 ### 1.6 Cambios en lo que ya existe
 
-- **`DocumentResponse`:** se agrega `archivedAt: string | null`, para mostrar desde cuándo está archivado. El resto no cambia.
+- **`DocumentResponse` y `DocumentSummary`** (detalle, carga y listado): se agrega `archivedAt: string | null`, la fecha y hora en ISO 8601 en que se archivó, o `null` si está activo, para mostrar desde cuándo está archivado. El resto no cambia. Queda documentado en el plan 001, sección 3.1.
 - **El 409 de la carga** suma `reason: "DUPLICATE"` (sección 1.2).
 - **`AuditAction`** suma `DOCUMENT_AREAS_CHANGE`, `DOCUMENT_VERSION_UPLOAD` y `DOCUMENT_ARCHIVE` (R13). Los fallos se auditan como en la carga: `FAILURE` con el código HTTP, fuera de la transacción, como mejor esfuerzo (plan 001, sección 4).
 - **`toHttpException`** suma las operaciones `'cambio de áreas'`, `'versión nueva'` y `'archivo'` para el mensaje y el log.

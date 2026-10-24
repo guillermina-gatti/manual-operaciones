@@ -154,12 +154,14 @@ Todas las rutas llevan el prefijo `/api`. Los errores usan el formato estándar 
   ```json
   { "id": "…", "title": "…", "description": null, "status": "ACTIVE",
     "areaIds": ["…"], "ownerId": "…", "reviewDate": "2027-03-01",
-    "createdById": "…", "createdAt": "…",
+    "createdById": "…", "createdAt": "…", "archivedAt": null,
     "currentVersion": { "id": "…", "versionNumber": 1, "status": "CURRENT",
       "originalFileName": "manual.pdf", "mimeType": "application/pdf",
       "sizeBytes": 2097152, "processingStatus": "PENDING", "createdAt": "…" } }
   ```
   No se devuelven `storageKey` ni `checksum`.
+
+  `archivedAt` (`string | null`): la fecha y hora en que se archivó el documento, en ISO 8601 (por ejemplo `"2026-10-24T13:30:00.000Z"`), o `null` si está activo. En la carga siempre es `null`. Lo devuelven también el listado (3.2) y el detalle (3.3), que tienen la misma forma. **Agregado en la spec 003 (T03).**
 - **Errores:**
 
 | Código | Cuándo | Regla |
@@ -175,7 +177,7 @@ Todas las rutas llevan el prefijo `/api`. Los errores usan el formato estándar 
 | 409 | El mismo contenido ya está en la versión vigente de un documento `ACTIVE` | R8b |
 | 503 | Falla el almacenamiento, la base o el encolado; se deshace todo | R8 |
 
-Para el 409, la respuesta agrega un campo al formato estándar: `{ statusCode: 409, message, error: "Conflict", existingDocumentId }`.
+Para el 409, la respuesta agrega dos campos al formato estándar: `{ statusCode: 409, message, error: "Conflict", reason: "DUPLICATE", existingDocumentId }`. `reason` dice qué tipo de conflicto es, para que la web elija el mensaje; en la carga siempre es `"DUPLICATE"`, y la spec 003 suma otros valores en sus propios endpoints. **`reason` agregado en la spec 003 (T03).**
 
 ### 3.2 `GET /api/documents?page=&limit=`: listar documentos
 

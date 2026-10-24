@@ -166,7 +166,7 @@ describe('DocumentWriteSteps', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('con duplicado da 409 con existingDocumentId', async () => {
+    it('con duplicado da 409 con reason DUPLICATE y existingDocumentId (D7 del plan 003)', async () => {
       repository.findActiveByChecksum.mockResolvedValue({
         documentId: EXISTING_DOCUMENT,
       });
@@ -180,6 +180,7 @@ describe('DocumentWriteSteps', () => {
         statusCode: 409,
         message: 'Ya hay un documento vigente con el mismo archivo',
         error: 'Conflict',
+        reason: 'DUPLICATE',
         existingDocumentId: EXISTING_DOCUMENT,
       });
     });

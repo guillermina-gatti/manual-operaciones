@@ -191,6 +191,7 @@ function toRecord(row: DocumentRow): DocumentRecord {
     reviewDate: row.reviewDate,
     createdById: row.createdById,
     createdAt: row.createdAt,
+    archivedAt: row.archivedAt,
     currentVersion: {
       id: version.id,
       versionNumber: version.versionNumber,

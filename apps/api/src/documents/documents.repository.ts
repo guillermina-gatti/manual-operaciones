@@ -67,6 +67,9 @@ export interface DocumentRecord {
   reviewDate: Date;
   createdById: string;
   createdAt: Date;
+  // Cuándo se archivó (spec 003, R10). El repositorio real lo completa siempre (null si está activo);
+  // es opcional para los registros armados a mano en los tests.
+  archivedAt?: Date | null;
   currentVersion: DocumentVersionRecord;
 }
 
