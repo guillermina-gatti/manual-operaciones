@@ -732,4 +732,122 @@ describe('DocumentLifecycleService', () => {
       });
     });
   });
+
+  describe('archive (R10, R11)', () => {
+    const ARCHIVED_AT = new Date('2026-10-22T15:00:00.000Z');
+
+    beforeEach(() => {
+      repository.archive.mockImplementation(
+        (_tx: unknown, id: string, at: Date) => {
+          events.push('archive');
+          return Promise.resolve(
+            documentRecord({ id, status: 'ARCHIVED', archivedAt: at }),
+          );
+        },
+      );
+    });
+
+    it('lee, bloquea, archiva con la fecha de ahora y audita, en ese orden', async () => {
+      const result = await service.archive(DOCUMENT_ID, admin);
+
+      expect(events).toEqual([
+        'read',
+        'begin',
+        'lock',
+        'archive',
+        'audit:SUCCESS',
+        'commit',
+      ]);
+      expect(repository.archive).toHaveBeenCalledWith(
+        TX,
+        DOCUMENT_ID,
+        ARCHIVED_AT,
+      );
+      expect(result).toMatchObject({
+        status: 'ARCHIVED',
+        archivedAt: ARCHIVED_AT.toISOString(),
+      });
+    });
+
+    it('audita DOCUMENT_ARCHIVE con SUCCESS en la transacción (R13)', async () => {
+      await service.archive(DOCUMENT_ID, admin);
+
+      expect(audit.record).toHaveBeenCalledTimes(1);
+      expect(audit.record).toHaveBeenCalledWith(
+        {
+          action: 'DOCUMENT_ARCHIVE',
+          actorId: admin.id,
+          documentId: DOCUMENT_ID,
+          result: 'SUCCESS',
+          at: expect.any(Date) as Date,
+        },
+        TX,
+      );
+    });
+
+    it('404 si no existe, sin abrir la transacción', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(null);
+
+      await expect(service.archive(DOCUMENT_ID, admin)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(repository.runInTransaction).not.toHaveBeenCalled();
+      expect(failureAudit()?.[0]).toMatchObject({
+        action: 'DOCUMENT_ARCHIVE',
+        detail: '404',
+      });
+    });
+
+    it('409 ARCHIVED si ya está archivado, y FAILURE con el documento', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(
+        documentRecord({ status: 'ARCHIVED', archivedAt: ARCHIVED_AT }),
+      );
+
+      const archive = service.archive(DOCUMENT_ID, admin);
+
+      await expect(archive).rejects.toBeInstanceOf(ConflictException);
+      await archive.catch((error: ConflictException) =>
+        expect(error.getResponse()).toMatchObject({ reason: 'ARCHIVED' }),
+      );
+      expect(repository.runInTransaction).not.toHaveBeenCalled();
+      expect(failureAudit()?.[0]).toEqual({
+        action: 'DOCUMENT_ARCHIVE',
+        actorId: admin.id,
+        documentId: DOCUMENT_ID,
+        result: 'FAILURE',
+        detail: '409',
+        at: expect.any(Date) as Date,
+      });
+    });
+
+    it('409 si se archivó entre la lectura y el bloqueo: rollback sin archivar otra vez', async () => {
+      repository.lockForUpdate.mockResolvedValue(
+        documentRecord({ status: 'ARCHIVED', archivedAt: ARCHIVED_AT }),
+      );
+
+      await expect(service.archive(DOCUMENT_ID, admin)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(repository.archive).not.toHaveBeenCalled();
+      expect(events).toContain('rollback');
+    });
+
+    it('si la base no responde → 503 y FAILURE con el código y el documento', async () => {
+      repository.archive.mockRejectedValue(
+        new RepositoryUnavailableError('timeout'),
+      );
+
+      const archive = service.archive(DOCUMENT_ID, admin);
+
+      await expect(archive).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await expect(archive).rejects.toThrow(
+        'No se pudo completar el archivado del documento. Intentá de nuevo más tarde.',
+      );
+      expect(failureAudit()?.[0]).toMatchObject({
+        action: 'DOCUMENT_ARCHIVE',
+        documentId: DOCUMENT_ID,
+        detail: '503',
+      });
+    });
+  });
 });

@@ -223,6 +223,28 @@ export class DocumentLifecycleService {
     );
   }
 
+  // R10, R11. Archiva el documento y desactiva todos sus fragmentos; los archivos quedan (D6).
+  archive(id: string, actor: AuthUser): Promise<DocumentResponse> {
+    return this.run('DOCUMENT_ARCHIVE', 'archivo', id, actor, async () => {
+      await this.findWritable(id);
+      return this.documents.runInTransaction(async (tx) => {
+        await this.lockWritable(tx, id);
+        const archived = await this.documents.archive(tx, id, new Date());
+        await this.audit.record(
+          {
+            action: 'DOCUMENT_ARCHIVE',
+            actorId: actor.id,
+            documentId: id,
+            result: 'SUCCESS',
+            at: new Date(),
+          },
+          tx,
+        );
+        return archived;
+      });
+    });
+  }
+
   // 5b y 5c. El choque con el índice de una sola CURRENT es 409, no 503 (plan 003, 5).
   private async addVersionOrConflict(
     ...args: Parameters<DocumentsRepository['addVersion']>
