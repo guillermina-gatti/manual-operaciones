@@ -4,10 +4,14 @@
 // en cada clic, se abre y se olvida. Nunca se pide al mostrar la pantalla ni se guarda.
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { describeApiError, getDownloadUrl } from '@/lib/api';
+import { describeApiError, getDownloadUrl, getVersionDownloadUrl } from '@/lib/api';
 
 interface DownloadButtonProps {
   documentId: string;
+  // Spec 003 (R12): con versionId descarga esa versión del historial; sin él, la vigente.
+  versionId?: string;
+  // Nombre accesible, cuando hay varios "Descargar" en la pantalla ("Descargar la versión 2").
+  label?: string;
   // Cómo se abre el enlace. Los tests pasan la suya: jsdom no deja reemplazar location.assign.
   openUrl?: (url: string) => void;
 }
@@ -26,7 +30,12 @@ function isWebUrl(value: string): boolean {
   }
 }
 
-export function DownloadButton({ documentId, openUrl = assignLocation }: DownloadButtonProps) {
+export function DownloadButton({
+  documentId,
+  versionId,
+  label,
+  openUrl = assignLocation,
+}: DownloadButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Corta un segundo clic que llegue antes de que React vuelva a dibujar el botón deshabilitado.
@@ -45,7 +54,9 @@ export function DownloadButton({ documentId, openUrl = assignLocation }: Downloa
     setError(null);
 
     try {
-      const { url } = await getDownloadUrl(documentId, controller.signal);
+      const { url } = versionId
+        ? await getVersionDownloadUrl(documentId, versionId, controller.signal)
+        : await getDownloadUrl(documentId, controller.signal);
       if (controller.signal.aborted) return;
       if (!isWebUrl(url)) throw new Error('El enlace de descarga no es una dirección web');
       openUrl(url);
@@ -60,7 +71,7 @@ export function DownloadButton({ documentId, openUrl = assignLocation }: Downloa
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <Button onClick={download} disabled={busy} aria-busy={busy}>
+      <Button onClick={download} disabled={busy} aria-busy={busy} aria-label={label}>
         {busy ? 'Preparando…' : 'Descargar'}
       </Button>
       {error && (
