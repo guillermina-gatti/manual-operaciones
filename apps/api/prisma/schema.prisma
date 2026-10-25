@@ -175,7 +175,8 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  areas UserArea[]
+  areas    UserArea[]
+  sessions Session[]
 
   @@index([role])
   @@index([isActive])
@@ -234,15 +235,42 @@ model UserArea {
   @@map("user_areas")
 }
 
+// ------------------------------------------------------------
+// SESSION / REFRESH TOKEN
+// ------------------------------------------------------------
+//
+// Representa una sesión activa o revocada de un usuario.
+// Almacena el hash del refresh token emitido para soportar:
+// - Rotación obligatoria en cada refresco.
+// - Detección de reutilización (familia de tokens).
+// - Revocación individual (logout) o masiva.
+// ------------------------------------------------------------
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  isRevoked    Boolean   @default(false) @map("is_revoked")
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  userAgent    String?   @map("user_agent") @db.VarChar(500)
+  ipAddress    String?   @map("ip_address") @db.VarChar(45)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
 // ============================================================
 // FUTURAS ENTIDADES DEL EQUIPO A
 // ============================================================
 //
 // Invitation:
 // Invitaciones de un solo uso, con vencimiento de 48 horas.
-//
-// RefreshToken / Session:
-// Gestión de sesiones y revocación de refresh tokens.
 //
 // AuditLog:
 // Registro de cambios administrativos y operaciones sensibles.
