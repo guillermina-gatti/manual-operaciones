@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (25/10/2026):** por empezar. T01 a T08 son el backend; T09 a T15, las pantallas; T16 a T18, Playwright; T19 está **bloqueada** por el worker de Guille; T20 es la verificación.
+- **Estado (25/10/2026):** T01 a T18 y T20 **hechas** (T01 a T08 son el backend; T09 a T15, las pantallas; T16 a T18, Playwright; T20, la [verificación](#verificación)). T19 está **bloqueada** por el worker de Guille.
 
 Convenciones:
 
@@ -393,25 +393,26 @@ Convenciones:
   5. **Tabla:** cada fila tiene sus tests, buscados por nombre, y pasan.
   6. **Celular:** a 375 px de ancho, la caja, los resultados y el estado "sin resultados" no tienen desplazamiento horizontal.
 - **Depende de:** T01 a T18
-- **Commit:** `docs(api): verificar la búsqueda de documentos`
+- **Commit:** `docs(specs): verificar búsqueda de documentos` (el usuario cambió el ámbito propuesto, `docs(api)`).
+- **Estado:** hecha (25/10/2026). El resultado, las mutaciones de control y los pendientes están en la sección [Verificación](#verificación).
 
 #### Escenario → test
 
 | Escenario | Unitario (API) | Integración (API) | Componente (web) | Playwright | ✔ |
 | --- | --- | --- | --- | --- | --- |
-| E1 · Buscar por contenido | `search-fragment.spec.ts` (T04); `document-query.service.spec.ts` › E1 (T07) | `search.e2e-spec.ts` › E1 (T08) | `MatchFragment.test.tsx` › E1 (T12); `SearchResults.test.tsx` › E1 (T14) | `busqueda.spec.ts` › E1 (T17); real: T19 (bloqueada) | ☐ |
-| E2 · Buscar por título | `document-query.service.spec.ts` › E2 (T07) | `search.e2e-spec.ts` › E2 (T08) | `SearchResults.test.tsx` › E2 (T14) | `busqueda.spec.ts` › E2 (T17); `integracion/busqueda.spec.ts` (T18) | ☐ |
-| E3 · Tildes y mayúsculas | — | `indexes.e2e-spec.ts` › R5 (T01); `search.repository.e2e-spec.ts` › E3 (T06); `search.e2e-spec.ts` › E3 (T08) | — (lo resuelve la base) | real: T19 (bloqueada) | ☐ |
-| E4 · Variantes de una palabra | — | `indexes.e2e-spec.ts` › R5 (T01); `search.repository.e2e-spec.ts` › E4 (T06); `search.e2e-spec.ts` › E4 (T08) | — (lo resuelve la base) | — | ☐ |
-| E5 · Documento de otra área | `document-access.policy.spec.ts` › `searchScope` (T03) | `search.repository.e2e-spec.ts` › E5 y defensa (T06); `search.e2e-spec.ts` › E5 (T08) | — (lo resuelve la API) | `integracion/busqueda.spec.ts` (T18) | ☐ |
-| E6 · Versión reemplazada | — | `search.repository.e2e-spec.ts` › defensa (T06); `search.e2e-spec.ts` › E6, con el endpoint real (T08) | — | real: T19 (bloqueada) | ☐ |
-| E7 · Documento archivado | `document-access.policy.spec.ts` (T03) | `search.repository.e2e-spec.ts` › E7 y defensa (T06); `search.e2e-spec.ts` › E7, con el endpoint real (T08) | — | — | ☐ |
-| E8 · Un resultado por documento | — | `search.repository.e2e-spec.ts` › E8 (T06); `search.e2e-spec.ts` › E8 (T08) | — | — | ☐ |
-| E9 · Búsqueda demasiado corta | `search-documents.query.spec.ts` (T02) | `search.e2e-spec.ts` › E9 (T08) | `search-rules.test.ts` (T09); `SearchBox.test.tsx` › E9 (T13); `DocumentList.search.test.tsx` (T15) | `busqueda.spec.ts` › E9 (T17) | ☐ |
-| E10 · Caracteres especiales | — | `search.repository.e2e-spec.ts` › E10 (T06); `search.e2e-spec.ts` › E10 (T08) | `SearchBox.test.tsx` (codificación, T13); `documents.test.ts` (T10) | `busqueda.spec.ts` › E10 (T17) | ☐ |
-| E11 · Sin resultados | — | `search.e2e-spec.ts` › E11 (T08) | `SearchResults.test.tsx` › E11 (T14) | `busqueda.spec.ts` › E11 (T17) | ☐ |
-| E12 · Fragmento con HTML | `search-fragment.spec.ts` › E12 (T04) | `search.repository.e2e-spec.ts` › E12 (T06); `search.e2e-spec.ts` › E12 (T08) | `MatchFragment.test.tsx` › E12 (T12) | `busqueda.spec.ts` › E12 (T17) | ☐ |
-| E13 · La búsqueda queda en la dirección | — | — | `DocumentList.search.test.tsx` › E13 (T15); `Pagination.test.tsx` (T11) | `busqueda.spec.ts` › E13 (T17) | ☐ |
+| E1 · Buscar por contenido | `search-fragment.spec.ts` (T04); `document-query.service.spec.ts` › E1 (T07) | `search.e2e-spec.ts` › E1 (T08) | `MatchFragment.test.tsx` › E1 (T12); `SearchResults.test.tsx` › E1 (T14) | `busqueda.spec.ts` › E1 (T17); real: T19 (bloqueada) | ☑ |
+| E2 · Buscar por título | `document-query.service.spec.ts` › E2 (T07) | `search.e2e-spec.ts` › E2 (T08) | `SearchResults.test.tsx` › E2 (T14) | `busqueda.spec.ts` › E2 (T17); `integracion/busqueda.spec.ts` (T18) | ☑ |
+| E3 · Tildes y mayúsculas | — | `indexes.e2e-spec.ts` › R5 (T01); `search.repository.e2e-spec.ts` › E3 (T06); `search.e2e-spec.ts` › E3 (T08) | — (lo resuelve la base) | real: T19 (bloqueada) | ☑ |
+| E4 · Variantes de una palabra | — | `indexes.e2e-spec.ts` › R5 (T01); `search.repository.e2e-spec.ts` › E4 (T06); `search.e2e-spec.ts` › E4 (T08) | — (lo resuelve la base) | — | ☑ |
+| E5 · Documento de otra área | `document-access.policy.spec.ts` › `searchScope` (T03) | `search.repository.e2e-spec.ts` › E5 y defensa (T06); `search.e2e-spec.ts` › E5 (T08) | — (lo resuelve la API) | `integracion/busqueda.spec.ts` (T18) | ☑ |
+| E6 · Versión reemplazada | — | `search.repository.e2e-spec.ts` › defensa (T06); `search.e2e-spec.ts` › E6, con el endpoint real (T08) | — | real: T19 (bloqueada) | ☑ |
+| E7 · Documento archivado | `document-access.policy.spec.ts` (T03) | `search.repository.e2e-spec.ts` › E7 y defensa (T06); `search.e2e-spec.ts` › E7, con el endpoint real (T08) | — | — | ☑ |
+| E8 · Un resultado por documento | — | `search.repository.e2e-spec.ts` › E8 (T06); `search.e2e-spec.ts` › E8 (T08) | — | — | ☑ |
+| E9 · Búsqueda demasiado corta | `search-documents.query.spec.ts` (T02) | `search.e2e-spec.ts` › E9 (T08) | `search-rules.test.ts` (T09); `SearchBox.test.tsx` › E9 (T13); `DocumentList.search.test.tsx` (T15) | `busqueda.spec.ts` › E9 (T17) | ☑ |
+| E10 · Caracteres especiales | — | `search.repository.e2e-spec.ts` › E10 (T06); `search.e2e-spec.ts` › E10 (T08) | `SearchBox.test.tsx` (codificación, T13); `documents.test.ts` (T10) | `busqueda.spec.ts` › E10 (T17) | ☑ |
+| E11 · Sin resultados | — | `search.e2e-spec.ts` › E11 (T08) | `SearchResults.test.tsx` › E11 (T14) | `busqueda.spec.ts` › E11 (T17) | ☑ |
+| E12 · Fragmento con HTML | `search-fragment.spec.ts` › E12 (T04) | `search.repository.e2e-spec.ts` › E12 (T06); `search.e2e-spec.ts` › E12 (T08) | `MatchFragment.test.tsx` › E12 (T12) | `busqueda.spec.ts` › E12 (T17) | ☑ |
+| E13 · La búsqueda queda en la dirección | — | — | `DocumentList.search.test.tsx` › E13 (T15); `Pagination.test.tsx` (T11) | `busqueda.spec.ts` › E13 (T17) | ☑ |
 
 Reglas y decisiones sin escenario propio, para no perderlas de vista:
 
@@ -425,6 +426,47 @@ Reglas y decisiones sin escenario propio, para no perderlas de vista:
 | D3, D15 · Índices de `chunks` | `indexes.e2e-spec.ts` (T01) |
 | D16 · Dónde tienen que estar las palabras | `search.repository.e2e-spec.ts` › D16 (T06) |
 | Caso borde: solo palabras ignoradas | `search.repository.e2e-spec.ts` (T06) |
+
+---
+
+## Verificación
+
+Corrida completa del 25/10/2026, en la rama `feat/busqueda-documentos`. La tabla escenario → test de T20 se revisó el mismo día: cada test nombrado existe en su archivo (buscado por nombre) y pasa en esta corrida.
+
+### Totales
+
+| Qué | Comando | Resultado |
+| --- | --- | --- |
+| API, lint | `pnpm --filter api lint` | sin avisos |
+| API, tipos | `pnpm --filter api exec tsc --noEmit` | sin errores (`build` no se corre desde el agente porque ejecuta `prisma generate`) |
+| API, unitarios | `pnpm --filter api test` | 23 suites, **303 tests**, todos pasan |
+| API, integración | `pnpm --filter api test:e2e` | 9 suites, **179 tests**, todos pasan. Contra `manual_test`, con `prisma migrate reset` antes de la suite. Incluye `indexes.e2e-spec.ts` (paso 4) |
+| Web, lint y build | `pnpm --filter web lint`, `pnpm --filter web build` | sin avisos; compila y chequea tipos |
+| Web, componentes | `pnpm --filter web test` | 35 archivos, **458 tests**, todos pasan |
+| Playwright, API simulada | `pnpm --filter web test:e2e` | **82 tests** (41 en escritorio y 41 en celular), todos pasan |
+| Playwright, API real | `pnpm --filter web test:e2e:integracion` | **10 tests** (2 de esta spec y 8 de las specs 002 y 003), todos pasan. La API se levantó contra `manual_test`, como en T18 |
+
+Durante la corrida, `busqueda.spec.ts` › E11 (escritorio) venció una vez por tiempo (30 s) en la primera pasada de Playwright, que corrió justo después de `next build` y tardó 2,5 min en vez de 1,2 min. La página había terminado en el estado esperado. Pasó en 10 de 10 repeticiones (`--repeat-each=5`, escritorio y celular) y en la corrida completa siguiente (82 de 82). Es intermitente; no se tocó.
+
+### Mutaciones de control
+
+Una por vez, restaurando cada archivo con `git checkout` antes de la siguiente. Cada una la detectó al menos un test.
+
+| Mutación | Archivo | Tests que fallaron |
+| --- | --- | --- |
+| R3 · sin filtro de áreas (ni `document_areas` ni `area_ids`) | `prisma-documents.repository.ts` | 4: `search.repository.e2e-spec.ts` › E5, "un usuario sin áreas", "defensa: area_ids de otra área"; `search.e2e-spec.ts` › E5 |
+| R2 · fragmentos de cualquier versión (sin `v.version_id = c.document_version_id`) | `prisma-documents.repository.ts` | 1: `search.repository.e2e-spec.ts` › "defensa: un fragmento activo de una versión REPLACED". El E6 real no la detecta porque `is_active` ya está en `false` (D5: es la segunda defensa) |
+| E10 · `to_tsquery` en vez de `plainto_tsquery` | `prisma-documents.repository.ts` | 22, entre ellos todos los de caracteres especiales de `search.repository.e2e-spec.ts` y `search.e2e-spec.ts` |
+| R11 · el fragmento con `dangerouslySetInnerHTML` | `MatchFragment.tsx` | `MatchFragment.test.tsx` › E12 y "no usa dangerouslySetInnerHTML"; `busqueda.spec.ts` › E12 (Playwright) |
+
+Además, en T17 se rompió una regla por escenario de Playwright y en T18 se renombró la ruta: ver el estado de esas tareas.
+
+### Pendientes
+
+- **T19 · Búsqueda por contenido de punta a punta: bloqueada** por el worker de Guille. Cuando se desbloquee, se hace T19 y se vuelve a correr esta verificación.
+- **Avisar a Guille del índice nuevo** (D15, nota de T01), y al equipo antes de mergear (T01 toca las migraciones y `schema.prisma`).
+- **Paso 6 de T20 no hecho a mano:** el ancho de 375 px no se revisó. `busqueda.spec.ts` › F7 comprueba que no haya desplazamiento horizontal en escritorio y en el celular de Playwright (Pixel 7, 412 px).
+- **Q3 del plan** (permiso para `CREATE EXTENSION unaccent` en producción): sigue abierta; es para el deploy y no bloquea.
 
 ---
 
