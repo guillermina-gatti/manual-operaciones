@@ -211,6 +211,7 @@ Convenciones:
   - 100 caracteres → `valid`; 101 → `invalid`.
 - **Depende de:** —
 - **Commit:** `feat(web): validar el texto de búsqueda`
+- **Estado:** hecha. Un texto vacío o con solo espacios da `none` (no hay búsqueda); la caja de T13 igual muestra el aviso de F2 si se envía así.
 
 ### T10 · Llamada a la API y mensajes de error
 
