@@ -98,6 +98,28 @@ export interface VersionHistoryRecord extends DocumentVersionRecord {
   uploadedById: string;
 }
 
+// Spec 004: qué se busca. `scope` sale de searchScope (document-access.policy): areaIds null = sin
+// filtro de áreas (ADMIN). El estado ACTIVE se exige siempre (R3).
+export interface SearchParams {
+  text: string;
+  scope: { areaIds: string[] | null };
+  page: number;
+  limit: number;
+}
+
+// El fragmento que mejor coincide, con las palabras entre los marcadores de search-fragment.ts
+// (plan 004, 4.2). null si la coincidencia es solo en el título o la descripción (R8).
+export interface SearchHit {
+  record: DocumentRecord;
+  fragment: { markedText: string; pageNumber: number | null } | null;
+}
+
+// Una página de resultados, en orden de relevancia (R9), y el total de documentos (R7, R10).
+export interface SearchPage {
+  data: SearchHit[];
+  total: number;
+}
+
 // 4. Puerto (Contrato abstracto): Define los métodos obligatorios que debe tener
 // cualquier repositorio de base de datos que conectemos al sistema.
 export abstract class DocumentsRepository {
@@ -170,4 +192,10 @@ export abstract class DocumentsRepository {
     documentId: string,
     versionId: string,
   ): Promise<DocumentVersionRecord | null>;
+
+  // ── Búsqueda (spec 004, plan sección 3).
+
+  // Los documentos ACTIVE del alcance que coinciden en el título y la descripción o en un fragmento
+  // activo de su versión vigente, uno por documento, en orden de relevancia (R2, R3, R6, R7, R9, R10).
+  abstract search(params: SearchParams): Promise<SearchPage>;
 }

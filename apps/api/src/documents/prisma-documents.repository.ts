@@ -14,6 +14,8 @@ import {
   NewVersion,
   RepositoryTransaction,
   RepositoryUnavailableError,
+  SearchPage,
+  SearchParams,
   VersionHistoryRecord,
 } from './documents.repository';
 
@@ -339,6 +341,12 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
       });
       return row ? toVersionRecord(row) : null;
     });
+  }
+
+  // Spec 004: se implementa en T06.
+  search(params: SearchParams): Promise<SearchPage> {
+    void params;
+    return Promise.reject(new Error('search: no implementado'));
   }
 
   // Función envoltorio: Si Prisma lanza un error de conexión o timeout,

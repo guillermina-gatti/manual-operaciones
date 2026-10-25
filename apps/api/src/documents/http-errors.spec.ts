@@ -17,6 +17,7 @@ const PHRASES: [HttpOperation, string][] = [
   ['cambio de áreas', 'el cambio de áreas'],
   ['versión nueva', 'la carga de la versión nueva'],
   ['archivo', 'el archivado del documento'],
+  ['búsqueda', 'la búsqueda'], // spec 004
 ];
 
 describe('toHttpException', () => {

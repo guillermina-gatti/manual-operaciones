@@ -108,6 +108,31 @@ export class DocumentSummary extends DocumentFields {
   currentVersion: DocumentVersionSummary;
 }
 
+// Spec 004 (plan 1.2): una parte del fragmento. Texto plano; `match` dice si es una palabra encontrada.
+export class SearchFragmentPart {
+  @ApiProperty({ example: 'caja' })
+  text: string;
+
+  @ApiProperty({ example: true })
+  match: boolean;
+}
+
+// El fragmento del contenido donde aparece la búsqueda, recortado (R8). Sin HTML (R11).
+export class SearchFragment {
+  @ApiProperty({ type: [SearchFragmentPart] })
+  parts: SearchFragmentPart[];
+
+  @ApiProperty({ type: Number, nullable: true, example: 4 })
+  pageNumber: number | null;
+}
+
+// Cada resultado de la búsqueda: lo mismo que el listado, más el fragmento, o null si la coincidencia
+// es solo en el título o la descripción (R8).
+export class DocumentSearchResult extends DocumentSummary {
+  @ApiProperty({ type: SearchFragment, nullable: true })
+  fragment: SearchFragment | null;
+}
+
 // Las columnas @db.Date llegan como medianoche UTC: se toma la fecha en UTC para no correr el día.
 const toDateOnly = (date: Date) => date.toISOString().slice(0, 10);
 

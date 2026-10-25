@@ -11,13 +11,15 @@ import { QueueUnavailableError } from './ports/processing-queue';
 export const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-// Las operaciones que mapean errores: carga y consulta (spec 001) y las del ciclo de vida (spec 003).
+// Las operaciones que mapean errores: carga y consulta (spec 001), las del ciclo de vida (spec 003)
+// y la búsqueda (spec 004).
 export type HttpOperation =
   | 'carga'
   | 'consulta'
   | 'cambio de áreas'
   | 'versión nueva'
-  | 'archivo';
+  | 'archivo'
+  | 'búsqueda';
 
 // Cómo se nombra cada una en los mensajes, con su artículo ("la carga", "el cambio de áreas").
 // "archivo" se nombra "el archivado del documento" para no confundirlo con el archivo subido.
@@ -27,6 +29,7 @@ const PHRASES: Record<HttpOperation, string> = {
   'cambio de áreas': 'el cambio de áreas',
   'versión nueva': 'la carga de la versión nueva',
   archivo: 'el archivado del documento',
+  búsqueda: 'la búsqueda',
 };
 
 const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1);

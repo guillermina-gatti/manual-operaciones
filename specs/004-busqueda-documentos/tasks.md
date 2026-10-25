@@ -118,6 +118,7 @@ Convenciones:
   - `pnpm --filter api exec tsc --noEmit` sin errores, y `pnpm --filter api test` sigue pasando.
 - **Depende de:** T03
 - **Commit:** `feat(api): definir el contrato de la búsqueda`
+- **Estado:** hecha.
 
 ### T06 · Repositorio: la consulta de búsqueda
 
