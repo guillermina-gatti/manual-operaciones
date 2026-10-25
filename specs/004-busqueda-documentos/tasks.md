@@ -253,6 +253,7 @@ Convenciones:
   - el código del componente no contiene `dangerouslySetInnerHTML` (el test lee el archivo).
 - **Depende de:** T10 (tipos)
 - **Commit:** `feat(web): mostrar el fragmento con las palabras resaltadas`
+- **Estado:** hecha. El test del código fuente busca `dangerouslySetInnerHTML` usado como atributo o propiedad (`=` o `:`), no la palabra suelta, para que el comentario que lo prohíbe no cuente.
 
 ### T13 · Caja de búsqueda
 
