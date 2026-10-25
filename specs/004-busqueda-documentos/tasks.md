@@ -361,6 +361,7 @@ Convenciones:
   - los tests de integración de las specs 002 y 003 siguen pasando.
 - **Depende de:** T17
 - **Commit:** `test(web): probar la búsqueda por título contra la API real`
+- **Estado:** hecha. Los 10 tests de integración (2 de esta spec, 8 de las specs 002 y 003) pasan con la API levantada contra `manual_test`. Los documentos se cargan por la API a través del rewrite, como en T28 de la spec 003, y se buscan desde la caja. La marca de la corrida va sin guiones (`<ms>x<hex>`). Con la ruta renombrada a `buscar` en el controlador (el pedido cae en `:id` y da 400), fallan los dos tests; restaurada, pasan.
 
 ## Tareas bloqueadas
 
