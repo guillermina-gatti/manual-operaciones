@@ -127,12 +127,19 @@ model Chunk {
 //   CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
 //   CREATE INDEX chunks_content_fts_idx ON chunks USING gin (to_tsvector('spanish', content)); -- HU36
 //
-// Como este esquema no los describe, `prisma migrate dev` los trata como sobrantes y agrega
+// Y en add_document_search (spec 004, búsqueda sin tildes; plan 004, D3 y D15), sin tocar los de Guille:
+//   CREATE EXTENSION IF NOT EXISTS unaccent;
+//   CREATE TEXT SEARCH CONFIGURATION es_unaccent (COPY = pg_catalog.spanish);  -- + ALTER MAPPING
+//   CREATE INDEX chunks_content_fts_es_unaccent_idx ON chunks
+//     USING gin (to_tsvector('es_unaccent'::regconfig, content));
+//
+// Como este esquema no describe los índices, `prisma migrate dev` los trata como sobrantes y agrega
 // DROP INDEX en la próxima migración (plan 003, D1). Por eso, toda migración nueva:
 //   1. se crea con `prisma migrate dev --create-only`;
-//   2. se revisa su migration.sql y se borra cualquier DROP INDEX de chunks_embedding_idx o
-//      chunks_content_fts_idx antes de aplicarla;
-//   3. el test test/documents/indexes.e2e-spec.ts exige que los dos sigan existiendo.
+//   2. se revisa su migration.sql y se borra cualquier DROP INDEX de chunks_embedding_idx,
+//      chunks_content_fts_idx o chunks_content_fts_es_unaccent_idx antes de aplicarla;
+//   3. se aplica con `prisma migrate deploy` (no con `migrate dev`, que volvería a comparar);
+//   4. el test test/documents/indexes.e2e-spec.ts exige que los tres sigan existiendo.
 
 // conversations, messages y message_feedback: los define Guille (HU17, HU25).
 

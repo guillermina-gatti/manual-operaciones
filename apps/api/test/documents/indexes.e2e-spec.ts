@@ -1,4 +1,4 @@
-/* Índices que las migraciones no pueden perder (spec 003, R8; plan 003, D1 y D2) */
+/* Índices que las migraciones no pueden perder (spec 003, R8; plan 003, D1 y D2; plan 004, D3 y D15) */
 
 import { randomUUID } from 'node:crypto';
 import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
@@ -7,9 +7,11 @@ import { cleanDocuments, seedDocument } from './helpers';
 
 // Los dos de Guille están escritos a mano en la migración de chunks: Prisma no los describe y una
 // migración nueva los borraría si nadie la revisa (D1). El de M4 se declara en schema.prisma (D2).
+// El de la búsqueda sin tildes (spec 004) también está escrito a mano, en add_document_search.
 const REQUIRED_INDEXES = [
   'chunks_embedding_idx',
   'chunks_content_fts_idx',
+  'chunks_content_fts_es_unaccent_idx',
   'document_versions_one_current_idx',
 ];
 
@@ -27,6 +29,34 @@ describe('Índices de la base (integración)', () => {
 
   beforeEach(async () => {
     await cleanDocuments(prisma);
+  });
+
+  // Spec 004, R5 (plan 004, 2.2): la configuración es_unaccent y la extensión que usa. Prisma no las
+  // describe, pero tampoco las borra; se exigen igual porque sin ellas el índice no se puede crear.
+  it('existen la configuración es_unaccent y la extensión unaccent', async () => {
+    const configs = await prisma.$queryRaw<{ cfgname: string }[]>`
+      SELECT cfgname::text FROM pg_ts_config WHERE cfgname = 'es_unaccent'
+    `;
+    const extensions = await prisma.$queryRaw<{ extname: string }[]>`
+      SELECT extname::text FROM pg_extension WHERE extname = 'unaccent'
+    `;
+
+    expect(configs).toHaveLength(1);
+    expect(extensions).toHaveLength(1);
+  });
+
+  // Spec 004, R5: sin distinguir tildes ni mayúsculas, y con las variantes de una misma palabra.
+  it.each([
+    ['Instrucción técnica', 'instruccion tecnica'],
+    ['instruccion tecnica', 'INSTRUCCIÓN TÉCNICA'],
+    ['procedimiento de devolución', 'procedimientos'],
+  ])('R5: "%s" se encuentra buscando "%s"', async (text, search) => {
+    const [row] = await prisma.$queryRaw<{ matches: boolean }[]>`
+      SELECT to_tsvector('es_unaccent'::regconfig, ${text})
+        @@ plainto_tsquery('es_unaccent'::regconfig, ${search}) AS matches
+    `;
+
+    expect(row.matches).toBe(true);
   });
 
   it('existen los índices de chunks y el de una sola versión CURRENT', async () => {
