@@ -44,6 +44,18 @@ export function listWhere(viewer: AccessSubject): Prisma.DocumentWhereInput {
   };
 }
 
+// Alcance de la búsqueda (spec 004, R3): por qué áreas se filtra. null = sin filtro (ADMIN).
+// El estado ACTIVE no está acá: la búsqueda lo exige para todos, también para el ADMIN.
+export interface SearchScope {
+  areaIds: string[] | null;
+}
+
+// Crea el alcance de la búsqueda para el usuario. El repositorio solo lo traduce a SQL.
+export function searchScope(viewer: AccessSubject): SearchScope {
+  if (viewer.role === 'ADMIN') return { areaIds: null };
+  return { areaIds: viewer.areaIds };
+}
+
 // 6. Comprueba si un usuario puede ser propietario de algo basado en las áreas indicadas
 export function canBeOwner(owner: AccessSubject, areaIds: string[]): boolean {
   return owner.role === 'ADMIN' || sharesArea(owner.areaIds, areaIds);

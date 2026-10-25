@@ -1,4 +1,9 @@
-import { canBeOwner, canView, listWhere } from './document-access.policy';
+import {
+  canBeOwner,
+  canView,
+  listWhere,
+  searchScope,
+} from './document-access.policy';
 
 const VENTAS = 'area-ventas';
 const OPERACIONES = 'area-operaciones';
@@ -77,5 +82,32 @@ describe('canBeOwner', () => {
     const owner = { role: 'SUPERVISOR' as const, areaIds: [VENTAS] };
 
     expect(canBeOwner(owner, [VENTAS, OPERACIONES])).toBe(true);
+  });
+});
+
+// Spec 004, R3 (plan 004, 3.1 y D5): qué documentos puede encontrar cada usuario. El estado ACTIVE
+// lo exige la consulta para todos; la política solo dice por qué áreas se filtra.
+describe('searchScope', () => {
+  it('para un ADMIN no filtra por áreas', () => {
+    expect(searchScope(admin)).toEqual({ areaIds: null });
+  });
+
+  it('para un EMPLOYEE filtra por sus áreas', () => {
+    expect(searchScope(empleadoDeVentas)).toEqual({ areaIds: [VENTAS] });
+  });
+
+  it('para un SUPERVISOR filtra por sus áreas', () => {
+    const supervisor = {
+      role: 'SUPERVISOR' as const,
+      areaIds: [VENTAS, OPERACIONES],
+    };
+
+    expect(searchScope(supervisor)).toEqual({
+      areaIds: [VENTAS, OPERACIONES],
+    });
+  });
+
+  it('para un EMPLOYEE sin áreas filtra con la lista vacía: no encuentra nada', () => {
+    expect(searchScope(empleadoSinAreas)).toEqual({ areaIds: [] });
   });
 });

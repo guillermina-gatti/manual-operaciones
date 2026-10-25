@@ -80,6 +80,7 @@ Convenciones:
   - los tests de `canView`, `listWhere` y `canBeOwner` siguen pasando sin cambios.
 - **Depende de:** —
 - **Commit:** `feat(api): definir qué documentos puede encontrar cada usuario`
+- **Estado:** hecha.
 
 ### T04 · Fragmento con las palabras marcadas
 
