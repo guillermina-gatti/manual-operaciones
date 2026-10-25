@@ -149,6 +149,7 @@ Convenciones:
   - los tests de `lifecycle.repository.e2e-spec.ts` siguen pasando con `seedProcessedVersion` ampliada.
 - **Depende de:** T01, T05
 - **Commit:** `feat(api): buscar documentos por título, descripción y contenido`
+- **Estado:** hecha. `ts_headline` acepta los marcadores sin comillas (escritos con `chr(57344)` y `chr(57345)`). El test del índice corre el `EXPLAIN` con el alcance del ADMIN y con `enable_seqscan` y `enable_nestloop` apagados: con pocos datos, el planificador prefiere ir a los fragmentos por versión o por `area_ids` (otros índices, que tampoco recorren la tabla). Así el test prueba que la expresión de la consulta es la del índice.
 
 ### T07 · Servicio: la búsqueda
 

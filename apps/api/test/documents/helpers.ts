@@ -75,6 +75,7 @@ export async function seedDocument(
     status?: 'ACTIVE' | 'ARCHIVED';
     createdAt?: Date;
     title?: string;
+    description?: string;
     checksum?: string;
   },
 ): Promise<SeededDocument> {
@@ -86,6 +87,7 @@ export async function seedDocument(
     data: {
       id,
       title: opts.title ?? 'Documento',
+      description: opts.description ?? null,
       status: opts.status ?? 'ACTIVE',
       ownerId: FIXTURE_USERS.admin.id,
       reviewDate: new Date('2027-01-15'),
@@ -133,6 +135,8 @@ export const daysFromToday = (days: number) =>
 // Spec 003: simula lo que hará el worker de Guille cuando exista (plan 003, 3.4). Deja la versión
 // en READY e inserta sus fragmentos con las áreas indicadas y activos o no. Sin embeddings: los
 // tests del ciclo de vida solo miran area_ids e is_active.
+// Spec 004 (T06): `contents` da el texto de cada fragmento (y su cantidad) y `pageNumbers`, su página.
+// Sin ellos, los fragmentos son "Fragmento N de prueba", sin página, como antes.
 export async function seedProcessedVersion(
   prisma: PrismaService,
   opts: {
@@ -141,20 +145,24 @@ export async function seedProcessedVersion(
     areaIds: string[];
     chunks?: number;
     isActive?: boolean;
+    contents?: string[];
+    pageNumbers?: (number | null)[];
   },
 ): Promise<string[]> {
   await prisma.documentVersion.update({
     where: { id: opts.versionId },
     data: { processingStatus: 'READY', processedAt: new Date() },
   });
-  const ids = Array.from({ length: opts.chunks ?? 2 }, () => randomUUID());
+  const count = opts.contents?.length ?? opts.chunks ?? 2;
+  const ids = Array.from({ length: count }, () => randomUUID());
   await prisma.chunk.createMany({
     data: ids.map((id, chunkIndex) => ({
       id,
       documentVersionId: opts.versionId,
       documentId: opts.documentId,
       chunkIndex,
-      content: `Fragmento ${chunkIndex + 1} de prueba`,
+      content: opts.contents?.[chunkIndex] ?? `Fragmento ${chunkIndex + 1} de prueba`,
+      pageNumber: opts.pageNumbers?.[chunkIndex] ?? null,
       areaIds: opts.areaIds,
       isActive: opts.isActive ?? true,
     })),

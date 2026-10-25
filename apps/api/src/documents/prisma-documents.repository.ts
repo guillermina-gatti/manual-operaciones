@@ -343,10 +343,50 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
     });
   }
 
-  // Spec 004: se implementa en T06.
+  // Spec 004 (plan 3.2, D9): dos lecturas en una transacción de solo lectura REPEATABLE READ, así el
+  // ranking y los datos de las tarjetas salen de la misma foto de la base.
   search(params: SearchParams): Promise<SearchPage> {
-    void params;
-    return Promise.reject(new Error('search: no implementado'));
+    return this.translate(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+
+          // Solo quedaron palabras que el español ignora ("de la para"): no hay nada que buscar.
+          const [{ nodes }] = await tx.$queryRaw<{ nodes: number }[]>`
+            SELECT numnode(${searchQuery(params.text)}) AS nodes
+          `;
+          if (nodes === 0) return { data: [], total: 0 };
+
+          const rows = await tx.$queryRaw<SearchRow[]>(searchRankingSql(params));
+          const total = Number(rows[0]?.total ?? 0);
+          const hits = rows.filter((row) => row.id !== null);
+          if (hits.length === 0) return { data: [], total };
+
+          const documents = await tx.document.findMany({
+            where: { id: { in: hits.map((row) => row.id as string) } },
+            include: documentInclude,
+          });
+          const byId = new Map(documents.map((row) => [row.id, toRecord(row)]));
+
+          // El orden es el del ranking (R9); findMany no lo conserva.
+          const data = hits.flatMap((row) => {
+            const record = byId.get(row.id as string);
+            if (!record) return [];
+            const fragment =
+              row.marked_text === null
+                ? null
+                : { markedText: row.marked_text, pageNumber: row.page_number };
+            return [{ record, fragment }];
+          });
+          return { data, total };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+          timeout: TRANSACTION_TIMEOUT_MS,
+          maxWait: TRANSACTION_MAX_WAIT_MS,
+        },
+      ),
+    );
   }
 
   // Función envoltorio: Si Prisma lanza un error de conexión o timeout,
@@ -364,6 +404,103 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
       throw error;
     }
   }
+}
+
+// ── Búsqueda (spec 004, plan sección 3) ─────────────────────────────────────────────────────────
+
+// Una fila del ranking: siempre hay una, con el total; id es null si la página está vacía.
+interface SearchRow {
+  total: bigint;
+  id: string | null;
+  page_number: number | null;
+  marked_text: string | null;
+}
+
+// D4: el texto del usuario va siempre como parámetro y plainto_tsquery lo toma como texto: ignora la
+// puntuación (", &, |, !, :, <->, *) y une las palabras con "y" (R6). Ni to_tsquery (su sintaxis da
+// error) ni websearch_to_tsquery (interpreta comillas, - y or). Se escribe en línea en cada uso, no en
+// un CTE: con el valor del parámetro, el planificador la calcula como constante y puede usar el índice.
+const searchQuery = (text: string) =>
+  Prisma.sql`plainto_tsquery('es_unaccent'::regconfig, ${text})`;
+
+// La misma expresión que el índice chunks_content_fts_es_unaccent_idx: si cambia, deja de usarlo.
+const chunkVector = Prisma.sql`to_tsvector('es_unaccent'::regconfig, c.content)`;
+
+// Marcadores de search-fragment.ts (U+E000 y U+E001), escritos con chr() para no depender de cómo se
+// pasen caracteres de uso privado en el texto de la consulta.
+const MARK_START_SQL = Prisma.sql`chr(57344)`;
+const MARK_END_SQL = Prisma.sql`chr(57345)`;
+
+// La consulta del ranking (plan 3.4). Exportada para el test del índice (EXPLAIN).
+export function searchRankingSql({ text, scope, page, limit }: SearchParams): Prisma.Sql {
+  const tsq = searchQuery(text);
+  const areaIds = scope.areaIds;
+
+  // R3: si no es ADMIN, el documento tiene que compartir un área (document_areas decide) y, como
+  // defensa, también las áreas copiadas en el fragmento (D5).
+  const documentAreas =
+    areaIds === null
+      ? Prisma.empty
+      : Prisma.sql`AND EXISTS (
+          SELECT 1 FROM document_areas da
+          WHERE da.document_id = d.id AND da.area_id = ANY(${areaIds}::uuid[]))`;
+  const chunkAreas =
+    areaIds === null ? Prisma.empty : Prisma.sql`AND c.area_ids && ${areaIds}::uuid[]`;
+
+  return Prisma.sql`
+    WITH visible AS (
+      -- R3: solo ACTIVE, para todos los roles, con su versión vigente
+      SELECT d.id, d.created_at, dv.id AS version_id,
+             to_tsvector('es_unaccent'::regconfig, d.title) AS title_vector,
+             setweight(to_tsvector('es_unaccent'::regconfig, d.title), 'A') ||
+             setweight(to_tsvector('es_unaccent'::regconfig, coalesce(d.description, '')), 'B')
+               AS doc_vector
+      FROM documents d
+      JOIN document_versions dv ON dv.document_id = d.id AND dv.status = 'CURRENT'
+      WHERE d.status = 'ACTIVE'
+      ${documentAreas}
+    ),
+    best_chunk AS (
+      -- R2 y R7: el fragmento activo de la versión vigente que mejor coincide, uno por documento
+      SELECT DISTINCT ON (c.document_id)
+             c.document_id, c.id AS chunk_id, c.page_number,
+             ts_rank(${chunkVector}, ${tsq}) AS chunk_rank
+      FROM chunks c
+      JOIN visible v ON v.id = c.document_id AND v.version_id = c.document_version_id
+      WHERE c.is_active
+        AND ${chunkVector} @@ ${tsq}
+        ${chunkAreas}
+      ORDER BY c.document_id, chunk_rank DESC, c.chunk_index
+    ),
+    hits AS (
+      -- D16: todas las palabras entre el título y la descripción, o todas en un mismo fragmento
+      SELECT v.id, v.created_at, b.chunk_id, b.page_number,
+             v.title_vector @@ ${tsq} AS in_title,
+             (CASE WHEN v.doc_vector @@ ${tsq} THEN ts_rank(v.doc_vector, ${tsq}) ELSE 0 END)
+               + coalesce(b.chunk_rank, 0) AS relevance
+      FROM visible v
+      LEFT JOIN best_chunk b ON b.document_id = v.id
+      WHERE v.doc_vector @@ ${tsq} OR b.chunk_id IS NOT NULL
+    )
+    SELECT t.total, p.id, p.page_number,
+           -- R8 y R11: el fragmento completo, sin cambios y con marcadores; el recorte lo hace
+           -- buildFragment. HighlightAll no reemplaza las etiquetas HTML del texto por espacios.
+           ts_headline('es_unaccent'::regconfig,
+                       translate(c.content, ${MARK_START_SQL} || ${MARK_END_SQL}, ''),
+                       ${tsq},
+                       'HighlightAll=true, StartSel=' || ${MARK_START_SQL}
+                         || ', StopSel=' || ${MARK_END_SQL})
+             AS marked_text
+    FROM (SELECT count(*) AS total FROM hits) t
+    LEFT JOIN LATERAL (
+      -- R9 y D6: título primero, después relevancia, el más nuevo y el id (orden estable)
+      SELECT * FROM hits
+      ORDER BY in_title DESC, relevance DESC, created_at DESC, id DESC
+      LIMIT ${limit} OFFSET ${(page - 1) * limit}
+    ) p ON true
+    LEFT JOIN chunks c ON c.id = p.chunk_id
+    ORDER BY p.in_title DESC, p.relevance DESC, p.created_at DESC, p.id DESC
+  `;
 }
 
 // Error del driver pg cuando el servidor corta la conexión sin que la aplicación lo pida
