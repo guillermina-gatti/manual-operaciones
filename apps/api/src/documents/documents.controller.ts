@@ -29,6 +29,7 @@ import type { DownloadUrl } from '../storage/file-storage';
 import {
   DocumentListResponse,
   DocumentQueryService,
+  DocumentSearchResponse,
   VersionHistoryResponse,
 } from './document-query.service';
 import { DocumentLifecycleService } from './document-lifecycle.service';
@@ -38,10 +39,12 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
 import {
   DocumentResponse,
+  DocumentSearchResult,
   DocumentSummary,
   VersionHistoryItem,
 } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
+import { SearchDocumentsQuery } from './dto/search-documents.query';
 import type { UploadedFileInput } from './file-inspector';
 
 // Límite máximo de tamaño de archivo: 10 Megabytes
@@ -71,6 +74,21 @@ class UploadVersionBody extends CreateVersionDto {
 class DocumentListBody implements DocumentListResponse {
   @ApiProperty({ type: [DocumentSummary] })
   data: DocumentSummary[];
+
+  @ApiProperty({ example: 1 })
+  total: number;
+
+  @ApiProperty({ example: 1 })
+  page: number;
+
+  @ApiProperty({ example: 20 })
+  limit: number;
+}
+
+// Clase para documentar en Swagger la respuesta de la búsqueda (spec 004)
+class DocumentSearchBody implements DocumentSearchResponse {
+  @ApiProperty({ type: [DocumentSearchResult] })
+  data: DocumentSearchResult[];
 
   @ApiProperty({ example: 1 })
   total: number;
@@ -181,6 +199,32 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<DocumentListResponse> {
     return this.queries.list(user, query);
+  }
+
+  // Ruta GET /documents/search: Buscar en el título, la descripción y el contenido (spec 004).
+  // Va ANTES de GET /documents/:id: si no, "search" llega al ParseUUIDPipe y responde 400.
+  @Get('search')
+  @ApiResponse({
+    status: 200,
+    description:
+      'Documentos visibles que coinciden, del más relevante al menos relevante, con el fragmento',
+    type: DocumentSearchBody,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'q falta o no tiene entre 3 y 100 caracteres (sin los espacios de los extremos), o page o limit inválidos',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el directorio de usuarios no responden',
+  })
+  search(
+    @Query() query: SearchDocumentsQuery,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentSearchResponse> {
+    return this.queries.search(user, query);
   }
 
   // Ruta GET /documents/:id: Obtener el detalle de un documento específico por su ID

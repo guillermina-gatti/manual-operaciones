@@ -195,6 +195,7 @@ Convenciones:
   - los tests de `query.e2e-spec.ts` (listado y detalle) siguen pasando.
 - **Depende de:** T06, T07
 - **Commit:** `feat(api): exponer la búsqueda de documentos`
+- **Estado:** hecha.
 
 ## Frontend
 
