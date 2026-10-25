@@ -210,3 +210,15 @@ export function toDocumentSummary(record: DocumentRecord): DocumentSummary {
     currentVersion: toVersionSummary(record.currentVersion),
   };
 }
+
+// Spec 004: lo mismo que el listado, más el fragmento (o null).
+export function toDocumentSearchResult(
+  record: DocumentRecord,
+  fragment: SearchFragment | null,
+): DocumentSearchResult {
+  return {
+    ...toDocumentFields(record),
+    currentVersion: toVersionSummary(record.currentVersion),
+    fragment,
+  };
+}

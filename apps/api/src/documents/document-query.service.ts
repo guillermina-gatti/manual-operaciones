@@ -1,19 +1,29 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import { DownloadUrl, FileStorage } from '../storage/file-storage';
-import { AccessSubject, canView, listWhere } from './document-access.policy';
+import {
+  AccessSubject,
+  canView,
+  listWhere,
+  searchScope,
+} from './document-access.policy';
 import { DocumentRecord, DocumentsRepository } from './documents.repository';
 import {
   DocumentResponse,
+  DocumentSearchResult,
   DocumentSummary,
   VersionHistoryItem,
   toDocumentResponse,
+  toDocumentSearchResult,
   toDocumentSummary,
   toVersionHistoryItem,
 } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
+import { SearchDocumentsQuery } from './dto/search-documents.query';
 import { toHttpException } from './http-errors';
+import type { HttpOperation } from './http-errors';
 import { UsersDirectory } from './ports/users-directory';
+import { buildFragment } from './search-fragment';
 
 // Forma del listado (R13). La clase para Swagger la agrega el controller (T19).
 export interface DocumentListResponse {
@@ -26,6 +36,14 @@ export interface DocumentListResponse {
 // Historial de versiones (spec 003, plan 1.4). La clase para Swagger la agrega el controller (T16).
 export interface VersionHistoryResponse {
   data: VersionHistoryItem[];
+}
+
+// Búsqueda (spec 004, plan 1.2): la misma forma que el listado, con el fragmento en cada resultado.
+export interface DocumentSearchResponse {
+  data: DocumentSearchResult[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 // R11: el mismo error, con el mismo mensaje, para un documento inexistente y para uno no visible.
@@ -80,6 +98,40 @@ export class DocumentQueryService {
     });
   }
 
+  // Spec 004 (plan 3.1): el alcance sale de la política y el fragmento, de buildFragment. Primero el
+  // visor: si el directorio falla, el error se propaga y nunca se busca sin filtro (R3).
+  search(
+    user: AuthUser,
+    query: SearchDocumentsQuery,
+  ): Promise<DocumentSearchResponse> {
+    return this.mapErrors(
+      async () => {
+        const viewer = await this.viewerFor(user);
+        const { data, total } = await this.documents.search({
+          text: query.q,
+          scope: searchScope(viewer),
+          page: query.page,
+          limit: query.limit,
+        });
+        return {
+          data: data.map(({ record, fragment }) =>
+            toDocumentSearchResult(
+              record,
+              fragment && {
+                parts: buildFragment(fragment.markedText),
+                pageNumber: fragment.pageNumber,
+              },
+            ),
+          ),
+          total,
+          page: query.page,
+          limit: query.limit,
+        };
+      },
+      'búsqueda',
+    );
+  }
+
   // Spec 003, R12: solo el ADMIN llega acá (lo controla el guard), así que no hay filtro de
   // visibilidad y funciona también con documentos archivados (D10).
   listVersions(id: string): Promise<VersionHistoryResponse> {
@@ -106,11 +158,14 @@ export class DocumentQueryService {
 
   // D13: el mismo mapeo que la carga. El 404 de R11 pasa sin cambios; una dependencia caída es 503;
   // cualquier otro error, 500.
-  private async mapErrors<T>(run: () => Promise<T>): Promise<T> {
+  private async mapErrors<T>(
+    run: () => Promise<T>,
+    operation: HttpOperation = 'consulta',
+  ): Promise<T> {
     try {
       return await run();
     } catch (error) {
-      throw toHttpException(error, this.logger, 'consulta');
+      throw toHttpException(error, this.logger, operation);
     }
   }
 

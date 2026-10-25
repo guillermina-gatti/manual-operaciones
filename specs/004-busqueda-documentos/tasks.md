@@ -171,6 +171,7 @@ Convenciones:
   - arma `{ data, total, page, limit }` con los valores de la consulta.
 - **Depende de:** T02, T03, T04, T05
 - **Commit:** `feat(api): armar los resultados de la búsqueda`
+- **Estado:** hecha. Suma `toDocumentSearchResult` en `dto/document.response.ts`, campo por campo como `toDocumentSummary`, en vez de hacer spread de una instancia de clase (aviso `no-misused-spread` de oxlint).
 
 ### T08 · Endpoint: `GET /documents/search`
 

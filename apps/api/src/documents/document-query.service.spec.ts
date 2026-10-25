@@ -616,3 +616,141 @@ describe('DocumentQueryService: historial y descarga de una versión (spec 003, 
     });
   });
 });
+
+// Spec 004 (T07; plan 004, 3.1): la búsqueda une el visor, la política, el repositorio y buildFragment.
+describe('DocumentQueryService.search', () => {
+  const START = '\uE000';
+  const END = '\uE001';
+  let users: { findById: jest.Mock };
+  let repository: { search: jest.Mock };
+  let service: DocumentQueryService;
+
+  beforeEach(() => {
+    users = {
+      findById: jest.fn((id: string) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+    };
+    repository = {
+      search: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+    };
+    service = new DocumentQueryService(
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      { getDownloadUrl: jest.fn() } as unknown as FileStorage,
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('pide primero el visor y busca con el alcance de la política (sus áreas)', async () => {
+    await service.search(empleadoVentas, { q: 'caja', page: 2, limit: 10 });
+
+    expect(users.findById).toHaveBeenCalledWith(empleadoVentas.id);
+    expect(users.findById.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.search.mock.invocationCallOrder[0],
+    );
+    expect(repository.search).toHaveBeenCalledWith({
+      text: 'caja',
+      scope: { areaIds: [AREA_IDS.ventas] },
+      page: 2,
+      limit: 10,
+    });
+  });
+
+  it('para un ADMIN busca sin filtro de áreas', async () => {
+    await service.search(admin, { q: 'caja', page: 1, limit: 20 });
+
+    expect(repository.search).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: { areaIds: null } }),
+    );
+  });
+
+  it('E1: arma el fragmento sin marcadores y con su página', async () => {
+    repository.search.mockResolvedValue({
+      data: [
+        {
+          record,
+          fragment: {
+            markedText: `el ${START}cierre${END} de ${START}caja${END}`,
+            pageNumber: 4,
+          },
+        },
+      ],
+      total: 1,
+    });
+
+    const response = await service.search(empleadoVentas, {
+      q: 'cierre de caja',
+      page: 1,
+      limit: 20,
+    });
+
+    expect(response).toEqual({
+      data: [
+        expect.objectContaining({
+          id: record.id,
+          title: record.title,
+          fragment: {
+            parts: [
+              { text: 'el ', match: false },
+              { text: 'cierre', match: true },
+              { text: ' de ', match: false },
+              { text: 'caja', match: true },
+            ],
+            pageNumber: 4,
+          },
+        }),
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    // Lo mismo que el listado: sin storageKey ni checksum.
+    expect(JSON.stringify(response)).not.toMatch(/storageKey|checksum/);
+  });
+
+  it('E2: sin coincidencia en el contenido, fragment es null', async () => {
+    repository.search.mockResolvedValue({
+      data: [{ record, fragment: null }],
+      total: 1,
+    });
+
+    const response = await service.search(admin, { q: 'caja', page: 1, limit: 20 });
+
+    expect(response.data[0].fragment).toBeNull();
+  });
+
+  it('si el directorio de usuarios falla: 503 y nunca busca sin filtro', async () => {
+    users.findById.mockRejectedValue(new RepositoryUnavailableError('directorio caído'));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+
+    await expect(
+      service.search(empleadoVentas, { q: 'caja', page: 1, limit: 20 }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(repository.search).not.toHaveBeenCalled();
+  });
+
+  it('R12: si la base no responde, 503 con el mensaje de la búsqueda', async () => {
+    repository.search.mockRejectedValue(new RepositoryUnavailableError('base caída'));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+
+    await expect(
+      service.search(admin, { q: 'caja', page: 1, limit: 20 }),
+    ).rejects.toThrow('No se pudo completar la búsqueda. Intentá de nuevo más tarde.');
+  });
+
+  it('un error inesperado es 500 con mensaje genérico', async () => {
+    repository.search.mockRejectedValue(new Error('x is undefined'));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+
+    const failure = service.search(admin, { q: 'caja', page: 1, limit: 20 });
+
+    await expect(failure).rejects.toBeInstanceOf(InternalServerErrorException);
+    await expect(failure).rejects.toThrow('No se pudo completar la búsqueda.');
+  });
+});
