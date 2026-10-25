@@ -63,6 +63,20 @@ Para compilar la web (`pnpm build`) hace falta crear `apps/web/.env` con `API_UR
 
 Tests: `pnpm --filter api test` y `pnpm --filter api test:e2e`.
 
+### Datos de desarrollo (seed)
+
+Carga en la base de desarrollo las áreas Ventas y Operaciones y cinco usuarios de prueba (un ADMIN y,
+por cada área, un SUPERVISOR y un EMPLOYEE), con los mismos UUID que usan el selector de sesión de la
+web y los tests. Sin estos datos, la API no reconoce ningún área ni usuario.
+
+```bash
+pnpm --filter api exec prisma db seed
+```
+
+Se puede correr las veces que haga falta: no duplica nada. Es **solo para desarrollo**: los usuarios no
+tienen contraseña válida y el seed se niega a correr con `NODE_ENV=production` o contra una base que no
+esté en `localhost`. Después de `prisma migrate reset` hay que volver a correrlo.
+
 ## Documentación
 
 - [Justificación de herramientas](./docs/justificacion.md): qué usamos, por qué y qué alternativas evaluamos.

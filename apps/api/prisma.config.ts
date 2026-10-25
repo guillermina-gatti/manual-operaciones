@@ -7,6 +7,9 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // Seed de desarrollo (usuarios y áreas de los fixtures): `prisma db seed`. En Prisma 7 no lo
+    // corren solos ni migrate dev ni migrate reset. El hook resuelve los imports .js del cliente generado.
+    seed: "ts-node --transpile-only -r ./test/resolve-js-to-ts.cjs prisma/seed.ts",
   },
   datasource: {
     url: process.env["DATABASE_URL"],
