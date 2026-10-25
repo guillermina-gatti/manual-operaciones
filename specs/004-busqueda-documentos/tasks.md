@@ -62,6 +62,7 @@ Convenciones:
   - campos de más, rechazados por `forbidNonWhitelisted`.
 - **Depende de:** —
 - **Commit:** `feat(api): validar el texto de búsqueda`
+- **Estado:** hecha.
 
 ### T03 · Política: qué puede encontrar cada usuario
 
