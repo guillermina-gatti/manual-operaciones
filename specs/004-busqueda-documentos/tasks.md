@@ -348,6 +348,7 @@ Convenciones:
   - F7: en el celular, `document.documentElement.scrollWidth <= window.innerWidth` con un fragmento de palabras largas.
 - **Depende de:** T16
 - **Commit:** `test(web): cubrir la búsqueda en el navegador`
+- **Estado:** hecha. 18 tests (9 escenarios en escritorio y celular). Una regla rota por escenario, de a una, y cada test la detectó: E1 (`<span>` en vez de `<mark>`), E2 (fragmento inventado sin coincidencia en el contenido), E9 (sin validar), E10 (sin `encodeURIComponent`), E11 (enlace "Borrar búsqueda" a otra ruta), E13 (`replace` en vez de `push`), F3 (siempre página 1) y F7 (sin `break-words`, en los dos proyectos). E12 lo cubre la mutación de R11 de T20. Ajustes: el aviso de E9 se busca dentro del formulario, porque Next tiene su propio `role="alert"` (el anunciador de rutas); E13 compara los pedidos antes y después de recargar, porque en `next dev` React StrictMode pide dos veces por montaje; y la palabra larga de F7 no tiene `/` ni `-`, porque el navegador ya corta ahí y el test pasaba sin `break-words`.
 
 ### T18 · Búsqueda por título contra la API real
 
