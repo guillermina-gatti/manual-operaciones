@@ -239,6 +239,7 @@ Convenciones:
   - los tests anteriores de `Pagination` pasan sin cambios.
 - **Depende de:** —
 - **Commit:** `feat(web): conservar la búsqueda al paginar`
+- **Estado:** hecha.
 
 ### T12 · Fragmento resaltado
 

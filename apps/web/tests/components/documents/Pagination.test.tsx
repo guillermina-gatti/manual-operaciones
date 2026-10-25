@@ -81,3 +81,33 @@ describe('Pagination (F7, P6)', () => {
     expect(pageLinks()).toHaveLength(2);
   });
 });
+
+// Spec 004 (T11; F3, D11): con una búsqueda activa, los enlaces conservan ?q=.
+describe('Pagination con búsqueda', () => {
+  test('los enlaces llevan ?q= y la página; la página 1 es solo ?q=', () => {
+    render(<Pagination currentPage={2} totalItems={45} pageSize={20} query="caja" />);
+
+    expect(pageLinks().map((link) => link.getAttribute('href'))).toEqual([
+      '/documentos?q=caja',
+      '/documentos?q=caja&pagina=2',
+      '/documentos?q=caja&pagina=3',
+    ]);
+    expect(screen.getByRole('link', { name: 'Anterior' })).toHaveAttribute(
+      'href',
+      '/documentos?q=caja',
+    );
+    expect(screen.getByRole('link', { name: 'Siguiente' })).toHaveAttribute(
+      'href',
+      '/documentos?q=caja&pagina=3',
+    );
+  });
+
+  test('el texto se codifica (espacios y &)', () => {
+    render(<Pagination currentPage={1} totalItems={45} pageSize={20} query="cierre & caja" />);
+
+    expect(screen.getByRole('link', { name: 'Siguiente' })).toHaveAttribute(
+      'href',
+      '/documentos?q=cierre%20%26%20caja&pagina=2',
+    );
+  });
+});
