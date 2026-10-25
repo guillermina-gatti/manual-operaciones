@@ -3,7 +3,7 @@
 - **Spec:** [spec.md](./spec.md) (HU15, la parte de cambiar áreas, y HU16)
 - **Planes de referencia:** [plan 001](../001-carga-documentos/plan.md) (API de documentos) y [plan 002](../002-pantallas-documentos/plan.md) (pantallas)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado:** listo para implementar. Las decisiones están en la sección 9.1 y la pregunta abierta con Guille, en la 9.2.
+- **Estado:** Implementada (T01 a T28 y T30). Pendiente: T29, bloqueada por el worker de Guille. Las decisiones están en la sección 9.1 y la pregunta abierta con Guille, en la 9.2.
 
 En este plan, R1 a R14 son reglas de esta spec; P1 a P7, sus decisiones (spec, sección 10); E1 a E13, sus escenarios (sección 11, en el orden en que aparecen); D1 a D10, las decisiones de este plan (sección 9.1); y Q1, la pregunta que sigue abierta con Guille (sección 9.2). Las reglas y decisiones de otros planes se citan con su número y el plan ("R5 de la spec 001", "D8 del plan 002").
 

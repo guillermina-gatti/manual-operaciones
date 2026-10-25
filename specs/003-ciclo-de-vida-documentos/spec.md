@@ -3,7 +3,7 @@
 - **Historias:** HU15 (asignar áreas a cada documento: la parte de cambiarlas) y HU16 (reemplazar o archivar documentos).
 - **Responsable:** Matías Fauda (pareja C)
 - **Depende de:** spec 001 (tablas y endpoints de documentos), spec 002 (pantallas) y la tabla `chunks` de Guille (ya está en `develop`).
-- **Estado:** lista para planificar. Las decisiones de la etapa de aclaración están en la sección 10.
+- **Estado:** Implementada (T01 a T28 y T30). Pendiente: T29, bloqueada por el worker de Guille. Las decisiones de la etapa de aclaración están en la sección 10.
 
 ## 1. Problema y objetivo
 

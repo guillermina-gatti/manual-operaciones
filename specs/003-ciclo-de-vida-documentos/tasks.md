@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T28 **hechas** (T01 a T16 son el backend; T17 a T24, las pantallas; T25 a T28, Playwright). T29 está **bloqueada** por el worker de Guille (Q1); T30 es la verificación final.
+- **Estado (24/10/2026):** T01 a T28 y T30 **hechas** (T01 a T16 son el backend; T17 a T24, las pantallas; T25 a T28, Playwright; T30, la [verificación](#verificación)). T29 está **bloqueada** por el worker de Guille (Q1).
 
 Convenciones:
 
@@ -536,36 +536,72 @@ Convenciones:
   5. **Tabla:** cada fila tiene sus tests, buscados por nombre, y pasan.
   6. **Celular:** a 375 px de ancho, el detalle con cada panel abierto, el diálogo de archivar y el historial no tienen desplazamiento horizontal.
 - **Depende de:** T01 a T28
-- **Commit:** `docs(specs): registrar verificación del ciclo de vida de documentos`
+- **Commit:** `docs(specs): verificar ciclo de vida de documentos`
+- **Estado:** hecha (24/10/2026). El resultado, la tabla escenario → test y los pendientes están en la sección [Verificación](#verificación).
 
-#### Escenario → test
+---
+
+## Verificación
+
+Corrida completa del 24/10/2026, en la rama `feat/ciclo-de-vida-documentos`.
+
+### Totales
+
+| Qué | Comando | Resultado |
+| --- | --- | --- |
+| API, lint | `pnpm --filter api lint` | sin avisos |
+| API, tipos | `pnpm --filter api exec tsc --noEmit` | sin errores (`build` no se corre desde el agente porque ejecuta `prisma generate`) |
+| API, unitarios | `pnpm --filter api test` | 19 suites, **241 tests**, todos pasan |
+| API, integración | `pnpm --filter api test:e2e` | 7 suites, **114 tests**, todos pasan. Contra `manual_test`, con `prisma migrate reset` antes de la suite |
+| Web, lint y build | `pnpm --filter web lint`, `pnpm --filter web build` | sin avisos; compila y chequea tipos |
+| Web, componentes | `pnpm --filter web test` | 30 archivos, **401 tests**, todos pasan |
+| Playwright, API simulada | `pnpm --filter web test:e2e` | **62 tests** (31 en escritorio y 31 en celular), todos pasan |
+| Playwright, API real | `pnpm --filter web test:e2e:integracion` | **8 tests** (3 de esta spec y 5 de la spec 002), todos pasan. La API se levantó contra `manual_test` (ver T28) |
+
+Durante la corrida aparecieron dos fallas, ya resueltas o anotadas:
+- `lifecycle.e2e-spec.ts` › "reviewDate de hoy → 400" dependía de la hora: calculaba "hoy" en UTC, que de 21:00 a 24:00 de Buenos Aires ya es mañana. Se corrigió el test para usar la fecha de Buenos Aires (commit `45ce014`).
+- `upload.e2e-spec.ts` (spec 001) › "un EMPLOYEE (rol sin permiso) recibe 403 y no escribe nada" falló una vez y pasó en las seis corridas siguientes. Es intermitente; no se tocó.
+
+Las reglas de los escenarios de Playwright (T26 y T27) se comprobaron rompiéndolas de a una en el código: los 12 tests correspondientes fallaron y el código se restauró.
+
+### Escenario → test
+
+Revisada el 24/10/2026: cada test existe en su archivo y pasa en la corrida de arriba.
 
 | Escenario | Unitario (API) | Integración (API) | Componente (web) | Playwright | ✔ |
 | --- | --- | --- | --- | --- | --- |
-| E1 · Cambiar áreas | `document-lifecycle.service.spec.ts` (T10) | `lifecycle.repository.e2e-spec.ts` (T06); `lifecycle.e2e-spec.ts` (T14) | `ChangeAreasForm.test.tsx` (T20) | `ciclo-de-vida.spec.ts` (T26); `integracion/ciclo-de-vida.spec.ts` (T28) | ☐ |
-| E2 · Subir una versión nueva | `document-lifecycle.service.spec.ts` (T11) | `lifecycle.repository.e2e-spec.ts` (T07); `lifecycle.e2e-spec.ts` (T15) | `NewVersionForm.test.tsx` (T21) | `ciclo-de-vida.spec.ts` (T26); `integracion/ciclo-de-vida.spec.ts` (T28) | ☐ |
-| E3 · Versión idéntica a la vigente | `document-lifecycle.service.spec.ts` (T11) | `lifecycle.e2e-spec.ts` (T15) | `NewVersionForm.test.tsx` (T21) | `ciclo-de-vida.spec.ts` (T26) | ☐ |
-| E4 · Versión nueva con fecha de revisión | `document-lifecycle.service.spec.ts` (T11); `create-version.dto.spec.ts` (T09) | `lifecycle.repository.e2e-spec.ts` (T07); `lifecycle.e2e-spec.ts` (T15) | `NewVersionForm.test.tsx` (T21); `ReviewDateField.test.tsx` (T19) | `ciclo-de-vida.spec.ts` (T26) | ☐ |
-| E5 · Falla al subir la versión nueva | `document-lifecycle.service.spec.ts` (T11) | `lifecycle.e2e-spec.ts` (T15) | `NewVersionForm.test.tsx` (T21) | `ciclo-de-vida.spec.ts` (T26) | ☐ |
-| E6 · El responsable pierde el acceso | `document-lifecycle.service.spec.ts` (T10) | `lifecycle.e2e-spec.ts` (T14) | `ChangeAreasForm.test.tsx` (T20) | `ciclo-de-vida.spec.ts` (T26) | ☐ |
-| E7 · Archivar | `document-lifecycle.service.spec.ts` (T12) | `lifecycle.repository.e2e-spec.ts` (T08); `lifecycle.e2e-spec.ts` (T14) | `ArchiveDialog.test.tsx` (T22); `DocumentDetail.test.tsx` (T24) | `ciclo-de-vida.spec.ts` (T26); `integracion/ciclo-de-vida.spec.ts` (T28) | ☐ |
-| E8 · Rol sin permiso | guards de la spec 001 | `lifecycle.e2e-spec.ts` (T14, T15, T16) | `DocumentDetail.test.tsx` (T24) | `ciclo-de-vida.spec.ts` (T27) | ☐ |
-| E9 · Documento archivado | `document-lifecycle.service.spec.ts` (T10, T11, T12) | `lifecycle.e2e-spec.ts` (T14, T15) | `DocumentDetail.test.tsx` (T24) | `ciclo-de-vida.spec.ts` (T27) | ☐ |
-| E10 · Una sola versión vigente | `document-lifecycle.service.spec.ts` (T11): `ConcurrentVersionError` | `indexes.e2e-spec.ts` (T01); `lifecycle.repository.e2e-spec.ts` (T07); `lifecycle.e2e-spec.ts` (T15) | — | — (no se reproduce en el navegador) | ☐ |
-| E11 · Archivar sin confirmar | — | — | `ArchiveDialog.test.tsx` (T22) | `ciclo-de-vida.spec.ts` (T26) | ☐ |
-| E12 · Un empleado no ve el historial | — | `lifecycle.e2e-spec.ts` (T16) | `DocumentDetail.test.tsx` (T24) | `ciclo-de-vida.spec.ts` (T27) | ☐ |
-| E13 · Historial de versiones | `document-query.service.spec.ts` (T13) | `lifecycle.repository.e2e-spec.ts` (T08); `lifecycle.e2e-spec.ts` (T16) | `VersionHistory.test.tsx` (T23) | `ciclo-de-vida.spec.ts` (T27) | ☐ |
+| E1 · Cambiar áreas | `document-lifecycle.service.spec.ts` › `changeAreas` (T10) | `lifecycle.repository.e2e-spec.ts` › `replaceAreas` (T06); `lifecycle.e2e-spec.ts` › E1 (T14) | `ChangeAreasForm.test.tsx` › E1 (T20) | `ciclo-de-vida.spec.ts` › E1 (T26); `integracion/ciclo-de-vida.spec.ts` › E1 (T28) | ☑ |
+| E2 · Subir una versión nueva | `document-lifecycle.service.spec.ts` › `addVersion` (T11) | `lifecycle.repository.e2e-spec.ts` › `addVersion` (T07); `lifecycle.e2e-spec.ts` › E2 (T15) | `NewVersionForm.test.tsx` › E2 (T21); `DocumentDetail.lifecycle.test.tsx` (T24) | `ciclo-de-vida.spec.ts` › E2 (T26); `integracion/ciclo-de-vida.spec.ts` › E2 (T28) | ☑ |
+| E3 · Versión idéntica a la vigente | `document-lifecycle.service.spec.ts` › E3 y bajo el bloqueo (T11) | `lifecycle.e2e-spec.ts` › E3 (T15) | `NewVersionForm.test.tsx` › E3 (T21) | `ciclo-de-vida.spec.ts` › E3 (T26) | ☑ |
+| E4 · Versión nueva con fecha de revisión | `document-lifecycle.service.spec.ts` › E4 (T11); `create-version.dto.spec.ts` (T09) | `lifecycle.repository.e2e-spec.ts` › `reviewDate` (T07); `lifecycle.e2e-spec.ts` › E4 (T15) | `NewVersionForm.test.tsx` › E4 (T21); `ReviewDateField.test.tsx` (T19) | `ciclo-de-vida.spec.ts` › E4 (T26) | ☑ |
+| E5 · Falla al subir la versión nueva | `document-lifecycle.service.spec.ts` › E5 (T11) | `lifecycle.e2e-spec.ts` › E5 (T15) | `NewVersionForm.test.tsx` › E5 (T21) | `ciclo-de-vida.spec.ts` › E5 (T26) | ☑ |
+| E6 · El responsable pierde el acceso | `document-lifecycle.service.spec.ts` › E6 (T10) | `lifecycle.e2e-spec.ts` › E6 (T14) | `ChangeAreasForm.test.tsx` › E6 (T20) | `ciclo-de-vida.spec.ts` › E6 (T26) | ☑ |
+| E7 · Archivar | `document-lifecycle.service.spec.ts` › `archive` (T12) | `lifecycle.repository.e2e-spec.ts` › `archive` (T08); `lifecycle.e2e-spec.ts` › E7 (T14) | `ArchiveDialog.test.tsx` › E7 (T22); `DocumentDetail.lifecycle.test.tsx` › E7 (T24) | `ciclo-de-vida.spec.ts` › E7 (T26); `integracion/ciclo-de-vida.spec.ts` › E7 (T28) | ☑ |
+| E8 · Rol sin permiso | guards de la spec 001 | `lifecycle.e2e-spec.ts` › E8 y E12, 403 (T14, T15, T16) | `DocumentDetail.lifecycle.test.tsx` › E8 y E12 (T24) | `ciclo-de-vida.spec.ts` › E8, EMPLOYEE y SUPERVISOR (T27) | ☑ |
+| E9 · Documento archivado | `document-lifecycle.service.spec.ts` › 409 `ARCHIVED` en las tres operaciones (T10, T11, T12) | `lifecycle.e2e-spec.ts` › E9 (T14, T15) | `DocumentDetail.lifecycle.test.tsx` › E9 (T24) | `ciclo-de-vida.spec.ts` › E9 (T27) | ☑ |
+| E10 · Una sola versión vigente | `document-lifecycle.service.spec.ts` › `ConcurrentVersionError` (T11) | `indexes.e2e-spec.ts` (T01); `lifecycle.repository.e2e-spec.ts` › E10 e índice (T07); `lifecycle.e2e-spec.ts` › E10 y archivar en paralelo (T15) | — | — (no se reproduce en el navegador) | ☑ |
+| E11 · Archivar sin confirmar | — | — | `ArchiveDialog.test.tsx` › E11 (T22); `DocumentDetail.lifecycle.test.tsx` › E11 (T24) | `ciclo-de-vida.spec.ts` › E11, Cancelar y Escape (T26) | ☑ |
+| E12 · Un empleado no ve el historial | — | `lifecycle.e2e-spec.ts` › E12 (T16) | `DocumentDetail.lifecycle.test.tsx` › E8 y E12 (T24) | `ciclo-de-vida.spec.ts` › E12 (T27) | ☑ |
+| E13 · Historial de versiones | `document-query.service.spec.ts` › `listVersions` y `getVersionDownloadUrl` (T13) | `lifecycle.repository.e2e-spec.ts` › `listVersions` y `findVersion` (T08); `lifecycle.e2e-spec.ts` › E13 (T16) | `VersionHistory.test.tsx` › E13 (T23); `DownloadButton.test.tsx` › descarga de una versión (T23) | `ciclo-de-vida.spec.ts` › E13, con descarga (T27); `smoke.spec.ts` (T25) | ☑ |
 
 Reglas y decisiones sin escenario propio, para no perderlas de vista:
 
-| Regla o decisión | Tests que la cubren |
+| Regla o decisión | Tests que la cubren (todos pasan) |
 | --- | --- |
-| R13 · Auditoría | `logger-audit-log.spec.ts` (T04); `document-lifecycle.service.spec.ts` (T10 a T12): `SUCCESS` y `FAILURE` |
-| R14 · Confirmación para archivar | `ArchiveDialog.test.tsx` (T22): el texto exacto; `ciclo-de-vida.spec.ts` (T26) |
-| D1 · Índices de `chunks` | `indexes.e2e-spec.ts` (T01) y el paso 4 de T30 |
-| D4 · Mismas áreas | `document-lifecycle.service.spec.ts` (T10) |
-| D6 · No se borran archivos viejos | `document-lifecycle.service.spec.ts` (T11); `lifecycle.e2e-spec.ts` (T15): el objeto de v1 sigue |
-| Casos borde de la sección 8 | T29 (**bloqueada**, Q1) |
+| R13 · Auditoría | `logger-audit-log.spec.ts` (T04); `document-lifecycle.service.spec.ts` (T10 a T12): `SUCCESS` en la transacción y `FAILURE` con el código y el `documentId`; `document-write-steps.spec.ts` (T10) |
+| R14 · Confirmación para archivar | `ArchiveDialog.test.tsx` (T22): el texto exacto y el foco en "Cancelar"; `ciclo-de-vida.spec.ts` › E7 (T26) |
+| D1 · Índices de `chunks` | `indexes.e2e-spec.ts` (T01), contra `manual_test` |
+| D4 · Mismas áreas | `document-lifecycle.service.spec.ts` › D4 (T10) |
+| D6 · No se borran archivos viejos | `document-lifecycle.service.spec.ts` (T11): solo se borra el archivo nuevo; `lifecycle.e2e-spec.ts` › E2 y E5 (T15): el objeto de v1 sigue |
+| D7 · `reason` en los 409 | `upload.e2e-spec.ts` (T03); `lifecycle.e2e-spec.ts` (T14, T15); `client.test.ts` y `error-messages.test.ts` (T17, T18) |
+
+### Pendientes
+
+- **T29 · Casos borde con el worker real: bloqueada** por el worker de Guille (Q1). Cuando se desbloquee, se hace T29 y se vuelve a correr esta verificación.
+- **La descarga no se puede probar sin S3.** Sin `S3_BUCKET`, la API usa el almacenamiento en memoria, que devuelve un enlace `memory://`. Contra la API real solo se comprueba que el enlace se pide y se genera; la descarga real queda para cuando haya bucket, igual que la T22 de la spec 001. Con la API simulada (E13 en Playwright), el navegador sí descarga el archivo.
+- **Pasos de T30 que no se hicieron en esta corrida:**
+  - paso 4: los índices se comprobaron con `indexes.e2e-spec.ts` en `manual_test`, no en la base de desarrollo, porque el agente no la usa;
+  - paso 6: el ancho de 375 px no se revisó a mano. Los escenarios de Playwright corren en celular (Pixel 7, 412 px), pero no comprueban el desplazamiento horizontal.
 
 ---
 
