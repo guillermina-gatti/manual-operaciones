@@ -41,7 +41,7 @@ El usuario escribe en el buscador de `/documentos` y confirma (Enter o el botón
 - **R3 · Visibilidad.** La búsqueda devuelve solo documentos `ACTIVE` que el usuario puede ver: el ADMIN, todos; el resto, los que comparten al menos un área con él. Nunca aparece texto de un documento que el usuario no puede ver.
 - **R4 · Texto de búsqueda.** Entre 3 y 100 caracteres, sin contar espacios al principio y al final. Si no: 400.
 - **R5 · Tildes, mayúsculas y variantes.** La búsqueda no distingue tildes ni mayúsculas ("instruccion" encuentra "Instrucción") y reconoce variantes de una misma palabra en español ("procedimientos" encuentra "procedimiento").
-- **R6 · Varias palabras.** Si se escriben varias palabras, el documento tiene que contener todas, aunque no estén juntas.
+- **R6 · Varias palabras.** Si se escriben varias palabras, el documento tiene que contener todas, aunque no estén juntas: todas las palabras tienen que estar entre el título y la descripción, o todas en un mismo fragmento del contenido (D16 del plan).
 - **R7 · Un resultado por documento.** Cada documento aparece una sola vez, aunque coincida en varios fragmentos.
 - **R8 · Fragmento coincidente.** Si la coincidencia está en el contenido, el resultado incluye el fragmento que mejor coincide, recortado alrededor de las palabras encontradas, con esas palabras marcadas, y su número de página si se conoce. Si solo coincide el título o la descripción, no hay fragmento.
 - **R9 · Orden.** Del más relevante al menos relevante. Una coincidencia en el título pesa más que una en el contenido. A igual relevancia, el más nuevo primero.
@@ -91,7 +91,7 @@ Tomadas en la etapa de aclaración (clarify) el 25/10/2026.
 | P5 · ¿Dónde está el buscador? | Arriba del listado de `/documentos` | F1 |
 | P6 · ¿Mínimo de caracteres? | 3 | R4, F2 |
 
-**Para coordinar con Guille (P2):** el índice de texto completo de `chunks` (`chunks_content_fts_idx`) hoy no ignora tildes. Para cumplir R5 hace falta la extensión `unaccent` y cambiar o agregar un índice. Como el índice es suyo, el plan tiene que proponer cómo hacerlo sin romper lo que ella usa, y acordarlo antes de migrar.
+**Para coordinar con Guille (P2):** el índice de texto completo de `chunks` (`chunks_content_fts_idx`) hoy no ignora tildes. Para cumplir R5 hace falta la extensión `unaccent` y un índice nuevo. Como el índice es suyo, se agrega uno nuevo sin tocar los de Guille (`chunks_content_fts_idx` y `chunks_embedding_idx`) y se le avisa. Si prefiere otra opción (reemplazar el suyo o cambiar su definición), se hace después, en una migración aparte aprobada por ella (D15 del plan).
 
 ## 11. Criterios de aceptación
 
