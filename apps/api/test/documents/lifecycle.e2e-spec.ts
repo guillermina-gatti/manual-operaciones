@@ -452,7 +452,12 @@ describe('Ciclo de vida de documentos (integración)', () => {
     });
 
     it('reviewDate de hoy → 400', async () => {
-      await postVersion(caja.id, uniquePdf(), { reviewDate: daysFromToday(0) })
+      // Hoy en Buenos Aires, como compara la API (D1 del plan 001). daysFromToday usa la fecha UTC,
+      // que de 21:00 a 24:00 de Buenos Aires ya es mañana.
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+      }).format(new Date());
+      await postVersion(caja.id, uniquePdf(), { reviewDate: today })
         .set(admin)
         .expect(400);
 
