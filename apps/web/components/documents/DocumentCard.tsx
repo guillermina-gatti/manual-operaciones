@@ -1,6 +1,7 @@
 // Tarjeta de un documento en el listado (F7). Recibe los nombres ya resueltos: la API manda solo IDs (Q1)
 // y el listado los pide una vez para toda la página.
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import type { DocumentSummary } from '@/lib/api';
 import { formatCreatedAt, formatReviewDate } from '@/lib/documents/format';
 
@@ -10,11 +11,19 @@ interface DocumentCardProps {
   areaNames: Record<string, string>;
   ownerName?: string;
   isAdmin: boolean;
+  // Spec 004: lo que va al final de la tarjeta, por ejemplo el fragmento de un resultado de búsqueda.
+  children?: ReactNode;
 }
 
 const MISSING = '—';
 
-export function DocumentCard({ document, areaNames, ownerName, isAdmin }: DocumentCardProps) {
+export function DocumentCard({
+  document,
+  areaNames,
+  ownerName,
+  isAdmin,
+  children,
+}: DocumentCardProps) {
   const areas = document.areaIds.map((id) => areaNames[id] ?? MISSING).join(', ');
   const fileName = document.currentVersion.originalFileName;
 
@@ -53,6 +62,7 @@ export function DocumentCard({ document, areaNames, ownerName, isAdmin }: Docume
         <dt className="text-zinc-500 dark:text-zinc-400">Cargado</dt>
         <dd>{formatCreatedAt(document.createdAt)}</dd>
       </dl>
+      {children}
     </article>
   );
 }

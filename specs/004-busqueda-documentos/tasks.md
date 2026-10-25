@@ -296,6 +296,7 @@ Convenciones:
   - con `page=2` pide `page=2`; con más de 20 resultados, la paginación conserva `q`.
 - **Depende de:** T10, T11, T12
 - **Commit:** `feat(web): mostrar los resultados de la búsqueda`
+- **Estado:** hecha. Para que el fragmento quede dentro de la misma tarjeta, `DocumentCard` suma un `children` opcional al final del `<article>`; sus tests no cambian. "Borrar búsqueda" en el estado vacío es un enlace a `/documentos`.
 
 ### T15 · Buscar desde el listado
 
