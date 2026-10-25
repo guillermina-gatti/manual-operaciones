@@ -14,6 +14,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { FileStorage } from '../../src/storage/file-storage';
 import { InMemoryFileStorage } from '../../src/storage/in-memory-file-storage';
 import type { DirectoryUser } from '../../src/documents/ports/users-directory';
+import { seedDirectoryFixtures } from '../directory-fixtures';
 
 export interface DocumentsTestApp {
   app: INestApplication;
@@ -44,7 +45,12 @@ export async function createDocumentsTestApp(): Promise<DocumentsTestApp> {
   configureApp(app);
   await app.init();
 
-  return { app, prisma: app.get(PrismaService), storage, queue, audit };
+  // Desde A-04, AreasDirectory y UsersDirectory leen las tablas reales: sin estos registros no
+  // existiría ningún área ni usuario de los fixtures. Una vez por suite (beforeAll); es idempotente.
+  const prisma = app.get(PrismaService);
+  await seedDirectoryFixtures(prisma);
+
+  return { app, prisma, storage, queue, audit };
 }
 
 export async function cleanDocuments(prisma: PrismaService): Promise<void> {
