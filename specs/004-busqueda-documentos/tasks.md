@@ -101,6 +101,7 @@ Convenciones:
   - ningún `U+E000` ni `U+E001` en la salida.
 - **Depende de:** —
 - **Commit:** `feat(api): marcar las palabras encontradas en el fragmento`
+- **Estado:** hecha.
 
 ### T05 · Contrato de la búsqueda
 
