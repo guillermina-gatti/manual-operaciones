@@ -275,6 +275,7 @@ Convenciones:
   - arranca con el valor recibido.
 - **Depende de:** T09
 - **Commit:** `feat(web): agregar la caja de búsqueda`
+- **Estado:** hecha. Recibe `query` (el `?q=` tal cual) y decide sola el aviso de un `q` inválido en la dirección. Un `q` de más de 100 caracteres (solo posible escribiéndolo en la dirección) muestra "La búsqueda puede tener hasta 100 caracteres.".
 
 ### T14 · Resultados de la búsqueda
 
