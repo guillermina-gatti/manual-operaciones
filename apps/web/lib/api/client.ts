@@ -66,11 +66,13 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-// Procesa la estructura de error estándar de NestJS y extrae los mensajes y datos adicionales (como existingDocumentId en 409)
+// Procesa la estructura de error estándar de NestJS y extrae los mensajes y datos adicionales
+// (existingDocumentId y reason en los 409)
 function toApiError(status: number, body: unknown): ApiError {
   const fields = (typeof body === 'object' && body !== null ? body : {}) as {
     message?: unknown;
     existingDocumentId?: unknown;
+    reason?: unknown;
   };
 
   const raw = Array.isArray(fields.message) ? fields.message : [fields.message];
@@ -78,5 +80,7 @@ function toApiError(status: number, body: unknown): ApiError {
   const existingDocumentId =
     typeof fields.existingDocumentId === 'string' ? fields.existingDocumentId : undefined;
 
-  return new ApiError(status, messages, existingDocumentId);
+  const reason = typeof fields.reason === 'string' ? fields.reason : undefined;
+
+  return new ApiError(status, messages, existingDocumentId, reason);
 }

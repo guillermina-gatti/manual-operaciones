@@ -76,4 +76,49 @@ describe('LoggerAuditLog', () => {
       /contenido|Bearer|secreto/,
     );
   });
+
+  // Spec 003, R13: cada cambio de áreas, versión nueva y archivo queda registrado.
+  describe.each([
+    'DOCUMENT_AREAS_CHANGE',
+    'DOCUMENT_VERSION_UPLOAD',
+    'DOCUMENT_ARCHIVE',
+  ] as const)('acción %s (spec 003)', (action) => {
+    it('registra el éxito con quién, qué documento y cuándo', async () => {
+      await new LoggerAuditLog().record({
+        action,
+        actorId: ADMIN_ID,
+        documentId: DOCUMENT_ID,
+        result: 'SUCCESS',
+        at: AT,
+      });
+
+      expect(log).toHaveBeenCalledWith({
+        action,
+        actorId: ADMIN_ID,
+        documentId: DOCUMENT_ID,
+        result: 'SUCCESS',
+        at: '2026-10-22T12:00:00.000Z',
+      });
+    });
+
+    it('registra el fallo con su código y el documento', async () => {
+      await new LoggerAuditLog().record({
+        action,
+        actorId: ADMIN_ID,
+        documentId: DOCUMENT_ID,
+        result: 'FAILURE',
+        detail: '409',
+        at: AT,
+      });
+
+      expect(log).toHaveBeenCalledWith({
+        action,
+        actorId: ADMIN_ID,
+        documentId: DOCUMENT_ID,
+        result: 'FAILURE',
+        detail: '409',
+        at: '2026-10-22T12:00:00.000Z',
+      });
+    });
+  });
 });

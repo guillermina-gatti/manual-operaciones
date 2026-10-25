@@ -2,7 +2,15 @@
 // Los textos de la API nunca se muestran: están en inglés o nombran campos internos.
 import { ApiError } from './api-error';
 
-export type ErrorContext = 'list' | 'detail' | 'download' | 'upload';
+// 'areas', 'version' y 'archive': las acciones del ciclo de vida (spec 003, plan 6.2 a 6.4).
+export type ErrorContext =
+  | 'list'
+  | 'detail'
+  | 'download'
+  | 'upload'
+  | 'areas'
+  | 'version'
+  | 'archive';
 
 export type UploadField =
   | 'file'
@@ -36,7 +44,16 @@ export const MESSAGES = {
   unexpected: 'Ocurrió un error inesperado. Probá de nuevo.',
   noConnection:
     'No pudimos conectarnos con el servidor. Revisá tu conexión y probá de nuevo.',
+  // Spec 003 (plan 6.2 a 6.4).
+  noModifyPermission: 'No tenés permiso para modificar documentos.',
+  identicalToCurrent: 'Este archivo es igual a la versión vigente.',
+  duplicateOther: 'Ya existe otro documento con este mismo archivo.',
+  archived: 'El documento fue archivado. Ya no se puede modificar.',
+  concurrentVersion:
+    'Otra persona subió una versión al mismo tiempo. Recargá el documento y volvé a intentar.',
 } as const;
+
+const LIFECYCLE_CONTEXTS: ErrorContext[] = ['areas', 'version', 'archive'];
 
 export const FIELD_MESSAGES: Record<UploadField, string> = {
   file: 'Elegí un archivo PDF, .txt o .md de hasta 10 MB que no esté vacío.',
@@ -63,26 +80,28 @@ export function describeApiError(
     case 0:
       return general(MESSAGES.noConnection, true);
     case 400:
-      // En el detalle y la descarga, un 400 es un id que no es UUID: para el usuario, no existe (F9).
-      if (context === 'detail' || context === 'download') {
+      // En el detalle, la descarga y el archivo, un 400 es un id que no es UUID: para el usuario,
+      // no existe (F9).
+      if (context === 'detail' || context === 'download' || context === 'archive') {
         return general(MESSAGES.documentNotFound, false);
       }
-      if (context === 'upload') return describeUploadBadRequest(error.messages);
+      // Los formularios: la carga, el cambio de áreas y la versión nueva.
+      if (context === 'upload' || context === 'areas' || context === 'version') {
+        return describeUploadBadRequest(error.messages);
+      }
       return general(MESSAGES.unexpected, true);
     case 401:
       return general(MESSAGES.sessionInvalid, false);
     case 403:
-      return general(
-        context === 'upload' ? MESSAGES.noUploadPermission : MESSAGES.noPermission,
-        false,
-      );
+      if (context === 'upload') return general(MESSAGES.noUploadPermission, false);
+      if (LIFECYCLE_CONTEXTS.includes(context)) {
+        return general(MESSAGES.noModifyPermission, false);
+      }
+      return general(MESSAGES.noPermission, false);
     case 404:
       return general(MESSAGES.documentNotFound, false);
     case 409:
-      return {
-        ...general(MESSAGES.duplicate, false),
-        existingDocumentId: error.existingDocumentId,
-      };
+      return describeConflict(error, context);
     case 413:
       return { ...general(MESSAGES.checkFile, false), fieldErrors: { file: FILE_TOO_LARGE } };
     case 415:
@@ -99,6 +118,24 @@ export function describeApiError(
 
 function general(message: string, canRetry: boolean): ErrorDescription {
   return { message, fieldErrors: {}, canRetry };
+}
+
+// Cada 409 según su reason (spec 003, D7). Sin reason, o con DUPLICATE en la carga, es el 409 de la
+// spec 002: el mismo texto y el enlace al documento existente.
+function describeConflict(error: ApiError, context: ErrorContext): ErrorDescription {
+  switch (error.reason) {
+    case 'IDENTICAL_TO_CURRENT':
+      return general(MESSAGES.identicalToCurrent, false);
+    case 'ARCHIVED':
+      return general(MESSAGES.archived, false);
+    case 'CONCURRENT_VERSION':
+      return general(MESSAGES.concurrentVersion, false);
+    default:
+      return {
+        ...general(context === 'version' ? MESSAGES.duplicateOther : MESSAGES.duplicate, false),
+        existingDocumentId: error.existingDocumentId,
+      };
+  }
 }
 
 // Cada texto de la API empieza con el nombre del campo ("title must…", "ownerId: …").

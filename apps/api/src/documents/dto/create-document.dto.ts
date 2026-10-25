@@ -17,8 +17,9 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
-// En multipart, un área sola llega como texto y varias como arreglo.
-const toUniqueArray = ({ value }: { value: unknown }) => {
+// En multipart, un área sola llega como texto y varias como arreglo. La usa también el cambio de
+// áreas (spec 003).
+export const toUniqueArray = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null) return value;
   return [...new Set(Array.isArray(value) ? value : [value])];
 };

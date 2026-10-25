@@ -4,8 +4,10 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -27,10 +29,18 @@ import type { DownloadUrl } from '../storage/file-storage';
 import {
   DocumentListResponse,
   DocumentQueryService,
+  VersionHistoryResponse,
 } from './document-query.service';
+import { DocumentLifecycleService } from './document-lifecycle.service';
 import { DocumentUploadService } from './document-upload.service';
+import { ChangeAreasDto } from './dto/change-areas.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
-import { DocumentResponse, DocumentSummary } from './dto/document.response';
+import { CreateVersionDto } from './dto/create-version.dto';
+import {
+  DocumentResponse,
+  DocumentSummary,
+  VersionHistoryItem,
+} from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
 import type { UploadedFileInput } from './file-inspector';
 
@@ -39,6 +49,16 @@ export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 // Clase DTO exclusiva para documentar en Swagger el cuerpo multipart/form-data
 class UploadDocumentBody extends CreateDocumentDto {
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'PDF, .txt o .md, hasta 10 MB',
+  })
+  file: unknown;
+}
+
+// Lo mismo para el cuerpo de la versión nueva (spec 003)
+class UploadVersionBody extends CreateVersionDto {
   @ApiProperty({
     type: 'string',
     format: 'binary',
@@ -62,6 +82,12 @@ class DocumentListBody implements DocumentListResponse {
   limit: number;
 }
 
+// Clase para documentar en Swagger el historial de versiones (spec 003)
+class VersionHistoryBody implements VersionHistoryResponse {
+  @ApiProperty({ type: [VersionHistoryItem] })
+  data: VersionHistoryItem[];
+}
+
 // Clase para documentar en Swagger la respuesta de enlaces temporales
 class DownloadUrlBody {
   @ApiProperty({ example: 'https://…' })
@@ -75,6 +101,11 @@ class DownloadUrlBody {
 const NOT_FOUND_DESCRIPTION =
   'El documento no existe o no es visible para el usuario (misma respuesta en los dos casos)';
 
+// Ciclo de vida (spec 003): respuestas comunes a las acciones sobre un documento existente
+const ADMIN_ONLY_DESCRIPTION =
+  'El rol no puede modificar documentos (solo ADMIN)';
+const ARCHIVED_DESCRIPTION = 'El documento está archivado (reason: "ARCHIVED")';
+
 @ApiTags('documents')
 @ApiBearerAuth()
 @Controller('documents')
@@ -83,6 +114,7 @@ export class DocumentsController {
   constructor(
     private readonly uploads: DocumentUploadService,
     private readonly queries: DocumentQueryService,
+    private readonly lifecycle: DocumentLifecycleService,
   ) {}
 
   // Ruta POST /documents: Carga de un nuevo documento (Solo ADMINs)
@@ -184,5 +216,159 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<DownloadUrl> {
     return this.queries.getDownloadUrl(user, id);
+  }
+
+  // Ruta PATCH /documents/:id/areas: Cambiar las áreas y, opcionalmente, el responsable (spec 003)
+  @Patch(':id/areas')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Documento con las áreas nuevas',
+    type: DocumentResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'id o datos inválidos, área inexistente o responsable sin acceso a las áreas nuevas',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({ status: 403, description: ADMIN_ONLY_DESCRIPTION })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({ status: 409, description: ARCHIVED_DESCRIPTION })
+  @ApiResponse({
+    status: 503,
+    description: 'La base no responde; no cambió nada',
+  })
+  changeAreas(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeAreasDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentResponse> {
+    return this.lifecycle.changeAreas(id, dto, user);
+  }
+
+  // Ruta POST /documents/:id/versions: Subir una versión nueva (spec 003). Mismos límites que la carga
+  @Post(':id/versions')
+  @Roles('ADMIN')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+      defParamCharset: 'utf8',
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: UploadVersionBody })
+  @ApiResponse({
+    status: 201,
+    description: 'Documento con la versión nueva como vigente',
+    type: DocumentResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'id inválido, falta el archivo o reviewDate mal formada o no posterior a hoy',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({ status: 403, description: ADMIN_ONLY_DESCRIPTION })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'reason: "ARCHIVED" (archivado), "IDENTICAL_TO_CURRENT" (igual a la vigente), "DUPLICATE" (igual a otro documento, con existingDocumentId) o "CONCURRENT_VERSION"',
+  })
+  @ApiResponse({ status: 413, description: 'El archivo pesa más de 10 MB' })
+  @ApiResponse({ status: 415, description: 'No es un PDF, .txt o .md real' })
+  @ApiResponse({
+    status: 503,
+    description:
+      'El almacenamiento, la base o la cola no responden; no se guardó nada',
+  })
+  addVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedFileInput | undefined,
+    @Body() dto: CreateVersionDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentResponse> {
+    return this.lifecycle.addVersion(id, file, dto, user);
+  }
+
+  // Ruta GET /documents/:id/versions: Historial de versiones (spec 003, R12). El guard corre antes
+  // que nada: otro rol recibe 403 aunque el documento no exista
+  @Get(':id/versions')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Versiones, de la más nueva a la más vieja',
+    type: VersionHistoryBody,
+  })
+  @ApiResponse({ status: 400, description: 'El id no es un UUID' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo el ADMIN ve el historial',
+  })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({ status: 503, description: 'La base no responde' })
+  listVersions(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<VersionHistoryResponse> {
+    return this.queries.listVersions(id);
+  }
+
+  // Ruta GET /documents/:id/versions/:versionId/download: Enlace de una versión (spec 003, R12)
+  @Get(':id/versions/:versionId/download')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Enlace temporal de descarga de esa versión (5 minutos)',
+    type: DownloadUrlBody,
+  })
+  @ApiResponse({ status: 400, description: 'Un id no es un UUID' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo el ADMIN descarga versiones anteriores',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'El documento no existe o la versión no es de ese documento',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el almacenamiento no responden',
+  })
+  getVersionDownloadUrl(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('versionId', ParseUUIDPipe) versionId: string,
+  ): Promise<DownloadUrl> {
+    return this.queries.getVersionDownloadUrl(id, versionId);
+  }
+
+  // Ruta POST /documents/:id/archive: Archivar un documento (spec 003, D5)
+  @Post(':id/archive')
+  @HttpCode(200)
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Documento archivado',
+    type: DocumentResponse,
+  })
+  @ApiResponse({ status: 400, description: 'El id no es un UUID' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({ status: 403, description: ADMIN_ONLY_DESCRIPTION })
+  @ApiResponse({ status: 404, description: 'El documento no existe' })
+  @ApiResponse({
+    status: 409,
+    description: 'El documento ya está archivado (reason: "ARCHIVED")',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'La base no responde; no cambió nada',
+  })
+  archive(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentResponse> {
+    return this.lifecycle.archive(id, user);
   }
 }

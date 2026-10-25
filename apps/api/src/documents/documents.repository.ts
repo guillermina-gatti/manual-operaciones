@@ -16,6 +16,16 @@ export class RepositoryUnavailableError extends Error {
   }
 }
 
+// Spec 003, R8: otra versión nueva se confirmó al mismo tiempo y la base rechazó una segunda CURRENT
+// (índice document_versions_one_current_idx) o un número de versión repetido. El servicio lo
+// convierte en 409 CONCURRENT_VERSION (plan 003, secciones 4 y 5).
+export class ConcurrentVersionError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'ConcurrentVersionError';
+  }
+}
+
 declare const transactionBrand: unique symbol;
 
 // 2. Transacción opaca (D10): Los servicios solo la reciben y la pasan sin poder manipularla.
@@ -67,6 +77,9 @@ export interface DocumentRecord {
   reviewDate: Date;
   createdById: string;
   createdAt: Date;
+  // Cuándo se archivó (spec 003, R10). El repositorio real lo completa siempre (null si está activo);
+  // es opcional para los registros armados a mano en los tests.
+  archivedAt?: Date | null;
   currentVersion: DocumentVersionRecord;
 }
 
@@ -74,6 +87,15 @@ export interface DocumentRecord {
 export interface DocumentPage {
   data: DocumentRecord[];
   total: number;
+}
+
+// Spec 003: los datos de una versión nueva. Son los mismos que los de la primera versión de la carga;
+// el número, el estado CURRENT y el procesamiento PENDING los pone el repositorio (R7).
+export type NewVersion = NewDocument['version'];
+
+// Spec 003, R12: una fila del historial. Además de lo de una versión, quién la subió.
+export interface VersionHistoryRecord extends DocumentVersionRecord {
+  uploadedById: string;
 }
 
 // 4. Puerto (Contrato abstracto): Define los métodos obligatorios que debe tener
@@ -104,4 +126,48 @@ export abstract class DocumentsRepository {
 
   // Busca un documento por ID junto con sus áreas y su versión vigente (o null si no existe).
   abstract findByIdWithAreas(id: string): Promise<DocumentRecord | null>;
+
+  // ── Ciclo de vida (spec 003). Las escrituras reciben la transacción opaca, como createWithFirstVersion.
+
+  // Bloquea la fila del documento hasta el fin de la transacción (SELECT … FOR UPDATE) y lo devuelve
+  // con sus áreas y su versión vigente, o null si no existe (plan 003, 3.3).
+  abstract lockForUpdate(
+    tx: RepositoryTransaction,
+    id: string,
+  ): Promise<DocumentRecord | null>;
+
+  // Reemplaza las áreas, cambia el responsable si viene y copia las áreas nuevas a todos los
+  // fragmentos del documento, de todas sus versiones (R4, R5).
+  abstract replaceAreas(
+    tx: RepositoryTransaction,
+    id: string,
+    areaIds: string[],
+    ownerId?: string,
+  ): Promise<DocumentRecord>;
+
+  // Pasa la versión vigente a REPLACED y desactiva sus fragmentos, crea la nueva con el número
+  // siguiente en CURRENT y PENDING, y cambia la fecha de revisión si viene (R7, R7b).
+  // Lanza ConcurrentVersionError si la base rechaza una segunda CURRENT (R8).
+  abstract addVersion(
+    tx: RepositoryTransaction,
+    id: string,
+    version: NewVersion,
+    reviewDate?: Date,
+  ): Promise<DocumentRecord>;
+
+  // Pasa el documento a ARCHIVED con su fecha y desactiva todos sus fragmentos (R10).
+  abstract archive(
+    tx: RepositoryTransaction,
+    id: string,
+    at: Date,
+  ): Promise<DocumentRecord>;
+
+  // El historial de versiones del documento, de la más nueva a la más vieja (R12).
+  abstract listVersions(documentId: string): Promise<VersionHistoryRecord[]>;
+
+  // Una versión, solo si pertenece a ese documento; null si no (R2, R12).
+  abstract findVersion(
+    documentId: string,
+    versionId: string,
+  ): Promise<DocumentVersionRecord | null>;
 }

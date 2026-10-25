@@ -48,6 +48,7 @@ describe('toDocumentResponse', () => {
       reviewDate: '2027-03-01',
       createdById: record.createdById,
       createdAt: '2026-10-22T12:00:00.000Z',
+      archivedAt: null,
       currentVersion: {
         id: record.currentVersion.id,
         versionNumber: 1,
@@ -79,6 +80,25 @@ describe('toDocumentResponse', () => {
 
     expect(response.areaIds).not.toBe(record.areaIds);
   });
+
+  // Spec 003, plan 1.6: el ADMIN ve desde cuándo está archivado.
+  it('un documento archivado devuelve archivedAt como texto ISO', () => {
+    const response = toDocumentResponse({
+      ...record,
+      status: 'ARCHIVED',
+      archivedAt: new Date('2026-10-24T13:30:00.000Z'),
+    });
+
+    expect(response.status).toBe('ARCHIVED');
+    expect(response.archivedAt).toBe('2026-10-24T13:30:00.000Z');
+  });
+
+  it('un registro sin archivedAt (activo) devuelve null', () => {
+    expect(toDocumentResponse(record).archivedAt).toBeNull();
+    expect(
+      toDocumentResponse({ ...record, archivedAt: null }).archivedAt,
+    ).toBeNull();
+  });
 });
 
 describe('toDocumentSummary', () => {
@@ -103,5 +123,15 @@ describe('toDocumentSummary', () => {
 
     expect(json).not.toMatch(/storageKey|checksum|documents\/|ba7816bf/);
     expect(json).not.toMatch(/createdBy"|email|bucket/);
+  });
+
+  it('también devuelve archivedAt', () => {
+    const summary = toDocumentSummary({
+      ...record,
+      status: 'ARCHIVED',
+      archivedAt: new Date('2026-10-24T13:30:00.000Z'),
+    });
+
+    expect(summary.archivedAt).toBe('2026-10-24T13:30:00.000Z');
   });
 });

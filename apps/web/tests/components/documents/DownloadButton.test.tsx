@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { DownloadButton } from '@/components/documents/DownloadButton';
 import { ApiError } from '@/lib/api';
 
@@ -170,4 +170,65 @@ describe('errores, debajo del botón', () => {
       expect(openUrl).not.toHaveBeenCalled();
     },
   );
+});
+
+// Spec 003 (R12; plan 003, 6.5): con versionId descarga esa versión. Se usa la llamada real de
+// lib/api con fetch simulado, para no cambiar el vi.mock de arriba.
+describe('descarga de una versión (spec 003)', () => {
+  const V2 = '55555555-5555-4555-8555-555555555555';
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(link(7)), { status: 200 })),
+    );
+  });
+
+  afterEach(() => {
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  test('pide /versions/:versionId/download en cada clic, nunca la vigente', async () => {
+    const user = userEvent.setup();
+    const openUrl = vi.fn();
+    render(<DownloadButton documentId={ID} versionId={V2} openUrl={openUrl} />);
+
+    await user.click(button());
+    await waitFor(() => expect(openUrl).toHaveBeenCalledTimes(1));
+    await user.click(button());
+    await waitFor(() => expect(openUrl).toHaveBeenCalledTimes(2));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [path] of fetchMock.mock.calls) {
+      expect(path).toBe(`/api/documents/${ID}/versions/${V2}/download`);
+    }
+    expect(mocks.getDownloadUrl).not.toHaveBeenCalled();
+    expect(openUrl).toHaveBeenCalledWith(link(7).url);
+  });
+
+  test('con label, el botón se nombra así (varias descargas en el historial)', () => {
+    render(
+      <DownloadButton documentId={ID} versionId={V2} label="Descargar la versión 2" openUrl={vi.fn()} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Descargar la versión 2' })).toBeInTheDocument();
+  });
+
+  test('un 404 (versión de otro documento) muestra "No se encontró el documento."', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ statusCode: 404, message: 'No se encontró el documento' }), {
+          status: 404,
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<DownloadButton documentId={ID} versionId={V2} openUrl={vi.fn()} />);
+
+    await user.click(button());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se encontró el documento.');
+  });
 });

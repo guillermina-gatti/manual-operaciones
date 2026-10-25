@@ -14,8 +14,6 @@ import { describeApiError, uploadDocument, useApiResource } from '@/lib/api';
 import type { UploadField } from '@/lib/api';
 import { areasDirectory } from '@/lib/directory';
 import type { Area } from '@/lib/directory';
-import { COMPANY_TIME_ZONE } from '@/lib/documents/format';
-import { tomorrowIn } from '@/lib/documents/review-date';
 import { DESCRIPTION_MAX } from '@/lib/documents/upload-rules';
 import { validateUpload } from '@/lib/documents/validate-upload';
 import type { UploadErrors, UploadFormValues } from '@/lib/documents/validate-upload';
@@ -23,6 +21,7 @@ import { AreasField } from './AreasField';
 import { FileField } from './FileField';
 import { FormErrorBanner } from './FormErrorBanner';
 import { OwnerField } from './OwnerField';
+import { ReviewDateField } from './ReviewDateField';
 
 const EMPTY: UploadFormValues = {
   file: null,
@@ -88,8 +87,6 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
   // Corta un segundo envío que llegue antes de que React dibuje el botón deshabilitado (F5).
   const submittingRef = useRef(false);
   const [focusRequest, setFocusRequest] = useState(0);
-  // Mínimo del <input type="date">: mañana en Buenos Aires (F2, D1 del plan 001).
-  const [minReviewDate] = useState(() => tomorrowIn(COMPANY_TIME_ZONE, new Date()));
 
   // Después de un envío con errores, el foco va al primer campo marcado.
   useEffect(() => {
@@ -208,22 +205,11 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
         }}
       />
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={field('review-date')} className="font-medium">
-          Fecha de revisión
-        </label>
-        <input
-          id={field('review-date')}
-          type="date"
-          min={minReviewDate}
-          className={`${INPUT} sm:max-w-xs`}
-          value={values.reviewDate}
-          onChange={(event) => update('reviewDate', event.target.value)}
-          aria-invalid={errors.reviewDate ? true : undefined}
-          aria-describedby={errors.reviewDate ? field('review-date-error') : undefined}
-        />
-        <FieldError id={field('review-date-error')} message={errors.reviewDate} />
-      </div>
+      <ReviewDateField
+        value={values.reviewDate}
+        error={errors.reviewDate}
+        onChange={(reviewDate) => update('reviewDate', reviewDate)}
+      />
 
       {submitError && (
         <FormErrorBanner

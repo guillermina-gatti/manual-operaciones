@@ -142,3 +142,102 @@ describe('uploadDocument', () => {
     );
   });
 });
+
+// Spec 003: las llamadas del ciclo de vida (plan 003, 6.6).
+describe('ciclo de vida (spec 003)', () => {
+  const VERSION_ID = '33333333-3333-4333-8333-333333333333';
+  const AREA = '0a000000-0000-4000-8000-000000000002';
+  const OWNER = '0b000000-0000-4000-8000-000000000004';
+
+  // Un archivado, con la forma del backend: archivedAt en texto ISO.
+  const ARCHIVED: DocumentResponse = {
+    ...DOCUMENT,
+    status: 'ARCHIVED',
+    archivedAt: '2026-10-23T18:00:00.000Z',
+  };
+
+  test('changeAreas hace PATCH a /areas con JSON, sin ownerId si no vino', async () => {
+    const { api, request } = fakeClient();
+
+    await api.changeAreas(ID, { areaIds: [AREA] });
+
+    const [path, init] = request.mock.calls[0];
+    expect(path).toBe(`/api/documents/${ID}/areas`);
+    expect(init.method).toBe('PATCH');
+    expect(new Headers(init.headers).get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({ areaIds: [AREA] });
+  });
+
+  test('changeAreas manda ownerId cuando viene', async () => {
+    const { api, request } = fakeClient();
+
+    await api.changeAreas(ID, { areaIds: [AREA], ownerId: OWNER });
+
+    expect(JSON.parse(request.mock.calls[0][1].body as string)).toEqual({
+      areaIds: [AREA],
+      ownerId: OWNER,
+    });
+  });
+
+  test('uploadVersion hace POST multipart a /versions con el archivo y sin reviewDate si está vacía', async () => {
+    const { api, request } = fakeClient();
+    const file = new File(['%PDF-1.7'], 'manual v2.pdf', { type: 'application/pdf' });
+
+    await api.uploadVersion(ID, { file, reviewDate: '' });
+
+    const [path, init] = request.mock.calls[0];
+    const form = init.body as FormData;
+    expect(path).toBe(`/api/documents/${ID}/versions`);
+    expect(init.method).toBe('POST');
+    expect(form.get('file')).toBe(file);
+    expect([...form.keys()]).toEqual(['file']);
+  });
+
+  test('uploadVersion manda reviewDate cuando tiene valor', async () => {
+    const { api, request } = fakeClient();
+    const file = new File(['%PDF-1.7'], 'manual v2.pdf', { type: 'application/pdf' });
+
+    await api.uploadVersion(ID, { file, reviewDate: '2027-05-01' });
+
+    expect((request.mock.calls[0][1].body as FormData).get('reviewDate')).toBe('2027-05-01');
+  });
+
+  test('archiveDocument hace POST a /archive y devuelve el documento archivado', async () => {
+    const { api, request } = fakeClient(ARCHIVED);
+
+    await expect(api.archiveDocument(ID)).resolves.toEqual(ARCHIVED);
+    expect(request).toHaveBeenCalledWith(`/api/documents/${ID}/archive`, {
+      method: 'POST',
+      signal: undefined,
+    });
+  });
+
+  test('listVersions pide /versions', async () => {
+    const { api, request } = fakeClient({ data: [] });
+
+    await api.listVersions(ID);
+
+    expect(request).toHaveBeenCalledWith(`/api/documents/${ID}/versions`, { signal: undefined });
+  });
+
+  test('getVersionDownloadUrl pide /versions/:versionId/download', async () => {
+    const { api, request } = fakeClient({ url: 'https://…', expiresAt: '2026-10-23T15:05:00.000Z' });
+
+    await api.getVersionDownloadUrl(ID, VERSION_ID);
+
+    expect(request).toHaveBeenCalledWith(
+      `/api/documents/${ID}/versions/${VERSION_ID}/download`,
+      { signal: undefined },
+    );
+  });
+
+  test('los dos ids se codifican', async () => {
+    const { api, request } = fakeClient();
+
+    await api.getVersionDownloadUrl('../x', 'a/b?c');
+    await api.changeAreas('../x', { areaIds: [AREA] });
+
+    expect(request.mock.calls[0][0]).toBe('/api/documents/..%2Fx/versions/a%2Fb%3Fc/download');
+    expect(request.mock.calls[1][0]).toBe('/api/documents/..%2Fx/areas');
+  });
+});

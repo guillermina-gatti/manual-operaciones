@@ -38,6 +38,9 @@ interface DocumentFields {
   reviewDate: string;
   createdById: string;
   createdAt: string;
+  // Cuándo se archivó, o null si está activo (spec 003, plan 1.6). La API lo manda siempre; es
+  // opcional para los datos de prueba anteriores a la spec 003.
+  archivedAt?: string | null;
 }
 
 // Detalle y respuesta 201 de la carga.
@@ -70,6 +73,27 @@ export interface UploadDocumentValues {
   ownerId: string;
   reviewDate: string;
   description: string;
+}
+
+// Spec 003: una fila del historial (plan 003, 1.4), de la más nueva a la más vieja.
+export interface VersionHistoryItem extends DocumentVersionResponse {
+  uploadedById: string;
+}
+
+export interface VersionHistoryResponse {
+  data: VersionHistoryItem[];
+}
+
+// Cambio de áreas: ownerId solo si el ADMIN eligió otro responsable (plan 003, 6.2).
+export interface ChangeAreasValues {
+  areaIds: string[];
+  ownerId?: string;
+}
+
+// Versión nueva: reviewDate vacía = se conserva la fecha actual (R7b).
+export interface UploadVersionValues {
+  file: File;
+  reviewDate: string;
 }
 
 // Documentos por página del listado (F7).
@@ -111,6 +135,51 @@ export function createDocumentsApi(client: ApiClient) {
         body: form,
         signal,
       });
+    },
+
+    // ── Ciclo de vida (spec 003, plan 6.6). Solo el ADMIN; la API responde 403 a los demás.
+
+    changeAreas(id: string, values: ChangeAreasValues, signal?: AbortSignal) {
+      const body: ChangeAreasValues = { areaIds: values.areaIds };
+      if (values.ownerId !== undefined) body.ownerId = values.ownerId;
+
+      return client.request<DocumentResponse>(`${documentPath(id)}/areas`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      });
+    },
+
+    uploadVersion(id: string, values: UploadVersionValues, signal?: AbortSignal) {
+      const form = new FormData();
+      form.append('file', values.file);
+      if (values.reviewDate !== '') form.append('reviewDate', values.reviewDate);
+
+      return client.request<DocumentResponse>(`${documentPath(id)}/versions`, {
+        method: 'POST',
+        body: form,
+        signal,
+      });
+    },
+
+    archiveDocument(id: string, signal?: AbortSignal) {
+      return client.request<DocumentResponse>(`${documentPath(id)}/archive`, {
+        method: 'POST',
+        signal,
+      });
+    },
+
+    listVersions(id: string, signal?: AbortSignal) {
+      return client.request<VersionHistoryResponse>(`${documentPath(id)}/versions`, { signal });
+    },
+
+    // Como la descarga de la vigente: se pide en cada clic (F8 del plan 002).
+    getVersionDownloadUrl(id: string, versionId: string, signal?: AbortSignal) {
+      return client.request<DownloadUrl>(
+        `${documentPath(id)}/versions/${encodeURIComponent(versionId)}/download`,
+        { signal },
+      );
     },
   };
 }

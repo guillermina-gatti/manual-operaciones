@@ -6,6 +6,7 @@ import { FakeProcessingQueue } from './adapters/fake-processing-queue';
 import { LoggerAuditLog } from './adapters/logger-audit-log';
 import { PrismaAreasDirectory } from './adapters/prisma-areas-directory';
 import { PrismaUsersDirectory } from './adapters/prisma-users-directory';
+import { DocumentLifecycleService } from './document-lifecycle.service';
 import { DocumentQueryService } from './document-query.service';
 import { DocumentUploadService } from './document-upload.service';
 import { DocumentsController } from './documents.controller';
@@ -24,6 +25,7 @@ import { PrismaDocumentsRepository } from './prisma-documents.repository';
   providers: [
     DocumentUploadService,
     DocumentQueryService,
+    DocumentLifecycleService,
     { provide: DocumentsRepository, useClass: PrismaDocumentsRepository }, // T18 (plan 5.6)
     { provide: ProcessingQueue, useClass: FakeProcessingQueue }, // hasta ProcessingService de Guille (plan 5.2)
     { provide: AreasDirectory, useClass: PrismaAreasDirectory },

@@ -9,6 +9,7 @@ import {
 import type {
   DocumentRecord,
   DocumentVersionRecord,
+  VersionHistoryRecord,
 } from '../documents.repository';
 
 // Forma de la respuesta del plan 3.1. storageKey y checksum son internos y no forman parte de ella.
@@ -56,6 +57,12 @@ export class DocumentVersionSummary {
   processingStatus: ProcessingStatus;
 }
 
+// Una fila del historial (spec 003, plan 1.4): la versión y quién la subió.
+export class VersionHistoryItem extends DocumentVersionResponse {
+  @ApiProperty({ format: 'uuid' })
+  uploadedById: string;
+}
+
 class DocumentFields {
   @ApiProperty({ format: 'uuid' })
   id: string;
@@ -83,6 +90,10 @@ class DocumentFields {
 
   @ApiProperty({ format: 'date-time' })
   createdAt: string;
+
+  // Cuándo se archivó, o null si está activo (spec 003, plan 1.6).
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  archivedAt: string | null;
 }
 
 // Respuesta del 201 de la carga y del detalle (R7, plan 3.1 y 3.3).
@@ -114,6 +125,7 @@ function toDocumentFields(
     reviewDate: toDateOnly(record.reviewDate),
     createdById: record.createdById,
     createdAt: record.createdAt.toISOString(),
+    archivedAt: record.archivedAt ? record.archivedAt.toISOString() : null,
   };
 }
 
@@ -148,6 +160,15 @@ export function toDocumentResponse(record: DocumentRecord): DocumentResponse {
   return {
     ...toDocumentFields(record),
     currentVersion: toVersionResponse(record.currentVersion),
+  };
+}
+
+export function toVersionHistoryItem(
+  version: VersionHistoryRecord,
+): VersionHistoryItem {
+  return {
+    ...toVersionResponse(version),
+    uploadedById: version.uploadedById,
   };
 }
 

@@ -96,6 +96,7 @@ describe('POST /api/documents (integración)', () => {
       reviewDate: expect.any(String),
       createdById: admin.id,
       createdAt: expect.any(String),
+      archivedAt: null,
       currentVersion: {
         id: expect.any(String),
         versionNumber: 1,
@@ -264,6 +265,25 @@ describe('POST /api/documents (integración)', () => {
       expect(await t.prisma.documentVersion.count()).toBe(1);
       expect(put).not.toHaveBeenCalled();
       expect(t.queue.enqueued).toEqual([]);
+    });
+
+    // Spec 003, D7: el 409 dice qué tipo de conflicto es, para que la web elija el mensaje.
+    it('el 409 de archivo duplicado trae reason DUPLICATE', async () => {
+      const content = pdfOfSize(4096);
+      const first = await uploadAsAdmin({ content }).expect(201);
+
+      const res = await uploadAsAdmin({
+        content,
+        fields: { title: 'Otro título' },
+      }).expect(409);
+
+      expect(res.body).toEqual({
+        statusCode: 409,
+        message: 'Ya hay un documento vigente con el mismo archivo',
+        error: 'Conflict',
+        reason: 'DUPLICATE',
+        existingDocumentId: (first.body as { id: string }).id,
+      });
     });
 
     it('el mismo archivo que un documento ARCHIVED se acepta: 201 (R8b)', async () => {
