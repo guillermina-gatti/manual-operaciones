@@ -2,6 +2,8 @@
 
 // Listado de documentos visibles para el usuario (F1, F7; plan 002, sección 1).
 // La API ya filtra por rol y áreas y ordena del más nuevo al más viejo: acá no se filtra ni se reordena.
+// Spec 004 (F1, F2, F3; plan 004, 5.2 y D11): arriba, la caja de búsqueda; con un ?q= válido, en vez
+// del listado se muestran los resultados. La búsqueda vive solo en la dirección.
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ScreenState } from '@/components/ui/ScreenState';
@@ -14,10 +16,13 @@ import {
 } from '@/lib/api';
 import { areasDirectory, usersDirectory } from '@/lib/directory';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
+import { parseSearchParam } from '@/lib/documents/search-rules';
 import { useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { SearchBox } from './SearchBox';
+import { SearchResults } from './SearchResults';
 
 // Enlace con forma de botón principal (mismo estilo que Button, 44 px de alto: F10).
 const LINK_BUTTON =
@@ -30,6 +35,41 @@ const LOADING = (
 );
 
 export function DocumentList() {
+  const { user, status } = useSession();
+  const searchParams = useSearchParams();
+  const query = searchParams.get('q');
+  const search = parseSearchParam(query);
+  const page = parsePageParam(searchParams.get('pagina'));
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* key: al ir atrás o adelante, la caja vuelve a arrancar con el ?q= de la dirección. */}
+      <SearchBox key={query ?? ''} query={query} />
+      {search.kind === 'valid' && status === 'ready' && user ? (
+        <>
+          {user.role === 'ADMIN' && (
+            <div className="flex justify-end">
+              <Link href="/documentos/nuevo" className={LINK_BUTTON}>
+                Cargar documento
+              </Link>
+            </div>
+          )}
+          <SearchResults
+            query={search.text}
+            page={page}
+            userId={user.id}
+            isAdmin={user.role === 'ADMIN'}
+          />
+        </>
+      ) : (
+        // Sin búsqueda, o con un ?q= inválido (F2: la caja avisa y no se busca), el listado de siempre.
+        <DocumentListing />
+      )}
+    </div>
+  );
+}
+
+function DocumentListing() {
   const { user, status } = useSession();
   const page = parsePageParam(useSearchParams().get('pagina'));
   const isAdmin = user?.role === 'ADMIN';

@@ -315,6 +315,7 @@ Convenciones:
   - al cambiar `q` en la URL, la caja muestra el valor nuevo.
 - **Depende de:** T13, T14
 - **Commit:** `feat(web): buscar desde el listado de documentos`
+- **Estado:** hecha. Se agregó `useRouter` al mock de `DocumentList.test.tsx`; sin cambios en las aserciones (sus 19 tests pasan). Hacía falta porque `SearchBox`, que ahora está dentro de `DocumentList`, usa `useRouter`, y el mock de la spec 002 solo exportaba `useSearchParams`. Decidido con el usuario el 25/10/2026.
 
 ## Tests en el navegador (Playwright)
 

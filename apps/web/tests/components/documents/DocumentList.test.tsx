@@ -31,6 +31,7 @@ vi.mock('@/lib/directory', () => ({
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => mocks.searchParams,
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
