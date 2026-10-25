@@ -1,7 +1,11 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { ApiClient } from '@/lib/api';
 import { createDocumentsApi, PAGE_SIZE } from '@/lib/api/documents';
-import type { DocumentResponse, UploadDocumentValues } from '@/lib/api/documents';
+import type {
+  DocumentResponse,
+  DocumentSearchResponse,
+  UploadDocumentValues,
+} from '@/lib/api/documents';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 
@@ -239,5 +243,48 @@ describe('ciclo de vida (spec 003)', () => {
 
     expect(request.mock.calls[0][0]).toBe('/api/documents/..%2Fx/versions/a%2Fb%3Fc/download');
     expect(request.mock.calls[1][0]).toBe('/api/documents/..%2Fx/areas');
+  });
+});
+
+// Spec 004 (T10; plan 004, 1.2): la búsqueda.
+describe('searchDocuments', () => {
+  test('codifica el texto y pide la página con 20 resultados', async () => {
+    const { api, request } = fakeClient({ data: [], total: 0, page: 2, limit: 20 });
+
+    await api.searchDocuments('cierre & caja', 2);
+
+    expect(request).toHaveBeenCalledWith(
+      '/api/documents/search?q=cierre%20%26%20caja&page=2&limit=20',
+      { signal: undefined },
+    );
+  });
+
+  test('pasa la señal para cancelar el pedido', async () => {
+    const { api, request } = fakeClient({ data: [], total: 0, page: 1, limit: 20 });
+    const signal = new AbortController().signal;
+
+    await api.searchDocuments('caja', 1, signal);
+
+    expect(request).toHaveBeenCalledWith('/api/documents/search?q=caja&page=1&limit=20', {
+      signal,
+    });
+  });
+
+  test('devuelve los resultados con su fragmento', async () => {
+    const response: DocumentSearchResponse = {
+      data: [
+        {
+          ...DOCUMENT,
+          archivedAt: null,
+          fragment: { parts: [{ text: 'caja', match: true }], pageNumber: 4 },
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+    };
+    const { api } = fakeClient(response);
+
+    await expect(api.searchDocuments('caja', 1)).resolves.toEqual(response);
   });
 });

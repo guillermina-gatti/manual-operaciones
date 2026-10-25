@@ -96,7 +96,27 @@ export interface UploadVersionValues {
   reviewDate: string;
 }
 
-// Documentos por página del listado (F7).
+// Spec 004 (plan 004, 1.2): el fragmento de un resultado. Texto plano; `match` marca las palabras
+// encontradas, que la web resalta sin HTML (R11).
+export interface SearchFragment {
+  parts: { text: string; match: boolean }[];
+  pageNumber: number | null;
+}
+
+// Cada resultado: lo mismo que el listado, más el fragmento (null si coincidió solo el título o la
+// descripción, R8).
+export interface DocumentSearchResult extends DocumentSummary {
+  fragment: SearchFragment | null;
+}
+
+export interface DocumentSearchResponse {
+  data: DocumentSearchResult[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// Documentos por página del listado (F7) y de la búsqueda (R10).
 export const PAGE_SIZE = 20;
 
 const documentPath = (id: string) => `/api/documents/${encodeURIComponent(id)}`;
@@ -106,6 +126,14 @@ export function createDocumentsApi(client: ApiClient) {
     listDocuments(page: number, signal?: AbortSignal) {
       return client.request<DocumentListResponse>(
         `/api/documents?page=${page}&limit=${PAGE_SIZE}`,
+        { signal },
+      );
+    },
+
+    // Spec 004: el texto va codificado; la API lo valida y lo trata como texto (R4, E10).
+    searchDocuments(q: string, page: number, signal?: AbortSignal) {
+      return client.request<DocumentSearchResponse>(
+        `/api/documents/search?q=${encodeURIComponent(q)}&page=${page}&limit=${PAGE_SIZE}`,
         { signal },
       );
     },

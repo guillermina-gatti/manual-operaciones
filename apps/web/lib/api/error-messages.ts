@@ -3,6 +3,7 @@
 import { ApiError } from './api-error';
 
 // 'areas', 'version' y 'archive': las acciones del ciclo de vida (spec 003, plan 6.2 a 6.4).
+// 'search': la búsqueda (spec 004, plan 5.3).
 export type ErrorContext =
   | 'list'
   | 'detail'
@@ -10,7 +11,8 @@ export type ErrorContext =
   | 'upload'
   | 'areas'
   | 'version'
-  | 'archive';
+  | 'archive'
+  | 'search';
 
 export type UploadField =
   | 'file'
@@ -51,6 +53,8 @@ export const MESSAGES = {
   archived: 'El documento fue archivado. Ya no se puede modificar.',
   concurrentVersion:
     'Otra persona subió una versión al mismo tiempo. Recargá el documento y volvé a intentar.',
+  // Spec 004 (plan 5.3). Solo aparecería si la validación de la web y la de la API no coincidieran.
+  invalidSearch: 'Revisá el texto de búsqueda: tiene que tener entre 3 y 100 caracteres.',
 } as const;
 
 const LIFECYCLE_CONTEXTS: ErrorContext[] = ['areas', 'version', 'archive'];
@@ -89,6 +93,7 @@ export function describeApiError(
       if (context === 'upload' || context === 'areas' || context === 'version') {
         return describeUploadBadRequest(error.messages);
       }
+      if (context === 'search') return general(MESSAGES.invalidSearch, false);
       return general(MESSAGES.unexpected, true);
     case 401:
       return general(MESSAGES.sessionInvalid, false);

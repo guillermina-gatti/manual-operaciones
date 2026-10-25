@@ -226,6 +226,7 @@ Convenciones:
   - los contextos anteriores no cambian.
 - **Depende de:** T08 (contrato de la API)
 - **Commit:** `feat(web): agregar la llamada de búsqueda a la API`
+- **Estado:** hecha.
 
 ### T11 · Paginación que conserva la búsqueda
 

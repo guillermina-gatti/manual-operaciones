@@ -302,3 +302,30 @@ describe('ciclo de vida (spec 003)', () => {
     },
   );
 });
+
+// Spec 004 (T10; plan 004, 5.3): la búsqueda.
+describe('búsqueda (spec 004)', () => {
+  test('400: el texto de búsqueda no cumple los límites', () => {
+    const description = describeApiError(
+      new ApiError(400, ['q must be longer than or equal to 3 characters']),
+      'search',
+    );
+
+    expect(description.message).toBe(
+      'Revisá el texto de búsqueda: tiene que tener entre 3 y 100 caracteres.',
+    );
+    expect(description.message).not.toContain('q must');
+    expect(description.canRetry).toBe(false);
+  });
+
+  test.each([
+    [503, 'El servicio no está disponible. Probá de nuevo en unos minutos.', true],
+    [0, 'No pudimos conectarnos con el servidor. Revisá tu conexión y probá de nuevo.', true],
+    [500, 'Ocurrió un error inesperado. Probá de nuevo.', true],
+    [401, 'Tu sesión no es válida. Volvé a ingresar.', false],
+  ])('%i: el mensaje de siempre', (status, message, canRetry) => {
+    const description = describeApiError(new ApiError(status), 'search');
+
+    expect(description).toMatchObject({ message, canRetry });
+  });
+});

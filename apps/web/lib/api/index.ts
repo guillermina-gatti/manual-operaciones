@@ -9,6 +9,7 @@ export const apiClient = createApiClient(getAuthHeaders);
 // Las llamadas a /api/documents, con ese cliente.
 export const {
   listDocuments,
+  searchDocuments,
   getDocument,
   getDownloadUrl,
   uploadDocument,
@@ -23,6 +24,8 @@ export type {
   ChangeAreasValues,
   DocumentListResponse,
   DocumentResponse,
+  DocumentSearchResponse,
+  DocumentSearchResult,
   DocumentStatus,
   DocumentSummary,
   DocumentVersionResponse,
@@ -30,6 +33,7 @@ export type {
   DocumentVersionSummary,
   DownloadUrl,
   ProcessingStatus,
+  SearchFragment,
   UploadDocumentValues,
   UploadVersionValues,
   VersionHistoryItem,
