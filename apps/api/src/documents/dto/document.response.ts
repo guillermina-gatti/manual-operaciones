@@ -167,8 +167,15 @@ export function toVersionHistoryItem(
   version: VersionHistoryRecord,
 ): VersionHistoryItem {
   return {
-    ...toVersionResponse(version),
+    id: version.id,
+    versionNumber: version.versionNumber,
+    status: version.status,
+    originalFileName: version.originalFileName,
+    mimeType: version.mimeType,
+    sizeBytes: version.sizeBytes,
+    processingStatus: version.processingStatus,
     uploadedById: version.uploadedById,
+    createdAt: version.createdAt.toISOString(),
   };
 }
 
