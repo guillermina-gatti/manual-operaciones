@@ -5,6 +5,8 @@ import {
   documentSummary,
   listResponse,
   mockApi,
+  searchResponse,
+  searchResult,
   versionHistory,
 } from './support/mock-api';
 import { loginAs } from './support/session';
@@ -43,5 +45,27 @@ test('con versions simulado, la ADMIN abre el historial en el detalle y ve las v
   await expect(rows.first()).toContainText('Versión 2');
   await expect(rows.first()).toContainText('Vigente');
   await expect(rows.last()).toContainText('Reemplazada');
+  expect(api.unhandled).toEqual([]);
+});
+
+// Spec 004 (T16): la API simulada también atiende la búsqueda, antes que el detalle (/api/documents/:id).
+test('con search simulado, el EMPLOYEE busca "caja" y ve un resultado', async ({ page }) => {
+  await loginAs(page, 'empleadoVentas');
+  const result = searchResult({ title: 'Manual de caja' }, [
+    { text: 'el ', match: false },
+    { text: 'caja', match: true },
+  ]);
+  const api = await mockApi(page, {
+    list: () => ({ status: 200, body: listResponse([]) }),
+    search: () => ({ status: 200, body: searchResponse([result]) }),
+  });
+
+  await page.goto('/documentos');
+  await page.getByRole('searchbox', { name: 'Buscar documentos' }).fill('caja');
+  await page.getByRole('button', { name: 'Buscar' }).click();
+
+  await expect(page).toHaveURL(/\/documentos\?q=caja$/);
+  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(page.getByRole('article').locator('mark')).toHaveText('caja');
   expect(api.unhandled).toEqual([]);
 });

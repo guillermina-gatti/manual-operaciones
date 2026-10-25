@@ -329,6 +329,7 @@ Convenciones:
   - `pnpm --filter web test:e2e` sigue pasando completo.
 - **Depende de:** T15
 - **Commit:** `test(web): simular la API de búsqueda`
+- **Estado:** hecha. Suma también `searchResult(overrides, parts?, pageNumber?)` para armar cada resultado.
 
 ### T17 · Escenarios de búsqueda en el navegador
 

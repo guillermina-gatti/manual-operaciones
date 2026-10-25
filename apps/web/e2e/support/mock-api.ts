@@ -4,8 +4,11 @@ import type { Page } from '@playwright/test';
 import type {
   DocumentListResponse,
   DocumentResponse,
+  DocumentSearchResponse,
+  DocumentSearchResult,
   DocumentSummary,
   DownloadUrl,
+  SearchFragment,
   VersionHistoryItem,
   VersionHistoryResponse,
 } from '../../lib/api';
@@ -43,6 +46,8 @@ export interface ApiHandlers {
   archive?: Handler; // POST /api/documents/:id/archive
   versions?: Handler; // GET /api/documents/:id/versions
   versionDownload?: Handler; // GET /api/documents/:id/versions/:versionId/download
+  // Spec 004 (T16): la búsqueda.
+  search?: Handler; // GET /api/documents/search
 }
 
 export interface MockedApi {
@@ -56,6 +61,8 @@ const ID = '([^/]+)';
 const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
   { name: 'list', method: 'GET', path: /^\/api\/documents$/ },
   { name: 'upload', method: 'POST', path: /^\/api\/documents$/ },
+  // Antes que el detalle: /api/documents/search también coincide con /api/documents/:id.
+  { name: 'search', method: 'GET', path: /^\/api\/documents\/search$/ },
   { name: 'download', method: 'GET', path: new RegExp(`^/api/documents/${ID}/download$`) },
   { name: 'detail', method: 'GET', path: new RegExp(`^/api/documents/${ID}$`) },
   { name: 'changeAreas', method: 'PATCH', path: new RegExp(`^/api/documents/${ID}/areas$`) },
@@ -192,6 +199,27 @@ export function versionHistory(document: DocumentResponse, count = 3): VersionHi
     });
   }
   return { data };
+}
+
+// Spec 004: un resultado de búsqueda; sin `parts`, la coincidencia es solo en el título (sin fragmento).
+export function searchResult(
+  overrides: Partial<DocumentResponse> = {},
+  parts?: SearchFragment['parts'],
+  pageNumber: number | null = null,
+): DocumentSearchResult {
+  return {
+    ...documentSummary(overrides),
+    archivedAt: null,
+    fragment: parts ? { parts, pageNumber } : null,
+  };
+}
+
+export function searchResponse(
+  data: DocumentSearchResult[],
+  total = data.length,
+  page = 1,
+): DocumentSearchResponse {
+  return { data, total, page, limit: 20 };
 }
 
 export function downloadUrl(url: string): DownloadUrl {
