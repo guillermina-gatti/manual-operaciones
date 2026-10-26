@@ -1,3 +1,4 @@
+/* Directorio de usuarios basado en Prisma*/
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';

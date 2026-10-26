@@ -1,3 +1,4 @@
+/* Manejador y traductor de excepciones HTTP*/
 import {
   HttpException,
   InternalServerErrorException,

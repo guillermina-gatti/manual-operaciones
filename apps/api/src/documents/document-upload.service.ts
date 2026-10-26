@@ -1,3 +1,4 @@
+/*Servicio de carga de documentos*/
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { AuthUser } from '../common/auth';

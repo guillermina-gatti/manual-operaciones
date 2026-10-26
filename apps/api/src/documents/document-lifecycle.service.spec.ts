@@ -1,3 +1,4 @@
+/* Pruebas unitarias para verificar el ciclo de vida de los documentos (cambio de áreas, versiones y archivado) */
 import {
   BadRequestException,
   ConflictException,

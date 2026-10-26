@@ -1,3 +1,4 @@
+/*Datos de prueba y fixtures estáticos de usuarios y áreas */
 import type { DirectoryUser } from '../ports/users-directory';
 
 // UUID fijos, escritos a mano, para que los tests y el desarrollo den siempre lo mismo.

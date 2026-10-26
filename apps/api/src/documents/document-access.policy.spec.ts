@@ -5,48 +5,44 @@ import {
   searchScope,
 } from './document-access.policy';
 
+// Constantes de prueba para simular áreas de la empresa
 const VENTAS = 'area-ventas';
 const OPERACIONES = 'area-operaciones';
 
+// Usuarios simulados con diferentes roles y áreas asignadas para las pruebas
 const admin = { role: 'ADMIN' as const, areaIds: [] };
 const empleadoDeVentas = { role: 'EMPLOYEE' as const, areaIds: [VENTAS] };
 const empleadoSinAreas = { role: 'EMPLOYEE' as const, areaIds: [] };
 
+// Pruebas para la función canView (¿Quién puede ver qué documento?)
 describe('canView', () => {
   it('un ADMIN ve un documento ARCHIVED sin áreas en común', () => {
     const document = { status: 'ARCHIVED' as const, areaIds: [OPERACIONES] };
-
     expect(canView(admin, document)).toBe(true);
   });
 
   it('un EMPLOYEE de Ventas ve un ACTIVE de Ventas y Operaciones', () => {
-    const document = {
-      status: 'ACTIVE' as const,
-      areaIds: [VENTAS, OPERACIONES],
-    };
-
+    const document = { status: 'ACTIVE' as const, areaIds: [VENTAS, OPERACIONES] };
     expect(canView(empleadoDeVentas, document)).toBe(true);
   });
 
   it('un EMPLOYEE de Ventas no ve uno de Operaciones', () => {
     const document = { status: 'ACTIVE' as const, areaIds: [OPERACIONES] };
-
     expect(canView(empleadoDeVentas, document)).toBe(false);
   });
 
   it('un EMPLOYEE de Ventas no ve uno ARCHIVED de Ventas', () => {
     const document = { status: 'ARCHIVED' as const, areaIds: [VENTAS] };
-
     expect(canView(empleadoDeVentas, document)).toBe(false);
   });
 
   it('un EMPLOYEE sin áreas no ve un ACTIVE de Ventas', () => {
     const document = { status: 'ACTIVE' as const, areaIds: [VENTAS] };
-
     expect(canView(empleadoSinAreas, document)).toBe(false);
   });
 });
 
+// Pruebas para listWhere (Generación de filtros de consulta para Prisma)
 describe('listWhere', () => {
   it('para un ADMIN no filtra', () => {
     expect(listWhere(admin)).toEqual({});
@@ -67,10 +63,10 @@ describe('listWhere', () => {
   });
 });
 
+// Pruebas para canBeOwner (¿Quién puede ser designado responsable de un documento?)
 describe('canBeOwner', () => {
   it('responsable sin acceso: un EMPLOYEE solo de Operaciones no puede serlo de un documento de Ventas', () => {
     const owner = { role: 'EMPLOYEE' as const, areaIds: [OPERACIONES] };
-
     expect(canBeOwner(owner, [VENTAS])).toBe(false);
   });
 
@@ -80,13 +76,11 @@ describe('canBeOwner', () => {
 
   it('un SUPERVISOR de un área compartida puede ser responsable', () => {
     const owner = { role: 'SUPERVISOR' as const, areaIds: [VENTAS] };
-
     expect(canBeOwner(owner, [VENTAS, OPERACIONES])).toBe(true);
   });
 });
 
-// Spec 004, R3 (plan 004, 3.1 y D5): qué documentos puede encontrar cada usuario. El estado ACTIVE
-// lo exige la consulta para todos; la política solo dice por qué áreas se filtra.
+// Pruebas para searchScope (Delimitación de búsqueda según el rol y áreas)
 describe('searchScope', () => {
   it('para un ADMIN no filtra por áreas', () => {
     expect(searchScope(admin)).toEqual({ areaIds: null });
@@ -97,14 +91,8 @@ describe('searchScope', () => {
   });
 
   it('para un SUPERVISOR filtra por sus áreas', () => {
-    const supervisor = {
-      role: 'SUPERVISOR' as const,
-      areaIds: [VENTAS, OPERACIONES],
-    };
-
-    expect(searchScope(supervisor)).toEqual({
-      areaIds: [VENTAS, OPERACIONES],
-    });
+    const supervisor = { role: 'SUPERVISOR' as const, areaIds: [VENTAS, OPERACIONES] };
+    expect(searchScope(supervisor)).toEqual({ areaIds: [VENTAS, OPERACIONES] });
   });
 
   it('para un EMPLOYEE sin áreas filtra con la lista vacía: no encuentra nada', () => {

@@ -1,3 +1,4 @@
+/*Pruebas unitarias de consultas, historial y búsqueda de documentos */
 import {
   InternalServerErrorException,
   Logger,

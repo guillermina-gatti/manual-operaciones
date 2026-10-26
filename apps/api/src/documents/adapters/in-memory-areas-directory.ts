@@ -1,3 +1,4 @@
+/* Directorio de áreas en memoria*/
 import { AreasDirectory } from '../ports/areas-directory';
 import { AREA_IDS } from './fixtures';
 

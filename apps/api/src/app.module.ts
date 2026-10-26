@@ -1,4 +1,4 @@
-
+// Módulo raíz de la aplicación que configura los módulos globales, la base de datos y los submódulos de negocio.
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';

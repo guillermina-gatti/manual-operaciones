@@ -1,5 +1,4 @@
-/*Define las reglas y el formato de los datos que el cliente (por ejemplo, el frontend) debe enviar obligatoriamente cuando quiere
-crear o subir un documento nuevo. */
+// DTO con las reglas de validación y transformación para la creación de un nuevo documento.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {

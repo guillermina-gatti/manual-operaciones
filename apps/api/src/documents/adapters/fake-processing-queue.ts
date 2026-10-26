@@ -1,3 +1,4 @@
+/*Simulación de cola de procesamiento */
 import { Injectable, Logger } from '@nestjs/common';
 import {
   ProcessingQueue,

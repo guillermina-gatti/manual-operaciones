@@ -1,3 +1,4 @@
+/* Registro de auditoría basado en Logger de Nest*/
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';

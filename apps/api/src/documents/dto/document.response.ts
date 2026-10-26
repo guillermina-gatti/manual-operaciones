@@ -1,5 +1,4 @@
-//Define la estructura exacta de cómo se le responderá al cliente una vez que el documento es
-// consultado o creado con éxito.
+// Clases DTO y funciones de mapeo para estructurar las respuestas de documentos, versiones y búsquedas hacia el cliente.
 import { ApiProperty } from '@nestjs/swagger';
 import {
   DocumentStatus,

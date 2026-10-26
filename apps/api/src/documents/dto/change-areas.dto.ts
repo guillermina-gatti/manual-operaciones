@@ -1,4 +1,4 @@
-/* Datos del cambio de áreas de un documento (spec 003, R3 y R4) */
+// DTO con los datos requeridos para cambiar las áreas y opcionalmente el responsable de un documento.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { ArrayMinSize, IsArray, IsOptional, IsUUID } from 'class-validator';

@@ -1,4 +1,4 @@
-// DOCUMENT_UPLOAD: carga (spec 001, R14). Las otras tres: ciclo de vida (spec 003, R13).
+// Puerto y estructuras de datos para el registro de auditoría de acciones del sistema.
 export type AuditAction =
   | 'DOCUMENT_UPLOAD'
   | 'DOCUMENT_AREAS_CHANGE'
@@ -18,8 +18,7 @@ export interface AuditEntry {
   at: Date;
 }
 
-// Puerto (plan 5.4): el dueño real de la auditoría está abierto (A1).
-// `tx` es la transacción de la carga, opaca para los servicios (plan 5.6).
+// Puerto abstractor para registrar las entradas de auditoría, soportando transacciones opacas.
 export abstract class AuditLog {
   abstract record(entry: AuditEntry, tx?: unknown): Promise<void>;
 }

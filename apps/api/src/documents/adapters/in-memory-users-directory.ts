@@ -1,3 +1,4 @@
+/* Directorio de usuarios en memoria*/
 import { DirectoryUser, UsersDirectory } from '../ports/users-directory';
 import { FIXTURE_USERS } from './fixtures';
 

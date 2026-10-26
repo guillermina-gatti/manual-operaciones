@@ -1,3 +1,4 @@
+/*Servicio de consultas de documentos */
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import { DownloadUrl, FileStorage } from '../storage/file-storage';

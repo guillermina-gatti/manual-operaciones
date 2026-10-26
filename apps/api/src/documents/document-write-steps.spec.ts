@@ -1,3 +1,4 @@
+/*Pruebas unitarias de los pasos reutilizables de escritura y utilidades de archivo */
 import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import { StorageUnavailableError } from '../storage/file-storage';

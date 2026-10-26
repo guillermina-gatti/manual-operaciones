@@ -1,4 +1,4 @@
-/* Datos de la versión nueva de un documento (spec 003, R7b). El archivo llega aparte, por el FileInterceptor */
+// DTO con las reglas opcionales para registrar una nueva versión de un documento.
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsISO8601, IsOptional, Matches } from 'class-validator';
 

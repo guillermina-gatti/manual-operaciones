@@ -1,4 +1,4 @@
-/* Parámetros de la búsqueda de documentos (spec 004): el texto y la misma paginación del listado */
+// DTO con los parámetros de búsqueda de texto y paginación para los documentos.
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsString, Length } from 'class-validator';

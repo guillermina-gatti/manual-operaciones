@@ -1,5 +1,4 @@
-/* Ciclo de vida de un documento que ya existe (spec 003): cambiar sus áreas, subir una versión
-nueva y archivarlo. Usa los mismos pasos de escritura que la carga (DocumentWriteSteps). */
+/* Ciclo de vida de un documento que ya existe: cambiar áreas, subir nueva versión y archivar. */
 
 import {
   ConflictException,
@@ -31,11 +30,11 @@ import { AuditAction, AuditLog } from './ports/audit-log';
 import { ProcessingQueue } from './ports/processing-queue';
 import { UsersDirectory } from './ports/users-directory';
 
-// R2: el mismo texto que la consulta (spec 001, R11).
+// Error 404: El documento no existe
 const documentNotFound = () =>
   new NotFoundException('No se encontró el documento');
 
-// R11: un documento archivado no se modifica. `reason` le dice a la web qué 409 es (D7).
+// Error 409: El documento está archivado y ya no se puede modificar
 const documentArchived = () =>
   new ConflictException({
     statusCode: 409,
@@ -44,7 +43,7 @@ const documentArchived = () =>
     reason: 'ARCHIVED',
   });
 
-// R6b: subir otra vez el archivo de la versión vigente no crea una versión.
+// Error 409: El archivo nuevo es idéntico a la versión que ya está vigente
 const identicalToCurrent = () =>
   new ConflictException({
     statusCode: 409,
@@ -53,7 +52,7 @@ const identicalToCurrent = () =>
     reason: 'IDENTICAL_TO_CURRENT',
   });
 
-// R8: la base rechazó una segunda CURRENT. Solo pasa si alguien escribió sin el bloqueo (plan 003, 5).
+// Error 409: Conflicto por competencia de versiones al mismo tiempo
 const concurrentVersion = () =>
   new ConflictException({
     statusCode: 409,
@@ -62,6 +61,7 @@ const concurrentVersion = () =>
     reason: 'CONCURRENT_VERSION',
   });
 
+// Comprueba si las áreas nuevas son exactamente iguales a las actuales
 const sameAreas = (current: string[], next: string[]) =>
   current.length === next.length && next.every((id) => current.includes(id));
 
@@ -70,7 +70,6 @@ export class DocumentLifecycleService {
   private readonly logger = new Logger(DocumentLifecycleService.name);
   private readonly steps: DocumentWriteSteps;
 
-  // Los mismos puertos que la carga, para armar los pasos compartidos igual que ella.
   constructor(
     areas: AreasDirectory,
     users: UsersDirectory,
@@ -88,7 +87,7 @@ export class DocumentLifecycleService {
     );
   }
 
-  // R3, R4, R5. Orden: 404, 409 archivado, sin cambios (D4), 400 de áreas y responsable, escritura.
+  // Cambia las áreas o el responsable de un documento existente
   changeAreas(
     id: string,
     dto: ChangeAreasDto,
@@ -102,8 +101,8 @@ export class DocumentLifecycleService {
       async () => {
         const current = await this.findWritable(id);
 
-        // D4: si no cambia nada, se responde sin escribir ni auditar.
         const ownerId = dto.ownerId ?? current.ownerId;
+        // Si no hubo cambios reales, devuelve el documento actual sin escribir nada
         if (
           sameAreas(current.areaIds, dto.areaIds) &&
           ownerId === current.ownerId
@@ -112,9 +111,9 @@ export class DocumentLifecycleService {
         }
 
         await this.steps.assertAreasExist(dto.areaIds);
-        // El responsable que va a quedar: el nuevo si vino, si no el actual (R4).
         await this.steps.assertOwnerCanSeeDocument(ownerId, dto.areaIds);
 
+        // Aplica el cambio bajo transacción y bloqueo
         return this.documents.runInTransaction(async (tx) => {
           await this.lockWritable(tx, id);
           const updated = await this.documents.replaceAreas(
@@ -139,9 +138,7 @@ export class DocumentLifecycleService {
     );
   }
 
-  // R6 a R9, en el orden de la tabla de la sección 4 del plan 003: primero todo lo que se puede
-  // rechazar sin escribir; después el archivo nuevo y, al final, la transacción. Si la transacción
-  // no se confirma, se borra solo el archivo nuevo: el de la versión anterior queda (D6).
+  // Sube una nueva versión de un archivo para un documento existente
   addVersion(
     id: string,
     file: UploadedFileInput | undefined,
@@ -154,12 +151,12 @@ export class DocumentLifecycleService {
       id,
       actor,
       async () => {
-        const inspected = inspectFile(file); // 3b: 400 o 415
+        const inspected = inspectFile(file); // Valida el archivo
         if (dto.reviewDate) {
-          this.steps.assertReviewDateIsAfterToday(dto.reviewDate); // 3c
+          this.steps.assertReviewDateIsAfterToday(dto.reviewDate);
         }
-        await this.findWritable(id); // 3d: 404 o 409
-        // 3e: igual a la vigente de este documento (R6b) o de otro (R8b de la spec 001).
+        await this.findWritable(id); // Valida que exista y no esté archivado
+
         const duplicate = await this.documents.findActiveByChecksum(
           inspected.checksum,
         );
@@ -170,6 +167,7 @@ export class DocumentLifecycleService {
         const versionId = randomUUID();
         const key = `documents/${id}/${versionId}.${inspected.extension}`;
 
+        // Almacena el archivo y confirma la transacción de la nueva versión
         return this.steps.storeThenCommit(
           {
             key,
@@ -180,7 +178,6 @@ export class DocumentLifecycleService {
           },
           () =>
             this.documents.runInTransaction(async (tx) => {
-              // 5a: bajo el bloqueo valen el estado y la versión vigente de ahora (plan 003, 4).
               const locked = await this.lockWritable(tx, id);
               if (locked.currentVersion.checksum === inspected.checksum) {
                 throw identicalToCurrent();
@@ -214,7 +211,6 @@ export class DocumentLifecycleService {
                 tx,
               );
 
-              // 5e: el último paso de la transacción (R7, D12 del plan 001).
               await this.queue.enqueue(versionId);
               return updated;
             }),
@@ -223,7 +219,7 @@ export class DocumentLifecycleService {
     );
   }
 
-  // R10, R11. Archiva el documento y desactiva todos sus fragmentos; los archivos quedan (D6).
+  // Archiva un documento existente (lo desactiva)
   archive(id: string, actor: AuthUser): Promise<DocumentResponse> {
     return this.run('DOCUMENT_ARCHIVE', 'archivo', id, actor, async () => {
       await this.findWritable(id);
@@ -245,7 +241,7 @@ export class DocumentLifecycleService {
     });
   }
 
-  // 5b y 5c. El choque con el índice de una sola CURRENT es 409, no 503 (plan 003, 5).
+  // Maneja conflictos si dos versiones se intentan subir al mismo tiempo
   private async addVersionOrConflict(
     ...args: Parameters<DocumentsRepository['addVersion']>
   ): Promise<DocumentRecord> {
@@ -257,8 +253,7 @@ export class DocumentLifecycleService {
     }
   }
 
-  // Corre una operación sobre el documento `id` y, si falla, la convierte en su HttpException y
-  // audita FAILURE (R13) con el documento, salvo en el 404: ese documento no existe.
+  // Ejecuta la operación y audita el fallo en caso de ocurrir un error
   private async run(
     action: AuditAction,
     operation: HttpOperation,
@@ -280,7 +275,7 @@ export class DocumentLifecycleService {
     }
   }
 
-  // Primera lectura, fuera de la transacción: 404 (R2) y 409 si está archivado (R11).
+  // Verifica que el documento exista y no esté archivado (lectura previa)
   private async findWritable(id: string): Promise<DocumentRecord> {
     const record = await this.documents.findByIdWithAreas(id);
     if (!record) throw documentNotFound();
@@ -288,7 +283,7 @@ export class DocumentLifecycleService {
     return record;
   }
 
-  // Bloqueo y nueva lectura (plan 003, 3.3): otro ADMIN pudo archivarlo después de la primera.
+  // Bloquea el registro en la base de datos para escritura segura dentro de la transacción
   private async lockWritable(
     tx: RepositoryTransaction,
     id: string,

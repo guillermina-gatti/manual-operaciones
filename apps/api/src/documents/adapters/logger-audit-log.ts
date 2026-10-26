@@ -1,3 +1,4 @@
+/*Registro de auditoría basado en Logger de Nest */
 import { Injectable, Logger } from '@nestjs/common';
 import { AuditEntry, AuditLog } from '../ports/audit-log';
 
