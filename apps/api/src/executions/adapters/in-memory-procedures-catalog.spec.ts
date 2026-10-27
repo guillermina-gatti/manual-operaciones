@@ -2,6 +2,7 @@ import { AREA_IDS, FIXTURE_USERS } from '../../documents/adapters/fixtures';
 import { InMemoryProceduresCatalog } from './in-memory-procedures-catalog';
 import {
   FIXTURE_PROCEDURE_VERSIONS,
+  PROCEDURE_AREAS,
   PROCEDURE_IDS,
   PROCEDURE_VERSION_IDS,
 } from './procedure-fixtures';
@@ -121,6 +122,53 @@ describe('InMemoryProceduresCatalog.publish', () => {
   });
 });
 
+describe('InMemoryProceduresCatalog areas', () => {
+  // areaIds are the areas currently assigned to the procedure, for any version.
+  it('every version of a procedure reports the same, current areas', async () => {
+    const catalog = new InMemoryProceduresCatalog();
+
+    const v1 = await catalog.findVersion(PROCEDURE_VERSION_IDS.cierreDeCajaV1);
+    const v2 = await catalog.findVersion(PROCEDURE_VERSION_IDS.cierreDeCajaV2);
+
+    expect(v1?.areaIds).toEqual([AREA_IDS.ventas]);
+    expect(v2?.areaIds).toEqual([AREA_IDS.ventas]);
+  });
+
+  it('assignAreas changes the areas reported by both methods, old versions included', async () => {
+    const catalog = new InMemoryProceduresCatalog();
+
+    catalog.assignAreas(PROCEDURE_IDS.cierreDeCaja, [AREA_IDS.operaciones]);
+
+    await expect(
+      catalog.findPublished(PROCEDURE_IDS.cierreDeCaja),
+    ).resolves.toMatchObject({ areaIds: [AREA_IDS.operaciones] });
+    await expect(
+      catalog.findVersion(PROCEDURE_VERSION_IDS.cierreDeCajaV1),
+    ).resolves.toMatchObject({ areaIds: [AREA_IDS.operaciones] });
+  });
+
+  it('assignAreas does not change the shared fixtures', () => {
+    const catalog = new InMemoryProceduresCatalog();
+
+    catalog.assignAreas(PROCEDURE_IDS.cierreDeCaja, [AREA_IDS.operaciones]);
+
+    expect(PROCEDURE_AREAS[PROCEDURE_IDS.cierreDeCaja]).toEqual([
+      AREA_IDS.ventas,
+    ]);
+  });
+
+  it('a procedure without assigned areas reports none', async () => {
+    const catalog = new InMemoryProceduresCatalog(
+      [FIXTURE_PROCEDURE_VERSIONS[0]],
+      {},
+    );
+
+    await expect(
+      catalog.findVersion(FIXTURE_PROCEDURE_VERSIONS[0].versionId),
+    ).resolves.toMatchObject({ areaIds: [] });
+  });
+});
+
 describe('procedure fixtures', () => {
   const versionIds = FIXTURE_PROCEDURE_VERSIONS.map((v) => v.versionId);
   const stepIds = FIXTURE_PROCEDURE_VERSIONS.flatMap((v) =>
@@ -164,15 +212,16 @@ describe('procedure fixtures', () => {
       FIXTURE_PROCEDURE_VERSIONS.filter((v) => v.procedureId === procedureId);
 
     expect(versionsOf(PROCEDURE_IDS.cierreDeCaja)).toHaveLength(2);
-    expect(
-      versionsOf(PROCEDURE_IDS.cierreDeCaja).every((v) =>
-        v.areaIds.includes(AREA_IDS.ventas),
-      ),
-    ).toBe(true);
-    expect(
-      versionsOf(PROCEDURE_IDS.recepcionMercaderia).every((v) =>
-        v.areaIds.includes(AREA_IDS.operaciones),
-      ),
-    ).toBe(true);
+    expect(versionsOf(PROCEDURE_IDS.recepcionMercaderia)).toHaveLength(1);
+    expect(PROCEDURE_AREAS).toEqual({
+      [PROCEDURE_IDS.cierreDeCaja]: [AREA_IDS.ventas],
+      [PROCEDURE_IDS.recepcionMercaderia]: [AREA_IDS.operaciones],
+    });
+  });
+
+  it('keep the areas on the procedure, not on each version', () => {
+    FIXTURE_PROCEDURE_VERSIONS.forEach((version) =>
+      expect(version).not.toHaveProperty('areaIds'),
+    );
   });
 });

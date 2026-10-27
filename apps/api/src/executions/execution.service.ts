@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
@@ -20,6 +21,8 @@ import {
   ExecutionRecord,
   ExecutionsRepository,
 } from './executions.repository';
+import { toHttpException } from './http-errors';
+import type { ExecutionOperation } from './http-errors';
 import { Clock } from './ports/clock';
 import {
   CatalogProcedureVersion,
@@ -78,6 +81,8 @@ const CONFLICT_MESSAGES = {
 
 @Injectable()
 export class ExecutionService {
+  private readonly logger = new Logger(ExecutionService.name);
+
   constructor(
     private readonly users: UsersDirectory,
     private readonly catalog: ProceduresCatalog,
@@ -87,7 +92,27 @@ export class ExecutionService {
 
   // Returns the execution in progress if there is one (CA3); otherwise starts one on
   // the published version with step 1 started now.
-  async start(user: AuthUser, procedureId: string): Promise<StartResult> {
+  start(user: AuthUser, procedureId: string): Promise<StartResult> {
+    return this.mapErrors(() => this.startOrResume(user, procedureId), 'start');
+  }
+
+  findOne(user: AuthUser, id: string): Promise<ExecutionView> {
+    return this.mapErrors(() => this.find(user, id), 'find');
+  }
+
+  // Finishes the current step and starts the next one, or completes the execution.
+  completeStep(
+    user: AuthUser,
+    id: string,
+    stepId: string,
+  ): Promise<ExecutionView> {
+    return this.mapErrors(() => this.complete(user, id, stepId), 'complete');
+  }
+
+  private async startOrResume(
+    user: AuthUser,
+    procedureId: string,
+  ): Promise<StartResult> {
     const areaIds = await this.areasOf(user);
 
     const existing = await this.executions.findInProgress(user.id, procedureId);
@@ -123,7 +148,7 @@ export class ExecutionService {
     }
   }
 
-  async findOne(user: AuthUser, id: string): Promise<ExecutionView> {
+  private async find(user: AuthUser, id: string): Promise<ExecutionView> {
     const areaIds = await this.areasOf(user);
     const { execution, version } = await this.visible(
       user,
@@ -133,22 +158,27 @@ export class ExecutionService {
     return toView(execution, version);
   }
 
-  // Finishes the current step and starts the next one, or completes the execution.
-  // Checks and write run in one transaction, on the locked execution row.
-  async completeStep(
+  // Access and the version are resolved first, outside the transaction: versions are
+  // immutable, so the catalog is never called while the row is locked. The progress
+  // checks and the write run in one transaction, on the locked execution row.
+  private async complete(
     user: AuthUser,
     id: string,
     stepId: string,
   ): Promise<ExecutionView> {
     const areaIds = await this.areasOf(user);
+    const { version } = await this.visible(
+      user,
+      areaIds,
+      await this.executions.findById(id),
+    );
+    const step = version.steps.find((s) => s.id === stepId);
+    if (!step) throw executionNotFound();
+
     return this.executions.runInTransaction(async (tx) => {
-      const { execution, version } = await this.visible(
-        user,
-        areaIds,
-        await this.executions.findById(id, tx),
-      );
-      const step = version.steps.find((s) => s.id === stepId);
-      if (!step) throw executionNotFound();
+      // Owner and version never change; status and steps may have, so re-read them.
+      const execution = await this.executions.findById(id, tx);
+      if (!execution) throw executionNotFound();
 
       if (execution.status === 'COMPLETED') {
         throw conflict(
@@ -170,6 +200,19 @@ export class ExecutionService {
     });
   }
 
+  // 404 and 409 pass as they are; a dependency that is down is a 503; anything else
+  // is a 500 (http-errors.ts).
+  private async mapErrors<T>(
+    run: () => Promise<T>,
+    operation: ExecutionOperation,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      throw toHttpException(error, this.logger, operation);
+    }
+  }
+
   // Areas come from the directory on every request, never from the session. A user
   // the directory does not know has no areas, so every check answers 404.
   private async areasOf(user: AuthUser): Promise<string[]> {
@@ -178,7 +221,8 @@ export class ExecutionService {
   }
 
   // The version the execution was started with (CA1), if the user can still see it:
-  // it must be theirs and they must share an area with that version. Otherwise 404.
+  // it must be theirs and they must share an area with the procedure's current areas
+  // (the catalog reports those for every version). Otherwise 404.
   private async visible(
     user: AuthUser,
     areaIds: string[],

@@ -1,4 +1,10 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import { AREA_IDS, FIXTURE_USERS } from '../documents/adapters/fixtures';
 import { InMemoryUsersDirectory } from '../documents/adapters/in-memory-users-directory';
@@ -16,6 +22,7 @@ import {
 import { ExecutionService } from './execution.service';
 import {
   ExecutionInProgressError,
+  ExecutionsRepositoryUnavailableError,
   ExecutionRecord,
   ExecutionsRepository,
   NewExecution,
@@ -23,6 +30,7 @@ import {
   StepCompletion,
 } from './executions.repository';
 import { Clock } from './ports/clock';
+import { CatalogUnavailableError } from './ports/procedures-catalog';
 
 // ── Test doubles ────────────────────────────────────────────────────────────
 
@@ -45,15 +53,21 @@ class FakeExecutionsRepository extends ExecutionsRepository {
   readonly transactions: RepositoryTransaction[] = [];
   readonly completions: { tx: RepositoryTransaction; data: StepCompletion }[] =
     [];
+  inTransaction = false;
 
-  runInTransaction<T>(
+  async runInTransaction<T>(
     fn: (tx: RepositoryTransaction) => Promise<T>,
   ): Promise<T> {
     const tx = {
       id: this.transactions.length,
     } as unknown as RepositoryTransaction;
     this.transactions.push(tx);
-    return fn(tx);
+    this.inTransaction = true;
+    try {
+      return await fn(tx);
+    } finally {
+      this.inTransaction = false;
+    }
   }
 
   create(data: NewExecution): Promise<ExecutionRecord> {
@@ -400,6 +414,96 @@ describe('ExecutionService', () => {
     });
   });
 
+  // ── procedure moved to another area ───────────────────────────────────────
+
+  describe('when the procedure is reassigned to another area', () => {
+    let executionId: string;
+
+    beforeEach(async () => {
+      ({
+        execution: { id: executionId },
+      } = await service.start(empleadoVentas, CIERRE));
+      catalog.assignAreas(CIERRE, [AREA_IDS.operaciones]);
+    });
+
+    it('the original user loses access to the execution in progress', async () => {
+      const lost = await expectNotFound(
+        service.findOne(empleadoVentas, executionId),
+      );
+      const missing = await expectNotFound(
+        service.findOne(empleadoVentas, UNKNOWN_ID),
+      );
+
+      expect(lost).toBe(missing);
+      await expectNotFound(
+        service.completeStep(empleadoVentas, executionId, V1.steps[0].id),
+      );
+      await expectNotFound(service.start(empleadoVentas, CIERRE));
+      expect(repository.completions).toHaveLength(0);
+    });
+
+    it('the check uses the current areas even for an old version', async () => {
+      catalog.publish(V2.versionId);
+
+      await expectNotFound(service.findOne(empleadoVentas, executionId));
+    });
+  });
+
+  // ── error mapping ─────────────────────────────────────────────────────────
+
+  describe('when a dependency fails', () => {
+    beforeEach(() => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    });
+
+    it('a catalog that is down is a 503 on every operation', async () => {
+      const { execution } = await service.start(empleadoVentas, CIERRE);
+      const down = new CatalogUnavailableError('catalog down');
+      jest.spyOn(catalog, 'findPublished').mockRejectedValue(down);
+      jest.spyOn(catalog, 'findVersion').mockRejectedValue(down);
+
+      await expect(service.start(otroVentas, CIERRE)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      await expect(
+        service.findOne(empleadoVentas, execution.id),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await expect(
+        service.completeStep(empleadoVentas, execution.id, V1.steps[0].id),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('a repository that is down is a 503', async () => {
+      jest
+        .spyOn(repository, 'findInProgress')
+        .mockRejectedValue(new ExecutionsRepositoryUnavailableError('db down'));
+
+      await expect(
+        service.start(empleadoVentas, CIERRE),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('an unexpected error is a 500', async () => {
+      jest
+        .spyOn(repository, 'findById')
+        .mockRejectedValue(new TypeError('x is undefined'));
+
+      await expect(
+        service.findOne(empleadoVentas, UNKNOWN_ID),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
+
+    it('business errors keep their status: 404 and 409 with reason', async () => {
+      const { execution } = await service.start(empleadoVentas, CIERRE);
+
+      await expectNotFound(service.findOne(otroVentas, execution.id));
+      await expectConflict(
+        service.completeStep(empleadoVentas, execution.id, V1.steps[2].id),
+        'STEP_OUT_OF_ORDER',
+      );
+    });
+  });
+
   // ── completeStep ──────────────────────────────────────────────────────────
 
   describe('completeStep', () => {
@@ -416,6 +520,20 @@ describe('ExecutionService', () => {
 
       expect(repository.transactions).toHaveLength(1);
       expect(repository.completions[0].tx).toBe(repository.transactions[0]);
+    });
+
+    // Versions are immutable, so the catalog is not read while the row is locked.
+    it('reads the version from the catalog before opening the transaction', async () => {
+      const readsInTransaction: boolean[] = [];
+      const findVersion = catalog.findVersion.bind(catalog);
+      jest.spyOn(catalog, 'findVersion').mockImplementation((versionId) => {
+        readsInTransaction.push(repository.inTransaction);
+        return findVersion(versionId);
+      });
+
+      await service.completeStep(empleadoVentas, executionId, V1.steps[0].id);
+
+      expect(readsInTransaction).toEqual([false]);
     });
 
     it('marks the end of N and starts N+1 at the same instant', async () => {

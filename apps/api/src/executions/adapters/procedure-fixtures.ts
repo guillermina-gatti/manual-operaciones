@@ -15,8 +15,18 @@ export const PROCEDURE_VERSION_IDS = {
   recepcionMercaderiaV1: '1b000000-0000-4000-8000-000000000003',
 } as const;
 
-// A catalog version plus whether it is the published one of its procedure.
-export interface FixtureProcedureVersion extends CatalogProcedureVersion {
+// Areas belong to the procedure, not to a version: every version reports these.
+export const PROCEDURE_AREAS: Record<string, string[]> = {
+  [PROCEDURE_IDS.cierreDeCaja]: [AREA_IDS.ventas],
+  [PROCEDURE_IDS.recepcionMercaderia]: [AREA_IDS.operaciones],
+};
+
+// A catalog version without its areas, plus whether it is the published one of
+// its procedure.
+export interface FixtureProcedureVersion extends Omit<
+  CatalogProcedureVersion,
+  'areaIds'
+> {
   published: boolean;
 }
 
@@ -26,7 +36,6 @@ export const FIXTURE_PROCEDURE_VERSIONS: FixtureProcedureVersion[] = [
   {
     procedureId: PROCEDURE_IDS.cierreDeCaja,
     versionId: PROCEDURE_VERSION_IDS.cierreDeCajaV1,
-    areaIds: [AREA_IDS.ventas],
     published: false,
     steps: [
       {
@@ -49,7 +58,6 @@ export const FIXTURE_PROCEDURE_VERSIONS: FixtureProcedureVersion[] = [
   {
     procedureId: PROCEDURE_IDS.cierreDeCaja,
     versionId: PROCEDURE_VERSION_IDS.cierreDeCajaV2,
-    areaIds: [AREA_IDS.ventas],
     published: true,
     steps: [
       {
@@ -77,7 +85,6 @@ export const FIXTURE_PROCEDURE_VERSIONS: FixtureProcedureVersion[] = [
   {
     procedureId: PROCEDURE_IDS.recepcionMercaderia,
     versionId: PROCEDURE_VERSION_IDS.recepcionMercaderiaV1,
-    areaIds: [AREA_IDS.operaciones],
     published: true,
     steps: [
       {
