@@ -55,10 +55,10 @@ Convenciones:
 
 ### T05 · DTOs
 
-- **Qué hace:** DTOs de crear procedimiento, editar versión (al menos un campo), crear y editar paso (`position` opcional), reordenar, asignar áreas y paginación del listado, con class-validator y Swagger.
+- **Qué hace:** DTOs de crear procedimiento, editar versión, crear y editar paso (`position` opcional al crear), reordenar, asignar áreas y paginación del listado, con class-validator y Swagger. En editar versión y editar paso ambos campos son opcionales: que el pedido traiga al menos uno (R5) lo comprueba el servicio (T08 y T09), porque `@IsOptional()` desactiva todos los validadores de una propiedad ausente.
 - **Cubre:** R2, R5, R6, R8, R11, R16; E3, E9, E18, E26; D9.
 - **Archivos:** `src/procedures/dto/*.ts` y sus `.spec.ts`.
-- **Verificación, test primero:** título vacío, solo espacios y de 201 caracteres; recorte de espacios; descripción de 1001 (procedimiento) y 2001 (paso); `position` menor a 1; lista de ids que no son UUID; áreas repetidas; `limit` 101, `page` 0 y texto.
+- **Verificación, test primero:** título vacío, solo espacios y de 201 caracteres; recorte de espacios; descripción de 1001 (procedimiento) y 2001 (paso); `position` menor a 1; lista de ids que no son UUID; áreas repetidas; `limit` 101, `page` 0 y texto; un cambio vacío (`{}`) es válido para el DTO de editar versión y de editar paso.
 
 ### T06 · Repositorio de procedimientos y versiones
 
@@ -79,14 +79,14 @@ Convenciones:
 - **Qué hace:** casos de uso de crear procedimiento, editar el borrador, crear un borrador nuevo y borrar un borrador; reglas de estado (R9); mapeo de errores a 404, 409 y 503.
 - **Cubre:** R1 a R5, R9, R10; E1, E3, E9 a E15; D1, D8.
 - **Archivos:** `src/procedures/procedure-draft.service.ts`, `src/procedures/http-errors.ts` y sus `.spec.ts`.
-- **Verificación, test primero:** con el repositorio simulado, cada `reason` 409 (`DRAFT_ALREADY_EXISTS`, `NO_PUBLISHED_VERSION`, `VERSION_NOT_EDITABLE`); la base caída da 503, un error inesperado da 500 y la causa no sale en la respuesta.
+- **Verificación, test primero:** con el repositorio simulado, cada `reason` 409 (`DRAFT_ALREADY_EXISTS`, `NO_PUBLISHED_VERSION`, `VERSION_NOT_EDITABLE`); un cambio sin título ni descripción responde 400 sin llamar al repositorio (R5); la base caída da 503, un error inesperado da 500 y la causa no sale en la respuesta.
 
 ### T09 · Servicio de pasos
 
 - **Qué hace:** casos de uso de agregar, editar, borrar y reordenar pasos, usando `step-order.ts` y el límite de pasos.
 - **Cubre:** R6 a R9; E4 a E8, E12; D4.
 - **Archivos:** `src/procedures/procedure-draft.service.ts` y su `.spec.ts`.
-- **Verificación, test primero:** `STEP_LIMIT_REACHED`; `VERSION_NOT_EDITABLE` en cada operación sobre una versión no `DRAFT`; lista de reordenamiento incorrecta devuelve 400 sin llamar al repositorio.
+- **Verificación, test primero:** `STEP_LIMIT_REACHED`; `VERSION_NOT_EDITABLE` en cada operación sobre una versión no `DRAFT`; editar un paso sin título ni descripción responde 400 sin llamar al repositorio; lista de reordenamiento incorrecta devuelve 400 sin llamar al repositorio.
 
 ### T10 · Respuestas, controlador y módulo (avisar al equipo antes de mergear)
 
