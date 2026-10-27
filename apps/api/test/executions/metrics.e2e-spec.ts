@@ -11,6 +11,7 @@ import {
 import type { CatalogStep } from '../../src/executions/ports/procedures-catalog';
 import {
   ExecutionsTestApp,
+  OTRO_EMPLEADO_VENTAS,
   authHeaders,
   cleanExecutions,
   createExecutionsTestApp,
@@ -95,11 +96,14 @@ describe('Procedures metrics (integration)', () => {
 
   // Inserts an execution straight into the database: `finishedSteps` steps of 3
   // minutes each from startedAt, then the current step started (unless all of
-  // them finished, which makes it COMPLETED).
+  // them finished, which makes it COMPLETED). A user can have only one execution in
+  // progress per procedure (executions_one_in_progress_idx), so a second one in
+  // progress needs another userId.
   async function seed(
     version: SeedVersion,
     startedAt: Date,
     finishedSteps: number,
+    userId: string = FIXTURE_USERS.empleadoVentas.id,
   ): Promise<void> {
     const at = (i: number) => new Date(startedAt.getTime() + i * STEP_MS);
     const completed = finishedSteps === version.steps.length;
@@ -113,7 +117,7 @@ describe('Procedures metrics (integration)', () => {
       }));
     await t.prisma.execution.create({
       data: {
-        userId: FIXTURE_USERS.empleadoVentas.id,
+        userId,
         procedureId: version.procedureId,
         procedureVersionId: version.versionId,
         status: completed ? 'COMPLETED' : 'IN_PROGRESS',
@@ -339,9 +343,15 @@ describe('Procedures metrics (integration)', () => {
   });
 
   it('a step still running after more than 24 hours counts as abandoned', async () => {
-    // Both at step 2: one started it 25 hours ago, the other 23 hours ago.
+    // Both at step 2, run by two employees: one started it 25 hours ago, the other
+    // 23 hours ago.
     await seed(CIERRE_V2, new Date(Date.now() - 25 * HOUR - STEP_MS), 1);
-    await seed(CIERRE_V2, new Date(Date.now() - 23 * HOUR - STEP_MS), 1);
+    await seed(
+      CIERRE_V2,
+      new Date(Date.now() - 23 * HOUR - STEP_MS),
+      1,
+      OTRO_EMPLEADO_VENTAS.id,
+    );
     await seed(CIERRE_V2, hoursAgo(30), CIERRE_V2.steps.length);
 
     const { body } = await metrics(admin).expect(200);
