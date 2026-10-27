@@ -269,3 +269,53 @@ model UserArea {
 // Estas entidades se implementarán en etapas posteriores,
 // coordinadas con Camila.
 // ============================================================
+
+// ============================================================
+// EQUIPO B — PROCEDIMIENTOS Y EJECUCIONES
+// HU12 — dueña: Mayra
+// ============================================================
+//
+// Ejecución paso a paso (spec 005). Procedimientos, versiones y
+// pasos son de Mica: se referencian solo por ID, sin relaciones
+// de Prisma hacia sus tablas. userId tampoco tiene relación,
+// para no tocar el modelo User.
+// ------------------------------------------------------------
+
+enum ExecutionStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Execution {
+  id                 String          @id @default(uuid()) @db.Uuid
+  userId             String          @map("user_id") @db.Uuid // users de A
+  procedureId        String          @map("procedure_id") @db.Uuid // procedimiento de Mica
+  procedureVersionId String          @map("procedure_version_id") @db.Uuid // versión con la que se inició (CA1)
+  status             ExecutionStatus @default(IN_PROGRESS)
+  startedAt          DateTime        @map("started_at") @db.Timestamptz(3)
+  finishedAt         DateTime?       @map("finished_at") @db.Timestamptz(3)
+
+  steps ExecutionStep[]
+
+  // Una sola ejecución en curso por usuario y procedimiento (índice único parcial).
+  @@unique([userId, procedureId], map: "executions_one_in_progress_idx", where: { status: "IN_PROGRESS" })
+  @@index([userId])
+  @@index([procedureId])
+  @@map("executions")
+}
+
+// La fila se crea cuando el paso se inicia; la duración es finishedAt - startedAt (CA2).
+model ExecutionStep {
+  id          String    @id @default(uuid()) @db.Uuid
+  executionId String    @map("execution_id") @db.Uuid
+  stepId      String    @map("step_id") @db.Uuid // paso de la versión, de Mica
+  stepOrder   Int       @map("step_order")
+  startedAt   DateTime  @map("started_at") @db.Timestamptz(3)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@unique([executionId, stepId])
+  @@unique([executionId, stepOrder])
+  @@map("execution_steps")
+}
