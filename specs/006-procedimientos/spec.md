@@ -119,7 +119,7 @@ Toda transición que no esté en la tabla es inválida: una versión `PUBLISHED`
 - Un empleado pide una versión por su identificador, aunque sea la vigente: 403 (R17); el detalle del procedimiento ya le muestra la vigente.
 - Se cambian las áreas mientras alguien ejecuta el procedimiento: rige desde el pedido siguiente (R12).
 - El procedimiento solo tiene un borrador y se borra: desaparece el procedimiento con sus áreas, sus pasos y sus adjuntos (R10).
-- Una versión publicada sin pasos no se muestra a SUPERSEDOR ni EMPLOYEE (R13).
+- Una versión publicada sin pasos no se muestra a SUPERVISOR ni a EMPLOYEE (R13).
 - Falla el directorio de usuarios mientras se lista: 503, no se lista sin filtro (R15).
 - Se pierde la conexión al almacenar un adjunto: 503 y nada a medias (R20).
 
