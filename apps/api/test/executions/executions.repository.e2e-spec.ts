@@ -160,7 +160,9 @@ describe('Executions repository (integration)', () => {
         http().post(url).set(headers),
       ]);
 
-      expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(responses.map((r) => r.status).sort((a, b) => a - b)).toEqual([
+        200, 409,
+      ]);
       const conflict = responses.find((r) => r.status === 409);
       expect(conflict?.body.reason).toBe('STEP_ALREADY_FINISHED');
 
