@@ -18,6 +18,7 @@ import {
 describe('SessionService', () => {
   let service: SessionService;
   let mockPrisma: {
+    $transaction: jest.Mock;
     session: {
       create: jest.Mock;
       findUnique: jest.Mock;
@@ -28,9 +29,11 @@ describe('SessionService', () => {
   const VALID_USER_ID = '11111111-1111-4111-8111-111111111111';
   const OTHER_USER_ID = '22222222-2222-4222-8222-222222222222';
   const VALID_SESSION_ID = '33333333-3333-4333-8333-333333333333';
+  const NEW_SESSION_ID = '44444444-4444-4444-8444-444444444444';
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn(async (cb) => cb(mockPrisma)),
       session: {
         create: jest.fn(),
         findUnique: jest.fn(),
@@ -314,6 +317,241 @@ describe('SessionService', () => {
       await expect(service.validateSession(validToken)).rejects.toThrow(
         Prisma.PrismaClientKnownRequestError,
       );
+    });
+  });
+
+  describe('rotateSession() (Rotación atómica y detección de reutilización)', () => {
+    it('debe rotar atómicamente una sesión activa, creando una nueva y asignando replacedById a la anterior', async () => {
+      const now = new Date();
+      const oldToken = generateRefreshToken();
+      const oldHash = hashRefreshToken(oldToken);
+
+      const existingRecord = {
+        id: VALID_SESSION_ID,
+        userId: VALID_USER_ID,
+        tokenHash: oldHash,
+        expiresAt: new Date(now.getTime() + 1000 * 60 * 60),
+        isRevoked: false,
+        replacedById: null,
+        userAgent: 'Old Agent',
+        ipAddress: '10.0.0.1',
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const newRecord = {
+        id: NEW_SESSION_ID,
+        userId: VALID_USER_ID,
+        tokenHash: 'new-hash',
+        expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
+        isRevoked: false,
+        replacedById: null,
+        userAgent: 'New Agent',
+        ipAddress: '10.0.0.2',
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(existingRecord);
+      mockPrisma.session.create.mockResolvedValue(newRecord);
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.rotateSession(oldToken, {
+        userAgent: 'New Agent',
+        ipAddress: '10.0.0.2',
+      });
+
+      expect(result.status).toBe('SUCCESS');
+      expect(result.userId).toBe(VALID_USER_ID);
+      expect(result.newRefreshToken).toBeDefined();
+      expect(result.newRefreshToken).toHaveLength(REFRESH_TOKEN_BASE64URL_LENGTH);
+
+      // Verificación de creación de nueva sesión
+      expect(mockPrisma.session.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: VALID_USER_ID,
+          userAgent: 'New Agent',
+          ipAddress: '10.0.0.2',
+        }),
+      });
+
+      // Verificación de reclamación condicional y asignación de replacedById
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: VALID_SESSION_ID,
+          isRevoked: false,
+          expiresAt: { gt: expect.any(Date) },
+        },
+        data: {
+          isRevoked: true,
+          replacedById: newRecord.id,
+        },
+      });
+
+      expect(result.newSession).toEqual({
+        id: NEW_SESSION_ID,
+        userId: VALID_USER_ID,
+        expiresAt: newRecord.expiresAt,
+        createdAt: newRecord.createdAt,
+        updatedAt: newRecord.updatedAt,
+        userAgent: 'New Agent',
+        ipAddress: '10.0.0.2',
+      });
+    });
+
+    it('debe devolver INVALID_TOKEN si el token entrante no tiene formato base64url', async () => {
+      const result = await service.rotateSession('token-invalido');
+      expect(result).toEqual({ status: 'INVALID_TOKEN' });
+      expect(mockPrisma.session.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('debe devolver INVALID_TOKEN si la sesión no existe en la base de datos', async () => {
+      mockPrisma.session.findUnique.mockResolvedValue(null);
+
+      const result = await service.rotateSession(generateRefreshToken());
+      expect(result).toEqual({ status: 'INVALID_TOKEN' });
+    });
+
+    it('debe devolver EXPIRED si la sesión ya expiró', async () => {
+      const expiredSession = {
+        id: VALID_SESSION_ID,
+        userId: VALID_USER_ID,
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() - 1000),
+        isRevoked: false,
+        replacedById: null,
+        userAgent: null,
+        ipAddress: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(expiredSession);
+
+      const result = await service.rotateSession(generateRefreshToken());
+      expect(result).toEqual({ status: 'EXPIRED', userId: VALID_USER_ID });
+    });
+
+    it('debe devolver MANUALLY_REVOKED si la sesión fue revocada sin sucesor (logout explícito)', async () => {
+      const manuallyRevokedSession = {
+        id: VALID_SESSION_ID,
+        userId: VALID_USER_ID,
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() + 1000 * 60),
+        isRevoked: true,
+        replacedById: null, // Sin reemplazo
+        userAgent: null,
+        ipAddress: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(manuallyRevokedSession);
+
+      const result = await service.rotateSession(generateRefreshToken());
+      expect(result).toEqual({ status: 'MANUALLY_REVOKED', userId: VALID_USER_ID });
+    });
+
+    it('debe devolver TOKEN_REUSE_DETECTED ante la presentación de una sesión ya revocada y reemplazada', async () => {
+      const now = new Date();
+      const rotatedSession = {
+        id: VALID_SESSION_ID,
+        userId: VALID_USER_ID,
+        tokenHash: 'hash',
+        expiresAt: new Date(now.getTime() + 1000 * 60),
+        isRevoked: true,
+        replacedById: NEW_SESSION_ID,
+        userAgent: null,
+        ipAddress: null,
+        createdAt: new Date(now.getTime() - 60000),
+        updatedAt: new Date(now.getTime() - 1000),
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(rotatedSession);
+
+      const result = await service.rotateSession(generateRefreshToken());
+      expect(result).toEqual({
+        status: 'TOKEN_REUSE_DETECTED',
+        userId: VALID_USER_ID,
+      });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('debe clasificar la pérdida de la carrera condicional como CAS_RACE_LOST sin credenciales sucesoras cuando updateMany retorna count 0', async () => {
+      const now = new Date();
+      const activeWhenChecked = {
+        id: VALID_SESSION_ID,
+        userId: VALID_USER_ID,
+        tokenHash: 'hash',
+        expiresAt: new Date(now.getTime() + 1000 * 60),
+        isRevoked: false,
+        replacedById: null,
+        userAgent: null,
+        ipAddress: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(activeWhenChecked);
+      mockPrisma.session.create.mockResolvedValue({ id: 'tentative-session-id' });
+      // Simulamos que updateMany retorna count: 0 (otra solicitud ganó la carrera condicional)
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 0 });
+
+      // Capturamos el error emitido dentro del callback de la transacción para abortarla
+      let transactionCallbackError: Error | null = null;
+      mockPrisma.$transaction.mockImplementation(async (cb) => {
+        try {
+          return await cb(mockPrisma);
+        } catch (err) {
+          transactionCallbackError = err as Error;
+          throw err;
+        }
+      });
+
+      const result = await service.rotateSession(generateRefreshToken());
+
+      // 1. Se intentó crear la sesión sucesora tentativa en la transacción
+      expect(mockPrisma.session.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: VALID_USER_ID,
+        }),
+      });
+
+      // 2. Se intentó la reclamación condicional atómica sobre la sesión previa
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: VALID_SESSION_ID,
+          isRevoked: false,
+          expiresAt: { gt: expect.any(Date) },
+        },
+        data: {
+          isRevoked: true,
+          replacedById: 'tentative-session-id',
+        },
+      });
+
+      // 3. Se produjo la señal de carrera perdida para abortar la transacción (CONCURRENT_RACE_LOST)
+      expect(transactionCallbackError).toBeInstanceOf(Error);
+      expect((transactionCallbackError as any)?.message).toBe('CONCURRENT_RACE_LOST');
+
+      // 4. El resultado final de la aplicación es CAS_RACE_LOST, sin credenciales sucesoras
+      expect(result).toEqual({
+        status: 'CAS_RACE_LOST',
+        userId: VALID_USER_ID,
+      });
+      expect(result.newSession).toBeUndefined();
+      expect(result.newRefreshToken).toBeUndefined();
+    });
+
+    it('debe rechazar userAgent > 500 o ipAddress > 45 sin truncamiento silencioso', async () => {
+      const validToken = generateRefreshToken();
+      await expect(
+        service.rotateSession(validToken, { userAgent: 'A'.repeat(501) }),
+      ).rejects.toThrow('userAgent excede la longitud máxima permitida de 500 caracteres');
+
+      await expect(
+        service.rotateSession(validToken, { ipAddress: 'A'.repeat(46) }),
+      ).rejects.toThrow('ipAddress excede la longitud máxima permitida de 45 caracteres');
     });
   });
 
