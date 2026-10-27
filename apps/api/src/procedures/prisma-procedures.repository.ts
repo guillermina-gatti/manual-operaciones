@@ -2,7 +2,10 @@
 ProceduresRepositoryUnavailableError, which the API turns into a 503 */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
-import type { ProcedureVersionStatus } from '../generated/prisma/client';
+import type {
+  ProcedureVersionStatus,
+  Step as StepRow,
+} from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DraftAlreadyExistsError,
@@ -10,12 +13,22 @@ import {
   DraftResult,
   NewDraft,
   NewProcedure,
+  NewStep,
   NoPublishedVersionError,
   ProcedureRecord,
   ProceduresRepository,
   ProceduresRepositoryUnavailableError,
+  StepChanges,
+  StepRecord,
+  StepResult,
   VersionRecord,
 } from './procedures.repository';
+import {
+  insertStep,
+  numberSteps,
+  removeStep,
+  reorderSteps as reorder,
+} from './step-order';
 
 // Same limits as the documents and executions repositories, so a frozen database never hangs a request.
 const TRANSACTION_TIMEOUT_MS = 5000;
@@ -219,6 +232,121 @@ export class PrismaProceduresRepository extends ProceduresRepository {
     );
   }
 
+  addStep(
+    procedureId: string,
+    versionId: string,
+    step: NewStep,
+    maxSteps: number,
+  ): Promise<StepResult<StepRecord>> {
+    return this.inDraft(procedureId, versionId, async (tx) => {
+      const ids = await stepIds(tx, versionId);
+      if (ids.length >= maxSteps) {
+        return { ok: false, reason: 'STEP_LIMIT_REACHED' } as const;
+      }
+      const placed = insertStep(ids, step.id, step.position);
+      if (!placed) return { ok: false, reason: 'INVALID_POSITION' } as const;
+
+      const order = placed.indexOf(step.id) + 1;
+      const atTheEnd = order === placed.length;
+      // The following steps move one place down: free their orders first (see negateOrders).
+      if (!atTheEnd) await negateOrders(tx, versionId);
+      const created = await tx.step.create({
+        data: {
+          id: step.id,
+          procedureVersionId: versionId,
+          stepOrder: order,
+          title: step.title,
+          description: step.description,
+        },
+      });
+      if (!atTheEnd) await setOrders(tx, numberSteps(placed), step.id);
+      return { ok: true, value: toStepRecord(created) } as const;
+    });
+  }
+
+  updateStep(
+    procedureId: string,
+    versionId: string,
+    stepId: string,
+    changes: StepChanges,
+  ): Promise<StepResult<StepRecord>> {
+    return this.inDraft(procedureId, versionId, async (tx) => {
+      const found = await tx.step.findFirst({
+        where: { id: stepId, procedureVersionId: versionId },
+        select: { id: true },
+      });
+      if (!found) return { ok: false, reason: 'STEP_NOT_FOUND' } as const;
+      const updated = await tx.step.update({
+        where: { id: stepId },
+        data: {
+          ...(changes.title !== undefined && { title: changes.title }),
+          ...(changes.description !== undefined && {
+            description: changes.description,
+          }),
+        },
+      });
+      return { ok: true, value: toStepRecord(updated) } as const;
+    });
+  }
+
+  deleteStep(
+    procedureId: string,
+    versionId: string,
+    stepId: string,
+  ): Promise<StepResult<void>> {
+    return this.inDraft(procedureId, versionId, async (tx) => {
+      const remaining = removeStep(await stepIds(tx, versionId), stepId);
+      if (!remaining) return { ok: false, reason: 'STEP_NOT_FOUND' } as const;
+
+      await tx.step.delete({ where: { id: stepId } });
+      if (remaining.length > 0) {
+        await negateOrders(tx, versionId);
+        await setOrders(tx, numberSteps(remaining));
+      }
+      return { ok: true, value: undefined } as const;
+    });
+  }
+
+  reorderSteps(
+    procedureId: string,
+    versionId: string,
+    requested: string[],
+  ): Promise<StepResult<StepRecord[]>> {
+    return this.inDraft(procedureId, versionId, async (tx) => {
+      const ordered = reorder(await stepIds(tx, versionId), requested);
+      if (!ordered) return { ok: false, reason: 'INVALID_ORDER' } as const;
+
+      if (ordered.length > 0) {
+        await negateOrders(tx, versionId);
+        await setOrders(tx, numberSteps(ordered));
+      }
+      const rows = await tx.step.findMany({
+        where: { procedureVersionId: versionId },
+        orderBy: { stepOrder: 'asc' },
+      });
+      return { ok: true, value: rows.map(toStepRecord) } as const;
+    });
+  }
+
+  // Runs the work in a transaction with the version row locked, and only if it is a draft of that
+  // procedure (R9). Nothing is written when it is not.
+  private inDraft<T>(
+    procedureId: string,
+    versionId: string,
+    work: (tx: Prisma.TransactionClient) => Promise<StepResult<T>>,
+  ): Promise<StepResult<T>> {
+    return this.translate(() =>
+      this.prisma.$transaction(async (tx) => {
+        const status = await lockVersion(tx, procedureId, versionId);
+        if (status === null) return { ok: false, reason: 'NOT_FOUND' } as const;
+        if (status !== 'DRAFT') {
+          return { ok: false, reason: 'NOT_A_DRAFT' } as const;
+        }
+        return work(tx);
+      }, TRANSACTION_OPTIONS),
+    );
+  }
+
   private async translate<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -257,6 +385,58 @@ async function lockVersion(
     FOR UPDATE
   `;
   return rows.length > 0 ? rows[0].status : null;
+}
+
+// The ids of the steps of the version, from first to last.
+async function stepIds(
+  tx: Prisma.TransactionClient,
+  versionId: string,
+): Promise<string[]> {
+  const rows = await tx.step.findMany({
+    where: { procedureVersionId: versionId },
+    orderBy: { stepOrder: 'asc' },
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
+}
+
+// Pass 1 of a renumbering. The order is unique per version and PostgreSQL checks it row by row, so
+// moving a step one place would clash with a neighbour that has not moved yet. Negative orders
+// cannot clash with the final ones (all positive); the table has no CHECK against them.
+async function negateOrders(
+  tx: Prisma.TransactionClient,
+  versionId: string,
+): Promise<void> {
+  await tx.$executeRaw`
+    UPDATE steps SET step_order = -step_order
+    WHERE procedure_version_id = ${versionId}::uuid
+  `;
+}
+
+// Pass 2: writes the final orders in one statement. `skip` is a step that was just created with its
+// final order and was not negated.
+async function setOrders(
+  tx: Prisma.TransactionClient,
+  numbered: { id: string; order: number }[],
+  skip?: string,
+): Promise<void> {
+  const rows = numbered.filter((step) => step.id !== skip);
+  await tx.$executeRaw`
+    UPDATE steps SET step_order = numbers.step_order
+    FROM unnest(${rows.map((step) => step.id)}::uuid[], ${rows.map((step) => step.order)}::int[])
+      AS numbers(id, step_order)
+    WHERE steps.id = numbers.id
+  `;
+}
+
+function toStepRecord(row: StepRow): StepRecord {
+  return {
+    id: row.id,
+    procedureVersionId: row.procedureVersionId,
+    order: row.stepOrder,
+    title: row.title,
+    description: row.description,
+  };
 }
 
 function isUnavailable(error: unknown): boolean {

@@ -78,6 +78,41 @@ export type DraftResult<T> =
   | { ok: true; value: T }
   | { ok: false; reason: DraftRejection };
 
+export interface StepRecord {
+  id: string;
+  procedureVersionId: string;
+  order: number;
+  title: string;
+  description: string;
+}
+
+// A step to add. position (1 to n + 1) is optional: at the end when it is missing (R7).
+export interface NewStep {
+  id: string;
+  title: string;
+  description: string;
+  position?: number;
+}
+
+// Only the fields that are present change (R6).
+export interface StepChanges {
+  title?: string;
+  description?: string;
+}
+
+// Why an operation on a step was not applied, besides the ones of a draft. The service answers
+// 404, 409 or 400.
+export type StepRejection =
+  | DraftRejection
+  | 'STEP_NOT_FOUND'
+  | 'STEP_LIMIT_REACHED'
+  | 'INVALID_POSITION'
+  | 'INVALID_ORDER';
+
+export type StepResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: StepRejection };
+
 export abstract class ProceduresRepository {
   // Inserts the procedure and its version 1 as a DRAFT in one statement.
   abstract create(data: NewProcedure): Promise<ProcedureRecord>;
@@ -103,4 +138,36 @@ export abstract class ProceduresRepository {
     procedureId: string,
     versionId: string,
   ): Promise<DraftResult<{ procedureDeleted: boolean }>>;
+
+  // Adds a step to a draft, at the end or at step.position, and renumbers the others (R7). Rejected
+  // with STEP_LIMIT_REACHED if the draft already has maxSteps (R6) or INVALID_POSITION if the
+  // position is outside 1..n + 1. The version row is locked, so requests run one after the other.
+  abstract addStep(
+    procedureId: string,
+    versionId: string,
+    step: NewStep,
+    maxSteps: number,
+  ): Promise<StepResult<StepRecord>>;
+
+  abstract updateStep(
+    procedureId: string,
+    versionId: string,
+    stepId: string,
+    changes: StepChanges,
+  ): Promise<StepResult<StepRecord>>;
+
+  // Deletes the step and moves the following ones up (R7).
+  abstract deleteStep(
+    procedureId: string,
+    versionId: string,
+    stepId: string,
+  ): Promise<StepResult<void>>;
+
+  // stepIds holds every step of the draft in the new order (R8); INVALID_ORDER otherwise. The step
+  // ids do not change. Returns the steps in the new order.
+  abstract reorderSteps(
+    procedureId: string,
+    versionId: string,
+    stepIds: string[],
+  ): Promise<StepResult<StepRecord[]>>;
 }
