@@ -3,76 +3,135 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
-import { JwtAuthGuard, Roles, RolesGuard } from './index';
+import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
+  AccessService,
+  CurrentUser,
+  IS_PUBLIC_KEY,
+  JwtAuthGuard,
+  Public,
+  ROLES_KEY,
+  Roles,
+  RolesGuard,
+} from './index';
+
+const USER_ID = '0b000000-0000-4000-8000-000000000001';
+const AREA_VENTAS = '0a000000-0000-4000-8000-000000000001';
+const JWT_SECRET = 'test-secret-common-auth-2026';
 
 class TestController {
   @Roles('ADMIN')
   upload(this: void) {}
+
+  @Public()
+  health(this: void) {}
 }
 
-const contextFor = (request: Record<string, unknown>): ExecutionContext =>
+const contextFor = (
+  request: Record<string, unknown>,
+  handler: (...args: unknown[]) => unknown = TestController.prototype.upload,
+): ExecutionContext =>
   ({
     switchToHttp: () => ({ getRequest: () => request }),
-    getHandler: () => TestController.prototype.upload,
+    getHandler: () => handler,
     getClass: () => TestController,
   }) as unknown as ExecutionContext;
 
-describe('JwtAuthGuard (simulado)', () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-
-  afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+describe('Exportaciones públicas de src/common/auth', () => {
+  it('reexporta JwtAuthGuard, RolesGuard, AccessService y los decoradores reales', () => {
+    expect(JwtAuthGuard).toBeDefined();
+    expect(RolesGuard).toBeDefined();
+    expect(AccessService).toBeDefined();
+    expect(Public).toBeDefined();
+    expect(Roles).toBeDefined();
+    expect(CurrentUser).toBeDefined();
+    expect(IS_PUBLIC_KEY).toBe('isPublic');
+    expect(ROLES_KEY).toBe('roles');
   });
 
-  it('responde 401 si faltan las cabeceras', () => {
-    const guard = new JwtAuthGuard();
+  it('JwtAuthGuard rechaza con 401 cabeceras simuladas x-user-id / x-user-role y exige Bearer JWT real', async () => {
+    const jwtService = new JwtService();
+    const configService = {
+      get: jest.fn().mockReturnValue(JWT_SECRET),
+    } as unknown as ConfigService;
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: USER_ID,
+          email: 'admin@empresa.com',
+          name: 'Admin',
+          role: 'ADMIN',
+          isActive: true,
+          areas: [{ areaId: AREA_VENTAS }],
+        }),
+      },
+    } as unknown as PrismaService;
 
-    expect(() => guard.canActivate(contextFor({ headers: {} }))).toThrow(
-      UnauthorizedException,
+    const guard = new JwtAuthGuard(
+      jwtService,
+      configService,
+      prisma,
+      new Reflector(),
     );
-  });
 
-  it('responde 401 si el rol no es válido', () => {
-    const guard = new JwtAuthGuard();
-    const request = { headers: { 'x-user-id': 'u1', 'x-user-role': 'ROOT' } };
+    await expect(
+      guard.canActivate(
+        contextFor({
+          headers: { 'x-user-id': USER_ID, 'x-user-role': 'ADMIN' },
+        }),
+      ),
+    ).rejects.toThrow(UnauthorizedException);
 
-    expect(() => guard.canActivate(contextFor(request))).toThrow(
-      UnauthorizedException,
+    const token = await jwtService.signAsync(
+      { sub: USER_ID },
+      { secret: JWT_SECRET, expiresIn: 900 },
     );
-  });
-
-  it('con cabeceras válidas deja pasar y carga request.user', () => {
-    const guard = new JwtAuthGuard();
     const request: Record<string, unknown> = {
-      headers: { 'x-user-id': 'u1', 'x-user-role': 'ADMIN' },
+      headers: { authorization: `Bearer ${token}` },
     };
 
-    expect(guard.canActivate(contextFor(request))).toBe(true);
-    expect(request.user).toEqual({ id: 'u1', role: 'ADMIN' });
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+    expect(request.user).toEqual({
+      id: USER_ID,
+      email: 'admin@empresa.com',
+      name: 'Admin',
+      role: 'ADMIN',
+      areaIds: [AREA_VENTAS],
+    });
   });
 
-  it('lanza al construirse si NODE_ENV es production', () => {
-    process.env.NODE_ENV = 'production';
+  it('RolesGuard verifica el rol de request.user y rechaza roles no autorizados con 403', () => {
+    const guard = new RolesGuard(new Reflector());
 
-    expect(() => new JwtAuthGuard()).toThrow();
-  });
-});
+    expect(() =>
+      guard.canActivate(
+        contextFor({
+          user: {
+            id: USER_ID,
+            email: 'emp@empresa.com',
+            name: 'Emp',
+            role: 'EMPLOYEE',
+            areaIds: [],
+          },
+        }),
+      ),
+    ).toThrow(ForbiddenException);
 
-describe('RolesGuard (simulado)', () => {
-  const guard = new RolesGuard(new Reflector());
-
-  it('responde 403 si el rol no está permitido', () => {
-    const request = { user: { id: 'u2', role: 'EMPLOYEE' } };
-
-    expect(() => guard.canActivate(contextFor(request))).toThrow(
-      ForbiddenException,
-    );
-  });
-
-  it('deja pasar a un ADMIN en una ruta con @Roles("ADMIN")', () => {
-    const request = { user: { id: 'u1', role: 'ADMIN' } };
-
-    expect(guard.canActivate(contextFor(request))).toBe(true);
+    expect(
+      guard.canActivate(
+        contextFor({
+          user: {
+            id: USER_ID,
+            email: 'admin@empresa.com',
+            name: 'Admin',
+            role: 'ADMIN',
+            areaIds: [],
+          },
+        }),
+      ),
+    ).toBe(true);
   });
 });

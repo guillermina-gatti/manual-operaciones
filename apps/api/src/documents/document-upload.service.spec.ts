@@ -40,7 +40,13 @@ const TOMORROW = '2026-10-23';
 // La transacción que entrega el repositorio simulado: los servicios solo la pasan.
 const TX = { transaction: 'simulada' };
 
-const admin: AuthUser = { id: FIXTURE_USERS.admin.id, role: 'ADMIN' };
+const admin: AuthUser = {
+  id: FIXTURE_USERS.admin.id,
+  email: 'admin@empresa.com',
+  name: 'Admin',
+  role: 'ADMIN',
+  areaIds: [...FIXTURE_USERS.admin.areaIds],
+};
 const PDF_CONTENT = Buffer.from('%PDF-1.7\ncontenido');
 const pdf = (originalname = 'manual.pdf') => ({
   originalname,
