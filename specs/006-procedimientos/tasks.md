@@ -86,11 +86,11 @@ Convenciones:
 - **Qué hace:** casos de uso de agregar, editar, borrar y reordenar pasos, usando `step-order.ts` y el límite de pasos.
 - **Cubre:** R6 a R9; E4 a E8, E12; D4.
 - **Archivos:** `src/procedures/procedure-draft.service.ts` y su `.spec.ts`.
-- **Verificación, test primero:** `STEP_LIMIT_REACHED`; `VERSION_NOT_EDITABLE` en cada operación sobre una versión no `DRAFT`; editar un paso sin título ni descripción responde 400 sin llamar al repositorio; lista de reordenamiento incorrecta devuelve 400 sin llamar al repositorio.
+- **Verificación, test primero:** `STEP_LIMIT_REACHED`; `VERSION_NOT_EDITABLE` en cada operación sobre una versión no `DRAFT`; editar un paso sin título ni descripción responde 400 sin llamar al repositorio; una lista de reordenamiento que no es la de los pasos del borrador responde 400 (`INVALID_ORDER`), y una posición fuera de rango también (`INVALID_POSITION`). Ambas las decide el repositorio dentro de la transacción, con la versión bloqueada: la lista solo se puede comparar con los pasos reales bajo el bloqueo, así que el servicio no puede rechazarla antes de llamarlo.
 
 ### T10 · Respuestas, controlador y módulo (avisar al equipo antes de mergear)
 
-- **Qué hace:** clases de respuesta con mapeo campo por campo, `ProceduresController` (rutas de borradores y pasos, con Swagger y todos sus códigos), `ProceduresModule` con `UsersDirectory` y `AreasDirectory` de Prisma, y una línea en `app.module.ts`.
+- **Qué hace:** clases de respuesta con mapeo campo por campo, `ProceduresController` (rutas de borradores y pasos, con Swagger y todos sus códigos), `ProceduresModule` con el repositorio de Prisma y el servicio de borradores, y una línea en `app.module.ts`. `UsersDirectory` y `AreasDirectory` se agregan al módulo en HU10 y HU11, cuando se usen.
 - **Cubre:** R1, R17; E2, E27; D7, D10.
 - **Archivos:** `src/procedures/dto/*.response.ts`, `procedures.controller.ts`, `procedures.module.ts`, `app.module.ts` y los `.spec.ts` correspondientes.
 - **Verificación, test primero:** las respuestas no incluyen campos internos; la app arranca con el módulo nuevo; `GET /api/docs` lista las rutas.
