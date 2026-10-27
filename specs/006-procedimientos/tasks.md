@@ -62,8 +62,8 @@ Convenciones:
 
 ### T06 · Repositorio de procedimientos y versiones
 
-- **Qué hace:** puerto `ProceduresRepository` con errores propios y su adaptador Prisma: crear procedimiento con su versión 1, buscar, listar con filtro y paginación, crear borrador desde la vigente (copiando pasos con ids nuevos, con `FOR UPDATE` del procedimiento), borrar un borrador (y el procedimiento si era la única versión). Traducción de errores de disponibilidad y de la violación del índice parcial.
-- **Cubre:** R2, R3, R4, R10; E1, E10, E11, E13, E14, E16; D2, D3, D5, D6, D8.
+- **Qué hace:** puerto `ProceduresRepository` con errores propios y su adaptador Prisma: crear procedimiento con su versión 1, buscar por id, crear borrador desde la vigente (copiando pasos con ids nuevos, con `FOR UPDATE` del procedimiento), editar título y descripción del borrador y borrar un borrador (y el procedimiento si era la única versión). Traducción de errores de disponibilidad y de la violación del índice parcial. El listado paginado con filtro de visibilidad no está acá: es de T14.
+- **Cubre:** R2, R3, R4, R5, R9, R10; E1, E9, E10, E11, E12, E13, E14, E15, E16; D2, D3, D5, D6, D8.
 - **Archivos:** `src/procedures/procedures.repository.ts`, `prisma-procedures.repository.ts` y sus `.spec.ts`; `test/procedures/helpers.ts` y `test/procedures/procedures.repository.e2e-spec.ts`.
 - **Verificación, test primero (integración):** los casos de las reglas contra la base de tests, incluido que dos pedidos simultáneos dejan un solo `DRAFT`.
 
