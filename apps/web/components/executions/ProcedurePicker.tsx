@@ -61,31 +61,36 @@ export function ProcedurePicker({ procedures = SAMPLE_PROCEDURES }: ProcedurePic
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {error && (
         <p
           role="alert"
-          className="rounded-md border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+          className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
         >
           {error}
         </p>
       )}
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
         {procedures.map((procedure) => (
           <li
             key={procedure.id}
-            className="flex min-w-0 flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-700"
+            className="flex min-w-0 flex-col justify-between gap-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-200 focus-within:border-blue-400 focus-within:shadow-md hover:border-blue-300 hover:shadow-md motion-safe:hover:-translate-y-0.5 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-blue-500 dark:hover:border-blue-500/70"
           >
-            <div className="flex min-w-0 flex-col gap-1">
-              <h2 id={`${baseId}-${procedure.id}`} className="break-words text-lg font-semibold">
+            <div className="flex min-w-0 flex-col gap-3">
+              <h2
+                id={`${baseId}-${procedure.id}`}
+                className="break-words text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+              >
                 {procedure.name}
               </h2>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                Área: <span>{procedure.areaName}</span>
+              {/* The area as a chip. */}
+              <p className="inline-flex items-center gap-1 self-start rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-800 ring-1 ring-inset ring-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800">
+                Área: <span className="font-semibold">{procedure.areaName}</span>
               </p>
             </div>
             <Button
-              className="self-start"
+              // `!` wins over Button's own size classes without editing it; still at least 44 px.
+              className="min-h-12! w-full rounded-lg! px-6! text-base shadow-sm sm:w-auto sm:self-start"
               // Every button says the same; the description tells which procedure it opens.
               aria-describedby={`${baseId}-${procedure.id}`}
               disabled={startingId !== null}

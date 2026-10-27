@@ -151,23 +151,33 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <article className="flex min-w-0 flex-col gap-6">
-        <header className="flex min-w-0 flex-col gap-1">
-          <h1 className="break-words text-2xl font-semibold">
+      <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
+        <header className="flex min-w-0 flex-col gap-3">
+          <h1 className="break-words text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl dark:text-zinc-50">
             {procedureName(execution.procedureId)}
           </h1>
           {summary.resumed && !completedHere && (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">Retomaste donde quedaste.</p>
+            <p className="self-start rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-800 ring-1 ring-inset ring-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800">
+              Retomaste donde quedaste.
+            </p>
           )}
         </header>
 
         {completed && (
           <div
             role="status"
-            className="flex flex-col gap-1 rounded-md border border-green-300 bg-green-50 p-3 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100"
+            className="flex items-start gap-4 rounded-xl border border-green-200 border-l-4 border-l-green-600 bg-green-50 p-5 text-green-900 shadow-sm dark:border-green-900 dark:border-l-green-500 dark:bg-green-950/60 dark:text-green-100"
           >
-            <p className="font-semibold">Completaste el procedimiento</p>
-            <p>Tiempo total: {formatDuration(summary.totalDurationMs)}</p>
+            <span
+              aria-hidden="true"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-700 text-lg font-bold text-white dark:bg-green-500 dark:text-zinc-950"
+            >
+              ✓
+            </span>
+            <div className="flex flex-col gap-1 pt-1">
+              <p className="text-lg font-semibold">Completaste el procedimiento</p>
+              <p>Tiempo total: {formatDuration(summary.totalDurationMs)}</p>
+            </div>
           </div>
         )}
 
@@ -176,7 +186,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
         {notice && (
           <p
             role="alert"
-            className="rounded-md border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+            className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
           >
             {notice}
           </p>
@@ -192,7 +202,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
         {completed && (
           <Link
             href="/ejecuciones"
-            className="inline-flex min-h-11 items-center self-start text-blue-700 hover:underline dark:text-blue-400"
+            className="inline-flex min-h-12 items-center self-start rounded-lg border border-blue-200 bg-white px-6 font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300 dark:hover:bg-blue-950"
           >
             Elegir otro procedimiento
           </Link>
@@ -209,13 +219,12 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
 export function ExecutionSkeleton() {
   return (
-    <div aria-hidden="true" className="flex animate-pulse flex-col gap-4">
-      <div className="h-8 w-2/3 rounded bg-zinc-200 dark:bg-zinc-700" />
-      <div className="h-4 w-24 rounded bg-zinc-200 dark:bg-zinc-700" />
-      <div className="h-2 w-full rounded bg-zinc-200 dark:bg-zinc-700" />
-      <div className="h-20 w-full rounded-lg bg-zinc-200 dark:bg-zinc-700" />
-      <div className="h-16 w-full rounded-lg bg-zinc-200 dark:bg-zinc-700" />
-      <div className="h-16 w-full rounded-lg bg-zinc-200 dark:bg-zinc-700" />
+    <div aria-hidden="true" className="flex animate-pulse flex-col gap-6">
+      <div className="h-10 w-2/3 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-28 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
     </div>
   );
 }
