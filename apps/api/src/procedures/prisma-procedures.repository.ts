@@ -111,6 +111,27 @@ export class PrismaProceduresRepository extends ProceduresRepository {
     });
   }
 
+  setAreas(procedureId: string, areaIds: string[]): Promise<string[] | null> {
+    return this.translate(() =>
+      this.prisma.$transaction(async (tx) => {
+        if (!(await lockProcedure(tx, procedureId))) return null;
+
+        await tx.procedureArea.deleteMany({ where: { procedureId } });
+        if (areaIds.length > 0) {
+          await tx.procedureArea.createMany({
+            data: areaIds.map((areaId) => ({ procedureId, areaId })),
+          });
+        }
+        const saved = await tx.procedureArea.findMany({
+          where: { procedureId },
+          select: { areaId: true },
+          orderBy: { areaId: 'asc' },
+        });
+        return saved.map((row) => row.areaId);
+      }, TRANSACTION_OPTIONS),
+    );
+  }
+
   async createDraft(data: NewDraft): Promise<VersionRecord | null> {
     try {
       return await this.translate(() =>
