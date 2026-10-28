@@ -16,6 +16,7 @@ const PHRASES: [ExecutionOperation, string][] = [
   ['start', 'el inicio de la ejecución'],
   ['find', 'la consulta de la ejecución'],
   ['complete', 'el registro del paso'],
+  ['metrics', 'la consulta de las métricas'],
 ];
 
 describe('toHttpException (executions)', () => {

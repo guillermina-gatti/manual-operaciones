@@ -192,7 +192,8 @@ export class PrismaExecutionsRepository extends ExecutionsRepository {
   }
 }
 
-function isUnavailable(error: unknown): boolean {
+// Also used by the metrics repository, so both report a database that is down alike.
+export function isUnavailable(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
