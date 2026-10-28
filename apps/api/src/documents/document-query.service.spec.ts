@@ -19,10 +19,19 @@ import type {
 import type { ListDocumentsQuery } from './dto/list-documents.query';
 import type { UsersDirectory } from './ports/users-directory';
 
-const admin: AuthUser = { id: FIXTURE_USERS.admin.id, role: 'ADMIN' };
+const admin: AuthUser = {
+  id: FIXTURE_USERS.admin.id,
+  email: 'admin@empresa.com',
+  name: 'Admin',
+  role: 'ADMIN',
+  areaIds: [...FIXTURE_USERS.admin.areaIds],
+};
 const empleadoVentas: AuthUser = {
   id: FIXTURE_USERS.empleadoVentas.id,
+  email: 'empleado.ventas@empresa.com',
+  name: 'Empleado Ventas',
   role: 'EMPLOYEE',
+  areaIds: [...FIXTURE_USERS.empleadoVentas.areaIds],
 };
 const defaultQuery: ListDocumentsQuery = { page: 1, limit: 20 };
 

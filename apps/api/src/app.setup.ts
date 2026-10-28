@@ -1,11 +1,15 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 
 // Configuración global de la app. La usan main.ts y los tests de integración,
 // así los tests levantan la API igual que en producción.
 export function configureApp(app: INestApplication): void {
   // Todas las rutas de la API comienzan con /api.
   app.setGlobalPrefix('api');
+
+  // Parseo de cookies HTTP (ej. cookie httpOnly de refresh token).
+  app.use(cookieParser());
 
   // Validación automática de los DTO.
   app.useGlobalPipes(

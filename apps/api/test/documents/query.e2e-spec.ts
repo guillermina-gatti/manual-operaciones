@@ -10,6 +10,7 @@ import {
   cleanDocuments,
   createDocumentsTestApp,
   seedDocument,
+  seedFixtureDirectory,
 } from './helpers';
 
 interface ListBody {
@@ -32,6 +33,7 @@ describe('Consultas de documentos (integración)', () => {
 
   beforeAll(async () => {
     t = await createDocumentsTestApp();
+    await seedFixtureDirectory(t.prisma);
   });
 
   afterAll(async () => {

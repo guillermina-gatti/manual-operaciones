@@ -3,10 +3,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ExecutionsModule } from './executions/executions.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProceduresModule } from './procedures/procedures.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { ProceduresModule } from './procedures/procedures.module';
       isGlobal: true,
     }),
     PrismaModule,
+    RedisModule,
+    AuthModule,
     DocumentsModule,
     ExecutionsModule,
     ProceduresModule,
