@@ -6,6 +6,11 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import {
+  bearer,
+  realAuthProviders,
+  SPEC_USERS,
+} from '../../test/executions/real-auth';
 import { configureApp } from '../app.setup';
 import { ExecutionService } from './execution.service';
 import type { ExecutionView } from './execution.service';
@@ -14,10 +19,7 @@ import { ExecutionsController } from './executions.controller';
 const EXECUTION_ID = '1d000000-0000-4000-8000-000000000001';
 const PROCEDURE_ID = '1a000000-0000-4000-8000-000000000001';
 const STEP_1 = '1c000000-0000-4000-8000-000000000001';
-const EMPLOYEE = {
-  'x-user-id': '0b000000-0000-4000-8000-000000000003',
-  'x-user-role': 'EMPLOYEE',
-};
+const EMPLOYEE = bearer(SPEC_USERS.empleadoVentas);
 
 const view: ExecutionView = {
   id: EXECUTION_ID,
@@ -71,7 +73,10 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
     service = { start: jest.fn(), findOne: jest.fn(), completeStep: jest.fn() };
     const moduleRef = await Test.createTestingModule({
       controllers: [ExecutionsController],
-      providers: [{ provide: ExecutionService, useValue: service }],
+      providers: [
+        { provide: ExecutionService, useValue: service },
+        ...realAuthProviders(), // the real JwtAuthGuard, users from a fake database
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     configureApp(app); // /api prefix, ValidationPipe and Swagger, as in main.ts
@@ -100,7 +105,7 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
 
       expect(response.body).toEqual(body);
       expect(service.start).toHaveBeenCalledWith(
-        { id: EMPLOYEE['x-user-id'], role: 'EMPLOYEE' },
+        SPEC_USERS.empleadoVentas,
         PROCEDURE_ID,
       );
     });
@@ -155,7 +160,7 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
 
       expect(response.body).toEqual(body);
       expect(service.findOne).toHaveBeenCalledWith(
-        { id: EMPLOYEE['x-user-id'], role: 'EMPLOYEE' },
+        SPEC_USERS.empleadoVentas,
         EXECUTION_ID,
       );
     });
@@ -201,7 +206,7 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
 
       expect(response.body).toEqual(body);
       expect(service.completeStep).toHaveBeenCalledWith(
-        { id: EMPLOYEE['x-user-id'], role: 'EMPLOYEE' },
+        SPEC_USERS.empleadoVentas,
         EXECUTION_ID,
         STEP_1,
       );
@@ -257,12 +262,25 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
     });
 
     it.each(routes)(
+      '%s: 401 with the old simulated x-user-* headers',
+      async (_route, call) => {
+        await call()
+          .set({
+            'x-user-id': SPEC_USERS.empleadoVentas.id,
+            'x-user-role': 'EMPLOYEE',
+          })
+          .expect(401);
+        expect(service.start).not.toHaveBeenCalled();
+        expect(service.findOne).not.toHaveBeenCalled();
+        expect(service.completeStep).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(routes)(
       '%s: 403 for ADMIN and SUPERVISOR',
       async (_route, call) => {
-        for (const role of ['ADMIN', 'SUPERVISOR']) {
-          await call()
-            .set({ 'x-user-id': EMPLOYEE['x-user-id'], 'x-user-role': role })
-            .expect(403);
+        for (const user of [SPEC_USERS.admin, SPEC_USERS.supervisorVentas]) {
+          await call().set(bearer(user)).expect(403);
         }
         expect(service.start).not.toHaveBeenCalled();
         expect(service.findOne).not.toHaveBeenCalled();
