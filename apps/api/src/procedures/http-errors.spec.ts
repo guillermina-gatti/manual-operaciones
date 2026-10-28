@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { RepositoryUnavailableError } from '../documents/documents.repository';
 import { toHttpException } from './http-errors';
 import type { ProcedureOperation } from './http-errors';
 import { ProceduresRepositoryUnavailableError } from './procedures.repository';
@@ -19,6 +20,7 @@ const PHRASES: [ProcedureOperation, string][] = [
   ['updateStep', 'la edición del paso'],
   ['removeStep', 'el borrado del paso'],
   ['reorderSteps', 'el reordenamiento de los pasos'],
+  ['setAreas', 'la asignación de áreas'],
 ];
 
 describe('toHttpException (procedures)', () => {
@@ -81,6 +83,23 @@ describe('toHttpException (procedures)', () => {
         message: `${phrase[0].toUpperCase()}${phrase.slice(1)} falló por un error inesperado`,
         cause: 'boom',
       });
+    });
+  });
+
+  it('503: the areas directory being down (the RepositoryUnavailableError of documents) is also a dependency not available', () => {
+    const failure = toHttpException(
+      new RepositoryUnavailableError('directorio caído'),
+      logger,
+      'setAreas',
+    );
+
+    expect(failure).toBeInstanceOf(ServiceUnavailableException);
+    expect(failure.message).toBe(
+      'No se pudo completar la asignación de áreas. Intentá de nuevo más tarde.',
+    );
+    expect(loggerError).toHaveBeenCalledWith({
+      message: 'La asignación de áreas falló por una dependencia no disponible',
+      cause: 'directorio caído',
     });
   });
 

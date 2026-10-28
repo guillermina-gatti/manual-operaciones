@@ -5,6 +5,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { RepositoryUnavailableError } from '../documents/documents.repository';
 import { errorMessage } from '../documents/http-errors';
 import { ProceduresRepositoryUnavailableError } from './procedures.repository';
 
@@ -16,7 +17,8 @@ export type ProcedureOperation =
   | 'addStep'
   | 'updateStep'
   | 'removeStep'
-  | 'reorderSteps';
+  | 'reorderSteps'
+  | 'setAreas';
 
 // How each operation is named in the messages, with its article.
 const PHRASES: Record<ProcedureOperation, string> = {
@@ -28,6 +30,7 @@ const PHRASES: Record<ProcedureOperation, string> = {
   updateStep: 'la edición del paso',
   removeStep: 'el borrado del paso',
   reorderSteps: 'el reordenamiento de los pasos',
+  setAreas: 'la asignación de áreas',
 };
 
 const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1);
@@ -42,7 +45,10 @@ export function toHttpException(
 ): HttpException {
   if (error instanceof HttpException) return error;
   const phrase = PHRASES[operation];
-  if (error instanceof ProceduresRepositoryUnavailableError) {
+  if (
+    error instanceof ProceduresRepositoryUnavailableError ||
+    error instanceof RepositoryUnavailableError
+  ) {
     logger.error({
       message: `${capitalize(phrase)} falló por una dependencia no disponible`,
       cause: errorMessage(error),
