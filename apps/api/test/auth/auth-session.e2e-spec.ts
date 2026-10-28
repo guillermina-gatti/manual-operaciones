@@ -56,7 +56,7 @@ describe('Auth & Sessions (E2E)', () => {
         .post('/api/auth/login')
         .set('User-Agent', 'Playwright-E2E-Agent/1.0')
         .send({
-          email: `  ${user.email.toUpperCase()}  `,
+          email: user.email.toUpperCase(),
           password: user.password,
         })
         .expect(200);

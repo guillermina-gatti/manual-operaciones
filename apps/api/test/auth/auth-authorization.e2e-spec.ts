@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { IsArray, IsString } from 'class-validator';
 import request from 'supertest';
 import {
   AccessService,
@@ -28,6 +29,8 @@ import {
 } from './helpers';
 
 class CheckAreaAccessBody {
+  @IsArray()
+  @IsString({ each: true })
   areaIds!: string[];
 }
 

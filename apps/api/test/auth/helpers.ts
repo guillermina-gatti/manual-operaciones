@@ -23,6 +23,14 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { REDIS_CLIENT } from '../../src/redis/redis.constants';
 import { FileStorage } from '../../src/storage/file-storage';
 import { InMemoryFileStorage } from '../../src/storage/in-memory-file-storage';
+import {
+  assertTestRedisClientOptions,
+  assertTestRedisIsolated,
+  useTestDatabase,
+  useTestRedis,
+} from '../test-database';
+
+export { assertTestRedisClientOptions, assertTestRedisIsolated };
 
 export const AUTH_E2E_PASSWORD = 'AuthE2e-ValidPassword!2026';
 export const LOOPBACK_IPS = ['127.0.0.1', '::ffff:127.0.0.1', '::1'] as const;
@@ -118,6 +126,9 @@ export interface AuthTestApp {
 export async function createAuthTestApp(
   extraControllers: Type<unknown>[] = [],
 ): Promise<AuthTestApp> {
+  useTestDatabase();
+  useTestRedis();
+
   const storage = new InMemoryFileStorage();
   const queue = new FakeProcessingQueue();
   const audit = new LoggerAuditLog();
@@ -134,23 +145,44 @@ export async function createAuthTestApp(
     .useValue(audit)
     .compile();
 
-  const app = moduleRef.createNestApplication();
-  configureApp(app);
-  await app.init();
+  let app: INestApplication | undefined;
+  try {
+    app = moduleRef.createNestApplication();
+    configureApp(app);
+    await app.init();
 
-  return {
-    app,
-    prisma: app.get(PrismaService),
-    redis: app.get<Redis>(REDIS_CLIENT),
-    rateLimiter: app.get(AuthRateLimiterService),
-    sessionService: app.get(SessionService),
-    authService: app.get(AuthService),
-    accessService: app.get(AccessService),
-    jwtService: app.get(JwtService),
-    storage,
-    queue,
-    audit,
-  };
+    const prisma = app.get(PrismaService);
+    const redis = app.get<Redis>(REDIS_CLIENT);
+    const rateLimiter = app.get(AuthRateLimiterService);
+    const sessionService = app.get(SessionService);
+    const authService = app.get(AuthService);
+    const accessService = app.get(AccessService);
+    const jwtService = app.get(JwtService);
+
+    await assertTestDatabaseConnected(prisma);
+    await assertTestRedisIsolated(redis);
+
+    return {
+      app,
+      prisma,
+      redis,
+      rateLimiter,
+      sessionService,
+      authService,
+      accessService,
+      jwtService,
+      storage,
+      queue,
+      audit,
+    };
+  } catch (error) {
+    if (app) {
+      await app.close().catch(() => undefined);
+    } else {
+      await moduleRef.close().catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export interface SeededAuthArea {
@@ -184,7 +216,9 @@ export class AuthTestSandbox {
     private readonly prisma: PrismaService,
     private readonly redis: Redis,
     private readonly rateLimiter: AuthRateLimiterService,
-  ) {}
+  ) {
+    assertTestRedisClientOptions(this.redis);
+  }
 
   trackEmail(email: string): string {
     this.emails.add(email.trim().toLowerCase());
@@ -276,6 +310,7 @@ export class AuthTestSandbox {
   }
 
   async cleanRedisKeys(): Promise<void> {
+    assertTestRedisClientOptions(this.redis);
     const ips = new Set<string>([...LOOPBACK_IPS, ...this.customIps]);
     const keysToDelete: string[] = [];
 

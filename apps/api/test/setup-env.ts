@@ -1,5 +1,6 @@
-/* En cada archivo de test: PrismaService lee DATABASE_URL, que apunta a la base de tests */
+/* En cada archivo de test: PrismaService y RedisModule leen la configuración aislada de pruebas */
 
-import { useTestDatabase } from './test-database';
+import { useTestDatabase, useTestRedis } from './test-database';
 
 useTestDatabase();
+useTestRedis();

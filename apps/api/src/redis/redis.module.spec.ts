@@ -76,6 +76,88 @@ describe('RedisModule', () => {
         client.disconnect();
       }
     });
+
+    it('debe configurar keyPrefix en el cliente cuando REDIS_KEY_PREFIX es una cadena no vacía', async () => {
+      const moduleRef: TestingModule = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({
+            isGlobal: true,
+            ignoreEnvFile: true,
+            load: [
+              () => ({
+                REDIS_URL: 'redis://localhost:6379/1',
+                REDIS_KEY_PREFIX: 'test:e2e:',
+              }),
+            ],
+          }),
+          RedisModule,
+        ],
+      }).compile();
+
+      const client = moduleRef.get<Redis>(REDIS_CLIENT);
+      try {
+        expect(client.options.keyPrefix).toBe('test:e2e:');
+      } finally {
+        client.disconnect();
+      }
+    });
+
+    it('no debe configurar keyPrefix cuando REDIS_KEY_PREFIX no está definido o está vacío', async () => {
+      const previousEnvPrefix = process.env.REDIS_KEY_PREFIX;
+      delete process.env.REDIS_KEY_PREFIX;
+
+      try {
+        const moduleWithoutPrefix: TestingModule =
+          await Test.createTestingModule({
+            imports: [
+              ConfigModule.forRoot({
+                isGlobal: true,
+                ignoreEnvFile: true,
+                load: [() => ({ REDIS_URL: 'redis://localhost:6379' })],
+              }),
+              RedisModule,
+            ],
+          }).compile();
+
+        const clientWithoutPrefix = moduleWithoutPrefix.get<Redis>(REDIS_CLIENT);
+        try {
+          expect(clientWithoutPrefix.options.keyPrefix).toBe('');
+        } finally {
+          clientWithoutPrefix.disconnect();
+        }
+
+        const moduleWithBlankPrefix: TestingModule =
+          await Test.createTestingModule({
+            imports: [
+              ConfigModule.forRoot({
+                isGlobal: true,
+                ignoreEnvFile: true,
+                load: [
+                  () => ({
+                    REDIS_URL: 'redis://localhost:6379',
+                    REDIS_KEY_PREFIX: '   ',
+                  }),
+                ],
+              }),
+              RedisModule,
+            ],
+          }).compile();
+
+        const clientWithBlankPrefix =
+          moduleWithBlankPrefix.get<Redis>(REDIS_CLIENT);
+        try {
+          expect(clientWithBlankPrefix.options.keyPrefix).toBe('');
+        } finally {
+          clientWithBlankPrefix.disconnect();
+        }
+      } finally {
+        if (previousEnvPrefix === undefined) {
+          delete process.env.REDIS_KEY_PREFIX;
+        } else {
+          process.env.REDIS_KEY_PREFIX = previousEnvPrefix;
+        }
+      }
+    });
   });
 
   describe('Listener de eventos de error', () => {

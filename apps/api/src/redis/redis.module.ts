@@ -24,12 +24,18 @@ const SAFE_REDIS_ERROR_CODES = new Set([
       useFactory: (configService: ConfigService): Redis => {
         const url =
           configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
+        const rawKeyPrefix = configService.get<string>('REDIS_KEY_PREFIX');
+        const keyPrefix =
+          typeof rawKeyPrefix === 'string' && rawKeyPrefix.trim().length > 0
+            ? rawKeyPrefix.trim()
+            : undefined;
         const client = new Redis(url, {
           lazyConnect: true,
           connectTimeout: 2000,
           commandTimeout: 1500,
           enableOfflineQueue: false,
           maxRetriesPerRequest: 1,
+          ...(keyPrefix ? { keyPrefix } : {}),
         });
 
         // Neutraliza excepciones no controladas de EventEmitter y registra fallos sanitizados
