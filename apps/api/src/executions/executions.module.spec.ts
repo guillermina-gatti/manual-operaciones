@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { JwtAuthGuard } from '../common/auth';
 import { UsersDirectory } from '../documents/ports/users-directory';
 import { PrismaUsersDirectory } from '../documents/adapters/prisma-users-directory';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -16,15 +17,22 @@ import { Clock, SystemClock } from './ports/clock';
 import { ProceduresCatalog } from './ports/procedures-catalog';
 import { PrismaExecutionsRepository } from './prisma-executions.repository';
 
+// PrismaModule is global in the app; here it is imported with a fake client. The real
+// JwtAuthGuard needs the global AuthModule, which is not under test here: the controller
+// specs run behind it.
+const compileModule = () =>
+  Test.createTestingModule({
+    imports: [PrismaModule, ExecutionsModule],
+  })
+    .overrideProvider(PrismaService)
+    .useValue({})
+    .overrideGuard(JwtAuthGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
+
 describe('ExecutionsModule', () => {
   it('wires each port to its adapter', async () => {
-    // PrismaModule is global in the app; here it is imported with a fake client.
-    const moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule, ExecutionsModule],
-    })
-      .overrideProvider(PrismaService)
-      .useValue({})
-      .compile();
+    const moduleRef = await compileModule();
 
     expect(moduleRef.get(ProceduresCatalog)).toBeInstanceOf(
       InMemoryProceduresCatalog,
@@ -41,12 +49,7 @@ describe('ExecutionsModule', () => {
   });
 
   it('wires the procedures metrics (HU38)', async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule, ExecutionsModule],
-    })
-      .overrideProvider(PrismaService)
-      .useValue({})
-      .compile();
+    const moduleRef = await compileModule();
 
     expect(moduleRef.get(ExecutionMetricsRepository)).toBeInstanceOf(
       PrismaExecutionMetricsRepository,

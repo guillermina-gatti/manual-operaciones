@@ -90,9 +90,18 @@ const AGGREGATES: MetricsAggregates = {
   ],
 };
 
-const as = (user: { id: string; role: AuthUser['role'] }): AuthUser => ({
+// As the real guard leaves it in request.user. The service still asks the directory
+// for the areas, so the ones here only complete the shape.
+const as = (user: {
+  id: string;
+  role: AuthUser['role'];
+  areaIds: readonly string[];
+}): AuthUser => ({
   id: user.id,
+  email: `${user.id}@fixtures.test`,
+  name: `Usuario ${user.role}`,
   role: user.role,
+  areaIds: [...user.areaIds],
 });
 const ADMIN = as(FIXTURE_USERS.admin);
 const SUPERVISOR_VENTAS = as(FIXTURE_USERS.supervisorVentas);
