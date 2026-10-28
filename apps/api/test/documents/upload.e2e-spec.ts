@@ -12,6 +12,7 @@ import {
   daysFromToday,
   pdfOfSize,
   seedDocument,
+  seedFixtureDirectory,
 } from './helpers';
 
 const TWO_MB = 2 * 1024 * 1024;
@@ -23,6 +24,7 @@ describe('POST /api/documents (integración)', () => {
 
   beforeAll(async () => {
     t = await createDocumentsTestApp();
+    await seedFixtureDirectory(t.prisma);
   });
 
   afterAll(async () => {

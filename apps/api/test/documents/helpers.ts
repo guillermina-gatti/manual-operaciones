@@ -1,19 +1,88 @@
 /* Arnés de integración de documentos: la app con la configuración de main.ts y simulaciones observables */
 
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
-import { FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
+import { ACCESS_TOKEN_TTL_SECONDS } from '../../src/auth/auth.service';
+import { PasswordService } from '../../src/auth/password.service';
+import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
 import { FakeProcessingQueue } from '../../src/documents/adapters/fake-processing-queue';
 import { LoggerAuditLog } from '../../src/documents/adapters/logger-audit-log';
 import { AuditLog } from '../../src/documents/ports/audit-log';
 import { ProcessingQueue } from '../../src/documents/ports/processing-queue';
+import type { DirectoryUser } from '../../src/documents/ports/users-directory';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { FileStorage } from '../../src/storage/file-storage';
 import { InMemoryFileStorage } from '../../src/storage/in-memory-file-storage';
-import type { DirectoryUser } from '../../src/documents/ports/users-directory';
+
+export const TEST_FIXTURE_PASSWORD = 'TestOnly-FixturePass!2026';
+
+const testJwtService = new JwtService();
+const testPasswordService = new PasswordService();
+let cachedFixturePasswordHashPromise: Promise<string> | null = null;
+
+function resolveTestJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.trim().length === 0) {
+    throw new Error(
+      'Falta JWT_SECRET en el entorno de pruebas: debe coincidir con el secreto que consume JwtAuthGuard',
+    );
+  }
+  return secret;
+}
+
+async function assertTestDatabaseConnected(
+  prisma: PrismaService,
+): Promise<void> {
+  const activeUrl = process.env.DATABASE_URL;
+  if (!activeUrl) {
+    throw new Error(
+      'Operación de fixtures abortada: DATABASE_URL no está configurada',
+    );
+  }
+
+  const testUrl = process.env.TEST_DATABASE_URL;
+  if (!testUrl || activeUrl !== testUrl) {
+    throw new Error(
+      'Operación de fixtures abortada: DATABASE_URL no coincide con TEST_DATABASE_URL',
+    );
+  }
+
+  const { hostname, pathname } = new URL(activeUrl);
+  const expectedDatabase = decodeURIComponent(pathname.replace(/^\//, ''));
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+  if (!isLocalHost || !expectedDatabase.endsWith('_test')) {
+    throw new Error(
+      `Operación de fixtures abortada: DATABASE_URL apunta a "${expectedDatabase}" en "${hostname}" (se requiere base local *_test)`,
+    );
+  }
+
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ current_database: string }>
+  >('SELECT current_database()');
+  const connectedDatabase = rows[0]?.current_database;
+  if (
+    !connectedDatabase ||
+    !connectedDatabase.endsWith('_test') ||
+    connectedDatabase !== expectedDatabase
+  ) {
+    throw new Error(
+      `Operación de fixtures abortada: la instancia de Prisma está conectada a "${connectedDatabase ?? 'desconocida'}" (se esperaba "${expectedDatabase}")`,
+    );
+  }
+}
+
+export function getTestFixturePasswordHash(): Promise<string> {
+  if (!cachedFixturePasswordHashPromise) {
+    cachedFixturePasswordHashPromise = testPasswordService.hash(
+      TEST_FIXTURE_PASSWORD,
+    );
+  }
+  return cachedFixturePasswordHashPromise;
+}
 
 export interface DocumentsTestApp {
   app: INestApplication;
@@ -51,6 +120,113 @@ export async function cleanDocuments(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
     'TRUNCATE document_versions, document_areas, documents CASCADE',
   );
+}
+
+const FIXTURE_AREAS_META = [
+  {
+    id: AREA_IDS.ventas,
+    name: `Fixture Ventas (${AREA_IDS.ventas})`,
+  },
+  {
+    id: AREA_IDS.operaciones,
+    name: `Fixture Operaciones (${AREA_IDS.operaciones})`,
+  },
+] as const;
+
+const FIXTURE_USERS_META: ReadonlyArray<{
+  user: DirectoryUser;
+  name: string;
+  email: string;
+}> = [
+  {
+    user: FIXTURE_USERS.admin,
+    name: 'Admin Fixture',
+    email: `fixture-${FIXTURE_USERS.admin.id}@fixtures.test.invalid`,
+  },
+  {
+    user: FIXTURE_USERS.supervisorVentas,
+    name: 'Supervisor Ventas Fixture',
+    email: `fixture-${FIXTURE_USERS.supervisorVentas.id}@fixtures.test.invalid`,
+  },
+  {
+    user: FIXTURE_USERS.empleadoVentas,
+    name: 'Empleado Ventas Fixture',
+    email: `fixture-${FIXTURE_USERS.empleadoVentas.id}@fixtures.test.invalid`,
+  },
+  {
+    user: FIXTURE_USERS.supervisorOperaciones,
+    name: 'Supervisor Operaciones Fixture',
+    email: `fixture-${FIXTURE_USERS.supervisorOperaciones.id}@fixtures.test.invalid`,
+  },
+  {
+    user: FIXTURE_USERS.empleadoOperaciones,
+    name: 'Empleado Operaciones Fixture',
+    email: `fixture-${FIXTURE_USERS.empleadoOperaciones.id}@fixtures.test.invalid`,
+  },
+];
+
+// Prepara de forma idempotente las áreas, usuarios y asignaciones user_areas de fixtures en PostgreSQL.
+// Separado de cleanDocuments() para no truncar tablas compartidas en cada test.
+export async function seedFixtureDirectory(
+  prisma: PrismaService,
+): Promise<void> {
+  await assertTestDatabaseConnected(prisma);
+  const passwordHash = await getTestFixturePasswordHash();
+
+  for (const area of FIXTURE_AREAS_META) {
+    await prisma.area.upsert({
+      where: { id: area.id },
+      create: {
+        id: area.id,
+        name: area.name,
+        isActive: true,
+      },
+      update: {
+        name: area.name,
+        isActive: true,
+      },
+    });
+  }
+
+  for (const entry of FIXTURE_USERS_META) {
+    await prisma.user.upsert({
+      where: { id: entry.user.id },
+      create: {
+        id: entry.user.id,
+        name: entry.name,
+        email: entry.email,
+        passwordHash,
+        role: entry.user.role,
+        isActive: true,
+      },
+      update: {
+        name: entry.name,
+        email: entry.email,
+        passwordHash,
+        role: entry.user.role,
+        isActive: true,
+      },
+    });
+  }
+
+  const fixtureUserIds = FIXTURE_USERS_META.map((entry) => entry.user.id);
+  await prisma.userArea.deleteMany({
+    where: { userId: { in: fixtureUserIds } },
+  });
+
+  const userAreaRows = FIXTURE_USERS_META.flatMap((entry) =>
+    entry.user.areaIds.map((areaId) => ({
+      userId: entry.user.id,
+      areaId,
+    })),
+  );
+
+  if (userAreaRows.length > 0) {
+    await prisma.userArea.createMany({
+      data: userAreaRows,
+      skipDuplicates: true,
+    });
+  }
 }
 
 export interface SeededDocument {
@@ -106,11 +282,12 @@ export async function seedDocument(
   return { id, versionId, storageKey, originalFileName };
 }
 
-// Cabeceras que lee el JwtAuthGuard simulado (src/common/auth). Cuando llegue la
-// autenticación real, este es el único lugar que cambia (overrideGuard).
+// Genera de forma sincrónica un JWT real firmado con JWT_SECRET para el guard de producción (JwtAuthGuard).
 export const authHeaders = (user: Pick<DirectoryUser, 'id' | 'role'>) => ({
-  'x-user-id': user.id,
-  'x-user-role': user.role,
+  Authorization: `Bearer ${testJwtService.sign(
+    { sub: user.id, role: user.role },
+    { secret: resolveTestJwtSecret(), expiresIn: ACCESS_TOKEN_TTL_SECONDS },
+  )}`,
 });
 
 // PDF del tamaño pedido: la firma %PDF- y relleno.
