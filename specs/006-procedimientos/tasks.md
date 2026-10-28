@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado (27/10/2026):** ninguna tarea empezada. T01 (esta spec) queda lista cuando se apruebe la revisión. T02 en adelante esperan esa aprobación.
+- **Estado (27/10/2026):** HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. Siguen T12 en adelante (áreas y visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
 
 Convenciones:
 
@@ -99,8 +99,8 @@ Convenciones:
 
 - **Qué hace:** e2e de los flujos críticos de borradores y pasos con la aplicación completa y la base de tests.
 - **Cubre:** E1 a E16.
-- **Archivos:** `test/procedures/drafts.e2e-spec.ts`.
-- **Verificación:** 201 al crear; 401 sin sesión y 403 con EMPLOYEE; 400 con datos inválidos; 409 con `reason` en segundo borrador y en versión publicada; 204 al borrar; la versión publicada conserva sus pasos (E11); un solo `DRAFT` con pedidos simultáneos (E16). Los corre Micaela.
+- **Archivos:** `test/procedures/app-helpers.ts` y `test/procedures/drafts.e2e-spec.ts`.
+- **Verificación:** 201 al crear; 401 sin sesión y 403 con SUPERVISOR y EMPLOYEE; 400 con datos inválidos; 404 con el mismo mensaje para un procedimiento inexistente y para una versión de otro procedimiento; 409 con `reason` en segundo borrador y en versión publicada; 204 al borrar; la versión publicada conserva sus pasos (E11); un solo `DRAFT` con pedidos simultáneos (E16). Los corre Micaela.
 
 ---
 
