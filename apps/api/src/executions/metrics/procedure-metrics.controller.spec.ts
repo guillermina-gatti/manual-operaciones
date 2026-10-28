@@ -5,24 +5,20 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import {
+  bearer,
+  realAuthProviders,
+  SPEC_USERS,
+} from '../../../test/executions/real-auth';
 import { configureApp } from '../../app.setup';
 import { ProcedureMetricsController } from './procedure-metrics.controller';
 import { ProcedureMetricsService } from './procedure-metrics.service';
 import type { ProcedureMetricsView } from './procedure-metrics.service';
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
-const ADMIN = {
-  'x-user-id': '0b000000-0000-4000-8000-000000000001',
-  'x-user-role': 'ADMIN',
-};
-const SUPERVISOR = {
-  'x-user-id': '0b000000-0000-4000-8000-000000000002',
-  'x-user-role': 'SUPERVISOR',
-};
-const EMPLOYEE = {
-  'x-user-id': '0b000000-0000-4000-8000-000000000003',
-  'x-user-role': 'EMPLOYEE',
-};
+const ADMIN = bearer(SPEC_USERS.admin);
+const SUPERVISOR = bearer(SPEC_USERS.supervisorVentas);
+const EMPLOYEE = bearer(SPEC_USERS.empleadoVentas);
 
 const view: ProcedureMetricsView = {
   filters: { areaId: null, from: null, to: null },
@@ -46,7 +42,10 @@ describe('ProcedureMetricsController (HTTP, service mocked)', () => {
     service = { procedures: jest.fn() };
     const moduleRef = await Test.createTestingModule({
       controllers: [ProcedureMetricsController],
-      providers: [{ provide: ProcedureMetricsService, useValue: service }],
+      providers: [
+        { provide: ProcedureMetricsService, useValue: service },
+        ...realAuthProviders(), // the real JwtAuthGuard, users from a fake database
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     configureApp(app); // /api prefix, ValidationPipe and Swagger, as in main.ts
@@ -74,10 +73,11 @@ describe('ProcedureMetricsController (HTTP, service mocked)', () => {
       .expect(200);
 
     expect(response.body).toEqual(view);
-    expect(service.procedures).toHaveBeenCalledWith(
-      { id: ADMIN['x-user-id'], role: 'ADMIN' },
-      { areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' },
-    );
+    expect(service.procedures).toHaveBeenCalledWith(SPEC_USERS.admin, {
+      areaId: VENTAS,
+      from: '2026-10-01',
+      to: '2026-10-27',
+    });
   });
 
   it('200 for SUPERVISOR, without filters', async () => {
@@ -86,13 +86,21 @@ describe('ProcedureMetricsController (HTTP, service mocked)', () => {
     await get().set(SUPERVISOR).expect(200);
 
     expect(service.procedures).toHaveBeenCalledWith(
-      { id: SUPERVISOR['x-user-id'], role: 'SUPERVISOR' },
+      SPEC_USERS.supervisorVentas,
       { areaId: undefined, from: undefined, to: undefined },
     );
   });
 
   it('401 without a session', async () => {
     await get().expect(401);
+
+    expect(service.procedures).not.toHaveBeenCalled();
+  });
+
+  it('401 with the old simulated x-user-* headers', async () => {
+    await get()
+      .set({ 'x-user-id': SPEC_USERS.admin.id, 'x-user-role': 'ADMIN' })
+      .expect(401);
 
     expect(service.procedures).not.toHaveBeenCalled();
   });
