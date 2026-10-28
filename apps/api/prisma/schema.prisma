@@ -319,3 +319,76 @@ model ExecutionStep {
   @@unique([executionId, stepOrder])
   @@map("execution_steps")
 }
+
+// ============================================================
+// EQUIPO B — PROCEDIMIENTOS Y VERSIONES
+// HU09 · HU10 · HU11 — dueña: Micaela (spec 006)
+// ============================================================
+//
+// Borrador = versión en estado DRAFT (a lo sumo una por procedimiento). Al publicar, la
+// anterior pasa a SUPERSEDED y sigue accesible para las ejecuciones (HU32). Cada versión tiene
+// sus propios pasos. Las áreas son del procedimiento. Con users y areas de A, y con las
+// ejecuciones de Mayra, solo nos relacionamos por ID, sin relaciones de Prisma.
+// ------------------------------------------------------------
+
+enum ProcedureVersionStatus {
+  DRAFT // editable; como máximo uno por procedimiento
+  PUBLISHED // inmutable; la más reciente es la vigente
+  SUPERSEDED // reemplazada por una publicada más nueva; sigue legible
+}
+
+model Procedure {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid // responsable (users de A)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  versions ProcedureVersion[]
+  areas    ProcedureArea[]
+
+  @@index([createdAt]) // orden del listado (R16)
+  @@map("procedures")
+}
+
+model ProcedureVersion {
+  id            String                 @id @default(uuid()) @db.Uuid
+  procedureId   String                 @map("procedure_id") @db.Uuid
+  versionNumber Int                    @map("version_number")
+  status        ProcedureVersionStatus @default(DRAFT)
+  title         String                 @db.VarChar(200) // cada versión guarda el suyo (P11)
+  description   String?                @db.VarChar(1000)
+  createdById   String                 @map("created_by_id") @db.Uuid // users de A
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  procedure Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  steps     Step[]
+
+  @@unique([procedureId, versionNumber])
+  // Como máximo un borrador por procedimiento (spec 006, R3; plan 006, D2).
+  @@unique([procedureId], map: "procedure_versions_one_draft_idx", where: { status: "DRAFT" })
+  @@map("procedure_versions")
+}
+
+model Step {
+  id                 String @id @default(uuid()) @db.Uuid
+  procedureVersionId String @map("procedure_version_id") @db.Uuid
+  stepOrder          Int    @map("step_order") // 1..n sin huecos (R7)
+  title              String @db.VarChar(200)
+  description        String @default("") @db.VarChar(2000)
+
+  version ProcedureVersion @relation(fields: [procedureVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([procedureVersionId, stepOrder])
+  @@map("steps")
+}
+
+model ProcedureArea {
+  procedureId String    @map("procedure_id") @db.Uuid
+  areaId      String    @map("area_id") @db.Uuid // areas de A
+  procedure   Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+
+  @@id([procedureId, areaId])
+  @@index([areaId])
+  @@map("procedure_areas")
+}
