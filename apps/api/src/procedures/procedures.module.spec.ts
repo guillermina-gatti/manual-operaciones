@@ -1,6 +1,9 @@
 import { Test } from '@nestjs/testing';
+import { PrismaAreasDirectory } from '../documents/adapters/prisma-areas-directory';
+import { AreasDirectory } from '../documents/ports/areas-directory';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProcedureAreasService } from './procedure-areas.service';
 import { ProcedureDraftService } from './procedure-draft.service';
 import { PrismaProceduresRepository } from './prisma-procedures.repository';
 import { ProceduresController } from './procedures.controller';
@@ -20,8 +23,12 @@ describe('ProceduresModule', () => {
     expect(moduleRef.get(ProceduresRepository)).toBeInstanceOf(
       PrismaProceduresRepository,
     );
+    expect(moduleRef.get(AreasDirectory)).toBeInstanceOf(PrismaAreasDirectory);
     expect(moduleRef.get(ProcedureDraftService)).toBeInstanceOf(
       ProcedureDraftService,
+    );
+    expect(moduleRef.get(ProcedureAreasService)).toBeInstanceOf(
+      ProcedureAreasService,
     );
     expect(moduleRef.get(ProceduresController)).toBeInstanceOf(
       ProceduresController,

@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../common/auth';
 import type { AuthUser } from '../common/auth';
+import { AreasResponse } from './dto/areas.response';
 import { CreateProcedureDto } from './dto/create-procedure.dto';
 import { CreateStepDto } from './dto/create-step.dto';
 import {
@@ -30,9 +31,11 @@ import {
   VersionResponse,
 } from './dto/procedure.response';
 import { ReorderStepsDto } from './dto/reorder-steps.dto';
+import { SetAreasDto } from './dto/set-areas.dto';
 import { StepResponse, toStepResponse } from './dto/step.response';
 import { UpdateStepDto } from './dto/update-step.dto';
 import { UpdateVersionDto } from './dto/update-version.dto';
+import { ProcedureAreasService } from './procedure-areas.service';
 import { ProcedureDraftService } from './procedure-draft.service';
 
 const UNAUTHORIZED = { status: 401, description: 'Sin autenticación' };
@@ -75,7 +78,10 @@ const UNAVAILABLE = { status: 503, description: 'La base no responde' };
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class ProceduresController {
-  constructor(private readonly drafts: ProcedureDraftService) {}
+  constructor(
+    private readonly drafts: ProcedureDraftService,
+    private readonly areas: ProcedureAreasService,
+  ) {}
 
   // POST /procedures: a procedure with its version 1 as a DRAFT (R2).
   @Post()
@@ -261,5 +267,29 @@ export class ProceduresController {
     @CurrentUser() user: AuthUser,
   ): Promise<void> {
     await this.drafts.removeStep(user, id, versionId, stepId);
+  }
+
+  // PUT /procedures/:id/areas: the whole set replaces the current one (R11, R12).
+  @Put(':id/areas')
+  @ApiResponse({
+    status: 200,
+    description: 'Las áreas que quedaron',
+    type: AreasResponse,
+  })
+  @ApiResponse({
+    ...INVALID,
+    description:
+      'El id no es un UUID, el cuerpo es inválido (repetidos, más de 100, ids que no son UUID) o alguna área no existe',
+  })
+  @ApiResponse(UNAUTHORIZED)
+  @ApiResponse(FORBIDDEN)
+  @ApiResponse({ ...NOT_FOUND, description: 'El procedimiento no existe' })
+  @ApiResponse(UNAVAILABLE)
+  async setAreas(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetAreasDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<AreasResponse> {
+    return { areaIds: await this.areas.setAreas(user, id, dto.areaIds) };
   }
 }

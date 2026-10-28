@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   INestApplication,
   NotFoundException,
@@ -7,6 +8,7 @@ import {
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { configureApp } from '../app.setup';
+import { ProcedureAreasService } from './procedure-areas.service';
 import { ProcedureDraftService } from './procedure-draft.service';
 import { ProceduresController } from './procedures.controller';
 import type {
@@ -36,6 +38,8 @@ const EMPLOYEE = authHeaders(
   'EMPLOYEE',
 );
 const ADMIN_USER = { id: ADMIN_ID, role: 'ADMIN' };
+const VENTAS = '0a000000-0000-4000-8000-000000000001';
+const OPERACIONES = '0a000000-0000-4000-8000-000000000002';
 
 const version: VersionRecord = {
   id: VERSION_ID,
@@ -80,6 +84,7 @@ describe('ProceduresController (HTTP, service mocked)', () => {
     | 'reorderSteps',
     jest.Mock
   >;
+  let areasService: { setAreas: jest.Mock };
 
   beforeAll(async () => {
     service = {
@@ -92,9 +97,13 @@ describe('ProceduresController (HTTP, service mocked)', () => {
       removeStep: jest.fn(),
       reorderSteps: jest.fn(),
     };
+    areasService = { setAreas: jest.fn() };
     const moduleRef = await Test.createTestingModule({
       controllers: [ProceduresController],
-      providers: [{ provide: ProcedureDraftService, useValue: service }],
+      providers: [
+        { provide: ProcedureDraftService, useValue: service },
+        { provide: ProcedureAreasService, useValue: areasService },
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     configureApp(app); // /api prefix, ValidationPipe and Swagger, as in main.ts
@@ -378,15 +387,97 @@ describe('ProceduresController (HTTP, service mocked)', () => {
     });
   });
 
+  describe('PUT /procedures/:id/areas', () => {
+    const url = `/api/procedures/${PROCEDURE_ID}/areas`;
+
+    it('200 with the areas that remain', async () => {
+      areasService.setAreas.mockResolvedValue([VENTAS, OPERACIONES]);
+
+      const response = await http()
+        .put(url)
+        .set(ADMIN)
+        .send({ areaIds: [VENTAS, OPERACIONES] })
+        .expect(200);
+
+      expect(areasService.setAreas).toHaveBeenCalledWith(
+        ADMIN_USER,
+        PROCEDURE_ID,
+        [VENTAS, OPERACIONES],
+      );
+      expect(response.body).toEqual({ areaIds: [VENTAS, OPERACIONES] });
+    });
+
+    it('200 with an empty set', async () => {
+      areasService.setAreas.mockResolvedValue([]);
+
+      const response = await http()
+        .put(url)
+        .set(ADMIN)
+        .send({ areaIds: [] })
+        .expect(200);
+
+      expect(response.body).toEqual({ areaIds: [] });
+    });
+
+    it('401 without a session and 403 for a SUPERVISOR or an EMPLOYEE, without calling the service', async () => {
+      await http().put(url).send({ areaIds: [] }).expect(401);
+      await http().put(url).set(SUPERVISOR).send({ areaIds: [] }).expect(403);
+      await http().put(url).set(EMPLOYEE).send({ areaIds: [] }).expect(403);
+
+      expect(areasService.setAreas).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['no areaIds', {}],
+      ['a single id instead of a list', { areaIds: VENTAS }],
+      ['an id that is not a UUID', { areaIds: ['ventas'] }],
+      ['a repeated area', { areaIds: [VENTAS, VENTAS] }],
+      ['an extra property', { areaIds: [], ownerId: ADMIN_ID }],
+    ])('400 with %s, without calling the service', async (_case, payload) => {
+      await http().put(url).set(ADMIN).send(payload).expect(400);
+
+      expect(areasService.setAreas).not.toHaveBeenCalled();
+    });
+
+    it('400 for a procedure id that is not a UUID', async () => {
+      await http()
+        .put('/api/procedures/uno/areas')
+        .set(ADMIN)
+        .send({ areaIds: [] })
+        .expect(400);
+
+      expect(areasService.setAreas).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [400, new BadRequestException('Alguna de las áreas no existe')],
+      [404, new NotFoundException('No se encontró el procedimiento')],
+      [503, new ServiceUnavailableException('caída')],
+    ])(
+      '%s from the service reaches the response unchanged',
+      async (status, error) => {
+        areasService.setAreas.mockRejectedValue(error);
+
+        const response = await http()
+          .put(url)
+          .set(ADMIN)
+          .send({ areaIds: [VENTAS] })
+          .expect(status);
+
+        expect(response.body.message).toBe(error.message);
+      },
+    );
+  });
+
   describe('Swagger', () => {
-    it('lists the 8 routes with the codes of the plan', async () => {
+    it('lists the 9 routes with the codes of the plan', async () => {
       const { body: doc } = await http().get('/api/docs-json').expect(200);
 
       const codes = (path: string, method: string) =>
         Object.keys(doc.paths[path][method].responses);
       expect(
         Object.keys(doc.paths).filter((p) => p.startsWith('/api/procedures')),
-      ).toHaveLength(6);
+      ).toHaveLength(7);
       expect(codes('/api/procedures', 'post')).toEqual(
         expect.arrayContaining(['201', '400', '401', '403', '503']),
       );
@@ -407,7 +498,7 @@ describe('ProceduresController (HTTP, service mocked)', () => {
       const operations = Object.entries(doc.paths)
         .filter(([path]) => path.startsWith('/api/procedures'))
         .flatMap(([, methods]) => Object.values(methods as object));
-      expect(operations).toHaveLength(8);
+      expect(operations).toHaveLength(9);
       for (const operation of operations) {
         const headers = (operation.parameters as any[]).filter(
           (p) => p.in === 'header',
@@ -418,6 +509,18 @@ describe('ProceduresController (HTTP, service mocked)', () => {
         );
         expect(headers.every((h) => h.required === true)).toBe(true);
       }
+    });
+
+    it('documents PUT /procedures/{id}/areas with its codes and response', async () => {
+      const { body: doc } = await http().get('/api/docs-json').expect(200);
+
+      const operation = doc.paths['/api/procedures/{id}/areas'].put;
+      expect(Object.keys(operation.responses)).toEqual(
+        expect.arrayContaining(['200', '400', '401', '403', '404', '503']),
+      );
+      expect(JSON.stringify(operation.responses['200'])).toContain(
+        'AreasResponse',
+      );
     });
   });
 });
