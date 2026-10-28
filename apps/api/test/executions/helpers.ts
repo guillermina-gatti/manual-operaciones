@@ -9,6 +9,7 @@ import type { DirectoryUser } from '../../src/documents/ports/users-directory';
 import { InMemoryProceduresCatalog } from '../../src/executions/adapters/in-memory-procedures-catalog';
 import { ProceduresCatalog } from '../../src/executions/ports/procedures-catalog';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { signTestJwt } from '../auth/helpers';
 import { seedDirectoryFixtures } from '../directory-fixtures';
 
 // A second Ventas employee, so the cross-employee 404 comes from ownership and not
@@ -75,7 +76,8 @@ export async function cleanExecutions(prisma: PrismaService): Promise<void> {
   );
 }
 
+// A real JWT signed with JWT_SECRET, as the login issues it. The guard only reads `sub`:
+// role and areas come from the users seeded above, so `role` here is informative.
 export const authHeaders = (user: Pick<DirectoryUser, 'id' | 'role'>) => ({
-  'x-user-id': user.id,
-  'x-user-role': user.role,
+  Authorization: `Bearer ${signTestJwt({ sub: user.id, role: user.role })}`,
 });
