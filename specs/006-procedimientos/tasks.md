@@ -108,17 +108,17 @@ Convenciones:
 
 ### T12 · Servicio de áreas
 
-- **Qué hace:** asignar el conjunto de áreas con `AreasDirectory.findExistingIds` (existencia, sin repetidos), reemplazando el anterior, sin importar el estado de las versiones.
-- **Cubre:** R11, R12; E17, E18.
-- **Archivos:** `src/procedures/procedure.service.ts`, el repositorio y sus `.spec.ts`.
-- **Verificación, test primero:** área inexistente → 400 sin cambios; repetida → 400; conjunto vacío válido; reemplazo completo; directorio caído → 503.
+- **Qué hace:** asignar el conjunto de áreas con `AreasDirectory.findExistingIds` (existencia), reemplazando el anterior, sin importar el estado de las versiones. `setAreas` en el repositorio, con bloqueo (D15).
+- **Cubre:** R11, R12; E17, E18; D7, D15.
+- **Archivos:** `src/procedures/procedure-areas.service.ts`, `src/procedures/procedures.repository.ts`, `src/procedures/prisma-procedures.repository.ts`, `src/procedures/http-errors.ts` y sus `.spec.ts`.
+- **Verificación, test primero:** área inexistente → 400 sin llamar al repositorio; conjunto vacío válido; reemplazo completo; procedimiento inexistente → 404; no toca versiones ni pasos; dos pedidos simultáneos terminan con uno de los dos conjuntos completos; directorio o base caídos → 503. Los repetidos los rechaza el DTO (T13).
 
 ### T13 · Endpoint de áreas y su integración
 
-- **Qué hace:** `PUT /procedures/:id/areas` en el controlador, con Swagger, y su e2e.
-- **Cubre:** R11, R12; E17, E18, E19.
-- **Archivos:** `src/procedures/procedures.controller.ts`, `test/procedures/areas.e2e-spec.ts`.
-- **Verificación:** asignar y reasignar; 400 con área inexistente; mover un procedimiento publicado de Ventas a Operaciones hace que el EMPLOYEE de Ventas reciba 404 en su pedido siguiente y que el de Operaciones lo vea (E19). Los corre Micaela.
+- **Qué hace:** `PUT /procedures/:id/areas` en el controlador, con Swagger y su DTO (arreglo de UUID, sin repetidos, hasta 100) y su respuesta; `AreasDirectory` en el módulo con el adaptador Prisma; y su e2e.
+- **Cubre:** R11, R12; E17, E18, E19 (la mitad de las áreas; la otra mitad, en T17); P18, P19.
+- **Archivos:** `src/procedures/dto/set-areas.dto.ts`, `src/procedures/dto/areas.response.ts`, `src/procedures/procedures.controller.ts`, `src/procedures/procedures.module.ts`, `test/procedures/areas.e2e-spec.ts` y sus `.spec.ts`.
+- **Verificación:** asignar y reasignar; 400 con área inexistente, repetida o con formato inválido, sin cambios; 401 y 403; 404 con procedimiento inexistente; mover un procedimiento publicado de Ventas a Operaciones deja sus áreas en Operaciones. Los corre Micaela.
 
 ---
 
@@ -150,7 +150,7 @@ Convenciones:
 - **Qué hace:** e2e de la visibilidad con la aplicación completa: la prueba que pide HU11.
 - **Cubre:** E19 a E27.
 - **Archivos:** `test/procedures/visibility.e2e-spec.ts`.
-- **Verificación:** EMPLOYEE de Ventas ve solo lo de Ventas; el detalle de otra área responde 404, idéntico al de un id inexistente (estado y cuerpo); sin borradores ni reemplazadas; ADMIN ve todo; sin áreas ve lista vacía; 400 con `limit=101`; 403 en la ruta de versiones. Los corre Micaela.
+- **Verificación:** EMPLOYEE de Ventas ve solo lo de Ventas; el detalle de otra área responde 404, idéntico al de un id inexistente (estado y cuerpo); sin borradores ni reemplazadas; ADMIN ve todo; sin áreas ve lista vacía; 400 con `limit=101`; 403 en la ruta de versiones; al pasar un procedimiento de Ventas a Operaciones, el EMPLOYEE de Ventas recibe 404 y el de Operaciones lo ve (E19). Los corre Micaela.
 
 ### T18 · Verificación de HU09, HU10 y HU11
 

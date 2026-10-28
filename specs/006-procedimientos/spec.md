@@ -76,7 +76,7 @@ Publicar queda fuera (HU32). Por eso, al terminar esta spec, un empleado todaví
 
 **Áreas (HU10)**
 
-- **R11 · Asignar áreas.** El ADMIN define el conjunto de áreas del procedimiento; el pedido reemplaza el conjunto anterior. Puede ser vacío. No puede tener repetidos, y todas las áreas tienen que existir (400 si no); se aceptan también las inactivas (P13). Se puede cambiar sin importar el estado de sus versiones, incluso si hay un borrador abierto.
+- **R11 · Asignar áreas.** El ADMIN define el conjunto de áreas del procedimiento; el pedido reemplaza el conjunto anterior. Puede ser vacío. No puede tener repetidos, y todas las áreas tienen que existir (400 si no); se aceptan también las inactivas (P13). Se puede cambiar sin importar el estado de sus versiones, incluso si hay un borrador abierto. Como mucho 100 áreas por pedido. Los repetidos se rechazan por formato (400 nombrando el campo `areaIds`) y las inexistentes consultando al directorio (400); si el pedido trae ambos defectos o un procedimiento inexistente con áreas inexistentes, gana el 400.
 - **R12 · Efecto inmediato.** El cambio de áreas rige desde el pedido siguiente: un usuario que pierde un área recibe 404 en ese procedimiento, también si tiene una ejecución en curso (acuerdo con la spec 005, P17).
 
 **Visibilidad (HU11)**
@@ -154,6 +154,8 @@ Tomadas en la etapa de aclaración (clarify) el 27/10/2026.
 | P15 · ¿Cómo se reordena? | Con la lista completa de pasos en el orden nuevo | R8 |
 | P16 · ¿En qué idioma van los mensajes de error HTTP? | En español, como `documents` y `executions`; comentarios e identificadores en inglés | Sección 9 |
 | P17 · ¿Cómo se alinea con la spec 005 de Mayra? | El puerto `ProceduresCatalog` es el de `executions/ports/procedures-catalog.ts`. `areaIds` son las áreas actuales del procedimiento, iguales en `findPublished` y en `findVersion`. Un procedimiento que cambia de área da 404 al empleado que la perdió, también con una ejecución en curso. Una versión sin pasos cuenta como sin versión publicada. `findVersion` devuelve versiones reemplazadas. El adaptador real va con HU32 | R12, R13, plan 7 |
+| P18 · ¿Qué devuelve `PUT /procedures/:id/areas`? | 200 con `{ areaIds }`, las áreas que quedaron, ordenadas. Un conjunto vacío es válido | R11 |
+| P19 · ¿Cómo se valida el pedido de áreas? | Formato en el DTO (arreglo de UUID, sin repetidos, hasta 100) y existencia con `AreasDirectory`. El orden de los chequeos es: rol (403), formato (400), existencia de las áreas (400) y por último el procedimiento (404) | R11 |
 
 ## 11. Preguntas abiertas
 
@@ -281,6 +283,7 @@ Escenario: E19 · mover de área
   Cuando el ADMIN lo pasa a Operaciones
   Entonces el EMPLOYEE de Ventas recibe 404 en su pedido siguiente
   Y un EMPLOYEE de Operaciones lo ve
+  (HU10 verifica el cambio de áreas en la base. Que el EMPLOYEE de Ventas reciba 404 y el de Operaciones lo vea se prueba con los GET de HU11, en T17.)
 
 # --- HU11 · visibilidad ---
 

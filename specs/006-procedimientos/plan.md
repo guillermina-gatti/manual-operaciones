@@ -54,7 +54,7 @@ Prefijo `/api`. Todas las rutas con `@UseGuards(JwtAuthGuard, RolesGuard)`. Los 
 | `POST /procedures` | ADMIN | 201 procedimiento con su versión 1 | R1, R2 |
 | `GET /procedures` | todos | 200 `{ data, total, page, limit }` | R13, R15, R16 |
 | `GET /procedures/:id` | todos | 200. ADMIN: datos, áreas y lista de versiones. Los demás: la vigente con sus pasos | R13, R14 |
-| `PUT /procedures/:id/areas` | ADMIN | 200 con las áreas | R11, R12 |
+| `PUT /procedures/:id/areas` | ADMIN | 200 con `{ areaIds }` | R11, R12, P18 |
 | `POST /procedures/:id/versions` | ADMIN | 201 borrador nuevo | R3, R4 |
 | `GET /procedures/:id/versions/:versionId` | ADMIN | 200 con sus pasos | R17 |
 | `PATCH /procedures/:id/versions/:versionId` | ADMIN | 200 | R5, R9 |
@@ -103,6 +103,7 @@ Las áreas se leen de `UsersDirectory` en cada pedido (R15). El ADMIN no las nec
 apps/api/src/procedures/
   procedures.module.ts            procedures.controller.ts
   procedure.service.ts            procedure-draft.service.ts   (borradores y pasos)
+  procedure-areas.service.ts      (asignación de áreas)
   procedure-access.policy.ts      step-order.ts                (funciones puras de orden)
   procedures.repository.ts        prisma-procedures.repository.ts
   http-errors.ts
@@ -131,6 +132,7 @@ Cada archivo `.ts` lleva su `.spec.ts` al lado. El módulo usa `{ provide: Users
 - **D12 · Adjuntos compartidos.** Al crear un borrador, las filas de `step_attachments` copian el mismo `storage_key`. Borrar un adjunto borra el archivo solo si no queda otra fila con esa clave. Subir sigue el orden "todo o nada" de documentos: inspeccionar el archivo, `FileStorage.put`, insertar la fila, y compensar con `FileStorage.delete` si algo falla. La clave la genera el sistema.
 - **D13 · Descargas.** `GET …/attachments/:attachmentId/download` está abierto a todos los roles y aplica R13 y R14 sobre la versión vigente; `FileStorage.getDownloadUrl` se llama solo después de comprobar el acceso (R21).
 - **D14 · Datos de demostración.** El seed de HU41 va a reutilizar los UUID de procedimientos de Mayra (`1a…`, `1b…`, `1c…`).
+- **D15 · Reemplazo de áreas.** `setAreas(procedureId, areaIds)` del repositorio corre en una transacción: bloquea la fila del procedimiento (`FOR UPDATE`), borra sus áreas y inserta las nuevas; si el procedimiento no existe devuelve `null` y no escribe. El bloqueo evita que dos pedidos simultáneos choquen en la clave compuesta; gana el último. El servicio vive en `procedure-areas.service.ts` y no en el de borradores, que solo depende del repositorio. `http-errors.ts` también traduce el `RepositoryUnavailableError` del directorio a 503 (P19).
 
 ## 7. Contrato con ejecuciones (para HU32)
 
