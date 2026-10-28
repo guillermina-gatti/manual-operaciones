@@ -10,13 +10,14 @@ import { errorMessage } from '../documents/http-errors';
 import { ExecutionsRepositoryUnavailableError } from './executions.repository';
 import { CatalogUnavailableError } from './ports/procedures-catalog';
 
-export type ExecutionOperation = 'start' | 'find' | 'complete';
+export type ExecutionOperation = 'start' | 'find' | 'complete' | 'metrics';
 
 // How each operation is named in the messages, with its article.
 const PHRASES: Record<ExecutionOperation, string> = {
   start: 'el inicio de la ejecución',
   find: 'la consulta de la ejecución',
   complete: 'el registro del paso',
+  metrics: 'la consulta de las métricas', // HU38
 };
 
 const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1);
