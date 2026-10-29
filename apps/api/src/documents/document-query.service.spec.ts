@@ -143,7 +143,11 @@ describe('DocumentQueryService.list', () => {
     it('usuario que no está en el directorio: filtra con áreas vacías', async () => {
       const unknown: AuthUser = {
         id: '0b000000-0000-4000-8000-000000000099',
+        email: 'desconocido@empresa.com',
+        name: 'Desconocido',
         role: 'EMPLOYEE',
+        // Sin áreas propias: el test comprueba que tampoco se las inventa el directorio.
+        areaIds: [],
       };
 
       await service.list(unknown, defaultQuery);

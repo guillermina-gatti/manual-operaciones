@@ -23,7 +23,13 @@ const TODAY = '2026-10-22';
 const YESTERDAY = '2026-10-21';
 const TOMORROW = '2026-10-23';
 
-const admin: AuthUser = { id: FIXTURE_USERS.admin.id, role: 'ADMIN' };
+const admin: AuthUser = {
+  id: FIXTURE_USERS.admin.id,
+  email: 'admin@empresa.com',
+  name: 'Admin',
+  role: 'ADMIN',
+  areaIds: [...FIXTURE_USERS.admin.areaIds],
+};
 
 const FILE = {
   key: 'documents/doc/version.pdf',

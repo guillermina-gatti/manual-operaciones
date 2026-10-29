@@ -50,7 +50,13 @@ const pdf = (originalname = 'manual v2.pdf') => ({
 // La transacción que entrega el repositorio simulado: el servicio solo la pasa.
 const TX = { transaction: 'simulada' };
 
-const admin: AuthUser = { id: FIXTURE_USERS.admin.id, role: 'ADMIN' };
+const admin: AuthUser = {
+  id: FIXTURE_USERS.admin.id,
+  email: 'admin@empresa.com',
+  name: 'Admin',
+  role: 'ADMIN',
+  areaIds: [...FIXTURE_USERS.admin.areaIds],
+};
 
 // Un documento de Ventas. Su responsable es el ADMIN, que puede serlo de cualquier área (R4).
 const documentRecord = (
