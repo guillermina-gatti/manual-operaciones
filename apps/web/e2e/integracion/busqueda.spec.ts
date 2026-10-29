@@ -5,6 +5,8 @@
 // Se corre aparte, como el ciclo de vida (spec 003, T28): `pnpm --filter web test:e2e:integracion`, con la
 // API levantada contra la base de tests, pasando la URL solo en el comando:
 //   DATABASE_URL=<la TEST_DATABASE_URL de apps/api/.env> pnpm dev:api
+// La sesión inicia sesión de verdad: antes, `pnpm --filter api seed:fixtures` deja los usuarios de prueba
+// con la contraseña de desarrollo.
 // Cada documento lleva "[e2e]" y una marca única en el título, y cada archivo tiene contenido distinto.
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
@@ -12,7 +14,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import type { DocumentResponse } from '../../lib/api';
 import { AREA_IDS } from '../../lib/directory/fixtures';
 import { pdfFile } from '../support/files';
-import { loginAs, userId } from '../support/session';
+import { authHeadersFor, loginAs, userId } from '../support/session';
 import type { TestUser } from '../support/session';
 
 const API_URL = 'http://localhost:3000';
@@ -31,7 +33,7 @@ test.beforeAll(async ({ request }) => {
 // Un documento de Ventas cargado por la ADMIN, por la API y a través del rewrite.
 async function createVentasDocument(request: APIRequestContext, title: string): Promise<DocumentResponse> {
   const response = await request.post('/api/documents', {
-    headers: { 'x-user-id': userId('admin'), 'x-user-role': 'ADMIN' },
+    headers: await authHeadersFor(request, 'admin'),
     multipart: {
       file: pdfFile('facturacion.pdf', 2048),
       title,

@@ -6,6 +6,8 @@
 // base de desarrollo, la API se levanta contra la base de tests, pasando la URL solo en el comando, después
 // de que `pnpm --filter api test:e2e` la deje migrada:
 //   DATABASE_URL=<la TEST_DATABASE_URL de apps/api/.env> pnpm dev:api
+// La sesión inicia sesión de verdad: antes, `pnpm --filter api seed:fixtures` deja los usuarios de prueba
+// con la contraseña de desarrollo.
 // Cada documento lleva "[e2e]" y una marca única en el título, y cada archivo tiene contenido distinto.
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
@@ -13,7 +15,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import type { DocumentResponse } from '../../lib/api';
 import { AREA_IDS } from '../../lib/directory/fixtures';
 import { pdfFile } from '../support/files';
-import { loginAs, userId } from '../support/session';
+import { authHeadersFor, loginAs, userId } from '../support/session';
 import type { TestUser } from '../support/session';
 
 const API_URL = 'http://localhost:3000';
@@ -35,7 +37,7 @@ test.beforeAll(async ({ request }) => {
 // así sigue siendo válido al pasar a Operaciones (R4 de la spec 001).
 async function createVentasDocument(request: APIRequestContext, name: string): Promise<DocumentResponse> {
   const response = await request.post('/api/documents', {
-    headers: { 'x-user-id': userId('admin'), 'x-user-role': 'ADMIN' },
+    headers: await authHeadersFor(request, 'admin'),
     multipart: {
       file: pdfFile('original.pdf', 2048),
       title: `[e2e] ${name} ${RUN}`,

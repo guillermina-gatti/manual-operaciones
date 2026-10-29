@@ -9,7 +9,8 @@ import {
   searchResult,
   versionHistory,
 } from './support/mock-api';
-import { loginAs } from './support/session';
+import { DEV_FIXTURE_PASSWORD } from '../lib/session/dev-credentials';
+import { accessTokenFor, loginAs } from './support/session';
 
 test('con la sesión de la ADMIN y la API simulada, /documentos muestra la tarjeta', async ({ page }) => {
   await loginAs(page, 'admin');
@@ -24,7 +25,14 @@ test('con la sesión de la ADMIN y la API simulada, /documentos muestra la tarje
     'href',
     `/documentos/${document.id}`,
   );
-  expect(api.requests[0].headers['x-user-role']).toBe('ADMIN');
+  expect(api.requests[0].headers.authorization).toBe(`Bearer ${accessTokenFor('admin')}`);
+  // La web inició sesión con el email y la contraseña de desarrollo de la ADMIN (sin cookie, el
+  // refresh del arranque da 401).
+  expect(api.auth.map((r) => r.path)).toEqual(['/api/auth/refresh', '/api/auth/login']);
+  expect(JSON.parse(api.auth[1].body!.toString())).toEqual({
+    email: 'admin@fixtures.test',
+    password: DEV_FIXTURE_PASSWORD,
+  });
   expect(api.unhandled).toEqual([]);
 });
 

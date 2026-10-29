@@ -10,7 +10,7 @@ import {
   listResponse,
   mockApi,
 } from './support/mock-api';
-import { loginAs } from './support/session';
+import { accessTokenFor, loginAs } from './support/session';
 
 const NOT_FOUND = 'No se encontró el documento.';
 
@@ -27,7 +27,7 @@ test.describe('E2 · Un empleado no ve la opción de cargar', () => {
     await expect(page.getByRole('article')).toHaveCount(1);
 
     await expect(page.getByRole('link', { name: 'Cargar documento' })).toHaveCount(0);
-    expect(api.requests[0].headers['x-user-role']).toBe('EMPLOYEE');
+    expect(api.requests[0].headers.authorization).toBe(`Bearer ${accessTokenFor('empleadoVentas')}`);
     expect(api.unhandled).toEqual([]);
   });
 

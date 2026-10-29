@@ -13,6 +13,9 @@ import type {
   VersionHistoryResponse,
 } from '../../lib/api';
 import { AREA_IDS, FIXTURE_USERS } from '../../lib/directory/fixtures';
+import { DEV_FIXTURE_PASSWORD, devEmail } from '../../lib/session/dev-credentials';
+import { accessTokenFor } from './session';
+import type { TestUser } from './session';
 
 export interface Reply {
   status: number;
@@ -51,8 +54,10 @@ export interface ApiHandlers {
 }
 
 export interface MockedApi {
-  // Todos los pedidos a /api, en orden.
+  // Todos los pedidos a /api, en orden, menos los de /api/auth.
   requests: ApiRequest[];
+  // Los pedidos de la sesión a /api/auth (login, refresh y logout), en orden.
+  auth: ApiRequest[];
   // Los que ningún handler atendió (respondidos con 501): un test puede exigir que no haya.
   unhandled: string[];
 }
@@ -76,8 +81,30 @@ const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
   },
 ];
 
+// La sesión (plan 002, sección 3.1), como la API de la pareja A: el login con la contraseña de desarrollo
+// da a cada usuario el token de accessTokenFor; el refresh responde 401 (al cargar la página no hay
+// cookie, así que la web inicia sesión); el logout siempre responde 200.
+function authReply(request: ApiRequest): Reply {
+  if (request.method === 'POST' && request.path === '/api/auth/login') {
+    const { email, password } = JSON.parse(request.body?.toString() ?? '{}') as Record<string, string>;
+    const key = (Object.keys(FIXTURE_USERS) as TestUser[]).find(
+      (candidate) => devEmail(FIXTURE_USERS[candidate].id) === email,
+    );
+    if (!key || password !== DEV_FIXTURE_PASSWORD) return apiError(401, 'Credenciales inválidas');
+    const { id, name, role } = FIXTURE_USERS[key];
+    return { status: 200, body: { accessToken: accessTokenFor(key), user: { id, name, email, role } } };
+  }
+  if (request.method === 'POST' && request.path === '/api/auth/refresh') {
+    return apiError(401, 'Sesión inválida o expirada');
+  }
+  if (request.method === 'POST' && request.path === '/api/auth/logout') {
+    return { status: 200, body: { revoked: true } };
+  }
+  return apiError(404, 'No existe');
+}
+
 export async function mockApi(page: Page, handlers: ApiHandlers): Promise<MockedApi> {
-  const api: MockedApi = { requests: [], unhandled: [] };
+  const api: MockedApi = { requests: [], auth: [], unhandled: [] };
 
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -89,6 +116,18 @@ export async function mockApi(page: Page, handlers: ApiHandlers): Promise<Mocked
       headers: await request.allHeaders(),
       body: request.postDataBuffer(),
     };
+
+    if (url.pathname.startsWith('/api/auth/')) {
+      api.auth.push(apiRequest);
+      const reply = authReply(apiRequest);
+      await route.fulfill({
+        status: reply.status,
+        contentType: 'application/json',
+        body: JSON.stringify(reply.body),
+      });
+      return;
+    }
+
     api.requests.push(apiRequest);
 
     for (const { name, method, path } of ROUTES) {
