@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { JwtAuthGuard } from '../common/auth';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProcedureDraftService } from './procedure-draft.service';
@@ -9,12 +10,16 @@ import { ProceduresRepository } from './procedures.repository';
 
 describe('ProceduresModule', () => {
   it('wires the repository to its Prisma adapter and builds the service and controller', async () => {
-    // PrismaModule is global in the app; here it is imported with a fake client.
+    // PrismaModule is global in the app; here it is imported with a fake client. The real
+    // JwtAuthGuard needs the global AuthModule, which is not under test here: the controller
+    // spec runs behind it.
     const moduleRef = await Test.createTestingModule({
       imports: [PrismaModule, ProceduresModule],
     })
       .overrideProvider(PrismaService)
       .useValue({})
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     expect(moduleRef.get(ProceduresRepository)).toBeInstanceOf(
