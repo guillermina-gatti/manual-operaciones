@@ -28,7 +28,7 @@ Verificado en `develop` (`bd163e7`).
 
 **API (`apps/api/src`)**
 
-- `common/auth/index.ts`: autenticación simulada (headers `x-user-id` y `x-user-role`) con `JwtAuthGuard`, `RolesGuard`, `@Roles()` y `@CurrentUser()`. Los guards reales (rama `feat/A-05-auth-session`, todavía sin mergear) van a mantener esos nombres y `AuthUser { id, role }`.
+- `common/auth/index.ts`: reexporta el login real de la Pareja A (`src/auth`): `JwtAuthGuard` (exige `Authorization: Bearer`, y lee el usuario y sus áreas activas de la base en cada pedido), `RolesGuard`, `@Roles()`, `@CurrentUser()` y `AuthUser { id, email, name, role, areaIds }`.
 - `documents/ports/users-directory.ts` y `areas-directory.ts`, con sus adaptadores Prisma (`PrismaUsersDirectory`, `PrismaAreasDirectory`), que lanzan `RepositoryUnavailableError` si la base no responde.
 - `executions/`: el modelo a seguir. Puertos abstractos, política de acceso en funciones puras, servicio con `mapErrors` y `toHttpException`, repositorio con transacción opaca, controlador sin lógica, respuestas campo por campo.
 - `executions/ports/procedures-catalog.ts`: el puerto que va a consumir mi adaptador real (HU32).
@@ -131,6 +131,7 @@ Cada archivo `.ts` lleva su `.spec.ts` al lado. El módulo usa `{ provide: Users
 - **D12 · Adjuntos compartidos.** Al crear un borrador, las filas de `step_attachments` copian el mismo `storage_key`. Borrar un adjunto borra el archivo solo si no queda otra fila con esa clave. Subir sigue el orden "todo o nada" de documentos: inspeccionar el archivo, `FileStorage.put`, insertar la fila, y compensar con `FileStorage.delete` si algo falla. La clave la genera el sistema.
 - **D13 · Descargas.** `GET …/attachments/:attachmentId/download` está abierto a todos los roles y aplica R13 y R14 sobre la versión vigente; `FileStorage.getDownloadUrl` se llama solo después de comprobar el acceso (R21).
 - **D14 · Datos de demostración.** El seed de HU41 va a reutilizar los UUID de procedimientos de Mayra (`1a…`, `1b…`, `1c…`).
+- **D16 · Login real en los tests.** Con el login de la Pareja A (`JwtAuthGuard` con Bearer), los tests de procedimientos se adaptan igual que los de Mayra y sin tocar código ajeno. Los specs de controlador usan `realAuthProviders()`, `bearer()` y `SPEC_USERS` de `test/executions/real-auth.ts`. El spec del módulo hace `overrideGuard(JwtAuthGuard)`, porque el `AuthModule` global no está en juego ahí. Los e2e firman los tokens con `signTestJwt` de `test/auth/helpers.ts`. Swagger pasa de `x-user-*` a Bearer (`@ApiBearerAuth()`). No hay cambio de comportamiento.
 
 ## 7. Contrato con ejecuciones (para HU32)
 
@@ -150,7 +151,7 @@ El cambio de una línea en `executions.module.ts` (`useClass: …`) lo hace Mayr
 
 - **Migraciones.** Se crean con `prisma migrate dev --create-only`; se revisa el SQL y se borra cualquier `DROP INDEX "chunks_..."`; el test de índices exige `chunks_embedding_idx`, `chunks_content_fts_idx`, `chunks_content_fts_es_unaccent_idx`, `chunks_area_ids_idx` y `chunks_document_id_idx`. La migración de sesiones de Camila (`20261025004346`) ordena antes de `add_executions`: hay que hablarlo con ella antes de mergear.
 - **`schema.prisma` y `app.module.ts`** los usan todas las parejas: avisar al equipo antes de mergear estos cambios (T02, T10 y T19 de las tareas).
-- **Autenticación simulada.** Hoy el rol sale de un header. No se apoya nada de seguridad en eso: el rol viene siempre de `@CurrentUser()` y las áreas, del directorio. El helper `authHeaders` de los tests está en un solo lugar, para cambiarlo cuando lleguen los guards reales.
+- **Autenticación real (D16).** El rol viene siempre de `@CurrentUser()` y las áreas, del directorio. El helper `authHeaders` de los e2e está en un solo lugar (`test/procedures/app-helpers.ts`) y firma los tokens con `signTestJwt`.
 - **Adjuntos.** `inspectFile` no acepta imágenes y `FileStorage` no copia: si hacen falta imágenes o copia real, se le pide a Matías (sección 11 de la spec).
 - **Responsable.** El nombre y el email para el Contrato 3 necesitan una ampliación del directorio de la pareja A; no bloquea HU09 a HU11.
 

@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado (27/10/2026):** HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. Siguen T12 en adelante (áreas y visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
+- **Estado (27/10/2026):** HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. Siguen T12 en adelante (áreas y visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
 
 Convenciones:
 
@@ -101,6 +101,14 @@ Convenciones:
 - **Cubre:** E1 a E16.
 - **Archivos:** `test/procedures/app-helpers.ts` y `test/procedures/drafts.e2e-spec.ts`.
 - **Verificación:** 201 al crear; 401 sin sesión y 403 con SUPERVISOR y EMPLOYEE; 400 con datos inválidos; 404 con el mismo mensaje para un procedimiento inexistente y para una versión de otro procedimiento; 409 con `reason` en segundo borrador y en versión publicada; 204 al borrar; la versión publicada conserva sus pasos (E11); un solo `DRAFT` con pedidos simultáneos (E16). Los corre Micaela.
+
+### T-JWT · Login real en los tests de procedimientos
+
+- **Qué hace:** adapta los tests de procedimientos al login real de la Pareja A, igual que Mayra y sin tocar código ajeno: specs de controlador detrás del guard real, spec del módulo con el guard reemplazado, usuarios completos en el spec del servicio, e2e con tokens firmados, y Swagger con Bearer en lugar de los headers `x-user-*`.
+- **Cubre:** R1; D16.
+- **Archivos:** `src/procedures/procedure-draft.service.spec.ts`, `src/procedures/procedures.module.spec.ts`, `src/procedures/procedures.controller.spec.ts`, `src/procedures/procedures.controller.ts` (se sacan los `@ApiHeader`), `test/procedures/app-helpers.ts` y `test/procedures/drafts.e2e-spec.ts`.
+- **Verificación, test primero:** los headers `x-user-id` y `x-user-role` dan 401 en las 8 rutas (unitario) y en el e2e, aun mandando el id y el rol de un ADMIN, sin escribir nada; sin token 401; SUPERVISOR y EMPLOYEE 403; Swagger documenta Bearer en cada operación y ningún header `x-user-*`; sin errores de `tsc` en los archivos de procedimientos. El e2e lo corre Micaela.
+- **Estado:** hecha (28/10/2026).
 
 ---
 
