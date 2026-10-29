@@ -4,6 +4,9 @@ import { ApiError } from './api-error';
 // Tipo de función para obtener los encabezados de autenticación (ej. Token JWT)
 export type GetAuthHeaders = () => Record<string, string>;
 
+// Renueva el token después de un 401 (plan 002, sección 3.1). Devuelve si se pudo renovar.
+export type RefreshAuth = () => Promise<boolean>;
+
 // Interfaz pública del cliente de API
 export interface ApiClient {
   request<T>(path: string, init?: RequestInit): Promise<T>;
@@ -13,7 +16,33 @@ export interface ApiClient {
 const API_PREFIX = '/api/';
 
 // Fábrica para crear la instancia del cliente HTTP
-export function createApiClient(getAuthHeaders: GetAuthHeaders): ApiClient {
+export function createApiClient(
+  getAuthHeaders: GetAuthHeaders,
+  refreshAuth?: RefreshAuth,
+): ApiClient {
+  // Hace la petición con los encabezados de autenticación del momento. Dice si llevaba alguno.
+  async function send(path: string, init: RequestInit) {
+    // Preparamos los encabezados HTTP
+    const headers = new Headers(init.headers);
+    headers.set('Accept', 'application/json');
+
+    // Inyectamos los encabezados de autenticación
+    const authHeaders = Object.entries(getAuthHeaders());
+    for (const [name, value] of authHeaders) {
+      headers.set(name, value);
+    }
+
+    try {
+      // Ejecutamos la petición HTTP
+      return { response: await fetch(path, { ...init, headers }), authenticated: authHeaders.length > 0 };
+    } catch (error) {
+      // Si el usuario canceló la petición a propósito, no lo tratamos como falla de red
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      // Error de red o conexión caída (estado 0)
+      throw new ApiError(0);
+    }
+  }
+
   return {
     async request<T>(path: string, init: RequestInit = {}): Promise<T> {
       // Validamos que la ruta comience con '/api/'
@@ -21,24 +50,14 @@ export function createApiClient(getAuthHeaders: GetAuthHeaders): ApiClient {
         throw new Error(`Solo se puede pedir a ${API_PREFIX}…, no a "${path}"`);
       }
 
-      // Preparamos los encabezados HTTP
-      const headers = new Headers(init.headers);
-      headers.set('Accept', 'application/json');
+      const first = await send(path, init);
+      let response = first.response;
 
-      // Inyectamos los encabezados de autenticación
-      for (const [name, value] of Object.entries(getAuthHeaders())) {
-        headers.set(name, value);
-      }
-
-      let response: Response;
-      try {
-        // Ejecutamos la petición HTTP
-        response = await fetch(path, { ...init, headers });
-      } catch (error) {
-        // Si el usuario canceló la petición a propósito, no lo tratamos como falla de red
-        if (error instanceof DOMException && error.name === 'AbortError') throw error;
-        // Error de red o conexión caída (estado 0)
-        throw new ApiError(0);
+      // Un 401 con sesión es un token vencido: se renueva una sola vez y se repite el pedido.
+      // Sin sesión no se intenta: el 401 es el esperado.
+      if (response.status === 401 && first.authenticated && refreshAuth) {
+        const refreshed = await refreshAuth().catch(() => false);
+        if (refreshed) response = (await send(path, init)).response;
       }
 
       // Intentamos parsear la respuesta como JSON

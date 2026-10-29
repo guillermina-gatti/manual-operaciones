@@ -1,12 +1,13 @@
 // Único punto de entrada de lib/api: los componentes importan de '@/lib/api', nunca de un archivo interno.
-import { getAuthHeaders } from '@/lib/session';
+import { getAuthHeaders, refreshSession } from '@/lib/session';
 import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
 import { createExecutionsApi } from './executions';
 import { createMetricsApi } from './metrics';
 
-// El cliente que usan las pantallas: cada pedido lleva las cabeceras de la sesión.
-export const apiClient = createApiClient(getAuthHeaders);
+// El cliente que usan las pantallas: cada pedido lleva el Bearer de la sesión y, si el token
+// venció (401), se renueva una vez y se repite.
+export const apiClient = createApiClient(getAuthHeaders, refreshSession);
 
 // Las llamadas a /api/documents, con ese cliente.
 export const {
@@ -44,7 +45,7 @@ export type {
 
 export { ApiError } from './api-error';
 export { createApiClient } from './client';
-export type { ApiClient, GetAuthHeaders } from './client';
+export type { ApiClient, GetAuthHeaders, RefreshAuth } from './client';
 export { describeApiError } from './error-messages';
 export type { ErrorContext, ErrorDescription, UploadField } from './error-messages';
 export { useApiResource } from './use-api-resource';
