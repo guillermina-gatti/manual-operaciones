@@ -7,6 +7,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { SPEC_USERS } from '../../test/executions/real-auth';
 import type { AuthUser } from '../common/auth';
 import { ProcedureDraftService } from './procedure-draft.service';
 import {
@@ -20,18 +21,10 @@ import type {
   VersionRecord,
 } from './procedures.repository';
 
-const ADMIN: AuthUser = {
-  id: '0b000000-0000-4000-8000-000000000001',
-  role: 'ADMIN',
-};
-const SUPERVISOR: AuthUser = {
-  id: '0b000000-0000-4000-8000-000000000002',
-  role: 'SUPERVISOR',
-};
-const EMPLOYEE: AuthUser = {
-  id: '0b000000-0000-4000-8000-000000000003',
-  role: 'EMPLOYEE',
-};
+// As the real guard leaves them in request.user (id, email, name, role and areas).
+const ADMIN: AuthUser = SPEC_USERS.admin;
+const SUPERVISOR: AuthUser = SPEC_USERS.supervisorVentas;
+const EMPLOYEE: AuthUser = SPEC_USERS.empleadoVentas;
 
 const PROCEDURE_ID = '1a000000-0000-4000-8000-000000000001';
 const VERSION_ID = '1b000000-0000-4000-8000-000000000001';

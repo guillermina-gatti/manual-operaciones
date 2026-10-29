@@ -154,6 +154,7 @@ Tomadas en la etapa de aclaración (clarify) el 27/10/2026.
 | P15 · ¿Cómo se reordena? | Con la lista completa de pasos en el orden nuevo | R8 |
 | P16 · ¿En qué idioma van los mensajes de error HTTP? | En español, como `documents` y `executions`; comentarios e identificadores en inglés | Sección 9 |
 | P17 · ¿Cómo se alinea con la spec 005 de Mayra? | El puerto `ProceduresCatalog` es el de `executions/ports/procedures-catalog.ts`. `areaIds` son las áreas actuales del procedimiento, iguales en `findPublished` y en `findVersion`. Un procedimiento que cambia de área da 404 al empleado que la perdió, también con una ejecución en curso. Una versión sin pasos cuenta como sin versión publicada. `findVersion` devuelve versiones reemplazadas. El adaptador real va con HU32 | R12, R13, plan 7 |
+| D16 · ¿Cómo se autentica ahora que está el login real de la Pareja A? | El servidor exige `Authorization: Bearer <jwt>` y rechaza con 401 los headers `x-user-id` y `x-user-role`. El rol y las áreas salen de la base en cada pedido. Los tests de controlador corren detrás del guard real con `real-auth.ts` de Mayra; los e2e firman los tokens con `signTestJwt` de Camila. Swagger pasa de los headers a Bearer. No cambia ninguna regla de negocio ni ninguna respuesta de las rutas | R1, R15 |
 
 ## 11. Preguntas abiertas
 

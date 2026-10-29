@@ -6,6 +6,11 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import {
+  bearer,
+  realAuthProviders,
+  SPEC_USERS,
+} from '../../test/executions/real-auth';
 import { configureApp } from '../app.setup';
 import { ProcedureDraftService } from './procedure-draft.service';
 import { ProceduresController } from './procedures.controller';
@@ -19,23 +24,13 @@ const PROCEDURE_ID = '1a000000-0000-4000-8000-000000000001';
 const VERSION_ID = '1b000000-0000-4000-8000-000000000001';
 const STEP_ID = '1c000000-0000-4000-8000-000000000001';
 const OTHER_STEP_ID = '1c000000-0000-4000-8000-000000000002';
-const ADMIN_ID = '0b000000-0000-4000-8000-000000000001';
+const ADMIN_ID = SPEC_USERS.admin.id;
 const T0 = new Date('2026-10-27T10:00:00.000Z');
 
-const authHeaders = (id: string, role: string) => ({
-  'x-user-id': id,
-  'x-user-role': role,
-});
-const ADMIN = authHeaders(ADMIN_ID, 'ADMIN');
-const SUPERVISOR = authHeaders(
-  '0b000000-0000-4000-8000-000000000002',
-  'SUPERVISOR',
-);
-const EMPLOYEE = authHeaders(
-  '0b000000-0000-4000-8000-000000000003',
-  'EMPLOYEE',
-);
-const ADMIN_USER = { id: ADMIN_ID, role: 'ADMIN' };
+const ADMIN = bearer(SPEC_USERS.admin);
+const SUPERVISOR = bearer(SPEC_USERS.supervisorVentas);
+const EMPLOYEE = bearer(SPEC_USERS.empleadoVentas);
+const ADMIN_USER = SPEC_USERS.admin; // what the real guard leaves in request.user
 
 const version: VersionRecord = {
   id: VERSION_ID,
@@ -94,7 +89,10 @@ describe('ProceduresController (HTTP, service mocked)', () => {
     };
     const moduleRef = await Test.createTestingModule({
       controllers: [ProceduresController],
-      providers: [{ provide: ProcedureDraftService, useValue: service }],
+      providers: [
+        { provide: ProcedureDraftService, useValue: service },
+        ...realAuthProviders(), // the real JwtAuthGuard, users from a fake database
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     configureApp(app); // /api prefix, ValidationPipe and Swagger, as in main.ts
@@ -277,6 +275,17 @@ describe('ProceduresController (HTTP, service mocked)', () => {
         expect(fn).not.toHaveBeenCalled();
     });
 
+    it('R1: 401 with the old simulated x-user-* headers and the service is not called', async () => {
+      await send(method, path, body)
+        .set({
+          'x-user-id': SPEC_USERS.admin.id,
+          'x-user-role': 'ADMIN',
+        })
+        .expect(401);
+      for (const fn of Object.values(service))
+        expect(fn).not.toHaveBeenCalled();
+    });
+
     it.each([
       ['SUPERVISOR', SUPERVISOR],
       ['EMPLOYEE', EMPLOYEE],
@@ -401,7 +410,7 @@ describe('ProceduresController (HTTP, service mocked)', () => {
       ).toEqual(expect.arrayContaining(['200', '400', '404', '409']));
     });
 
-    it('documents x-user-id and x-user-role as required headers on every operation', async () => {
+    it('documents the Bearer token on every operation and no x-user-* header', async () => {
       const { body: doc } = await http().get('/api/docs-json').expect(200);
 
       const operations = Object.entries(doc.paths)
@@ -409,14 +418,11 @@ describe('ProceduresController (HTTP, service mocked)', () => {
         .flatMap(([, methods]) => Object.values(methods as object));
       expect(operations).toHaveLength(8);
       for (const operation of operations) {
-        const headers = (operation.parameters as any[]).filter(
-          (p) => p.in === 'header',
+        expect(operation.security).toEqual([{ bearer: [] }]);
+        const headers = (operation.parameters ?? []).filter(
+          (p: { in: string }) => p.in === 'header',
         );
-        expect(headers).toHaveLength(2);
-        expect(headers.map((h) => h.name)).toEqual(
-          expect.arrayContaining(['x-user-id', 'x-user-role']),
-        );
-        expect(headers.every((h) => h.required === true)).toBe(true);
+        expect(headers).toEqual([]);
       }
     });
   });

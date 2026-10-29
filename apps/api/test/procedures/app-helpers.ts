@@ -6,6 +6,7 @@ import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import type { DirectoryUser } from '../../src/documents/ports/users-directory';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { signTestJwt } from '../auth/helpers';
 import { seedDirectoryFixtures } from '../directory-fixtures';
 
 export interface ProceduresTestApp {
@@ -29,7 +30,9 @@ export async function createProceduresTestApp(): Promise<ProceduresTestApp> {
   return { app, prisma };
 }
 
+// A real JWT signed with JWT_SECRET, as the login issues it. The guard only reads `sub`:
+// role and areas come from the users seeded above (seedDirectoryFixtures), so `role` here
+// is informative.
 export const authHeaders = (user: Pick<DirectoryUser, 'id' | 'role'>) => ({
-  'x-user-id': user.id,
-  'x-user-role': user.role,
+  Authorization: `Bearer ${signTestJwt({ sub: user.id, role: user.role })}`,
 });
