@@ -56,6 +56,32 @@ export function searchScope(viewer: AccessSubject): SearchScope {
   return { areaIds: viewer.areaIds };
 }
 
+// Spec 005, R4 y R6: el estado de revisión lo ve, y "Marcar como revisado" lo puede usar, el ADMIN o
+// el responsable. No mira áreas: para llegar acá el documento ya pasó canView.
+export function canReview(
+  user: { id: string; role: Role },
+  document: { ownerId: string },
+): boolean {
+  return user.role === 'ADMIN' || document.ownerId === user.id;
+}
+
+// Spec 005, R5: los ACTIVE con la fecha de revisión hasta lastDay (hoy + 30) que el usuario puede
+// revisar. El ADMIN, todos; los demás, los suyos que todavía puede ver (listWhere ya exige ACTIVE).
+export function pendingReviewWhere(
+  viewer: AccessSubject,
+  userId: string,
+  lastDay: Date,
+): Prisma.DocumentWhereInput {
+  if (viewer.role === 'ADMIN') {
+    return { status: 'ACTIVE', reviewDate: { lte: lastDay } };
+  }
+  return {
+    ...listWhere(viewer),
+    ownerId: userId,
+    reviewDate: { lte: lastDay },
+  };
+}
+
 // 6. Comprueba si un usuario puede ser propietario de algo basado en las áreas indicadas
 export function canBeOwner(owner: AccessSubject, areaIds: string[]): boolean {
   return owner.role === 'ADMIN' || sharesArea(owner.areaIds, areaIds);

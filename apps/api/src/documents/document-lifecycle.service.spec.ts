@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { AuthUser } from '../common/auth';
+import { Clock } from '../common/clock';
 import { StorageUnavailableError } from '../storage/file-storage';
 import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
@@ -855,6 +857,446 @@ describe('DocumentLifecycleService', () => {
         documentId: DOCUMENT_ID,
         detail: '503',
       });
+    });
+  });
+});
+
+// Spec 005 (T10): "Marcar como revisado", con el reloj fijo en el 9/11/2026 a las 23:30 de Buenos
+// Aires (en UTC ya es el 10/11). El documento es de Ventas, vencido, y su responsable es el EMPLOYEE
+// de Ventas.
+describe('DocumentLifecycleService.markReviewed (R6 a R9)', () => {
+  const NOW = new Date('2026-11-10T02:30:00.000Z');
+  class FixedClock extends Clock {
+    now(): Date {
+      return new Date(NOW);
+    }
+  }
+
+  const empleadoVentas: AuthUser = {
+    id: FIXTURE_USERS.empleadoVentas.id,
+    email: 'empleado.ventas@empresa.com',
+    name: 'Empleado Ventas',
+    role: 'EMPLOYEE',
+    areaIds: [...FIXTURE_USERS.empleadoVentas.areaIds],
+  };
+  const supervisorVentas: AuthUser = {
+    id: FIXTURE_USERS.supervisorVentas.id,
+    email: 'supervisor.ventas@empresa.com',
+    name: 'Supervisor Ventas',
+    role: 'SUPERVISOR',
+    areaIds: [...FIXTURE_USERS.supervisorVentas.areaIds],
+  };
+  const empleadoOperaciones: AuthUser = {
+    id: FIXTURE_USERS.empleadoOperaciones.id,
+    email: 'empleado.operaciones@empresa.com',
+    name: 'Empleado Operaciones',
+    role: 'EMPLOYEE',
+    areaIds: [...FIXTURE_USERS.empleadoOperaciones.areaIds],
+  };
+
+  const overdue = (overrides: Partial<DocumentRecord> = {}) =>
+    documentRecord({
+      ownerId: empleadoVentas.id,
+      reviewDate: new Date('2026-11-04T00:00:00.000Z'),
+      lastReviewedAt: null,
+      lastReviewedById: null,
+      ...overrides,
+    });
+
+  let events: string[];
+  let users: { findById: jest.Mock };
+  let repository: {
+    runInTransaction: jest.Mock;
+    findByIdWithAreas: jest.Mock;
+    lockForUpdate: jest.Mock;
+    markReviewed: jest.Mock;
+  };
+  let audit: { record: jest.Mock };
+  let loggerError: jest.SpyInstance;
+  let service: DocumentLifecycleService;
+
+  beforeEach(() => {
+    loggerError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    events = [];
+    const fixtureUsers = Object.values(FIXTURE_USERS);
+    users = {
+      findById: jest.fn((id: string) =>
+        Promise.resolve(fixtureUsers.find((user) => user.id === id) ?? null),
+      ),
+    };
+    repository = {
+      runInTransaction: jest.fn(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          events.push('begin');
+          try {
+            const result = await fn(TX);
+            events.push('commit');
+            return result;
+          } catch (error) {
+            events.push('rollback');
+            throw error;
+          }
+        },
+      ),
+      findByIdWithAreas: jest.fn(() => {
+        events.push('read');
+        return Promise.resolve(overdue());
+      }),
+      lockForUpdate: jest.fn(() => {
+        events.push('lock');
+        return Promise.resolve(overdue());
+      }),
+      markReviewed: jest.fn(
+        (
+          _tx: unknown,
+          _id: string,
+          review: { reviewDate: Date; reviewedById: string; at: Date },
+        ) => {
+          events.push('markReviewed');
+          return Promise.resolve(
+            overdue({
+              reviewDate: review.reviewDate,
+              lastReviewedAt: review.at,
+              lastReviewedById: review.reviewedById,
+            }),
+          );
+        },
+      ),
+    };
+    audit = {
+      record: jest.fn((entry: AuditEntry) => {
+        events.push(`audit:${entry.result}`);
+        return Promise.resolve();
+      }),
+    };
+    service = new DocumentLifecycleService(
+      { findExistingIds: jest.fn() } as unknown as AreasDirectory,
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      { put: jest.fn(), delete: jest.fn() } as unknown as FileStorage,
+      { enqueue: jest.fn() } as unknown as ProcessingQueue,
+      audit as unknown as AuditLog,
+      new FixedClock(),
+    );
+  });
+
+  afterEach(() => {
+    loggerError.mockRestore();
+  });
+
+  const statusOf = (promise: Promise<unknown>) =>
+    promise.then(
+      () => 'ok',
+      (error: { getStatus?: () => number }) => error.getStatus?.(),
+    );
+  const failureAudit = () =>
+    audit.record.mock.calls.find(
+      ([entry]) => (entry as AuditEntry).result === 'FAILURE',
+    )?.[0] as AuditEntry | undefined;
+
+  it('E8: el responsable lo marca; escribe con la fecha, el actor y el instante del reloj, y audita en la transacción', async () => {
+    const response = await service.markReviewed(
+      DOCUMENT_ID,
+      { reviewDate: '2027-05-09' },
+      empleadoVentas,
+    );
+
+    expect(repository.markReviewed).toHaveBeenCalledWith(TX, DOCUMENT_ID, {
+      reviewDate: new Date('2027-05-09T00:00:00.000Z'),
+      reviewedById: empleadoVentas.id,
+      at: NOW,
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'DOCUMENT_REVIEW',
+        actorId: empleadoVentas.id,
+        documentId: DOCUMENT_ID,
+        result: 'SUCCESS',
+        at: NOW,
+      }),
+      TX,
+    );
+    expect(events).toEqual([
+      'read',
+      'begin',
+      'lock',
+      'markReviewed',
+      'audit:SUCCESS',
+      'commit',
+    ]);
+    expect(response.reviewDate).toBe('2027-05-09');
+    expect(response.review).toEqual({
+      status: 'UP_TO_DATE',
+      lastReviewedAt: NOW.toISOString(),
+      lastReviewedById: empleadoVentas.id,
+    });
+  });
+
+  it('el ADMIN también puede, aunque no sea el responsable', async () => {
+    await expect(
+      statusOf(
+        service.markReviewed(DOCUMENT_ID, { reviewDate: '2027-05-09' }, admin),
+      ),
+    ).resolves.toBe('ok');
+  });
+
+  it('E9: la fecha de hoy en Argentina → 400, sin leer la base', async () => {
+    const failure = service.markReviewed(
+      DOCUMENT_ID,
+      { reviewDate: '2026-11-09' },
+      empleadoVentas,
+    );
+
+    await expect(failure).rejects.toThrow(
+      new BadRequestException(
+        'reviewDate tiene que ser posterior a hoy (2026-11-09)',
+      ),
+    );
+    expect(repository.findByIdWithAreas).not.toHaveBeenCalled();
+    expect(repository.runInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('mañana en Argentina (aunque en UTC ya sea hoy) pasa', async () => {
+    await expect(
+      statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2026-11-10' },
+          empleadoVentas,
+        ),
+      ),
+    ).resolves.toBe('ok');
+  });
+
+  it('un documento que no existe → 404', async () => {
+    repository.findByIdWithAreas.mockResolvedValue(null);
+
+    await expect(
+      service.markReviewed(
+        DOCUMENT_ID,
+        { reviewDate: '2027-05-09' },
+        empleadoVentas,
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(repository.runInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('un documento de otra área → 404, con el mismo mensaje (no revela que existe)', async () => {
+    await expect(
+      service.markReviewed(
+        DOCUMENT_ID,
+        { reviewDate: '2027-05-09' },
+        empleadoOperaciones,
+      ),
+    ).rejects.toThrow(new NotFoundException('No se encontró el documento'));
+  });
+
+  it('E10: lo ve pero no es el responsable → 403, sin abrir la transacción', async () => {
+    await expect(
+      service.markReviewed(
+        DOCUMENT_ID,
+        { reviewDate: '2027-05-09' },
+        supervisorVentas,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(repository.runInTransaction).not.toHaveBeenCalled();
+    expect(repository.markReviewed).not.toHaveBeenCalled();
+  });
+
+  it('E11: archivado → 409 ARCHIVED (solo el ADMIN llega: para los demás es 404)', async () => {
+    repository.findByIdWithAreas.mockResolvedValue(
+      overdue({ status: 'ARCHIVED' }),
+    );
+
+    const error = await service
+      .markReviewed(DOCUMENT_ID, { reviewDate: '2027-05-09' }, admin)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      reason: 'ARCHIVED',
+    });
+    await expect(
+      statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2027-05-09' },
+          empleadoVentas,
+        ),
+      ),
+    ).resolves.toBe(404);
+  });
+
+  it('archivado bajo el bloqueo → 409 y rollback', async () => {
+    repository.lockForUpdate.mockResolvedValue(overdue({ status: 'ARCHIVED' }));
+
+    await expect(
+      statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2027-05-09' },
+          empleadoVentas,
+        ),
+      ),
+    ).resolves.toBe(409);
+    expect(repository.markReviewed).not.toHaveBeenCalled();
+    expect(events).toContain('rollback');
+  });
+
+  it('bajo el bloqueo ya no es el responsable → 403; el ADMIN sigue pudiendo', async () => {
+    repository.lockForUpdate.mockResolvedValue(
+      overdue({ ownerId: FIXTURE_USERS.supervisorVentas.id }),
+    );
+
+    await expect(
+      statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2027-05-09' },
+          empleadoVentas,
+        ),
+      ),
+    ).resolves.toBe(403);
+    expect(repository.markReviewed).not.toHaveBeenCalled();
+    await expect(
+      statusOf(
+        service.markReviewed(DOCUMENT_ID, { reviewDate: '2027-05-09' }, admin),
+      ),
+    ).resolves.toBe('ok');
+  });
+
+  it('bajo el bloqueo ya no existe → 404', async () => {
+    repository.lockForUpdate.mockResolvedValue(null);
+
+    await expect(
+      statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2027-05-09' },
+          empleadoVentas,
+        ),
+      ),
+    ).resolves.toBe(404);
+  });
+
+  it('D12: la misma fecha que ya tiene se acepta y se registra', async () => {
+    repository.findByIdWithAreas.mockResolvedValue(
+      overdue({ reviewDate: new Date('2027-05-09T00:00:00.000Z') }),
+    );
+
+    await expect(
+      statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2027-05-09' },
+          empleadoVentas,
+        ),
+      ),
+    ).resolves.toBe('ok');
+    expect(repository.markReviewed).toHaveBeenCalled();
+  });
+
+  it('R13: la base no responde → 503 y auditoría FAILURE', async () => {
+    repository.markReviewed.mockRejectedValue(
+      new RepositoryUnavailableError('base caída'),
+    );
+
+    await expect(
+      service.markReviewed(
+        DOCUMENT_ID,
+        { reviewDate: '2027-05-09' },
+        empleadoVentas,
+      ),
+    ).rejects.toThrow(ServiceUnavailableException);
+    expect(failureAudit()).toMatchObject({
+      action: 'DOCUMENT_REVIEW',
+      actorId: empleadoVentas.id,
+      documentId: DOCUMENT_ID,
+      result: 'FAILURE',
+      detail: '503',
+    });
+  });
+
+  it('un 403 también queda auditado como FAILURE', async () => {
+    await statusOf(
+      service.markReviewed(
+        DOCUMENT_ID,
+        { reviewDate: '2027-05-09' },
+        supervisorVentas,
+      ),
+    );
+
+    expect(failureAudit()).toMatchObject({
+      action: 'DOCUMENT_REVIEW',
+      actorId: supervisorVentas.id,
+      result: 'FAILURE',
+      detail: '403',
+    });
+  });
+
+  // T13 (R12): la fecha anterior y la nueva.
+  describe('auditoría con las fechas (R12)', () => {
+    it('E8: audita la fecha anterior leída bajo el bloqueo (no la de la primera lectura) y la nueva', async () => {
+      // Entre la primera lectura y el bloqueo, otra revisión cambió la fecha a 2026-11-20.
+      repository.findByIdWithAreas.mockResolvedValue(overdue());
+      repository.lockForUpdate.mockResolvedValue(
+        overdue({ reviewDate: new Date('2026-11-20T00:00:00.000Z') }),
+      );
+
+      await service.markReviewed(
+        DOCUMENT_ID,
+        { reviewDate: '2027-05-09' },
+        empleadoVentas,
+      );
+
+      expect(audit.record).toHaveBeenCalledWith(
+        {
+          action: 'DOCUMENT_REVIEW',
+          actorId: empleadoVentas.id,
+          documentId: DOCUMENT_ID,
+          result: 'SUCCESS',
+          previousReviewDate: '2026-11-20',
+          newReviewDate: '2027-05-09',
+          at: NOW,
+        },
+        TX,
+      );
+    });
+
+    it('un 403 audita FAILURE con la fecha pedida y la que tenía', async () => {
+      await statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2027-05-09' },
+          supervisorVentas,
+        ),
+      );
+
+      expect(failureAudit()).toMatchObject({
+        result: 'FAILURE',
+        detail: '403',
+        previousReviewDate: '2026-11-04',
+        newReviewDate: '2027-05-09',
+      });
+    });
+
+    it('un 400 de la fecha audita la fecha pedida, sin la anterior (no se leyó el documento)', async () => {
+      await statusOf(
+        service.markReviewed(
+          DOCUMENT_ID,
+          { reviewDate: '2026-11-09' },
+          empleadoVentas,
+        ),
+      );
+
+      const entry = failureAudit();
+      expect(entry).toMatchObject({
+        detail: '400',
+        newReviewDate: '2026-11-09',
+      });
+      expect(entry).not.toHaveProperty('previousReviewDate');
     });
   });
 });

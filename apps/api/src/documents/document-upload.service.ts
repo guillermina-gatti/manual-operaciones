@@ -2,6 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { AuthUser } from '../common/auth';
+import { Clock, SystemClock } from '../common/clock';
 import { FileStorage } from '../storage/file-storage';
 import { DocumentWriteSteps, truncateFileName } from './document-write-steps';
 import { DocumentRecord, DocumentsRepository } from './documents.repository';
@@ -34,6 +35,7 @@ export class DocumentUploadService {
     storage: FileStorage,
     private readonly queue: ProcessingQueue,
     private readonly audit: AuditLog,
+    clock: Clock = new SystemClock(),
   ) {
     this.steps = new DocumentWriteSteps(
       areas,
@@ -41,6 +43,7 @@ export class DocumentUploadService {
       documents,
       storage,
       audit,
+      clock,
     );
   }
 

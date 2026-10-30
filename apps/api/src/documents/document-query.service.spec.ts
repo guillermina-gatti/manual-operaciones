@@ -9,7 +9,8 @@ import type { AuthUser } from '../common/auth';
 import { StorageUnavailableError } from '../storage/file-storage';
 import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
-import { listWhere } from './document-access.policy';
+import { Clock } from '../common/clock';
+import { listWhere, pendingReviewWhere } from './document-access.policy';
 import { DocumentQueryService } from './document-query.service';
 import { RepositoryUnavailableError } from './documents.repository';
 import type {
@@ -766,5 +767,229 @@ describe('DocumentQueryService.search', () => {
 
     await expect(failure).rejects.toBeInstanceOf(InternalServerErrorException);
     await expect(failure).rejects.toThrow('No se pudo completar la búsqueda.');
+  });
+});
+
+// Spec 005 (T09): el estado de revisión en las respuestas y "Por revisar", con el reloj fijo en el
+// 9/11/2026 a las 23:30 de Buenos Aires (en UTC ya es el 10/11).
+describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
+  class FixedClock extends Clock {
+    now(): Date {
+      return new Date('2026-11-10T02:30:00.000Z');
+    }
+  }
+
+  // El SUPERVISOR de Ventas ve los documentos de Ventas, pero no es su responsable.
+  const otroDeVentas: AuthUser = {
+    id: FIXTURE_USERS.supervisorVentas.id,
+    email: 'supervisor.ventas@empresa.com',
+    name: 'Supervisor Ventas',
+    role: 'SUPERVISOR',
+    areaIds: [AREA_IDS.ventas],
+  };
+  // Vencido hace 5 días, de Ventas, con el EMPLOYEE de Ventas como responsable.
+  const overdue: DocumentRecord = {
+    ...record,
+    ownerId: empleadoVentas.id,
+    reviewDate: new Date('2026-11-04T00:00:00.000Z'),
+    lastReviewedAt: null,
+    lastReviewedById: null,
+  };
+  const dueSoon: DocumentRecord = {
+    ...overdue,
+    id: '0c000000-0000-4000-8000-000000000002',
+    reviewDate: new Date('2026-11-19T00:00:00.000Z'),
+  };
+  const never = { lastReviewedAt: null, lastReviewedById: null };
+  const searchQuery = { q: 'caja', page: 1, limit: 20 };
+
+  let users: { findById: jest.Mock };
+  let repository: {
+    list: jest.Mock;
+    findByIdWithAreas: jest.Mock;
+    search: jest.Mock;
+    listForReview: jest.Mock;
+    count: jest.Mock;
+  };
+  let service: DocumentQueryService;
+
+  beforeEach(() => {
+    users = {
+      findById: jest.fn((id: string) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+    };
+    repository = {
+      list: jest.fn().mockResolvedValue({ data: [dueSoon], total: 1 }),
+      findByIdWithAreas: jest.fn().mockResolvedValue(overdue),
+      search: jest.fn().mockResolvedValue({
+        data: [{ record: dueSoon, fragment: null }],
+        total: 1,
+      }),
+      listForReview: jest
+        .fn()
+        .mockResolvedValue({ data: [overdue, dueSoon], total: 2 }),
+      count: jest.fn().mockResolvedValue(0),
+    };
+    service = new DocumentQueryService(
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      { getDownloadUrl: jest.fn() } as unknown as FileStorage,
+      new FixedClock(),
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('el estado en el detalle, el listado y la búsqueda (R4, D6, D7)', () => {
+    it('E2: el responsable lo ve en el detalle, con el estado calculado para el 9/11', async () => {
+      const response = await service.findOne(empleadoVentas, overdue.id);
+
+      expect(response.review).toEqual({ status: 'OVERDUE', ...never });
+    });
+
+    it('E1: el responsable lo ve en el listado y en la búsqueda', async () => {
+      const list = await service.list(empleadoVentas, defaultQuery);
+      const search = await service.search(empleadoVentas, searchQuery);
+
+      expect(list.data[0].review).toEqual({ status: 'DUE_SOON', ...never });
+      expect(search.data[0].review).toEqual({ status: 'DUE_SOON', ...never });
+    });
+
+    it('el ADMIN lo ve aunque no sea el responsable', async () => {
+      const response = await service.findOne(admin, overdue.id);
+
+      expect(response.review).toEqual({ status: 'OVERDUE', ...never });
+    });
+
+    it('E5: otro usuario de la misma área no recibe la clave review', async () => {
+      const detail = await service.findOne(otroDeVentas, overdue.id);
+      const list = await service.list(otroDeVentas, defaultQuery);
+      const search = await service.search(otroDeVentas, searchQuery);
+
+      expect(detail).not.toHaveProperty('review');
+      expect(list.data[0]).not.toHaveProperty('review');
+      expect(search.data[0]).not.toHaveProperty('review');
+    });
+  });
+
+  describe('pendingReview (R5)', () => {
+    it('pide el filtro de la política con hoy + 30 = 9/12, en hora de Argentina (D4)', async () => {
+      await service.pendingReview(empleadoVentas, defaultQuery);
+
+      expect(repository.listForReview).toHaveBeenCalledWith(
+        pendingReviewWhere(
+          { role: 'EMPLOYEE', areaIds: [AREA_IDS.ventas] },
+          empleadoVentas.id,
+          new Date('2026-12-09T00:00:00.000Z'),
+        ),
+        1,
+        20,
+      );
+    });
+
+    it('E7: para el ADMIN, sin filtro de responsable ni de áreas', async () => {
+      await service.pendingReview(admin, { page: 2, limit: 10 });
+
+      expect(repository.listForReview).toHaveBeenCalledWith(
+        {
+          status: 'ACTIVE',
+          reviewDate: { lte: new Date('2026-12-09T00:00:00.000Z') },
+        },
+        2,
+        10,
+      );
+    });
+
+    it('E6: devuelve en el orden del repositorio, con review en cada uno, sin consultar count', async () => {
+      const response = await service.pendingReview(empleadoVentas, defaultQuery);
+
+      expect(response).toEqual({
+        data: [
+          expect.objectContaining({
+            id: overdue.id,
+            review: { status: 'OVERDUE', ...never },
+          }),
+          expect.objectContaining({
+            id: dueSoon.id,
+            review: { status: 'DUE_SOON', ...never },
+          }),
+        ],
+        total: 2,
+        page: 1,
+        limit: 20,
+        isReviewer: true,
+      });
+      expect(repository.count).not.toHaveBeenCalled();
+    });
+
+    it('E13: sin pendientes, si es responsable de algo, isReviewer es true (D19)', async () => {
+      repository.listForReview.mockResolvedValue({ data: [], total: 0 });
+      repository.count.mockResolvedValue(2);
+
+      const response = await service.pendingReview(empleadoVentas, defaultQuery);
+
+      expect(response).toEqual({
+        data: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        isReviewer: true,
+      });
+      expect(repository.count).toHaveBeenCalledWith({
+        ...listWhere({ role: 'EMPLOYEE', areaIds: [AREA_IDS.ventas] }),
+        ownerId: empleadoVentas.id,
+      });
+    });
+
+    it('D9: quien no es responsable de nada recibe la lista vacía e isReviewer false, sin 403', async () => {
+      repository.listForReview.mockResolvedValue({ data: [], total: 0 });
+
+      await expect(
+        service.pendingReview(otroDeVentas, defaultQuery),
+      ).resolves.toEqual({
+        data: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        isReviewer: false,
+      });
+    });
+
+    it('el ADMIN siempre es revisor, sin consultar count', async () => {
+      repository.listForReview.mockResolvedValue({ data: [], total: 0 });
+
+      const response = await service.pendingReview(admin, defaultQuery);
+
+      expect(response.isReviewer).toBe(true);
+      expect(repository.count).not.toHaveBeenCalled();
+    });
+
+    it('R13: el directorio no responde → 503 y nunca lista', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      users.findById.mockRejectedValue(
+        new RepositoryUnavailableError('directorio caído'),
+      );
+
+      await expect(
+        service.pendingReview(empleadoVentas, defaultQuery),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(repository.listForReview).not.toHaveBeenCalled();
+    });
+
+    it('R13: la base no responde → 503', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      repository.listForReview.mockRejectedValue(
+        new RepositoryUnavailableError('connection terminated'),
+      );
+
+      await expect(
+        service.pendingReview(empleadoVentas, defaultQuery),
+      ).rejects.toThrow(ServiceUnavailableException);
+    });
   });
 });

@@ -121,4 +121,44 @@ describe('LoggerAuditLog', () => {
       });
     });
   });
+
+  // Spec 005, R12: cada "Marcar como revisado", con la fecha anterior y la nueva.
+  describe('acción DOCUMENT_REVIEW (spec 005)', () => {
+    it('registra la fecha anterior y la nueva', async () => {
+      await new LoggerAuditLog().record({
+        action: 'DOCUMENT_REVIEW',
+        actorId: ADMIN_ID,
+        documentId: DOCUMENT_ID,
+        result: 'SUCCESS',
+        previousReviewDate: '2026-11-04',
+        newReviewDate: '2027-05-09',
+        at: AT,
+      });
+
+      expect(log).toHaveBeenCalledWith({
+        action: 'DOCUMENT_REVIEW',
+        actorId: ADMIN_ID,
+        documentId: DOCUMENT_ID,
+        result: 'SUCCESS',
+        previousReviewDate: '2026-11-04',
+        newReviewDate: '2027-05-09',
+        at: '2026-10-22T12:00:00.000Z',
+      });
+    });
+
+    it('sin las fechas, no escribe esas claves', async () => {
+      await new LoggerAuditLog().record({
+        action: 'DOCUMENT_REVIEW',
+        actorId: ADMIN_ID,
+        result: 'FAILURE',
+        detail: '400',
+        at: AT,
+      });
+
+      const [logged] = log.mock.calls[0] as [Record<string, unknown>];
+      expect(Object.keys(logged).sort()).toEqual(
+        ['action', 'actorId', 'at', 'detail', 'result'].sort(),
+      );
+    });
+  });
 });

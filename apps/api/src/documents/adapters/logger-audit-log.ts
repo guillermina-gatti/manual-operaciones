@@ -16,6 +16,10 @@ export class LoggerAuditLog extends AuditLog {
       ...(entry.documentId && { documentId: entry.documentId }),
       result: entry.result,
       ...(entry.detail && { detail: entry.detail }),
+      ...(entry.previousReviewDate && {
+        previousReviewDate: entry.previousReviewDate,
+      }),
+      ...(entry.newReviewDate && { newReviewDate: entry.newReviewDate }),
       at: entry.at.toISOString(),
     });
     return Promise.resolve();

@@ -1,6 +1,7 @@
 /* Arma la feature de documentos: qué implementación usa cada puerto (plan 5) */
 
 import { Module } from '@nestjs/common';
+import { Clock, SystemClock } from '../common/clock';
 import { StorageModule } from '../storage/storage.module';
 import { FakeProcessingQueue } from './adapters/fake-processing-queue';
 import { LoggerAuditLog } from './adapters/logger-audit-log';
@@ -31,6 +32,7 @@ import { PrismaDocumentsRepository } from './prisma-documents.repository';
     { provide: AreasDirectory, useClass: PrismaAreasDirectory },
     { provide: UsersDirectory, useClass: PrismaUsersDirectory },
     { provide: AuditLog, useClass: LoggerAuditLog }, // hasta resolver A1 (plan 5.4)
+    { provide: Clock, useClass: SystemClock }, // "hoy" de la fecha de revisión (spec 005, D2)
   ],
 })
 export class DocumentsModule {}
