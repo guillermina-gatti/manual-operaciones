@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (30/10/2026):** listas para empezar; el plan está revisado y sin preguntas abiertas. T01 a T06 son el backend y T07, la [verificación](#t07--verificación-de-la-feature). Sin pantallas ni Playwright: el panel es de la pareja B (D13).
+- **Estado (30/10/2026):** T01 a T07 **hechas**. Sin commits: los hace el usuario. T01 a T06 son el backend y T07, la [verificación](#t07--verificación-de-la-feature). Sin pantallas ni Playwright: el panel es de la pareja B (D13).
 
 Convenciones:
 
@@ -32,6 +32,7 @@ Convenciones:
   - `review-status.spec.ts`, `document-query.service.spec.ts`, `document-access.policy.spec.ts` y `test/documents/reviews.e2e-spec.ts` (spec 005) pasan **sin cambios**: son la red de seguridad del cambio en `reviewStatusOf` y `pendingReview`.
 - **Depende de:** —
 - **Commit:** `refactor(api): compartir el límite de los documentos por vencer`
+- **Estado:** hecha. Los 4 tests nuevos fallaron primero. `document-query.service.ts` deja de importar `addDays` y `DUE_SOON_DAYS`. `test:e2e reviews` (spec 005): 38 pasan sin cambios.
 
 ### T02 · Reglas de alcance y período, desde las métricas de la pareja B
 
@@ -49,6 +50,7 @@ Convenciones:
   Falla porque el archivo no existe.
 - **Depende de:** —
 - **Commit:** `feat(api): reutilizar las reglas de alcance y período de las métricas`
+- **Estado:** hecha. Falló primero (el archivo no existía); 16 tests. `src/executions` no se tocó: solo se importa.
 - **Nota:** al terminar, avisar a Mayra (pareja B) que documentos importa esas cuatro funciones (D4). Lo manda Matías.
 
 ### T03 · Filtros de la consulta
@@ -62,6 +64,7 @@ Convenciones:
   - `userId` → error en `userId`.
 - **Depende de:** T02
 - **Commit:** `feat(api): validar los filtros de las métricas de documentos`
+- **Estado:** hecha. Falló primero (el DTO no existía); 8 tests.
 
 ### T04 · Repositorio: los totales en una sola consulta
 
@@ -87,6 +90,7 @@ Convenciones:
   Falla porque el repositorio no existe.
 - **Depende de:** T01, T02
 - **Commit:** `feat(api): contar las métricas de documentos en la base`
+- **Estado:** hecha. Falló primero (el repositorio no existía); 10 tests. La versión `REPLACED` en error de E8 se arma en el test con `prisma.documentVersion` (pasa la primera a `REPLACED` y crea una `CURRENT` en `READY`), sin cambiar `seedDocument`. `uploaded` con solo `from` y solo `to` también se prueba acá (4 y 5 de los seis bordes).
 
 ### T05 · Servicio y respuesta
 
@@ -110,6 +114,7 @@ Convenciones:
   - `document-metrics.response.spec.ts`: con una vista que trae un campo de más, la respuesta es exactamente `filters` y los seis totales (`toStrictEqual`).
 - **Depende de:** T02, T04
 - **Commit:** `feat(api): calcular las métricas de documentos`
+- **Estado:** hecha. Fallaron primero los 3 de `http-errors.spec.ts` y las dos suites nuevas (no existían). 78 tests en las 6 suites que se corrieron. El servicio recibe `UsersDirectory`, `DocumentMetricsRepository` y el `Clock` de `src/common/clock.ts`; el método se llama `documents(user, filters)`. Además de los casos de la tarea: SUPERVISOR con un área que no existe → el mismo 404, y el 500 deja la causa en el log.
 
 ### T06 · Endpoint `GET /api/metrics/documents`
 
@@ -139,6 +144,7 @@ Convenciones:
   Falla con 404 en todos los casos, porque la ruta no existe.
 - **Depende de:** T03, T05
 - **Commit:** `feat(api): exponer las métricas de documentos`
+- **Estado:** hecha. Antes del controlador fallaban 16 de 17 (404: la ruta no existía; el que pasaba era el de `/api/metrics/procedures`). Con el controlador, 17 de 17. Además de la tarea: "bordes del período" con 23:59:59.999 del 31/10, y solo `from` / solo `to` por HTTP. Con todo junto: `pnpm test` 79 suites, 1194 tests; `pnpm test:e2e` 24 suites, 368 tests, todos pasan.
 
 ## Verificación final
 
@@ -163,41 +169,81 @@ Convenciones:
   6. **Avisos:** a Mayra, el contrato de R8 (spec, sección 10) y la dependencia de D4.
 - **Depende de:** T01 a T06
 - **Commit:** `docs(specs): verificar métricas de documentos`
+- **Estado:** hecha (30/10/2026). El resultado, las mutaciones y los pendientes están en la sección [Verificación](#verificación).
 
 #### Escenario → test
 
 | Escenario | Unitario | Integración | ✔ |
 | --- | --- | --- | --- |
-| E1 · El ADMIN ve los totales de todas las áreas | `metrics-rules.spec.ts` › E1 (T02); `document-metrics.service.spec.ts` › E1 (T05) | `metrics.repository.e2e-spec.ts` › E1 (T04); `metrics.e2e-spec.ts` › E1 (T06) | ☐ |
-| E2 · El SUPERVISOR ve solo sus áreas | `metrics-rules.spec.ts` › E2 (T02); `document-metrics.service.spec.ts` › E2 (T05) | `metrics.repository.e2e-spec.ts` › E2/E3 (T04); `metrics.e2e-spec.ts` › E2 (T06) | ☐ |
-| E3 · Filtro por área | `metrics-rules.spec.ts` › E3 (T02); `document-metrics.service.spec.ts` › E3 (T05) | `metrics.e2e-spec.ts` › E3 (T06) | ☐ |
-| E4 · Área ajena o inexistente | `metrics-rules.spec.ts` › E4 (T02); `document-metrics.service.spec.ts` › E4 (T05) | `metrics.e2e-spec.ts` › E4 (T06) | ☐ |
-| E5 · Un empleado no tiene acceso | `metrics-rules.spec.ts` › E5 (T02) | `metrics.e2e-spec.ts` › E5, 403 y 401 (T06) | ☐ |
-| E6 · Documento con varias áreas | — (lo decide la consulta) | `metrics.repository.e2e-spec.ts` › E6 (T04); `metrics.e2e-spec.ts` › E6 (T06) | ☐ |
-| E7 · Los archivados no cuentan | — | `metrics.repository.e2e-spec.ts` › E7 (T04); `metrics.e2e-spec.ts` › E7 (T06) | ☐ |
-| E8 · Error de procesamiento | — | `metrics.repository.e2e-spec.ts` › E8 (T04); `metrics.e2e-spec.ts` › E8 (T06) | ☐ |
-| E9 · Cargados en el período | `metrics-rules.spec.ts` › `toMetricsPeriod` (T02); `document-metrics.service.spec.ts` › E9 (T05) | `metrics.repository.e2e-spec.ts` › E9 (T04); `metrics.e2e-spec.ts` › E9 y bordes del período (T06) | ☐ |
-| E10 · Fechas inválidas | `metrics-rules.spec.ts` › `isCalendarDate` (T02); `document-metrics.query.spec.ts` (T03); `document-metrics.service.spec.ts` › E10 (T05) | `metrics.e2e-spec.ts` › E10 (T06) | ☐ |
-| E11 · Sin documentos | — | `metrics.repository.e2e-spec.ts` › E11 (T04); `metrics.e2e-spec.ts` › E11 (T06) | ☐ |
+| E1 · El ADMIN ve los totales de todas las áreas | `metrics-rules.spec.ts` › E1 (T02); `document-metrics.service.spec.ts` › E1 (T05) | `metrics.repository.e2e-spec.ts` › E1 (T04); `metrics.e2e-spec.ts` › E1 (T06) | ☑ |
+| E2 · El SUPERVISOR ve solo sus áreas | `metrics-rules.spec.ts` › E2 (T02); `document-metrics.service.spec.ts` › E2 (T05) | `metrics.repository.e2e-spec.ts` › E2/E3 (T04); `metrics.e2e-spec.ts` › E2 (T06) | ☑ |
+| E3 · Filtro por área | `metrics-rules.spec.ts` › E3 (T02); `document-metrics.service.spec.ts` › E3 (T05) | `metrics.e2e-spec.ts` › E3 (T06) | ☑ |
+| E4 · Área ajena o inexistente | `metrics-rules.spec.ts` › E4 (T02); `document-metrics.service.spec.ts` › E4 (T05) | `metrics.e2e-spec.ts` › E4 (T06) | ☑ |
+| E5 · Un empleado no tiene acceso | `metrics-rules.spec.ts` › E5 (T02) | `metrics.e2e-spec.ts` › E5, 403 y 401 (T06) | ☑ |
+| E6 · Documento con varias áreas | — (lo decide la consulta) | `metrics.repository.e2e-spec.ts` › E6 (T04); `metrics.e2e-spec.ts` › E6 (T06) | ☑ |
+| E7 · Los archivados no cuentan | — | `metrics.repository.e2e-spec.ts` › E7 (T04); `metrics.e2e-spec.ts` › E7 (T06) | ☑ |
+| E8 · Error de procesamiento | — | `metrics.repository.e2e-spec.ts` › E8 (T04); `metrics.e2e-spec.ts` › E8 (T06) | ☑ |
+| E9 · Cargados en el período | `metrics-rules.spec.ts` › `toMetricsPeriod` (T02); `document-metrics.service.spec.ts` › E9 (T05) | `metrics.repository.e2e-spec.ts` › E9 (T04); `metrics.e2e-spec.ts` › E9 y bordes del período (T06) | ☑ |
+| E10 · Fechas inválidas | `metrics-rules.spec.ts` › `isCalendarDate` (T02); `document-metrics.query.spec.ts` (T03); `document-metrics.service.spec.ts` › E10 (T05) | `metrics.e2e-spec.ts` › E10 (T06) | ☑ |
+| E11 · Sin documentos | — | `metrics.repository.e2e-spec.ts` › E11 (T04); `metrics.e2e-spec.ts` › E11 (T06) | ☑ |
 
 Reglas, decisiones y casos borde sin escenario propio:
 
 | Regla, decisión o caso | Tests que lo cubren | ✔ |
 | --- | --- | --- |
-| R2 · Áreas del directorio, no de la sesión | `document-metrics.service.spec.ts` › E2 (T05); `metrics.e2e-spec.ts` › R2 (T06) | ☐ |
-| R5 · Bordes de "por vencer" en hora de Argentina | `review-status.spec.ts` › `dueSoonThrough` (T01); `metrics.repository.e2e-spec.ts` › consistencia (T04); `metrics.e2e-spec.ts` › bordes (T06); mutación del paso 3 | ☐ |
-| R6 · Caso borde de las 23:30 del día `to` | `metrics-rules.spec.ts` (T02); `metrics.e2e-spec.ts` › E9 (T06) | ☐ |
-| R8 · Solo `filters` y los seis totales | `document-metrics.response.spec.ts` (T05) | ☐ |
-| R9 · 503 y 500 | `http-errors.spec.ts` y `document-metrics.service.spec.ts` (T05) | ☐ |
-| D3 · Contrato con las funciones de la pareja B | `metrics-rules.spec.ts` (T02); paso 5 de T07 | ☐ |
-| D9 · Una sola consulta | `metrics.repository.e2e-spec.ts` (T04) | ☐ |
-| D14 · Área inexistente para el ADMIN: 200 con ceros | `document-metrics.service.spec.ts` › E4 (T05); `metrics.e2e-spec.ts` › E4 (T06); mutación del paso 3 | ☐ |
-| D15 · Texto del 503, igual al de procedimientos | `http-errors.spec.ts` (T05) | ☐ |
-| D16 · `uploaded` por `documents.created_at` | `metrics.repository.e2e-spec.ts` › E9 (T04); `metrics.e2e-spec.ts` › E9 (T06) | ☐ |
-| Caso borde: versión vigente sin procesar | `metrics.repository.e2e-spec.ts` › E8 (T04) | ☐ |
-| Caso borde: cargado en el período y después archivado | `metrics.e2e-spec.ts` › E7 (T06) | ☐ |
-| Caso borde: SUPERVISOR sin áreas | `metrics.repository.e2e-spec.ts` (T04); `metrics.e2e-spec.ts` (T06) | ☐ |
-| `GET /api/metrics/procedures` sigue igual | `metrics.e2e-spec.ts` › ruta (T06); `test/executions/metrics.e2e-spec.ts` sin cambios | ☐ |
+| R2 · Áreas del directorio, no de la sesión | `document-metrics.service.spec.ts` › E2 (T05); `metrics.e2e-spec.ts` › R2 (T06) | ☑ |
+| R5 · Bordes de "por vencer" en hora de Argentina | `review-status.spec.ts` › `dueSoonThrough` (T01); `metrics.repository.e2e-spec.ts` › consistencia (T04); `metrics.e2e-spec.ts` › bordes (T06); mutación del paso 3 | ☑ |
+| R6 · Caso borde de las 23:30 del día `to` | `metrics-rules.spec.ts` (T02); `metrics.e2e-spec.ts` › E9 (T06) | ☑ |
+| R8 · Solo `filters` y los seis totales | `document-metrics.response.spec.ts` (T05) | ☑ |
+| R9 · 503 y 500 | `http-errors.spec.ts` y `document-metrics.service.spec.ts` (T05) | ☑ |
+| D3 · Contrato con las funciones de la pareja B | `metrics-rules.spec.ts` (T02); paso 5 de T07 | ☑ |
+| D9 · Una sola consulta | `metrics.repository.e2e-spec.ts` (T04) | ☑ |
+| D14 · Área inexistente para el ADMIN: 200 con ceros | `document-metrics.service.spec.ts` › E4 (T05); `metrics.e2e-spec.ts` › E4 (T06); mutación del paso 3 | ☑ |
+| D15 · Texto del 503, igual al de procedimientos | `http-errors.spec.ts` (T05) | ☑ |
+| D16 · `uploaded` por `documents.created_at` | `metrics.repository.e2e-spec.ts` › E9 (T04); `metrics.e2e-spec.ts` › E9 (T06) | ☑ |
+| Caso borde: versión vigente sin procesar | `metrics.repository.e2e-spec.ts` › E8 (T04) | ☑ |
+| Caso borde: cargado en el período y después archivado | `metrics.e2e-spec.ts` › E7 (T06) | ☑ |
+| Caso borde: SUPERVISOR sin áreas | `metrics.repository.e2e-spec.ts` (T04); `metrics.e2e-spec.ts` (T06) | ☑ |
+| `GET /api/metrics/procedures` sigue igual | `metrics.e2e-spec.ts` › ruta (T06); `test/executions/metrics.e2e-spec.ts` sin cambios | ☑ |
+
+---
+
+## Verificación
+
+Corrida completa del 30/10/2026, en la rama `feat/metricas-documentos`, con T01 a T07 sin commitear. Cada fila de la tabla de T07 se buscó por nombre de test; todos pasan.
+
+### Totales
+
+| Qué | Comando | Resultado |
+| --- | --- | --- |
+| API, lint | `oxlint --type-aware src/ test/` | sin avisos |
+| API, tipos | `tsc --noEmit` | 3 errores, los mismos que en `HEAD`, en `src/auth/*.spec.ts` (pareja A); ninguno en archivos de esta spec |
+| API, formato | `prettier --check` sobre los archivos nuevos y tocados | en verde, salvo `http-errors.spec.ts` y `document-query.service.ts`, que ya fallaban en `HEAD` y no se reformatean |
+| API, unitarios | `pnpm --filter api test` | 79 suites, **1194 tests**, todos pasan (46 nuevos: 39 en `src/documents/metrics`, 4 de T01 y 3 de `http-errors.spec.ts`) |
+| API, integración | `pnpm --filter api test:e2e` | 24 suites, **368 tests**, todos pasan (antes: 22 suites, 341). Contra `manual_test`, con `prisma migrate reset` antes de cada corrida. Incluye `reviews*.e2e-spec.ts` (spec 005) y `test/executions/metrics.e2e-spec.ts` sin cambios |
+| Swagger | `GET /docs-json` en la app de tests | `/api/metrics/documents` bajo `metrics`, con 200, 400, 401, 403, 404 y 503; esquemas `DocumentMetricsResponse`, `DocumentMetricsFiltersResponse` y `DocumentMetricsTotalsResponse` junto a los de procedimientos, que siguen ahí |
+
+### Mutaciones de control
+
+Una por vez, con copia del archivo y restaurándolo antes de la siguiente. Con cada una se corrieron los unitarios de `src/documents` y `test:e2e documents/(metrics|reviews)`. Todas fueron detectadas.
+
+| Mutación | Archivo | Tests que fallaron |
+| --- | --- | --- |
+| Contar archivados: `WHERE TRUE` en vez de `d.status = 'ACTIVE'` | `prisma-document-metrics.repository.ts` | 2 de integración: E7 en las dos suites |
+| Contar dos veces un documento con dos áreas: `JOIN document_areas` en vez de `EXISTS` | `prisma-document-metrics.repository.ts` | 2 de integración: E6 en las dos suites |
+| "Hoy" en UTC: `timeZone: 'UTC'` en `todayInCompany` | `company-date.ts` | 9 unitarios (entre ellos E1 de `DocumentMetricsService` y los de la fecha de las specs 001, 003 y 005) y 4 de integración (R5 de las métricas; E4, E9 y bordes de la spec 005) |
+| Un SUPERVISOR ve un área ajena: se le suma el área pedida a las suyas antes de `metricsScope` | `document-metrics.service.ts` | 2 unitarios (E4 ajena y E4 inexistente) y 1 de integración (E4) |
+| Sin `v.status = 'CURRENT'` | `prisma-document-metrics.repository.ts` | 1 de integración: E8 del repositorio (la `REPLACED` en error) |
+| `<=` en el fin del período | `prisma-document-metrics.repository.ts` | 2 de integración: E9 del repositorio y "bordes del período" |
+| 404 para el ADMIN con un área que no existe | `document-metrics.service.ts` | 1 unitario (E4, D14) y 1 de integración (E4) |
+
+La primera versión de la mutación del `JOIN` dejó `da` sin unir: fallaron 13 tests, pero por error de SQL y no por contar dos veces, así que no cuenta. Se rehízo con el `JOIN` en el `FROM`.
+
+### Pendientes
+
+- **`today` como `Date` en vez de `::date` (D8):** no se probó por mutación. La base de tests corre con la sesión en UTC, donde un `Date` a medianoche UTC compara igual y ningún test lo detectaría; fijar otra zona de sesión obligaría a tocar la conexión de `PrismaService`. D8 se sostiene por revisión: la consulta solo recibe `today` y `dueSoonThrough` como texto con `::date`.
+- **Archivos de la pareja B:** `git status` y `git diff --stat develop...HEAD` sobre `apps/api/src/executions`, `apps/web/lib/metrics` y `apps/web/components/metrics` están vacíos; `src/executions` solo aparece en los `import` de `src/documents/metrics/metrics-rules.ts`. Hay que volver a mirarlo después de los commits.
+- **Avisos a Mayra (pareja B):** el contrato de R8, con el ejemplo de respuesta; la dependencia de D4 (documentos importa `metricsScope`, `MetricsScope`, `toMetricsPeriod` e `isCalendarDate`); y que su adaptador `DocumentMetrics` tiene que pasar a la forma de R8. Los manda Matías.
 
 ---
 
