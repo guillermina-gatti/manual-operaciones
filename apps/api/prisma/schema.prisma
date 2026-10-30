@@ -48,6 +48,10 @@ model Document {
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   archivedAt  DateTime?      @map("archived_at") @db.Timestamptz(3)
 
+  // Última revisión (spec 005, R8, R10, R11): null si nunca se revisó. Se escriben siempre juntas.
+  lastReviewedAt   DateTime? @map("last_reviewed_at") @db.Timestamptz(3)
+  lastReviewedById String?   @map("last_reviewed_by_id") @db.Uuid // users de A, solo por ID
+
   areas    DocumentArea[]
   versions DocumentVersion[]
 
