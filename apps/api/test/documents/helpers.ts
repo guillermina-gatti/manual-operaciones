@@ -8,6 +8,7 @@ import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { ACCESS_TOKEN_TTL_SECONDS } from '../../src/auth/auth.service';
 import { PasswordService } from '../../src/auth/password.service';
+import { Clock } from '../../src/common/clock';
 import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
 import { FakeProcessingQueue } from '../../src/documents/adapters/fake-processing-queue';
 import { LoggerAuditLog } from '../../src/documents/adapters/logger-audit-log';
@@ -93,22 +94,40 @@ export interface DocumentsTestApp {
   audit: LoggerAuditLog;
 }
 
+// Un reloj de documentos que siempre da el mismo instante (spec 005, D2). Extiende el Clock de
+// src/common/clock.ts, no el de las ejecuciones (D20).
+export class FixedClock extends Clock {
+  constructor(private readonly instant: Date) {
+    super();
+  }
+
+  now(): Date {
+    return new Date(this.instant);
+  }
+}
+
 // Levanta AppModule entero. El almacenamiento, la cola y la auditoría se reemplazan por
 // instancias propias del test, así se pueden revisar (y nunca se usa el bucket real).
 // Prisma va contra la base de tests (test/setup-env.ts).
-export async function createDocumentsTestApp(): Promise<DocumentsTestApp> {
+// Spec 005 (T11): con `clock`, "hoy" sale de ese reloj; sin él, de la hora real, como antes.
+export async function createDocumentsTestApp(
+  options: { clock?: Clock } = {},
+): Promise<DocumentsTestApp> {
   const storage = new InMemoryFileStorage();
   const queue = new FakeProcessingQueue();
   const audit = new LoggerAuditLog();
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(FileStorage)
     .useValue(storage)
     .overrideProvider(ProcessingQueue)
     .useValue(queue)
     .overrideProvider(AuditLog)
-    .useValue(audit)
-    .compile();
+    .useValue(audit);
+  if (options.clock) {
+    builder = builder.overrideProvider(Clock).useValue(options.clock);
+  }
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication();
   configureApp(app);
@@ -244,6 +263,9 @@ export interface SeededDocument {
 
 // Inserta directo en la base un documento con su primera versión (PENDING), con las áreas,
 // el estado y la fecha de creación que elija el test. No pasa por la carga ni por el almacenamiento.
+// Spec 005 (T06): `reviewDate` (YYYY-MM-DD), `ownerId` y `lastReview` opcionales. Sin ellos, como
+// antes: 2027-01-15, responsable ADMIN y sin revisión. No pasa por canBeOwner: sirve para sembrar
+// un responsable que perdió el acceso.
 export async function seedDocument(
   prisma: PrismaService,
   opts: {
@@ -253,6 +275,9 @@ export async function seedDocument(
     title?: string;
     description?: string;
     checksum?: string;
+    reviewDate?: string;
+    ownerId?: string;
+    lastReview?: { at: Date; byId: string };
   },
 ): Promise<SeededDocument> {
   const id = randomUUID();
@@ -265,10 +290,14 @@ export async function seedDocument(
       title: opts.title ?? 'Documento',
       description: opts.description ?? null,
       status: opts.status ?? 'ACTIVE',
-      ownerId: FIXTURE_USERS.admin.id,
-      reviewDate: new Date('2027-01-15'),
+      ownerId: opts.ownerId ?? FIXTURE_USERS.admin.id,
+      reviewDate: new Date(opts.reviewDate ?? '2027-01-15'),
       createdById: FIXTURE_USERS.admin.id,
       ...(opts.createdAt && { createdAt: opts.createdAt }),
+      ...(opts.lastReview && {
+        lastReviewedAt: opts.lastReview.at,
+        lastReviewedById: opts.lastReview.byId,
+      }),
       areas: {
         createMany: { data: opts.areaIds.map((areaId) => ({ areaId })) },
       },

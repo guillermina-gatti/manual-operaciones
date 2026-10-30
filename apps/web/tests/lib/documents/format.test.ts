@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { formatCreatedAt, formatReviewDate, formatSize } from '@/lib/documents/format';
+import { formatCreatedAt, formatDay, formatReviewDate, formatSize } from '@/lib/documents/format';
 
 describe('formatSize', () => {
   test.each([
@@ -65,5 +65,16 @@ describe('formatCreatedAt (F7)', () => {
 
   test('un valor que no es una fecha muestra "—"', () => {
     expect(formatCreatedAt('no es una fecha')).toBe('—');
+  });
+});
+
+// Spec 005 (T17): el día de un instante, en Buenos Aires.
+describe('formatDay', () => {
+  test('a la 01:30 UTC del 31/10, en Buenos Aires todavía es el 30/10', () => {
+    expect(formatDay('2026-10-31T01:30:00.000Z')).toBe('30/10/2026');
+  });
+
+  test('un valor inválido → "—"', () => {
+    expect(formatDay('no es una fecha')).toBe('—');
   });
 });

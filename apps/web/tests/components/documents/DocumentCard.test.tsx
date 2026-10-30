@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { DocumentCard } from '@/components/documents/DocumentCard';
-import type { DocumentSummary } from '@/lib/api';
+import type { DocumentSummary, ReviewStatus } from '@/lib/api';
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
 const OPERACIONES = '0a000000-0000-4000-8000-000000000002';
@@ -130,5 +130,47 @@ describe('etiqueta "Archivado"', () => {
     renderCard({ isAdmin: true });
 
     expect(screen.queryByText('Archivado')).not.toBeInTheDocument();
+  });
+});
+
+// Spec 005 (T16, F1): la etiqueta del estado de revisión, junto al título.
+describe('etiqueta del estado de revisión (F1)', () => {
+  const withReview = (status: ReviewStatus | null): DocumentSummary => ({
+    ...DOCUMENT,
+    review: { status, lastReviewedAt: null, lastReviewedById: null },
+  });
+
+  test('E1: por vencer → "Vence pronto", en la cabecera junto al título', () => {
+    renderCard({ document: withReview('DUE_SOON') });
+
+    const badge = screen.getByText('Vence pronto');
+    expect(badge.closest('div')).toContainElement(
+      screen.getByRole('link', { name: 'Manual de caja' }),
+    );
+  });
+
+  test('E2: vencido → "Vencido"', () => {
+    renderCard({ document: withReview('OVERDUE') });
+
+    expect(screen.getByText('Vencido')).toBeInTheDocument();
+  });
+
+  test('E3: al día → sin etiqueta', () => {
+    renderCard({ document: withReview('UP_TO_DATE') });
+
+    expect(screen.queryByText(/Vencido|Vence pronto/)).not.toBeInTheDocument();
+  });
+
+  test('E5: sin review (no es ADMIN ni responsable) → sin etiqueta', () => {
+    renderCard({ document: { ...DOCUMENT, reviewDate: '2020-01-01' } });
+
+    expect(screen.queryByText(/Vencido|Vence pronto/)).not.toBeInTheDocument();
+  });
+
+  test('un archivado para el ADMIN: "Archivado" y ninguna etiqueta de revisión', () => {
+    renderCard({ document: { ...withReview(null), status: 'ARCHIVED' }, isAdmin: true });
+
+    expect(screen.getByText('Archivado')).toBeInTheDocument();
+    expect(screen.queryByText(/Vencido|Vence pronto/)).not.toBeInTheDocument();
   });
 });

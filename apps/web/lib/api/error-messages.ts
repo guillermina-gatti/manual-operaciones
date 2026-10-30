@@ -3,7 +3,7 @@
 import { ApiError } from './api-error';
 
 // 'areas', 'version' y 'archive': las acciones del ciclo de vida (spec 003, plan 6.2 a 6.4).
-// 'search': la búsqueda (spec 004, plan 5.3).
+// 'search': la búsqueda (spec 004, plan 5.3). 'review': "Marcar como revisado" (spec 005, plan 7.5).
 export type ErrorContext =
   | 'list'
   | 'detail'
@@ -12,7 +12,8 @@ export type ErrorContext =
   | 'areas'
   | 'version'
   | 'archive'
-  | 'search';
+  | 'search'
+  | 'review';
 
 export type UploadField =
   | 'file'
@@ -55,6 +56,8 @@ export const MESSAGES = {
     'Otra persona subió una versión al mismo tiempo. Recargá el documento y volvé a intentar.',
   // Spec 004 (plan 5.3). Solo aparecería si la validación de la web y la de la API no coincidieran.
   invalidSearch: 'Revisá el texto de búsqueda: tiene que tener entre 3 y 100 caracteres.',
+  // Spec 005 (plan 7.5).
+  noReviewPermission: 'No tenés permiso para marcar este documento como revisado.',
 } as const;
 
 const LIFECYCLE_CONTEXTS: ErrorContext[] = ['areas', 'version', 'archive'];
@@ -89,8 +92,13 @@ export function describeApiError(
       if (context === 'detail' || context === 'download' || context === 'archive') {
         return general(MESSAGES.documentNotFound, false);
       }
-      // Los formularios: la carga, el cambio de áreas y la versión nueva.
-      if (context === 'upload' || context === 'areas' || context === 'version') {
+      // Los formularios: la carga, el cambio de áreas, la versión nueva y la revisión (spec 005).
+      if (
+        context === 'upload' ||
+        context === 'areas' ||
+        context === 'version' ||
+        context === 'review'
+      ) {
         return describeUploadBadRequest(error.messages);
       }
       if (context === 'search') return general(MESSAGES.invalidSearch, false);
@@ -99,6 +107,7 @@ export function describeApiError(
       return general(MESSAGES.sessionInvalid, false);
     case 403:
       if (context === 'upload') return general(MESSAGES.noUploadPermission, false);
+      if (context === 'review') return general(MESSAGES.noReviewPermission, false);
       if (LIFECYCLE_CONTEXTS.includes(context)) {
         return general(MESSAGES.noModifyPermission, false);
       }

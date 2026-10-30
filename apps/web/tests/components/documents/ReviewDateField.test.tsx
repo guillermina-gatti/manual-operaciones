@@ -53,6 +53,15 @@ describe('ReviewDateField (spec 003, R7b; plan 003, 6.3)', () => {
     expect(screen.getByLabelText('Fecha de revisión')).not.toHaveAttribute('aria-invalid');
   });
 
+  test('con label, usa esa etiqueta (spec 005, "Marcar como revisado")', () => {
+    render(<ReviewDateField label="Próxima fecha de revisión" value="" onChange={vi.fn()} />);
+
+    expect(screen.getByLabelText('Próxima fecha de revisión')).toHaveAttribute(
+      'min',
+      tomorrowIn(COMPANY_TIME_ZONE, new Date()),
+    );
+  });
+
   test('avisa cada cambio con el valor YYYY-MM-DD', async () => {
     const onChange = vi.fn();
     render(<ReviewDateField value="" onChange={onChange} />);

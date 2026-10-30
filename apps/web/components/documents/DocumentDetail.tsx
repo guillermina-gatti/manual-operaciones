@@ -12,29 +12,18 @@ import { ScreenState } from '@/components/ui/ScreenState';
 import { ApiError, describeApiError, getDocument, useApiResource } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
 import { areasDirectory, usersDirectory } from '@/lib/directory';
-import {
-  COMPANY_TIME_ZONE,
-  formatCreatedAt,
-  formatReviewDate,
-  formatSize,
-} from '@/lib/documents/format';
+import { formatCreatedAt, formatDay, formatReviewDate, formatSize } from '@/lib/documents/format';
 import { useSession } from '@/lib/session';
 import { ArchiveDialog } from './ArchiveDialog';
 import { ChangeAreasForm } from './ChangeAreasForm';
 import { DownloadButton } from './DownloadButton';
+import { MarkReviewedForm } from './MarkReviewedForm';
 import { NewVersionForm } from './NewVersionForm';
 import { ProcessingStatusBadge } from './ProcessingStatusBadge';
+import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { VersionHistory } from './VersionHistory';
 
 type Panel = 'areas' | 'version';
-
-// "Archivado desde 23/10/2026": el día en Buenos Aires.
-const archivedDateFormat = new Intl.DateTimeFormat('es-AR', {
-  timeZone: COMPANY_TIME_ZONE,
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-});
 
 // El mismo formato que acepta la API (ParseUUIDPipe). Otro id no puede existir.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,10 +51,20 @@ export function DocumentDetail() {
   const document = useApiResource(user && validId ? `document:${id}:${user.id}` : null, (signal) =>
     getDocument(id, signal),
   );
-  const ownerId = document.status === 'success' ? document.data.ownerId : null;
+  // El responsable y, si hubo una revisión, quién la hizo (spec 005, R11): un solo pedido.
+  const nameIds =
+    document.status === 'success'
+      ? [
+          ...new Set(
+            [document.data.ownerId, document.data.review?.lastReviewedById].filter(
+              (id): id is string => Boolean(id),
+            ),
+          ),
+        ]
+      : [];
   const areas = useApiResource(user && validId ? 'areas' : null, () => areasDirectory.listAreas());
-  const owners = useApiResource(ownerId ? `owner:${ownerId}` : null, () =>
-    usersDirectory.getNames([ownerId!]),
+  const owners = useApiResource(nameIds.length > 0 ? `names:${nameIds.join(',')}` : null, () =>
+    usersDirectory.getNames(nameIds),
   );
 
   if (status === 'loading') return LOADING;
@@ -91,7 +90,14 @@ export function DocumentDetail() {
   const areaNames = Object.fromEntries(
     (areas.status === 'success' ? areas.data : []).map((area) => [area.id, area.name]),
   );
-  const ownerName = owners.status === 'success' ? owners.data[doc.ownerId] : undefined;
+  const names = owners.status === 'success' ? owners.data : {};
+  const ownerName = names[doc.ownerId];
+  const lastReview = doc.review?.lastReviewedAt
+    ? {
+        day: formatDay(doc.review.lastReviewedAt),
+        by: doc.review.lastReviewedById ? names[doc.review.lastReviewedById] : undefined,
+      }
+    : null;
   const version = doc.currentVersion;
   const archived = doc.status === 'ARCHIVED';
   // R11: un archivado no tiene acciones. R1: solo el ADMIN.
@@ -119,10 +125,12 @@ export function DocumentDetail() {
               Archivado
             </span>
           )}
+          {/* Spec 005 (F1): solo llega `review` al ADMIN y al responsable (R4). */}
+          <ReviewStatusBadge status={doc.review?.status} />
         </div>
         {isAdmin && archived && doc.archivedAt && (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Archivado desde {archivedDateFormat.format(new Date(doc.archivedAt))}
+            Archivado desde {formatDay(doc.archivedAt)}
           </p>
         )}
         {doc.description && (
@@ -145,6 +153,12 @@ export function DocumentDetail() {
         </Field>
         <Field label="Responsable">{ownerName ?? MISSING}</Field>
         <Field label="Fecha de revisión">{formatReviewDate(doc.reviewDate)}</Field>
+        {/* R11: cuándo y quién hizo la última revisión; nunca revisado, no se muestra. */}
+        {lastReview && (
+          <Field label="Última revisión">
+            {lastReview.day}, por {lastReview.by ?? MISSING}
+          </Field>
+        )}
         <Field label="Cargado">{formatCreatedAt(doc.createdAt)}</Field>
         <Field label="Archivo">
           <span className="break-all">{version.originalFileName}</span>
@@ -218,6 +232,14 @@ export function DocumentDetail() {
           onClose={() => setArchiveOpen(false)}
           onArchived={() => finish('Documento archivado')}
         />
+      )}
+
+      {/* Spec 005 (F4, D17): "Marcar como revisado", siempre visible, para quien recibe `review`
+          (ADMIN o responsable, R6) y solo si el documento está activo (R9). */}
+      {doc.review && !archived && (
+        <ActionPanel title="Revisión">
+          <MarkReviewedForm documentId={doc.id} onDone={() => finish('Revisión registrada')} />
+        </ActionPanel>
       )}
 
       {/* R12: el historial solo para el ADMIN; los demás roles no lo ven ni lo piden. */}

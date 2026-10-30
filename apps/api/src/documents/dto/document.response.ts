@@ -1,5 +1,5 @@
 // Clases DTO y funciones de mapeo para estructurar las respuestas de documentos, versiones y búsquedas hacia el cliente.
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   DocumentStatus,
   DocumentVersionStatus,
@@ -10,6 +10,10 @@ import type {
   DocumentVersionRecord,
   VersionHistoryRecord,
 } from '../documents.repository';
+import type {
+  DocumentReviewInfo as ReviewInfo,
+  ReviewStatus,
+} from '../review-status';
 
 // Forma de la respuesta del plan 3.1. storageKey y checksum son internos y no forman parte de ella.
 export class DocumentVersionResponse {
@@ -62,6 +66,28 @@ export class VersionHistoryItem extends DocumentVersionResponse {
   uploadedById: string;
 }
 
+// Spec 005 (plan 2.1): el estado de revisión y la última revisión. Solo lo recibe el ADMIN o el
+// responsable del documento (R4).
+export class DocumentReviewInfo implements ReviewInfo {
+  @ApiProperty({
+    enum: ['UP_TO_DATE', 'DUE_SOON', 'OVERDUE'],
+    nullable: true,
+    description: 'null si el documento está archivado (R2)',
+  })
+  status: ReviewStatus | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: 'null si nunca se revisó (R11)',
+  })
+  lastReviewedAt: string | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  lastReviewedById: string | null;
+}
+
 class DocumentFields {
   @ApiProperty({ format: 'uuid' })
   id: string;
@@ -93,6 +119,14 @@ class DocumentFields {
   // Cuándo se archivó, o null si está activo (spec 003, plan 1.6).
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   archivedAt: string | null;
+
+  // Spec 005 (D6): la clave no está si quien pide no es ADMIN ni el responsable. Para los demás, la
+  // respuesta es la misma de antes.
+  @ApiPropertyOptional({
+    type: DocumentReviewInfo,
+    description: 'Solo para el ADMIN y el responsable del documento',
+  })
+  review?: DocumentReviewInfo;
 }
 
 // Respuesta del 201 de la carga y del detalle (R7, plan 3.1 y 3.3).
@@ -136,8 +170,10 @@ export class DocumentSearchResult extends DocumentSummary {
 const toDateOnly = (date: Date) => date.toISOString().slice(0, 10);
 
 // Campo por campo, nunca `...record`: un campo interno nuevo del repositorio no llega a la respuesta.
+// La última revisión del registro solo sale dentro de `review`, y `review` solo si viene (spec 005, D6).
 function toDocumentFields(
   record: DocumentRecord,
+  review?: DocumentReviewInfo,
 ): Omit<DocumentResponse, 'currentVersion'> {
   return {
     id: record.id,
@@ -150,6 +186,13 @@ function toDocumentFields(
     createdById: record.createdById,
     createdAt: record.createdAt.toISOString(),
     archivedAt: record.archivedAt ? record.archivedAt.toISOString() : null,
+    ...(review && {
+      review: {
+        status: review.status,
+        lastReviewedAt: review.lastReviewedAt,
+        lastReviewedById: review.lastReviewedById,
+      },
+    }),
   };
 }
 
@@ -180,9 +223,12 @@ function toVersionSummary(
   };
 }
 
-export function toDocumentResponse(record: DocumentRecord): DocumentResponse {
+export function toDocumentResponse(
+  record: DocumentRecord,
+  review?: DocumentReviewInfo,
+): DocumentResponse {
   return {
-    ...toDocumentFields(record),
+    ...toDocumentFields(record, review),
     currentVersion: toVersionResponse(record.currentVersion),
   };
 }
@@ -203,9 +249,12 @@ export function toVersionHistoryItem(
   };
 }
 
-export function toDocumentSummary(record: DocumentRecord): DocumentSummary {
+export function toDocumentSummary(
+  record: DocumentRecord,
+  review?: DocumentReviewInfo,
+): DocumentSummary {
   return {
-    ...toDocumentFields(record),
+    ...toDocumentFields(record, review),
     currentVersion: toVersionSummary(record.currentVersion),
   };
 }
@@ -214,9 +263,10 @@ export function toDocumentSummary(record: DocumentRecord): DocumentSummary {
 export function toDocumentSearchResult(
   record: DocumentRecord,
   fragment: SearchFragment | null,
+  review?: DocumentReviewInfo,
 ): DocumentSearchResult {
   return {
-    ...toDocumentFields(record),
+    ...toDocumentFields(record, review),
     currentVersion: toVersionSummary(record.currentVersion),
     fragment,
   };

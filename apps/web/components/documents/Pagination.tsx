@@ -9,16 +9,17 @@ interface PaginationProps {
   pageSize: number;
   // Spec 004 (F3, D11): con una búsqueda activa, cada enlace conserva ?q=.
   query?: string;
+  // Spec 005: otra ruta, como /documentos/por-revisar. Por defecto, el listado.
+  basePath?: string;
 }
 
-// La página 1 es /documentos (o /documentos?q=…), sin ?pagina=1: una sola dirección para la primera
-// página.
-function pageHref(page: number, query?: string): string {
+// La página 1 es la ruta sola (o con ?q=…), sin ?pagina=1: una sola dirección para la primera página.
+function pageHref(page: number, query: string | undefined, basePath: string): string {
   const params = [
     ...(query === undefined ? [] : [`q=${encodeURIComponent(query)}`]),
     ...(page === 1 ? [] : [`pagina=${page}`]),
   ];
-  return params.length === 0 ? '/documentos' : `/documentos?${params.join('&')}`;
+  return params.length === 0 ? basePath : `${basePath}?${params.join('&')}`;
 }
 
 // Al menos 44 × 44 px, para tocarlos en el celular (F10).
@@ -27,7 +28,13 @@ const ITEM =
 const LINK = `${ITEM} border border-zinc-300 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:hover:bg-zinc-800`;
 const CURRENT = `${ITEM} bg-blue-700 font-semibold text-white dark:bg-blue-500 dark:text-zinc-950`;
 
-export function Pagination({ currentPage, totalItems, pageSize, query }: PaginationProps) {
+export function Pagination({
+  currentPage,
+  totalItems,
+  pageSize,
+  query,
+  basePath = '/documentos',
+}: PaginationProps) {
   const pages = pageCount(totalItems, pageSize);
   if (pages <= 1) return null;
 
@@ -36,7 +43,7 @@ export function Pagination({ currentPage, totalItems, pageSize, query }: Paginat
   return (
     <nav aria-label="Páginas" className="flex flex-wrap items-center justify-center gap-2">
       {page > 1 && (
-        <Link href={pageHref(page - 1, query)} className={LINK}>
+        <Link href={pageHref(page - 1, query, basePath)} className={LINK}>
           <span aria-hidden="true">‹&nbsp;</span>Anterior
         </Link>
       )}
@@ -50,7 +57,7 @@ export function Pagination({ currentPage, totalItems, pageSize, query }: Paginat
         ) : (
           <Link
             key={item}
-            href={pageHref(item, query)}
+            href={pageHref(item, query, basePath)}
             aria-label={`Página ${item}`}
             aria-current={item === page ? 'page' : undefined}
             className={item === page ? CURRENT : LINK}
@@ -61,7 +68,7 @@ export function Pagination({ currentPage, totalItems, pageSize, query }: Paginat
       )}
 
       {page < pages && (
-        <Link href={pageHref(page + 1, query)} className={LINK}>
+        <Link href={pageHref(page + 1, query, basePath)} className={LINK}>
           Siguiente<span aria-hidden="true">&nbsp;›</span>
         </Link>
       )}

@@ -21,6 +21,7 @@ import { useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
 import { SearchResults } from './SearchResults';
 
@@ -45,6 +46,13 @@ export function DocumentList() {
     <div className="flex flex-col gap-6">
       {/* key: al ir atrás o adelante, la caja vuelve a arrancar con el ?q= de la dirección. */}
       <SearchBox key={query ?? ''} query={query} />
+      {/* Spec 005 (F2): el acceso a "Por revisar", con y sin búsqueda. Para quien no es ADMIN ni
+          responsable de nada no muestra nada. */}
+      {status === 'ready' && user && (
+        <div className="flex flex-wrap justify-end gap-3 empty:hidden">
+          <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
+        </div>
+      )}
       {search.kind === 'valid' && status === 'ready' && user ? (
         <>
           {user.role === 'ADMIN' && (

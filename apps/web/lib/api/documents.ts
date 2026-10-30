@@ -41,6 +41,20 @@ interface DocumentFields {
   // Cuándo se archivó, o null si está activo (spec 003, plan 1.6). La API lo manda siempre; es
   // opcional para los datos de prueba anteriores a la spec 003.
   archivedAt?: string | null;
+  // Spec 005 (plan 005, 2.1): solo llega si el usuario es ADMIN o el responsable (R4). La web no
+  // calcula el estado ni decide quién lo ve: usa lo que manda la API (D16).
+  review?: DocumentReview;
+}
+
+// Spec 005: el estado de revisión (R1) y la última revisión (R11).
+export type ReviewStatus = 'UP_TO_DATE' | 'DUE_SOON' | 'OVERDUE';
+
+export interface DocumentReview {
+  // null si el documento está archivado (R2).
+  status: ReviewStatus | null;
+  // null si nunca se revisó.
+  lastReviewedAt: string | null;
+  lastReviewedById: string | null;
 }
 
 // Detalle y respuesta 201 de la carga.
@@ -58,6 +72,11 @@ export interface DocumentListResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+// Spec 005: "Por revisar" (R5). isReviewer dice si mostrar el acceso aunque no haya pendientes (D19).
+export interface PendingReviewResponse extends DocumentListResponse {
+  isReviewer: boolean;
 }
 
 // En el backend expiresAt es un Date; en JSON llega como texto ISO.
@@ -208,6 +227,25 @@ export function createDocumentsApi(client: ApiClient) {
         `${documentPath(id)}/versions/${encodeURIComponent(versionId)}/download`,
         { signal },
       );
+    },
+
+    // ── Avisos de vencimiento (spec 005, plan 7.6).
+
+    // Con limit=1 sirve para leer solo la cantidad y si el usuario es revisor (D18).
+    listPendingReview(page: number, limit: number, signal?: AbortSignal) {
+      return client.request<PendingReviewResponse>(
+        `/api/documents/pending-review?page=${page}&limit=${limit}`,
+        { signal },
+      );
+    },
+
+    markReviewed(id: string, reviewDate: string, signal?: AbortSignal) {
+      return client.request<DocumentResponse>(`${documentPath(id)}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewDate }),
+        signal,
+      });
     },
   };
 }

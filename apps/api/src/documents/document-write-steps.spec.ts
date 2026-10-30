@@ -1,6 +1,7 @@
 /*Pruebas unitarias de los pasos reutilizables de escritura y utilidades de archivo */
 import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
+import { Clock } from '../common/clock';
 import { StorageUnavailableError } from '../storage/file-storage';
 import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
@@ -30,6 +31,17 @@ const admin: AuthUser = {
   role: 'ADMIN',
   areaIds: [...FIXTURE_USERS.admin.areaIds],
 };
+
+// Un reloj que siempre da el mismo instante (spec 005, D2).
+class FixedClock extends Clock {
+  constructor(private readonly instant: Date) {
+    super();
+  }
+
+  now(): Date {
+    return new Date(this.instant);
+  }
+}
 
 const FILE = {
   key: 'documents/doc/version.pdf',
@@ -107,6 +119,30 @@ describe('DocumentWriteSteps', () => {
         BadRequestException,
       );
       expect(() => steps.assertReviewDateIsAfterToday(TOMORROW)).not.toThrow();
+    });
+
+    it('con un reloj inyectado, "hoy" sale del reloj en hora de Argentina (spec 005, D2)', () => {
+      // 9/11 a las 23:30 en Buenos Aires; en UTC ya es 10/11.
+      const clock = new FixedClock(new Date('2026-11-10T02:30:00.000Z'));
+      const withClock = new DocumentWriteSteps(
+        areas as unknown as AreasDirectory,
+        users as unknown as UsersDirectory,
+        repository as unknown as DocumentsRepository,
+        storage as unknown as FileStorage,
+        audit as unknown as AuditLog,
+        clock,
+      );
+
+      expect(() =>
+        withClock.assertReviewDateIsAfterToday('2026-11-09'),
+      ).toThrow(
+        new BadRequestException(
+          'reviewDate tiene que ser posterior a hoy (2026-11-09)',
+        ),
+      );
+      expect(() =>
+        withClock.assertReviewDateIsAfterToday('2026-11-10'),
+      ).not.toThrow();
     });
   });
 
@@ -290,6 +326,27 @@ describe('DocumentWriteSteps', () => {
         documentId: EXISTING_DOCUMENT,
         result: 'FAILURE',
         detail: '409',
+        at: expect.any(Date) as Date,
+      });
+    });
+
+    it('con extra, registra también las fechas de la revisión (spec 005, R12)', async () => {
+      await steps.auditFailure(
+        'DOCUMENT_REVIEW',
+        admin,
+        403,
+        EXISTING_DOCUMENT,
+        { previousReviewDate: '2026-11-04', newReviewDate: '2027-05-09' },
+      );
+
+      expect(audit.record).toHaveBeenCalledWith({
+        action: 'DOCUMENT_REVIEW',
+        actorId: admin.id,
+        documentId: EXISTING_DOCUMENT,
+        result: 'FAILURE',
+        detail: '403',
+        previousReviewDate: '2026-11-04',
+        newReviewDate: '2027-05-09',
         at: expect.any(Date) as Date,
       });
     });

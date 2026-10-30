@@ -2,13 +2,18 @@
 
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { AuthUser } from '../common/auth';
+import { Clock, SystemClock } from '../common/clock';
 import { FileStorage } from '../storage/file-storage';
+import { toDbDate, todayInCompany } from './company-date';
+import { findVisibleDocument } from './document-access';
+import { canReview } from './document-access.policy';
 import {
   DocumentWriteSteps,
   duplicateDocumentConflict,
@@ -23,12 +28,14 @@ import {
 import { ChangeAreasDto } from './dto/change-areas.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
 import { DocumentResponse, toDocumentResponse } from './dto/document.response';
+import { MarkReviewedDto } from './dto/mark-reviewed.dto';
 import { UploadedFileInput, inspectFile } from './file-inspector';
 import { HttpOperation, toHttpException } from './http-errors';
 import { AreasDirectory } from './ports/areas-directory';
-import { AuditAction, AuditLog } from './ports/audit-log';
+import { AuditAction, AuditLog, ReviewAuditDates } from './ports/audit-log';
 import { ProcessingQueue } from './ports/processing-queue';
 import { UsersDirectory } from './ports/users-directory';
+import { reviewFor } from './review-status';
 
 // Error 404: El documento no existe
 const documentNotFound = () =>
@@ -61,6 +68,15 @@ const concurrentVersion = () =>
     reason: 'CONCURRENT_VERSION',
   });
 
+// Error 403: lo ve, pero no es el ADMIN ni el responsable (spec 005, R6)
+const cannotReview = () =>
+  new ForbiddenException(
+    'Solo el ADMIN o el responsable pueden marcar el documento como revisado',
+  );
+
+// Una columna @db.Date llega como medianoche UTC: la fecha YYYY-MM-DD, en UTC.
+const toDateOnly = (date: Date) => date.toISOString().slice(0, 10);
+
 // Comprueba si las áreas nuevas son exactamente iguales a las actuales
 const sameAreas = (current: string[], next: string[]) =>
   current.length === next.length && next.every((id) => current.includes(id));
@@ -72,11 +88,12 @@ export class DocumentLifecycleService {
 
   constructor(
     areas: AreasDirectory,
-    users: UsersDirectory,
+    private readonly users: UsersDirectory,
     private readonly documents: DocumentsRepository,
     storage: FileStorage,
     private readonly queue: ProcessingQueue,
     private readonly audit: AuditLog,
+    private readonly clock: Clock = new SystemClock(),
   ) {
     this.steps = new DocumentWriteSteps(
       areas,
@@ -84,6 +101,7 @@ export class DocumentLifecycleService {
       documents,
       storage,
       audit,
+      clock,
     );
   }
 
@@ -241,6 +259,67 @@ export class DocumentLifecycleService {
     });
   }
 
+  // "Marcar como revisado" (spec 005, R6 a R9; plan 3.2). El orden de los controles: la fecha, que
+  // solo depende de la petición (400); que exista y se vea (404); que sea el ADMIN o el responsable
+  // (403); que no esté archivado (409). Después, lo mismo bajo el bloqueo. Cambia solo la fecha y la
+  // última revisión: no crea versión ni toca el archivo ni los fragmentos (R8).
+  markReviewed(
+    id: string,
+    dto: MarkReviewedDto,
+    actor: AuthUser,
+  ): Promise<DocumentResponse> {
+    // R12: las fechas que se conocen, también para auditar un fallo. La anterior, la última leída.
+    const dates: ReviewAuditDates = { newReviewDate: dto.reviewDate };
+    return this.run(
+      'DOCUMENT_REVIEW',
+      'revisión',
+      id,
+      actor,
+      async () => {
+        this.steps.assertReviewDateIsAfterToday(dto.reviewDate);
+
+        const visible = await findVisibleDocument(
+          this.users,
+          this.documents,
+          actor,
+          id,
+        );
+        dates.previousReviewDate = toDateOnly(visible.reviewDate);
+        if (!canReview(actor, visible)) throw cannotReview();
+        if (visible.status === 'ARCHIVED') throw documentArchived();
+
+        return this.documents.runInTransaction(async (tx) => {
+          const locked = await this.lockWritable(tx, id);
+          // La fecha que de verdad se reemplaza es la leída bajo el bloqueo: con dos revisiones a
+          // la vez, la segunda registra la que dejó la primera.
+          dates.previousReviewDate = toDateOnly(locked.reviewDate);
+          if (!canReview(actor, locked)) throw cannotReview();
+
+          const at = this.clock.now();
+          const reviewed = await this.documents.markReviewed(tx, id, {
+            reviewDate: toDbDate(dto.reviewDate),
+            reviewedById: actor.id,
+            at,
+          });
+          await this.audit.record(
+            {
+              action: 'DOCUMENT_REVIEW',
+              actorId: actor.id,
+              documentId: id,
+              result: 'SUCCESS',
+              previousReviewDate: dates.previousReviewDate,
+              newReviewDate: dto.reviewDate,
+              at,
+            },
+            tx,
+          );
+          return reviewed;
+        });
+      },
+      dates,
+    );
+  }
+
   // Maneja conflictos si dos versiones se intentan subir al mismo tiempo
   private async addVersionOrConflict(
     ...args: Parameters<DocumentsRepository['addVersion']>
@@ -260,9 +339,13 @@ export class DocumentLifecycleService {
     id: string,
     actor: AuthUser,
     operate: () => Promise<DocumentRecord>,
+    auditDates?: ReviewAuditDates,
   ): Promise<DocumentResponse> {
     try {
-      return toDocumentResponse(await operate());
+      const record = await operate();
+      // Spec 005 (R4): la respuesta lleva el estado de revisión si el actor puede verlo.
+      const today = todayInCompany(this.clock.now());
+      return toDocumentResponse(record, reviewFor(actor, record, today));
     } catch (error) {
       const failure = toHttpException(error, this.logger, operation);
       await this.steps.auditFailure(
@@ -270,6 +353,7 @@ export class DocumentLifecycleService {
         actor,
         failure.getStatus(),
         failure instanceof NotFoundException ? undefined : id,
+        auditDates,
       );
       throw failure;
     }

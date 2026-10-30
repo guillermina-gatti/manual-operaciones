@@ -80,6 +80,10 @@ export interface DocumentRecord {
   // Cuándo se archivó (spec 003, R10). El repositorio real lo completa siempre (null si está activo);
   // es opcional para los registros armados a mano en los tests.
   archivedAt?: Date | null;
+  // Última revisión (spec 005, R8, R10, R11): null si nunca se revisó. Como archivedAt, el repositorio
+  // real los completa siempre y son opcionales para los registros armados a mano en los tests.
+  lastReviewedAt?: Date | null;
+  lastReviewedById?: string | null;
   currentVersion: DocumentVersionRecord;
 }
 
@@ -96,6 +100,13 @@ export type NewVersion = NewDocument['version'];
 // Spec 003, R12: una fila del historial. Además de lo de una versión, quién la subió.
 export interface VersionHistoryRecord extends DocumentVersionRecord {
   uploadedById: string;
+}
+
+// Spec 005, R8: la fecha nueva y quién y cuándo hizo la revisión.
+export interface ReviewToRecord {
+  reviewDate: Date;
+  reviewedById: string;
+  at: Date;
 }
 
 // Spec 004: qué se busca. `scope` sale de searchScope (document-access.policy): areaIds null = sin
@@ -192,6 +203,27 @@ export abstract class DocumentsRepository {
     documentId: string,
     versionId: string,
   ): Promise<DocumentVersionRecord | null>;
+
+  // ── Avisos de vencimiento (spec 005, plan 3.1 a 3.3).
+
+  // Como list, pero de la fecha de revisión más antigua a la más nueva y, a igual fecha, por id: los
+  // vencidos quedan primero sin ordenar por estado (R5, D8).
+  abstract listForReview(
+    where: Prisma.DocumentWhereInput,
+    page: number,
+    limit: number,
+  ): Promise<DocumentPage>;
+
+  // Cuántos documentos cumplen el filtro (para saber si alguien es responsable de alguno, D19).
+  abstract count(where: Prisma.DocumentWhereInput): Promise<number>;
+
+  // Cambia la fecha de revisión y registra la última revisión, dentro de la transacción recibida.
+  // No toca versiones, fragmentos ni el archivo (R8).
+  abstract markReviewed(
+    tx: RepositoryTransaction,
+    id: string,
+    review: ReviewToRecord,
+  ): Promise<DocumentRecord>;
 
   // ── Búsqueda (spec 004, plan sección 3).
 

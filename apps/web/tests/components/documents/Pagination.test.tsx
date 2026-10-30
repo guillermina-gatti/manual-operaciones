@@ -111,3 +111,21 @@ describe('Pagination con búsqueda', () => {
     );
   });
 });
+
+// Spec 005 (T21): la lista "Por revisar" pagina sobre su propia ruta.
+describe('con otra ruta base', () => {
+  test('los enlaces van a /documentos/por-revisar, y la página 1 sin ?pagina', () => {
+    render(
+      <Pagination currentPage={2} totalItems={45} pageSize={20} basePath="/documentos/por-revisar" />,
+    );
+
+    expect(screen.getByRole('link', { name: 'Anterior' })).toHaveAttribute(
+      'href',
+      '/documentos/por-revisar',
+    );
+    expect(screen.getByRole('link', { name: 'Siguiente' })).toHaveAttribute(
+      'href',
+      '/documentos/por-revisar?pagina=3',
+    );
+  });
+});

@@ -5,10 +5,12 @@ import {
   documentSummary,
   listResponse,
   mockApi,
+  pendingReviewHandler,
   searchResponse,
   searchResult,
   versionHistory,
 } from './support/mock-api';
+import { FIXTURE_USERS } from '../lib/directory/fixtures';
 import { DEV_FIXTURE_PASSWORD } from '../lib/session/dev-credentials';
 import { accessTokenFor, loginAs } from './support/session';
 
@@ -75,5 +77,29 @@ test('con search simulado, el EMPLOYEE busca "caja" y ve un resultado', async ({
   await expect(page).toHaveURL(/\/documentos\?q=caja$/);
   await expect(page.getByRole('article')).toHaveCount(1);
   await expect(page.getByRole('article').locator('mark')).toHaveText('caja');
+  expect(api.unhandled).toEqual([]);
+});
+
+// Spec 005 (T23): la API simulada atiende "Por revisar"; el acceso con la cantidad lleva a la lista.
+test('con pendingReview simulado, la responsable ve "Por revisar (1)" y entra a la lista', async ({ page }) => {
+  await loginAs(page, 'empleadoVentas');
+  const document = documentSummary({
+    title: 'Manual de caja',
+    ownerId: FIXTURE_USERS.empleadoVentas.id,
+    reviewDate: '2026-11-04',
+    review: { status: 'OVERDUE', lastReviewedAt: null, lastReviewedById: null },
+  });
+  const api = await mockApi(page, {
+    list: () => ({ status: 200, body: listResponse([document]) }),
+    pendingReview: pendingReviewHandler([document]),
+  });
+
+  await page.goto('/documentos');
+  await page.getByRole('link', { name: 'Por revisar: 1 documento' }).click();
+
+  await expect(page).toHaveURL(/\/documentos\/por-revisar$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Por revisar' })).toBeVisible();
+  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(page.getByRole('article')).toContainText('Vencido');
   expect(api.unhandled).toEqual([]);
 });
