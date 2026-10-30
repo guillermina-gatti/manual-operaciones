@@ -9,10 +9,11 @@ import {
   DownloadUrl,
   FileStorage,
   StorageUnavailableError,
+  StoredFileNotFoundError,
 } from './file-storage';
 
 // Tipos de métodos que podemos simular que fallan
-type StorageMethod = 'put' | 'delete' | 'getDownloadUrl';
+type StorageMethod = 'put' | 'get' | 'delete' | 'getDownloadUrl';
 
 // Estructura interna para guardar los archivos simulados en memoria
 interface StoredObject {
@@ -58,6 +59,14 @@ export class InMemoryFileStorage extends FileStorage {
   ): Promise<void> {
     await this.failIfConfigured('put'); // Comprueba si simulamos un fallo aquí
     this.objects.set(key, { buffer, contentType, checksum });
+  }
+
+  // Simula leer un archivo guardado en memoria
+  async get(key: string): Promise<Buffer> {
+    await this.failIfConfigured('get'); // Comprueba si simulamos un fallo aquí
+    const stored = this.objects.get(key);
+    if (!stored) throw new StoredFileNotFoundError(key);
+    return stored.buffer;
   }
 
   // Simula eliminar un archivo de la memoria

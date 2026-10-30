@@ -19,7 +19,19 @@ export class StorageUnavailableError extends Error {
   }
 }
 
-// 4. Puerto (Contrato / Clase abstracta): Define qué métodos obligatorios debe tener
+// 4. Error personalizado: La clave pedida no existe en el almacenamiento.
+// Cada adaptador traduce su "no encontrado" a este error (ej. NoSuchKey de S3).
+export class StoredFileNotFoundError extends Error {
+  constructor(
+    readonly key: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`No existe un archivo guardado con la clave ${key}`, options);
+    this.name = 'StoredFileNotFoundError';
+  }
+}
+
+// 5. Puerto (Contrato / Clase abstracta): Define qué métodos obligatorios debe tener
 // cualquier sistema de almacenamiento que conectemos.
 export abstract class FileStorage {
   // Método para guardar/subir un archivo binario
@@ -29,6 +41,9 @@ export abstract class FileStorage {
     contentType: string,
     checksum: string,
   ): Promise<void>;
+
+  // Método para leer el contenido de un archivo guardado (lo usa el worker de procesamiento)
+  abstract get(key: string): Promise<Buffer>;
 
   // Método para eliminar un archivo usando su clave o ruta única
   abstract delete(key: string): Promise<void>;
