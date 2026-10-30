@@ -1,5 +1,20 @@
 /* Pruebas del estado de revisión (spec 005, R1 a R3; plan 1.1; T03) */
-import { DUE_SOON_DAYS, reviewFor, reviewStatusOf } from './review-status';
+import {
+  DUE_SOON_DAYS,
+  dueSoonThrough,
+  reviewFor,
+  reviewStatusOf,
+} from './review-status';
+
+// Spec 007 (T01): el último día "por vencer", compartido con "Por revisar" y las métricas.
+describe('dueSoonThrough', () => {
+  it.each([
+    ['2026-11-09', '2026-12-09'],
+    ['2026-12-15', '2027-01-14'],
+  ])('%s → %s (hoy + 30)', (today, expected) => {
+    expect(dueSoonThrough(today)).toBe(expected);
+  });
+});
 
 const TODAY = '2026-11-09';
 const active = (reviewDate: string) => ({

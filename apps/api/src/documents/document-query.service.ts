@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import { Clock, SystemClock } from '../common/clock';
 import { DownloadUrl, FileStorage } from '../storage/file-storage';
-import { addDays, toDbDate, todayInCompany } from './company-date';
+import { toDbDate, todayInCompany } from './company-date';
 import {
   documentNotFound,
   findVisibleDocument,
@@ -31,7 +31,7 @@ import { SearchDocumentsQuery } from './dto/search-documents.query';
 import { toHttpException } from './http-errors';
 import type { HttpOperation } from './http-errors';
 import { UsersDirectory } from './ports/users-directory';
-import { DUE_SOON_DAYS, reviewFor } from './review-status';
+import { dueSoonThrough, reviewFor } from './review-status';
 import { buildFragment } from './search-fragment';
 
 // Forma del listado (R13). La clase para Swagger la agrega el controller (T19).
@@ -126,7 +126,7 @@ export class DocumentQueryService {
     return this.mapErrors(async () => {
       const today = this.today();
       const viewer = await this.viewerFor(user);
-      const lastDay = toDbDate(addDays(today, DUE_SOON_DAYS));
+      const lastDay = toDbDate(dueSoonThrough(today));
       const { data, total } = await this.documents.listForReview(
         pendingReviewWhere(viewer, user.id, lastDay),
         query.page,

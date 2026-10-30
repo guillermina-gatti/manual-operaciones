@@ -1,5 +1,30 @@
 /* Pruebas de las fechas de la empresa (spec 005, plan 1.2; T02) */
-import { addDays, toDbDate, todayInCompany } from './company-date';
+import {
+  addDays,
+  companyTimeZone,
+  toDbDate,
+  todayInCompany,
+} from './company-date';
+
+// Spec 007 (T01): la zona se exporta para el período de las métricas.
+describe('companyTimeZone', () => {
+  const previousTimeZone = process.env.APP_TIMEZONE;
+
+  afterEach(() => {
+    if (previousTimeZone === undefined) delete process.env.APP_TIMEZONE;
+    else process.env.APP_TIMEZONE = previousTimeZone;
+  });
+
+  it('es Buenos Aires sin APP_TIMEZONE', () => {
+    delete process.env.APP_TIMEZONE;
+    expect(companyTimeZone()).toBe('America/Argentina/Buenos_Aires');
+  });
+
+  it('respeta APP_TIMEZONE', () => {
+    process.env.APP_TIMEZONE = 'UTC';
+    expect(companyTimeZone()).toBe('UTC');
+  });
+});
 
 describe('todayInCompany', () => {
   const previousTimeZone = process.env.APP_TIMEZONE;

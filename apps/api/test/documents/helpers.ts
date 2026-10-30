@@ -376,3 +376,19 @@ export async function seedProcessedVersion(
   });
   return ids;
 }
+
+// Spec 007 (T04, D10): deja una versión en el estado de procesamiento que pida el test, sin pasar
+// por el worker. Sirve para sembrar una versión vigente en error (processingFailed).
+export async function setProcessingStatus(
+  prisma: PrismaService,
+  versionId: string,
+  status: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED',
+): Promise<void> {
+  await prisma.documentVersion.update({
+    where: { id: versionId },
+    data: {
+      processingStatus: status,
+      processingError: status === 'FAILED' ? 'Error de prueba' : null,
+    },
+  });
+}

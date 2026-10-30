@@ -11,6 +11,11 @@ export type ReviewStatus = 'UP_TO_DATE' | 'DUE_SOON' | 'OVERDUE';
 // R1, P1: "por vencer" son los próximos 30 días, contando hoy.
 export const DUE_SOON_DAYS = 30;
 
+// R1: el último día "por vencer" (hoy + 30). Lo usan reviewStatusOf, "Por revisar" y las métricas
+// de documentos (spec 007, D7), así los tres cuentan con el mismo borde.
+export const dueSoonThrough = (today: string): string =>
+  addDays(today, DUE_SOON_DAYS);
+
 // R1 y R2. Las dos fechas son YYYY-MM-DD y "today" ya está en hora de la empresa (todayInCompany):
 // se comparan como texto, así no hay horas ni zonas en la comparación.
 export function reviewStatusOf(
@@ -19,7 +24,7 @@ export function reviewStatusOf(
 ): ReviewStatus | null {
   if (document.status === 'ARCHIVED') return null;
   if (document.reviewDate < today) return 'OVERDUE';
-  if (document.reviewDate <= addDays(today, DUE_SOON_DAYS)) return 'DUE_SOON';
+  if (document.reviewDate <= dueSoonThrough(today)) return 'DUE_SOON';
   return 'UP_TO_DATE';
 }
 

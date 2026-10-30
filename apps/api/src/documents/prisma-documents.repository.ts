@@ -569,7 +569,7 @@ export function searchRankingSql({ text, scope, page, limit }: SearchParams): Pr
 const PG_CONNECTION_LOST = 'Connection terminated unexpectedly';
 
 // Comprueba si el error de Prisma corresponde a un problema de disponibilidad del servidor
-function isUnavailable(error: unknown): boolean {
+export function isUnavailable(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&

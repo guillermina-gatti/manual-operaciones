@@ -3,8 +3,10 @@ Las fechas sin hora viajan como YYYY-MM-DD, que ordena igual que las fechas que 
 
 const DEFAULT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
 
-// La zona se lee en cada llamada: APP_TIMEZONE es configurable (D1 del plan 001).
-const companyTimeZone = () => process.env.APP_TIMEZONE || DEFAULT_TIME_ZONE;
+// La zona se lee en cada llamada: APP_TIMEZONE es configurable (D1 del plan 001). Exportada para el
+// período de las métricas de documentos (spec 007).
+export const companyTimeZone = () =>
+  process.env.APP_TIMEZONE || DEFAULT_TIME_ZONE;
 
 // La fecha YYYY-MM-DD de ese instante en la zona de la empresa. Era el today() de DocumentWriteSteps.
 export function todayInCompany(now: Date): string {
