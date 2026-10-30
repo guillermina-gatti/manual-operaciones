@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { DocumentSummary } from '@/lib/api';
 import { formatCreatedAt, formatReviewDate } from '@/lib/documents/format';
+import { ReviewStatusBadge } from './ReviewStatusBadge';
 
 interface DocumentCardProps {
   document: DocumentSummary;
@@ -46,6 +47,8 @@ export function DocumentCard({
             Archivado
           </span>
         )}
+        {/* Spec 005 (F1): solo llega `review` al ADMIN y al responsable (R4). */}
+        <ReviewStatusBadge status={document.review?.status} />
       </div>
 
       <p title={fileName} className="truncate text-sm text-zinc-600 dark:text-zinc-400">

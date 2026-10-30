@@ -21,12 +21,15 @@ export const {
   archiveDocument,
   listVersions,
   getVersionDownloadUrl,
+  listPendingReview,
+  markReviewed,
 } = createDocumentsApi(apiClient);
 export { PAGE_SIZE } from './documents';
 export type {
   ChangeAreasValues,
   DocumentListResponse,
   DocumentResponse,
+  DocumentReview,
   DocumentSearchResponse,
   DocumentSearchResult,
   DocumentStatus,
@@ -35,7 +38,9 @@ export type {
   DocumentVersionStatus,
   DocumentVersionSummary,
   DownloadUrl,
+  PendingReviewResponse,
   ProcessingStatus,
+  ReviewStatus,
   SearchFragment,
   UploadDocumentValues,
   UploadVersionValues,

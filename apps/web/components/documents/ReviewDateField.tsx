@@ -15,6 +15,8 @@ interface ReviewDateFieldProps {
   optional?: boolean;
   // La fecha que ya tiene el documento (YYYY-MM-DD), para la ayuda del modo opcional.
   currentDate?: string;
+  // Otra etiqueta, por ejemplo la de "Marcar como revisado" (spec 005). Sin ella, las de siempre.
+  label?: string;
 }
 
 const INPUT =
@@ -26,6 +28,7 @@ export function ReviewDateField({
   error,
   optional = false,
   currentDate,
+  label,
 }: ReviewDateFieldProps) {
   const id = useId();
   // Mínimo del <input type="date">: mañana en Buenos Aires (D1 del plan 001).
@@ -36,7 +39,7 @@ export function ReviewDateField({
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={`${id}-input`} className="font-medium">
-        {optional ? 'Nueva fecha de revisión (opcional)' : 'Fecha de revisión'}
+        {label ?? (optional ? 'Nueva fecha de revisión (opcional)' : 'Fecha de revisión')}
       </label>
       <input
         id={`${id}-input`}
