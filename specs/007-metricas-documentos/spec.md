@@ -40,7 +40,9 @@ El panel de la pareja B pide `GET /api/metrics/documents` con los filtros que el
 - **R2 · Alcance de áreas.** Las áreas del usuario se leen del directorio de usuarios en cada pedido, nunca de la sesión.
   - ADMIN sin `areaId`: todas las áreas. Con `areaId`: solo esa.
   - SUPERVISOR sin `areaId`: sus áreas. Con `areaId` de una de sus áreas: solo esa.
-- **R3 · Área ajena o inexistente.** Un `areaId` que no existe, o que no es del SUPERVISOR, responde 404 "No se encontró el área", igual en los dos casos, como en las métricas de procedimientos.
+- **R3 · Área ajena o inexistente.** Como en las métricas de procedimientos:
+  - SUPERVISOR con un `areaId` que no es de sus áreas, exista o no: 404 "No se encontró el área".
+  - ADMIN con un `areaId` que no existe: no es un error. Responde 200 con todos los totales en 0, porque ningún documento tiene esa área.
 - **R4 · Qué documentos cuentan.** Solo documentos `ACTIVE` que tienen al menos un área dentro del alcance. Un documento con varias áreas cuenta una sola vez en cada total. Los archivados no cuentan en ningún total.
 - **R5 · Foto de hoy.** `active`, `upToDate`, `dueSoon`, `overdue` y `processingFailed` describen el estado de hoy, en hora de Argentina; el período no los cambia (decisión P1).
   - `active`: documentos activos del alcance.
@@ -65,7 +67,7 @@ El panel de la pareja B pide `GET /api/metrics/documents` con los filtros que el
   ```
 
   `filters` repite los filtros recibidos, con `null` en los que no vinieron. Sin documentos en el alcance, todos los totales valen 0.
-- **R9 · Errores.** Con el formato de NestJS. Si la base o el directorio de usuarios no responden: 503 "No se pudo completar la consulta de las métricas. Intentá de nuevo en unos minutos.". Cualquier otro error: 500, con la causa solo en el log.
+- **R9 · Errores.** Con el formato de NestJS. Si la base o el directorio de usuarios no responden: 503 "No se pudo completar la consulta de las métricas. Intentá de nuevo más tarde.", el mismo texto que el de las métricas de procedimientos. Cualquier otro error: 500, con la causa solo en el log.
 
 ## 7. Estados
 
@@ -79,6 +81,7 @@ Esta feature no cambia estados: solo cuenta los de las specs 001 (documento), 00
 - Un documento cargado en el período y después archivado: no cuenta en ningún total (R4).
 - Un documento cuya versión vigente todavía no se procesó: cuenta en `active` y en su estado de revisión, no en `processingFailed`.
 - Un SUPERVISOR sin áreas: todos los totales en 0.
+- Un ADMIN con un `areaId` que no existe: 200 con todos los totales en 0 (R3).
 
 ## 9. Restricciones no funcionales
 
@@ -99,6 +102,8 @@ Tomadas en la etapa de aclaración (clarify) el 30/10/2026.
 | P5 · ¿Un documento con varias áreas? | Cuenta una vez | R4 |
 | P6 · ¿Y "consultados"? | Fuera de esta spec: no se registran las consultas | Sección 4 |
 | P7 · ¿Qué forma tiene la respuesta? | `filters` + `totals`, como la de procedimientos, con los campos de R8 | R8 |
+
+En la revisión del plan (30/10/2026) se corrigieron R3 (el ADMIN con un área que no existe recibe 200 con todo en 0, no 404) y el texto del 503 de R9 ("más tarde"), para que coincidan con las métricas de procedimientos, como pide P3. Son D14 y D15 del plan.
 
 Para la pareja B (Mayra): el adaptador de la web hoy espera `{ active, consulted, processingFailed }`, una forma que su propio código marca como propuesta. Este contrato la reemplaza: tienen que adaptar `DocumentMetrics` y la tarjeta a R8.
 
@@ -123,10 +128,11 @@ Escenario: filtro por área
   Entonces los totales cuentan solo los documentos de Operaciones
   Y filters.areaId es el de Operaciones
 
-Escenario: área ajena
+Escenario: área ajena o inexistente
   Dado un SUPERVISOR que pertenece solo a Ventas
   Cuando pide las métricas con areaId de Operaciones
   Entonces la respuesta es 404 "No se encontró el área"
+  Y si un ADMIN pide las métricas con un areaId que no existe, la respuesta es 200 con todos los totales en 0
 
 Escenario: un empleado no tiene acceso
   Dado un EMPLOYEE con sesión
