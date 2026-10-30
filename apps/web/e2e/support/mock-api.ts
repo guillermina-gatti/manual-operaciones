@@ -8,6 +8,7 @@ import type {
   DocumentSearchResult,
   DocumentSummary,
   DownloadUrl,
+  PendingReviewResponse,
   SearchFragment,
   VersionHistoryItem,
   VersionHistoryResponse,
@@ -51,7 +52,17 @@ export interface ApiHandlers {
   versionDownload?: Handler; // GET /api/documents/:id/versions/:versionId/download
   // Spec 004 (T16): la búsqueda.
   search?: Handler; // GET /api/documents/search
+  // Spec 005 (T23): los avisos de vencimiento. Sin `pendingReview`, ver DEFAULT_PENDING_REVIEW.
+  pendingReview?: Handler; // GET /api/documents/pending-review
+  markReviewed?: Handler; // POST /api/documents/:id/review
 }
+
+// Spec 005 (T23): el listado pide en segundo plano la cantidad de "Por revisar" (F2). Un test que no
+// simula `pendingReview` no está probando eso: la API simulada responde que el usuario no es revisor
+// (el acceso no aparece) y ese pedido no se anota en `requests` ni en `unhandled`, así los tests de las
+// specs 002 a 004 siguen viendo solo sus pedidos. Decidido con el usuario el 30/10/2026.
+const PENDING_REVIEW_PATH = '/api/documents/pending-review';
+const DEFAULT_PENDING_REVIEW = { data: [], total: 0, page: 1, limit: 1, isReviewer: false };
 
 export interface MockedApi {
   // Todos los pedidos a /api, en orden, menos los de /api/auth.
@@ -68,6 +79,9 @@ const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
   { name: 'upload', method: 'POST', path: /^\/api\/documents$/ },
   // Antes que el detalle: /api/documents/search también coincide con /api/documents/:id.
   { name: 'search', method: 'GET', path: /^\/api\/documents\/search$/ },
+  // Spec 005: lo mismo con /api/documents/pending-review.
+  { name: 'pendingReview', method: 'GET', path: /^\/api\/documents\/pending-review$/ },
+  { name: 'markReviewed', method: 'POST', path: new RegExp(`^/api/documents/${ID}/review$`) },
   { name: 'download', method: 'GET', path: new RegExp(`^/api/documents/${ID}/download$`) },
   { name: 'detail', method: 'GET', path: new RegExp(`^/api/documents/${ID}$`) },
   { name: 'changeAreas', method: 'PATCH', path: new RegExp(`^/api/documents/${ID}/areas$`) },
@@ -124,6 +138,19 @@ export async function mockApi(page: Page, handlers: ApiHandlers): Promise<Mocked
         status: reply.status,
         contentType: 'application/json',
         body: JSON.stringify(reply.body),
+      });
+      return;
+    }
+
+    if (
+      !handlers.pendingReview &&
+      apiRequest.method === 'GET' &&
+      url.pathname === PENDING_REVIEW_PATH
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(DEFAULT_PENDING_REVIEW),
       });
       return;
     }
@@ -259,6 +286,35 @@ export function searchResponse(
   page = 1,
 ): DocumentSearchResponse {
   return { data, total, page, limit: 20 };
+}
+
+// Spec 005: la respuesta de "Por revisar". Los documentos traen su `review` (documentSummary con
+// overrides). Con limit=1 es la que pide el acceso del listado; con 20, la lista.
+export function pendingReviewResponse(
+  data: DocumentSummary[],
+  { total = data.length, page = 1, limit = 20, isReviewer = true } = {},
+): PendingReviewResponse {
+  return { data, total, page, limit, isReviewer };
+}
+
+// Responde "Por revisar" según el limit del pedido, como la API: el acceso pide 1 y la lista 20.
+export function pendingReviewHandler(
+  data: DocumentSummary[],
+  isReviewer = true,
+): (request: ApiRequest) => Reply {
+  return (request) => {
+    const limit = Number(request.search.get('limit') ?? 20);
+    const page = Number(request.search.get('page') ?? 1);
+    return {
+      status: 200,
+      body: pendingReviewResponse(data.slice((page - 1) * limit, page * limit), {
+        total: data.length,
+        page,
+        limit,
+        isReviewer,
+      }),
+    };
+  };
 }
 
 export function downloadUrl(url: string): DownloadUrl {
