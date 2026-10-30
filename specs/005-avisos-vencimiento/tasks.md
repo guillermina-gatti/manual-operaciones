@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (30/10/2026):** ninguna hecha. T01 a T13 son el backend; T14 a T22, las pantallas; T23 a T25, Playwright; T26, la verificación.
+- **Estado (30/10/2026):** T01 a T26 **hechas** (T01 a T13 son el backend; T14 a T22, las pantallas; T23 a T25, Playwright; T26, la [verificación](#verificación)). Sin commits de T02 a T26: los hace el usuario.
 
 Convenciones:
 
@@ -43,6 +43,7 @@ Convenciones:
 - **Depende de:** —
 - **Nota:** toca `schema.prisma` y las migraciones. **Avisar al equipo antes de mergear**: agrega dos columnas nulas a `documents`, sin tocar tablas de otras parejas.
 - **Commit:** `feat(api): guardar la última revisión de cada documento`
+- **Estado:** hecha y commiteada por el usuario, con la migración aplicada.
 
 ### T02 · Fechas de la empresa y reloj de documentos
 
@@ -64,6 +65,7 @@ Convenciones:
   - `pnpm --filter api test:e2e upload lifecycle` sigue pasando: Nest resuelve el `Clock` del módulo.
 - **Depende de:** —
 - **Commit:** `feat(api): calcular la fecha de la empresa con un reloj inyectable`
+- **Estado:** hecha. `tsc --noEmit` da 3 errores que ya estaban en `HEAD`, todos en `src/auth/*.spec.ts` (pareja A); no se tocan.
 
 ### T03 · Estado de revisión
 
@@ -79,6 +81,7 @@ Convenciones:
   - cruce de año: `today = '2026-12-15'`, `2027-01-14` → `DUE_SOON` y `2027-01-15` → `UP_TO_DATE`.
 - **Depende de:** T02
 - **Commit:** `feat(api): calcular el estado de revisión de un documento`
+- **Estado:** hecha.
 
 ### T04 · Política: quién ve y revisa, y qué está pendiente
 
@@ -94,6 +97,7 @@ Convenciones:
   - los tests de `canView`, `listWhere`, `searchScope` y `canBeOwner` siguen pasando sin cambios.
 - **Depende de:** T03
 - **Commit:** `feat(api): definir quién ve y revisa el estado de un documento`
+- **Estado:** hecha. `reviewFor` recibe solo lo que necesita del documento (`ownerId`, `status`, `reviewDate` y la última revisión opcional), así no depende de los campos que `DocumentRecord` suma en T05.
 
 ### T05 · Respuesta con el estado de revisión
 
@@ -110,6 +114,7 @@ Convenciones:
   - `pnpm --filter api exec tsc --noEmit` sin errores.
 - **Depende de:** T01, T04
 - **Commit:** `feat(api): incluir el estado de revisión en la respuesta de un documento`
+- **Estado:** hecha. Con el parámetro opcional, `data.map(toDocumentSummary)` del listado le pasaría el índice como `review`: `DocumentQueryService.list` pasa a `data.map((record) => toDocumentSummary(record))`, sin cambiar el comportamiento. `prisma-documents.repository.ts` ya no pasaba `prettier --check` en `HEAD`; no se reformatea.
 
 ### T06 · Repositorio: "Por revisar" y "Marcar como revisado"
 
@@ -129,6 +134,7 @@ Convenciones:
   - los tests de `documents.repository.e2e-spec.ts`, `lifecycle.repository.e2e-spec.ts` y `search.repository.e2e-spec.ts` siguen pasando con `seedDocument` ampliada.
 - **Depende de:** T01, T05
 - **Commit:** `feat(api): listar los documentos por revisar y registrar una revisión`
+- **Estado:** hecha. Los datos de `markReviewed` van en un tipo propio del puerto, `ReviewToRecord`. Además de los casos de la tarea, un test comprueba que si la transacción se deshace no queda ni la fecha ni la revisión.
 
 ### T07 · Repositorio: la versión nueva con fecha cuenta como revisión
 
@@ -142,6 +148,7 @@ Convenciones:
   - los tests unitarios de `document-lifecycle.service.spec.ts` y los de integración de la spec 003 (`lifecycle.e2e-spec.ts`, `lifecycle.repository.e2e-spec.ts`) pasan **sin cambios**.
 - **Depende de:** T06
 - **Commit:** `feat(api): registrar la revisión al subir una versión con fecha nueva`
+- **Estado:** hecha. Los tests de la spec 003 (unitarios y de integración) pasan sin cambios.
 
 ### T08 · Visibilidad compartida
 
@@ -151,6 +158,7 @@ Convenciones:
 - **Verificación:** es un movimiento sin cambio de comportamiento: `document-query.service.spec.ts` y `test/documents/query.e2e-spec.ts` pasan **sin cambios** (son la red de seguridad, como `DocumentWriteSteps` en T02 de la spec 003). `pnpm --filter api exec tsc --noEmit` sin errores.
 - **Depende de:** —
 - **Commit:** `refactor(api): compartir la regla de visibilidad de un documento`
+- **Estado:** hecha. `documentNotFound` también se mueve a `document-access.ts`, para que el 404 sea el mismo en los dos servicios. Es un movimiento: no hay test nuevo; los existentes son la red de seguridad.
 
 ### T09 · Servicio de consultas: el estado y "Por revisar"
 
@@ -168,6 +176,7 @@ Convenciones:
   - los tests existentes de `document-query.service.spec.ts` pasan sin cambios.
 - **Depende de:** T04, T05, T06, T08
 - **Commit:** `feat(api): mostrar el estado de revisión y armar la lista por revisar`
+- **Estado:** hecha. La forma de la respuesta es `PendingReviewResponse` (`DocumentListResponse` + `isReviewer`), en el servicio, como `DocumentListResponse`.
 
 ### T10 · Servicio: "Marcar como revisado"
 
@@ -192,6 +201,7 @@ Convenciones:
   - los tests existentes de `document-lifecycle.service.spec.ts` pasan sin cambios.
 - **Depende de:** T02, T04, T05, T06, T08
 - **Commit:** `feat(api): marcar un documento como revisado`
+- **Estado:** hecha. El 403 dice "Solo el ADMIN o el responsable pueden marcar el documento como revisado". `run` ahora pasa `reviewFor(actor, …)` a la respuesta, así las acciones del ciclo de vida del ADMIN también la traen; los tests de la spec 003 pasan sin cambios. El constructor guarda `users` para `findVisibleDocument`.
 
 ### T11 · Endpoint: `GET /documents/pending-review` y el estado en las respuestas
 
@@ -218,6 +228,7 @@ Convenciones:
   - las suites de `query.e2e-spec.ts`, `search.e2e-spec.ts`, `upload.e2e-spec.ts` y `lifecycle.e2e-spec.ts` siguen pasando sin el reloj fijo.
 - **Depende de:** T09
 - **Commit:** `feat(api): exponer la lista de documentos por revisar`
+- **Estado:** hecha. Los fixtures tienen una sola área por usuario: el caso "varias áreas" crea en el test un SUPERVISOR de Ventas y Operaciones (filas en `users` y `user_areas` de la base de tests, sin tocar archivos de la pareja A) y lo borra al terminar. E1 a E4 ya pasaban antes del endpoint, porque el estado en el listado y el detalle llegó con T09; lo que falló primero fue todo lo de "Por revisar" (400 del `ParseUUIDPipe`).
 
 ### T12 · Endpoint: `POST /documents/:id/review`
 
@@ -235,6 +246,7 @@ Convenciones:
   - columnas: después de una revisión, las dos tienen valor; en un documento recién cargado por la API, las dos `null`.
 - **Depende de:** T07, T10, T11
 - **Commit:** `feat(api): exponer la acción de marcar como revisado`
+- **Estado:** hecha. E12 y "sin fecha no cambia" ya pasaban antes del endpoint (los cubre T07 con el endpoint de la spec 003); también los 404, que la ruta inexistente responde igual. Lo que falló primero fue lo que necesita la ruta: E8, E9, E10, E11, el caso borde de 30 días y las columnas.
 
 ### T13 · Auditoría de la revisión
 
@@ -252,6 +264,7 @@ Convenciones:
   - `reviews.e2e-spec.ts`, con `jest.spyOn(audit, 'record')`: **E8** con las dos fechas; **simultáneas:** dos `POST …/review` a la vez (`Promise.all`) con fechas distintas → los dos 200, `review_date` es una de las dos, dos entradas `SUCCESS`, y la anterior de una es la nueva de la otra.
 - **Depende de:** T12
 - **Commit:** `feat(api): auditar la fecha anterior y la nueva de cada revisión`
+- **Estado:** hecha. Los unitarios fallaron primero (5 nuevos). Los dos de integración se escribieron después del cambio, para comprobarlo de punta a punta; pasaron de entrada. `ReviewAuditDates` es el tipo de las dos fechas, en el puerto. `markReviewed` lleva las fechas que conoce en un objeto que `run` le pasa a `auditFailure`: la nueva desde el principio (el DTO ya validó el formato) y la anterior desde la primera lectura, actualizada bajo el bloqueo.
 
 ## Frontend
 
@@ -269,6 +282,7 @@ Convenciones:
   - los contextos anteriores no cambian.
 - **Depende de:** T12 (contrato de la API)
 - **Commit:** `feat(web): agregar las llamadas de revisión a la API`
+- **Estado:** hecha.
 
 ### T15 · Etiqueta del estado de revisión
 
@@ -281,6 +295,7 @@ Convenciones:
   - el estado se lee como texto (no depende del color): `getByText`.
 - **Depende de:** T14
 - **Commit:** `feat(web): mostrar la etiqueta del estado de revisión`
+- **Estado:** hecha.
 
 ### T16 · Etiqueta en la tarjeta
 
@@ -294,6 +309,7 @@ Convenciones:
   - los tests anteriores de `DocumentCard` pasan sin cambios.
 - **Depende de:** T15
 - **Commit:** `feat(web): mostrar el estado de revisión en la tarjeta`
+- **Estado:** hecha.
 
 ### T17 · Etiqueta y última revisión en el detalle
 
@@ -310,6 +326,7 @@ Convenciones:
   - los tests de `DocumentDetail.test.tsx` y `DocumentDetail.lifecycle.test.tsx` pasan sin cambios ("Archivado desde" sigue igual).
 - **Depende de:** T15
 - **Commit:** `feat(web): mostrar el estado y la última revisión en el detalle`
+- **Estado:** hecha. El pedido de nombres del detalle pasa de `owner:<id>` a `names:<ids>`: con una revisión pide `[ownerId, lastReviewedById]` (sin repetir); sin ella, `[ownerId]`, como antes. Los tests de las specs 002 y 003 pasan sin cambios.
 
 ### T18 · Formulario "Marcar como revisado"
 
@@ -330,6 +347,7 @@ Convenciones:
   - dos clics seguidos → un solo pedido.
 - **Depende de:** T14
 - **Commit:** `feat(web): agregar el formulario de marcar como revisado`
+- **Estado:** hecha. Los tests usan una fecha lejana (`2099-05-09`) como fecha válida, para no depender del día en que corren.
 
 ### T19 · Sección "Revisión" en el detalle
 
@@ -345,6 +363,7 @@ Convenciones:
   - los tests anteriores de `DocumentDetail` pasan sin cambios.
 - **Depende de:** T17, T18
 - **Commit:** `feat(web): marcar como revisado desde el detalle`
+- **Estado:** hecha. La sección es un `ActionPanel` titulado "Revisión" (una región con ese nombre), el mismo contenedor de los paneles del plan 003.
 
 ### T20 · Acceso a "Por revisar" con la cantidad
 
@@ -360,6 +379,7 @@ Convenciones:
   - los tests de `DocumentList.test.tsx` y `DocumentList.search.test.tsx` siguen pasando. Si su mock de `@/lib/api` no exporta `listPendingReview`, se suma al mock sin cambiar las aserciones (como el `useRouter` de T15 de la spec 004).
 - **Depende de:** T14
 - **Commit:** `feat(web): mostrar el acceso a los documentos por revisar`
+- **Estado:** hecha. El acceso va en su propia fila, debajo de la caja de búsqueda y encima de "Cargar documento", en vez de compartir la fila con ese botón: así no se mueve el botón del ADMIN, que el listado arma en cada uno de sus estados. Recibe `userId` e `isAdmin` como props. Los tests de `DocumentList.test.tsx` y `DocumentList.search.test.tsx` pasan **sin cambios en sus mocks** (sin `listPendingReview` simulado, el pedido falla y el acceso no aparece). Se suma `DocumentList.review.test.tsx` para la integración, con y sin búsqueda; falla sin el cambio en `DocumentList`.
 
 ### T21 · Paginación con otra ruta base
 
@@ -371,6 +391,7 @@ Convenciones:
   - los tests anteriores (con y sin `query`) pasan sin cambios.
 - **Depende de:** —
 - **Commit:** `feat(web): permitir otra ruta base en la paginación`
+- **Estado:** hecha.
 
 ### T22 · Página "Por revisar"
 
@@ -388,6 +409,7 @@ Convenciones:
   - `pnpm --filter web build` compila la ruta nueva (y `/documentos/[id]` sigue funcionando).
 - **Depende de:** T16, T21
 - **Commit:** `feat(web): agregar la página de documentos por revisar`
+- **Estado:** hecha. Los errores usan el contexto `'list'` de `describeApiError`, como el listado.
 
 ## Tests en el navegador (Playwright)
 
@@ -401,6 +423,7 @@ Convenciones:
   - `pnpm --filter web test:e2e` sigue pasando completo.
 - **Depende de:** T19, T20, T22
 - **Commit:** `test(web): simular la API de los avisos de vencimiento`
+- **Estado:** hecha. Con el acceso de T20, 12 tests de Playwright de las specs 002 y 004 (smoke, consulta E2, E8 y E10, y busqueda E1, en escritorio y celular) fallaban: el pedido de la cantidad quedaba sin atender (`unhandled`) y consulta E8 leía ese pedido como `requests[0]`. **Decidido con el usuario el 30/10/2026:** se resuelve en `mock-api.ts`, sin cambiar aserciones. Si el test no simula `pendingReview`, la API simulada responde `isReviewer: false` y ese pedido no se anota en `requests` ni en `unhandled`. Suma además `markReviewed`, `pendingReviewResponse(...)` y `pendingReviewHandler(...)`, que responde según el `limit` del pedido, como la API. Se escribió el cambio del soporte antes que el test de humo. `pnpm test:e2e`: 84 pasan (los 82 de antes y el nuevo, en los dos proyectos).
 
 ### T24 · Escenarios de los avisos en el navegador
 
@@ -418,6 +441,16 @@ Convenciones:
   - F6: en el celular, `document.documentElement.scrollWidth <= window.innerWidth` en el listado, el detalle y "Por revisar".
 - **Depende de:** T23
 - **Commit:** `test(web): cubrir los avisos de vencimiento en el navegador`
+- **Estado:** hecha. 24 tests (12 en escritorio y 12 en celular). Pasaron de entrada, así que se rompió una regla por vez, en escritorio, y cada test la detectó:
+  - "Vencido" cambiado: E1/E2/E3, E2, E6 y E8;
+  - "Vence pronto" cambiado: E1/E2/E3, E4 y E6;
+  - la sección "Revisión" para cualquiera: E5;
+  - el acceso sin mirar `isReviewer`: E5;
+  - borrar la fecha ante un error: E9, E10 y E11;
+  - sin "Revisión registrada": E8;
+  - otro mensaje en la lista vacía: E13.
+
+  En dos de esas corridas fallaron también otros tests por tiempo, mientras `next dev` compilaba; con todo restaurado, los 24 pasan. F6 se comprueba con un título de 70 caracteres sin espacios en el listado, el detalle y "Por revisar".
 
 ### T25 · Avisos contra la API real
 
@@ -431,6 +464,9 @@ Convenciones:
   - los tests de integración de las specs 002 a 004 siguen pasando.
 - **Depende de:** T24
 - **Commit:** `test(web): probar los avisos de vencimiento contra la API real`
+- **Estado:** hecha. Son 2 tests: E1, E6 y E8 de punta a punta, y E5 en un documento aparte. Se corrió con la API levantada contra `manual_test` y después de `seed:fixtures`.
+  - Con varios workers fallaron 5 logins (2 de esta spec y 3 de las specs 003 y 004) con un 503 de `AuthRateLimiterService` ("Falla en servicio de Redis durante operación assertAllowed"). Es de la pareja A (`src/auth`), no se toca. Con `--workers=1`, pasan los 12 tests de integración: 2 de esta spec y 10 de las specs 002 a 004.
+  - Mutaciones de control: con la sección "Revisión" para cualquiera, falla E5; con otro texto en lugar de "Vence pronto", falla E1/E6/E8.
 
 ## Verificación final
 
@@ -450,24 +486,25 @@ Convenciones:
   8. **`src/executions` sin cambios** en la rama: `git diff --stat develop...HEAD -- apps/api/src/executions` vacío (D20).
 - **Depende de:** T01 a T25
 - **Commit:** `docs(specs): verificar avisos de vencimiento`
+- **Estado:** hecha (30/10/2026). El resultado, las mutaciones de control y los pendientes están en la sección [Verificación](#verificación).
 
 #### Escenario → test
 
 | Escenario | Unitario (API) | Integración (API) | Componente (web) | Playwright | ✔ |
 | --- | --- | --- | --- | --- | --- |
-| E1 · Documento por vencer | `review-status.spec.ts` › E1 (T03); `document-query.service.spec.ts` › E1 (T09) | `reviews.e2e-spec.ts` › E1 (T11) | `DocumentCard.test.tsx` › E1 (T16) | `avisos.spec.ts` › E1 (T24); `integracion/avisos.spec.ts` (T25) | ☐ |
-| E2 · Documento vencido | `review-status.spec.ts` › E2 (T03); `document-query.service.spec.ts` › E2 (T09) | `reviews.e2e-spec.ts` › E2 (T11) | `DocumentCard.test.tsx` › E2 (T16); `DocumentDetail.review.test.tsx` › E2 (T17) | `avisos.spec.ts` › E2 (T24) | ☐ |
-| E3 · Documento al día | `review-status.spec.ts` › E3 (T03) | `reviews.e2e-spec.ts` › E3 (T11) | `DocumentCard.test.tsx` › E3 (T16) | `avisos.spec.ts` › E3 (T24) | ☐ |
-| E4 · La fecha de revisión es hoy | `review-status.spec.ts` › E4 (T03); `company-date.spec.ts` (T02) | `reviews.e2e-spec.ts` › E4, con el reloj en 23:30 de Argentina (T11) | — (lo decide la API) | `avisos.spec.ts` › E4 (T24) | ☐ |
-| E5 · Un empleado no responsable no ve avisos | `document-access.policy.spec.ts` › `canReview` y `review-status.spec.ts` › `reviewFor` (T04); `document-query.service.spec.ts` › E5 (T09) | `reviews.e2e-spec.ts` › E5, sin la clave `review` (T11) | `DocumentCard.test.tsx` (T16); `DocumentDetail.review.test.tsx` (T17, T19); `PendingReviewLink.test.tsx` (T20) | `avisos.spec.ts` › E5 (T24); `integracion/avisos.spec.ts` (T25) | ☐ |
-| E6 · Sección "Por revisar" | `document-query.service.spec.ts` › `pendingReview` (T09) | `reviews.repository.e2e-spec.ts` › orden (T06); `reviews.e2e-spec.ts` › E6 (T11) | `PendingReviewList.test.tsx` › E6 (T22) | `avisos.spec.ts` › E6 (T24); `integracion/avisos.spec.ts` (T25) | ☐ |
-| E7 · El ADMIN ve todos los pendientes | `document-access.policy.spec.ts` › `pendingReviewWhere` (T04) | `reviews.e2e-spec.ts` › E7 (T11) | — | `avisos.spec.ts` › E7 (T24) | ☐ |
-| E8 · Marcar como revisado | `document-lifecycle.service.spec.ts` › E8 (T10, T13) | `reviews.repository.e2e-spec.ts` › `markReviewed` (T06); `reviews.e2e-spec.ts` › E8 (T12) | `MarkReviewedForm.test.tsx` › E8 (T18); `DocumentDetail.review.test.tsx` › E8 (T17, T19) | `avisos.spec.ts` › E8 (T24); `integracion/avisos.spec.ts` (T25) | ☐ |
-| E9 · Fecha inválida | `mark-reviewed.dto.spec.ts` y `document-lifecycle.service.spec.ts` › E9 (T10) | `reviews.e2e-spec.ts` › E9 (T12) | `MarkReviewedForm.test.tsx` › E9 (T18) | `avisos.spec.ts` › E9 (T24) | ☐ |
-| E10 · Sin permiso para marcar | `document-lifecycle.service.spec.ts` › E10 (T10) | `reviews.e2e-spec.ts` › E10 (T12) | `MarkReviewedForm.test.tsx` › E10 (T18) | `avisos.spec.ts` › E10 (T24) | ☐ |
-| E11 · Documento archivado | `review-status.spec.ts` › R2 (T03); `document-lifecycle.service.spec.ts` › E11 (T10) | `reviews.e2e-spec.ts` › archivado (T11) y E11 (T12) | `MarkReviewedForm.test.tsx` › E11 (T18); `DocumentDetail.review.test.tsx` › E11 (T19) | `avisos.spec.ts` › E11 (T24) | ☐ |
-| E12 · Una versión nueva cuenta como revisión | — (repositorio) | `reviews.repository.e2e-spec.ts` › R10 (T07); `reviews.e2e-spec.ts` › E12, con el endpoint real (T12) | — (la pantalla es la del plan 003) | — | ☐ |
-| E13 · Sin pendientes | `document-query.service.spec.ts` › `isReviewer` (T09) | `reviews.e2e-spec.ts` › E13 (T11) | `PendingReviewList.test.tsx` › E13 (T22); `PendingReviewLink.test.tsx` › E13 (T20) | `avisos.spec.ts` › E13 (T24) | ☐ |
+| E1 · Documento por vencer | `review-status.spec.ts` › E1 (T03); `document-query.service.spec.ts` › E1 (T09) | `reviews.e2e-spec.ts` › E1 (T11) | `DocumentCard.test.tsx` › E1 (T16) | `avisos.spec.ts` › E1 (T24); `integracion/avisos.spec.ts` (T25) | ☑ |
+| E2 · Documento vencido | `review-status.spec.ts` › E2 (T03); `document-query.service.spec.ts` › E2 (T09) | `reviews.e2e-spec.ts` › E2 (T11) | `DocumentCard.test.tsx` › E2 (T16); `DocumentDetail.review.test.tsx` › E2 (T17) | `avisos.spec.ts` › E2 (T24) | ☑ |
+| E3 · Documento al día | `review-status.spec.ts` › E3 (T03) | `reviews.e2e-spec.ts` › E3 (T11) | `DocumentCard.test.tsx` › E3 (T16) | `avisos.spec.ts` › E3 (T24) | ☑ |
+| E4 · La fecha de revisión es hoy | `review-status.spec.ts` › E4 (T03); `company-date.spec.ts` (T02) | `reviews.e2e-spec.ts` › E4, con el reloj en 23:30 de Argentina (T11) | — (lo decide la API) | `avisos.spec.ts` › E4 (T24) | ☑ |
+| E5 · Un empleado no responsable no ve avisos | `document-access.policy.spec.ts` › `canReview` y `review-status.spec.ts` › `reviewFor` (T04); `document-query.service.spec.ts` › E5 (T09) | `reviews.e2e-spec.ts` › E5, sin la clave `review` (T11) | `DocumentCard.test.tsx` (T16); `DocumentDetail.review.test.tsx` (T17, T19); `PendingReviewLink.test.tsx` (T20) | `avisos.spec.ts` › E5 (T24); `integracion/avisos.spec.ts` (T25) | ☑ |
+| E6 · Sección "Por revisar" | `document-query.service.spec.ts` › `pendingReview` (T09) | `reviews.repository.e2e-spec.ts` › orden (T06); `reviews.e2e-spec.ts` › E6 (T11) | `PendingReviewList.test.tsx` › E6 (T22) | `avisos.spec.ts` › E6 (T24); `integracion/avisos.spec.ts` (T25) | ☑ |
+| E7 · El ADMIN ve todos los pendientes | `document-access.policy.spec.ts` › `pendingReviewWhere` (T04) | `reviews.e2e-spec.ts` › E7 (T11) | — | `avisos.spec.ts` › E7 (T24) | ☑ |
+| E8 · Marcar como revisado | `document-lifecycle.service.spec.ts` › E8 (T10, T13) | `reviews.repository.e2e-spec.ts` › `markReviewed` (T06); `reviews.e2e-spec.ts` › E8 (T12) | `MarkReviewedForm.test.tsx` › E8 (T18); `DocumentDetail.review.test.tsx` › E8 (T17, T19) | `avisos.spec.ts` › E8 (T24); `integracion/avisos.spec.ts` (T25) | ☑ |
+| E9 · Fecha inválida | `mark-reviewed.dto.spec.ts` y `document-lifecycle.service.spec.ts` › E9 (T10) | `reviews.e2e-spec.ts` › E9 (T12) | `MarkReviewedForm.test.tsx` › E9 (T18) | `avisos.spec.ts` › E9 (T24) | ☑ |
+| E10 · Sin permiso para marcar | `document-lifecycle.service.spec.ts` › E10 (T10) | `reviews.e2e-spec.ts` › E10 (T12) | `MarkReviewedForm.test.tsx` › E10 (T18) | `avisos.spec.ts` › E10 (T24) | ☑ |
+| E11 · Documento archivado | `review-status.spec.ts` › R2 (T03); `document-lifecycle.service.spec.ts` › E11 (T10) | `reviews.e2e-spec.ts` › archivado (T11) y E11 (T12) | `MarkReviewedForm.test.tsx` › E11 (T18); `DocumentDetail.review.test.tsx` › E11 (T19) | `avisos.spec.ts` › E11 (T24) | ☑ |
+| E12 · Una versión nueva cuenta como revisión | — (repositorio) | `reviews.repository.e2e-spec.ts` › R10 (T07); `reviews.e2e-spec.ts` › E12, con el endpoint real (T12) | — (la pantalla es la del plan 003) | — | ☑ |
+| E13 · Sin pendientes | `document-query.service.spec.ts` › `isReviewer` (T09) | `reviews.e2e-spec.ts` › E13 (T11) | `PendingReviewList.test.tsx` › E13 (T22); `PendingReviewLink.test.tsx` › E13 (T20) | `avisos.spec.ts` › E13 (T24) | ☑ |
 
 Reglas y decisiones sin escenario propio, para no perderlas de vista:
 
@@ -489,6 +526,47 @@ Reglas y decisiones sin escenario propio, para no perderlas de vista:
 | Caso borde: fecha nueva dentro de 30 días | `reviews.e2e-spec.ts` (T12) |
 | Caso borde: dos revisiones a la vez | `reviews.e2e-spec.ts` › simultáneas (T13) |
 | Caso borde: varias áreas | `reviews.e2e-spec.ts` (T11) |
+
+---
+
+## Verificación
+
+Corrida completa del 30/10/2026, en la rama `feat/avisos-vencimiento`, con T02 a T26 sin commitear. Para la tabla escenario → test de T26 se buscó cada test por nombre; los nombres reales pueden variar un poco respecto de la tabla (por ejemplo, el de E13 en `document-query.service.spec.ts` se llama "E13: sin pendientes…"). Todos pasan en esta corrida.
+
+### Totales
+
+| Qué | Comando | Resultado |
+| --- | --- | --- |
+| API, lint | `oxlint --type-aware src/ test/` | sin avisos |
+| API, tipos | `tsc --noEmit` | 3 errores, los mismos que en `HEAD`, todos en `src/auth/*.spec.ts` (pareja A); ninguno en archivos de esta spec |
+| API, unitarios | `pnpm --filter api test` | 72 suites, **1132 tests**, todos pasan (antes de la spec: 70 suites, 1063) |
+| API, integración | `pnpm --filter api test:e2e` | 22 suites, **341 tests**, todos pasan (antes: 21 suites, 305). Contra `manual_test`, con `prisma migrate reset` antes de la suite. Incluye `indexes.e2e-spec.ts` sin cambios |
+| Web, lint y build | `pnpm --filter web lint`, `pnpm --filter web build` | sin avisos; compila, con `/documentos/por-revisar` |
+| Web, componentes | `pnpm --filter web test` | 54 archivos, **689 tests**, todos pasan |
+| Playwright, API simulada | `pnpm --filter web test:e2e` | **108 tests** (54 en escritorio y 54 en celular), todos pasan; los 82 de las specs 002 a 004, sin cambios en sus aserciones |
+| Playwright, API real | `playwright test --project=integracion --workers=1` | **12 tests** (2 de esta spec y 10 de las specs 002 a 004). La API se levantó contra `manual_test` y se cargaron los fixtures. En la primera corrida, justo después del reset de `test:e2e` con la API conectada, falló una vez E1/E6/E8 sin dejar el detalle. Después pasó 12 de 12 en tres corridas seguidas y 2 de 2 sola. Es intermitente; no se tocó |
+
+Con varios workers, los logins contra la API real fallan a veces con 503 del limitador de intentos de la pareja A (Redis, `assertAllowed`): ver T25.
+
+### Mutaciones de control
+
+Una por vez, restaurando cada archivo desde una copia antes de la siguiente. Con cada una se corrieron los unitarios de la API y `test:e2e reviews` (las dos suites de integración de esta spec). Todas fueron detectadas.
+
+| Mutación | Archivo | Tests que fallaron |
+| --- | --- | --- |
+| "Hoy" en UTC (E4, E9): `timeZone: 'UTC'` | `company-date.ts` | 8 unitarios (entre ellos `todayInCompany` a las 23:30, E9 de `markReviewed`, el `lte` de `pendingReview` y los de la fecha de las specs 001 y 003) y 3 de integración: E4, E9 y los bordes de 30 días |
+| `review` para cualquiera (R4): `reviewFor` decide como si fuera ADMIN | `review-status.ts` | 2 unitarios (`reviewFor` › E5, `DocumentQueryService` › E5) y 1 de integración (E5: sin la clave `review`) |
+| Marcar como revisado sin ser responsable (R6): sin los dos `throw cannotReview()` | `document-lifecycle.service.ts` | 4 unitarios (E10, el 403 bajo el bloqueo y los dos de auditoría del 403) y 1 de integración (E10) |
+| "Por revisar" con archivados (R2): el ADMIN sin `status: 'ACTIVE'` | `document-access.policy.ts` | 2 unitarios (`pendingReviewWhere` del ADMIN, E7) y 1 de integración (el archivado no está en la lista del ADMIN) |
+
+Además, en T24 y T25 se rompió una regla por escenario de Playwright: ver el estado de esas tareas.
+
+### Pendientes
+
+- **Paso 7 de T26 no hecho a mano:** el ancho de 375 px no se revisó. `avisos.spec.ts` › F6 comprueba que no haya desplazamiento horizontal en el listado, el detalle y "Por revisar", en el celular de Playwright (Pixel 7, 412 px).
+- **Paso 8 de T26:** `git diff --stat develop...HEAD -- apps/api/src/executions` está vacío, y `git status` no muestra cambios en `src/executions`, `src/auth`, `prisma`, `layout.tsx`, `next.config.ts` ni `playwright.config.ts`. Hay que volver a correrlo después de los commits de T02 a T26.
+- **Aviso a la pareja B** (D22) sobre `review.status`: lo manda Matías.
+- **Avisar al equipo antes de mergear** (T01: `schema.prisma` y la migración).
 
 ---
 
