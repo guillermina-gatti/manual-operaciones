@@ -4,6 +4,7 @@
 import { useId } from 'react';
 import { FieldError } from '@/components/ui/FieldError';
 import type { Area } from '@/lib/directory';
+import { displayAreaName } from '@/lib/directory/areas-directory';
 
 interface AreasFieldProps {
   areas: Area[];
@@ -15,6 +16,8 @@ interface AreasFieldProps {
 export function AreasField({ areas, selected, onChange, error }: AreasFieldProps) {
   const id = useId();
   const errorId = `${id}-error`;
+  // Un área desactivada nunca se puede agregar; si ya está vinculada, se muestra sin borrarla.
+  const visibleAreas = areas.filter((area) => area.isActive !== false || selected.includes(area.id));
 
   // La lista nueva siempre en el orden de las áreas, no en el orden en que se marcaron.
   function toggle(areaId: string, checked: boolean) {
@@ -31,11 +34,11 @@ export function AreasField({ areas, selected, onChange, error }: AreasFieldProps
       className="flex min-w-0 flex-col gap-1"
     >
       <legend className="font-medium">Áreas</legend>
-      {areas.length === 0 ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">No hay áreas cargadas</p>
+      {visibleAreas.length === 0 ? (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">No hay áreas disponibles</p>
       ) : (
         <div className="flex flex-wrap gap-x-6">
-          {areas.map((area) => (
+          {visibleAreas.map((area) => (
             <label key={area.id} className="flex min-h-11 items-center gap-2">
               <input
                 type="checkbox"
@@ -43,7 +46,7 @@ export function AreasField({ areas, selected, onChange, error }: AreasFieldProps
                 checked={selected.includes(area.id)}
                 onChange={(event) => toggle(area.id, event.target.checked)}
               />
-              {area.name}
+              {displayAreaName(area)}
             </label>
           ))}
         </div>

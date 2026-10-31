@@ -1,10 +1,11 @@
-// Único punto de entrada de los directorios. Cuando la pareja A exponga GET /api/areas y
-// GET /api/users?areaIds=…, se cambian solo estas dos líneas (T28 y T29; plan 002, sección 3.3).
-import { createFakeAreasDirectory } from './fake-areas-directory';
+// Punto de entrada de los directorios: T28 usa el catálogo HTTP real con la sesión vigente.
+// T29 (candidatos) y A-06.4 (nombres históricos) se integran en PR separados.
+import { apiClient } from '@/lib/api';
 import { createFakeUsersDirectory } from './fake-users-directory';
+import { createHttpAreasDirectory } from './http-areas-directory';
 
 export const usersDirectory = createFakeUsersDirectory();
-export const areasDirectory = createFakeAreasDirectory();
+export const areasDirectory = createHttpAreasDirectory(apiClient);
 
 export type { Area, AreasDirectory } from './areas-directory';
 export type { DirectoryUser, UsersDirectory } from './users-directory';

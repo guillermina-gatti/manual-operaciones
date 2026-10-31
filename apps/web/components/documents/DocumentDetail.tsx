@@ -12,6 +12,7 @@ import { ScreenState } from '@/components/ui/ScreenState';
 import { ApiError, describeApiError, getDocument, useApiResource } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
 import { areasDirectory, usersDirectory } from '@/lib/directory';
+import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { formatCreatedAt, formatDay, formatReviewDate, formatSize } from '@/lib/documents/format';
 import { useSession } from '@/lib/session';
 import { ArchiveDialog } from './ArchiveDialog';
@@ -87,9 +88,7 @@ export function DocumentDetail() {
   if (areas.status === 'loading' || owners.status === 'loading') return LOADING;
 
   const doc = document.data;
-  const areaNames = Object.fromEntries(
-    (areas.status === 'success' ? areas.data : []).map((area) => [area.id, area.name]),
-  );
+  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
   const names = owners.status === 'success' ? owners.data : {};
   const ownerName = names[doc.ownerId];
   const lastReview = doc.review?.lastReviewedAt

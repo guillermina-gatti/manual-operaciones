@@ -15,6 +15,7 @@ import {
   useApiResource,
 } from '@/lib/api';
 import { areasDirectory, usersDirectory } from '@/lib/directory';
+import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
 import { parseSearchParam } from '@/lib/documents/search-rules';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
@@ -175,9 +176,7 @@ if (!user) {
 
   // Se espera a los nombres para no mostrar "—" un instante; si fallan, las tarjetas igual se muestran.
   if (areas.status === 'loading' || owners.status === 'loading') return LOADING;
-  const areaNames = Object.fromEntries(
-    (areas.status === 'success' ? areas.data : []).map((area) => [area.id, area.name]),
-  );
+  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
   const ownerNames = owners.status === 'success' ? owners.data : {};
 
   return (

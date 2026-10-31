@@ -15,8 +15,8 @@ export const AREA_IDS = {
 } as const;
 
 export const AREAS = [
-  { id: AREA_IDS.ventas, name: 'Ventas' },
-  { id: AREA_IDS.operaciones, name: 'Operaciones' },
+  { id: AREA_IDS.ventas, name: 'Ventas', isActive: true },
+  { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: true },
 ];
 
 export const FIXTURE_USERS = {

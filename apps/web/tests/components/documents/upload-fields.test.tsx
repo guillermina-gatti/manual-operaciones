@@ -135,8 +135,8 @@ describe('FileField', () => {
 });
 
 const AREAS = [
-  { id: '0a000000-0000-4000-8000-000000000001', name: 'Ventas' },
-  { id: '0a000000-0000-4000-8000-000000000002', name: 'Operaciones' },
+  { id: '0a000000-0000-4000-8000-000000000001', name: 'Ventas', isActive: true },
+  { id: '0a000000-0000-4000-8000-000000000002', name: 'Operaciones', isActive: true },
 ];
 
 function AreasHarness({ error }: { error?: string }) {
@@ -184,9 +184,9 @@ describe('AreasField', () => {
     );
   });
 
-  test('sin áreas para elegir dice "No hay áreas cargadas"', () => {
-    render(<AreasField areas={[]} selected={[]} onChange={vi.fn()} />);
+  test('sin áreas disponibles muestra el mensaje correspondiente', () => {
+  render(<AreasField areas={[]} selected={[]} onChange={vi.fn()} />);
 
-    expect(screen.getByText('No hay áreas cargadas')).toBeInTheDocument();
-  });
+  expect(screen.getByText('No hay áreas disponibles')).toBeInTheDocument();
+});
 });
