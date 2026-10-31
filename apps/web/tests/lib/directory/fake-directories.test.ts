@@ -47,17 +47,17 @@ describe('directorio de usuarios simulado', () => {
 });
 
 describe('instancias de @/lib/directory', () => {
-  test('T29 todavía usa la demora simulada para candidatos', async () => {
+  test('A-06.4 sigue pendiente: getNames conserva transitoriamente la demora simulada', async () => {
     vi.useFakeTimers();
     const resolved = vi.fn();
 
-    const candidates = usersDirectory.listOwnerCandidates([AREA_IDS.ventas]).then(resolved);
+    const names = usersDirectory.getNames([FIXTURE_USERS.admin.id]).then(resolved);
 
     await vi.advanceTimersByTimeAsync(0);
     expect(resolved).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1000);
-    await candidates;
+    await names;
     expect(resolved).toHaveBeenCalledTimes(1);
   });
 });
