@@ -17,7 +17,7 @@ import {
 import { areasDirectory, usersDirectory } from '@/lib/directory';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
 import { parseSearchParam } from '@/lib/documents/search-rules';
-import { useSession } from '@/lib/session';
+import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
@@ -97,11 +97,38 @@ function DocumentListing() {
     usersDirectory.getNames(ownerIds),
   );
 
-  if (status === 'loading') return LOADING;
-  if (status === 'disabled') {
-    return <ScreenState kind="error" message={describeApiError(new ApiError(401), 'list').message} />;
-  }
-  if (!user) return <ScreenState kind="empty" message="Elegí un usuario de prueba" />;
+if (status === 'loading') return LOADING;
+
+if (status === 'disabled') {
+  return (
+    <ScreenState
+      kind="error"
+      message={describeApiError(new ApiError(401), 'list').message}
+    />
+  );
+}
+
+if (!user) {
+  return REAL_AUTH_ENABLED ? (
+    <ScreenState
+      kind="empty"
+      message="Necesitás iniciar sesión para ver los documentos."
+      action={
+        <Link
+          href="/login"
+          className="text-blue-700 underline dark:text-blue-400"
+        >
+          Ir a iniciar sesión
+        </Link>
+      }
+    />
+  ) : (
+    <ScreenState
+      kind="empty"
+      message="Elegí un usuario de prueba"
+    />
+  );
+}
 
   if (documents.status === 'loading' || documents.status === 'idle') return LOADING;
 
