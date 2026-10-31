@@ -10,6 +10,7 @@ import { ExecutionsModule } from './executions/executions.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProceduresModule } from './procedures/procedures.module';
 import { RedisModule } from './redis/redis.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RedisModule } from './redis/redis.module';
     RedisModule,
     AuthModule,
     AreasModule,
+    UsersModule,
     DocumentsModule,
     ExecutionsModule,
     ProceduresModule,
