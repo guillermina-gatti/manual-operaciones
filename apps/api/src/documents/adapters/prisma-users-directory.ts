@@ -56,6 +56,7 @@ export class PrismaUsersDirectory extends UsersDirectory {
       return {
         id: user.id,
         role: user.role,
+        isActive: user.isActive,
         areaIds: user.areas.map((relation) => relation.areaId),
       };
     } catch (error) {
