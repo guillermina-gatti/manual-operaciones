@@ -13,7 +13,7 @@ import type {
   VersionHistoryItem,
   VersionHistoryResponse,
 } from '../../lib/api';
-import { AREA_IDS, FIXTURE_USERS } from '../../lib/directory/fixtures';
+import { AREAS, AREA_IDS, FIXTURE_USERS } from '../../lib/directory/fixtures';
 import { DEV_FIXTURE_PASSWORD, devEmail } from '../../lib/session/dev-credentials';
 import { accessTokenFor } from './session';
 import type { TestUser } from './session';
@@ -40,6 +40,7 @@ export interface ApiRequest {
 type Handler = (request: ApiRequest, id?: string, versionId?: string) => Reply | Promise<Reply>;
 
 export interface ApiHandlers {
+  areas?: Handler; // GET /api/areas (T28)
   list?: Handler; // GET /api/documents
   detail?: Handler; // GET /api/documents/:id
   download?: Handler; // GET /api/documents/:id/download
@@ -75,6 +76,7 @@ export interface MockedApi {
 
 const ID = '([^/]+)';
 const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
+  { name: 'areas', method: 'GET', path: /^\/api\/areas$/ },
   { name: 'list', method: 'GET', path: /^\/api\/documents$/ },
   { name: 'upload', method: 'POST', path: /^\/api\/documents$/ },
   // Antes que el detalle: /api/documents/search también coincide con /api/documents/:id.
@@ -151,6 +153,17 @@ export async function mockApi(page: Page, handlers: ApiHandlers): Promise<Mocked
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(DEFAULT_PENDING_REVIEW),
+      });
+      return;
+    }
+
+    // Los E2E de Documentos existentes no prueban el directorio: devolvemos el catálogo de
+    // fixtures sin contar este pedido. Un test de T28 puede pasar handlers.areas para controlarlo.
+    if (!handlers.areas && apiRequest.method === 'GET' && url.pathname === '/api/areas') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(AREAS),
       });
       return;
     }

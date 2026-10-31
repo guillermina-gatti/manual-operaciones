@@ -36,8 +36,8 @@ describe('fixtures del frontend', () => {
   test('las áreas tienen los UUID de la API y un nombre', () => {
     expect(AREA_IDS).toEqual(API_AREA_IDS);
     expect(AREAS).toEqual([
-      { id: API_AREA_IDS.ventas, name: 'Ventas' },
-      { id: API_AREA_IDS.operaciones, name: 'Operaciones' },
+      { id: API_AREA_IDS.ventas, name: 'Ventas', isActive: true },
+      { id: API_AREA_IDS.operaciones, name: 'Operaciones', isActive: true },
     ]);
   });
 
