@@ -33,6 +33,7 @@ describe('InMemoryUsersDirectory', () => {
     ).resolves.toEqual({
       id: FIXTURE_USERS.empleadoVentas.id,
       role: 'EMPLOYEE',
+      isActive: true,
       areaIds: [AREA_IDS.ventas],
     });
   });
@@ -44,7 +45,12 @@ describe('InMemoryUsersDirectory', () => {
   });
 
   it('se puede construir con datos propios del test', async () => {
-    const propio = { id: UNKNOWN_ID, role: 'SUPERVISOR' as const, areaIds: [] };
+    const propio = {
+      id: UNKNOWN_ID,
+      role: 'SUPERVISOR' as const,
+      areaIds: [],
+      isActive: false,
+    };
     const users = new InMemoryUsersDirectory([propio]);
 
     await expect(users.findById(UNKNOWN_ID)).resolves.toEqual(propio);

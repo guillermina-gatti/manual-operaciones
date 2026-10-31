@@ -5,6 +5,8 @@ export interface DirectoryUser {
   id: string;
   role: Role;
   areaIds: string[];
+  // Estado vigente; los consumidores deben diferenciar asignaciones nuevas de referencias históricas.
+  isActive: boolean;
 }
 
 export abstract class UsersDirectory {
