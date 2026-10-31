@@ -6,7 +6,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { ApiError, describeApiError } from '@/lib/api';
-import { useSession } from '@/lib/session';
+import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import type { Role } from '@/lib/session';
 
 interface RequireRoleProps {
@@ -24,7 +24,27 @@ export function RequireRole({ role, deniedMessage, children }: RequireRoleProps)
   if (status === 'disabled') {
     return <ScreenState kind="error" message={describeApiError(new ApiError(401), 'upload').message} />;
   }
-  if (!user) return <ScreenState kind="empty" message="Elegí un usuario de prueba" />;
+  if (!user) {
+  return REAL_AUTH_ENABLED ? (
+    <ScreenState
+      kind="empty"
+      message="Necesitás iniciar sesión para acceder a esta sección."
+      action={
+        <Link
+          href="/login"
+          className="text-blue-700 underline dark:text-blue-400"
+        >
+          Ir a iniciar sesión
+        </Link>
+      }
+    />
+  ) : (
+    <ScreenState
+      kind="empty"
+      message="Elegí un usuario de prueba"
+    />
+  );
+}
 
   if (user.role !== role) {
     return (
