@@ -7,9 +7,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
-import { AreasDirectory } from '../documents/ports/areas-directory';
 import { toHttpException } from './http-errors';
 import { canManage } from './procedure-access.policy';
+import { ProcedureAreasCatalog } from './procedure-areas.catalog';
 import { ProceduresRepository } from './procedures.repository';
 
 @Injectable()
@@ -18,11 +18,11 @@ export class ProcedureAreasService {
 
   constructor(
     private readonly procedures: ProceduresRepository,
-    private readonly areas: AreasDirectory,
+    private readonly areas: ProcedureAreasCatalog,
   ) {}
 
-  // R11: the whole set replaces the previous one. The directory says which areas exist
-  // before anything is written, so a bad id leaves the procedure as it was (E18, P19).
+  // R11: the whole set replaces the previous one. The areas are checked before anything is
+  // written, so a bad id leaves the procedure as it was (E18, E35, P19).
   async setAreas(
     user: AuthUser,
     procedureId: string,
@@ -35,10 +35,7 @@ export class ProcedureAreasService {
         );
       }
       if (areaIds.length > 0) {
-        const existing = await this.areas.findExistingIds(areaIds);
-        if (existing.length !== areaIds.length) {
-          throw new BadRequestException('Alguna de las áreas no existe');
-        }
+        await this.checkAreas(procedureId, areaIds);
       }
       const saved = await this.procedures.setAreas(procedureId, areaIds);
       if (!saved)
@@ -46,6 +43,29 @@ export class ProcedureAreasService {
       return saved;
     } catch (error) {
       throw toHttpException(error, this.logger, 'setAreas');
+    }
+  }
+
+  // Every area must exist (E18). An inactive one is only valid if the procedure already had it
+  // (R11, P13): the procedure is read only when the request has an inactive area. A procedure
+  // that does not exist has no areas, so an inactive one is new and the answer is 400 (E38).
+  private async checkAreas(
+    procedureId: string,
+    areaIds: string[],
+  ): Promise<void> {
+    const states = await this.areas.findStates(areaIds);
+    if (states.length !== areaIds.length) {
+      throw new BadRequestException('Alguna de las áreas no existe');
+    }
+    const inactiveIds = states
+      .filter((area) => !area.isActive)
+      .map((area) => area.id);
+    if (inactiveIds.length === 0) return;
+
+    const procedure = await this.procedures.findById(procedureId);
+    const current = new Set(procedure?.areaIds ?? []);
+    if (inactiveIds.some((id) => !current.has(id))) {
+      throw new BadRequestException('Alguna de las áreas está inactiva');
     }
   }
 }

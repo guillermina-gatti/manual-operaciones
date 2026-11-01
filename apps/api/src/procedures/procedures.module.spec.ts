@@ -1,9 +1,9 @@
 import { Test } from '@nestjs/testing';
 import { JwtAuthGuard } from '../common/auth';
-import { PrismaAreasDirectory } from '../documents/adapters/prisma-areas-directory';
-import { AreasDirectory } from '../documents/ports/areas-directory';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaProcedureAreasCatalog } from './prisma-procedure-areas.catalog';
+import { ProcedureAreasCatalog } from './procedure-areas.catalog';
 import { ProcedureAreasService } from './procedure-areas.service';
 import { ProcedureDraftService } from './procedure-draft.service';
 import { PrismaProceduresRepository } from './prisma-procedures.repository';
@@ -28,7 +28,9 @@ describe('ProceduresModule', () => {
     expect(moduleRef.get(ProceduresRepository)).toBeInstanceOf(
       PrismaProceduresRepository,
     );
-    expect(moduleRef.get(AreasDirectory)).toBeInstanceOf(PrismaAreasDirectory);
+    expect(moduleRef.get(ProcedureAreasCatalog)).toBeInstanceOf(
+      PrismaProcedureAreasCatalog,
+    );
     expect(moduleRef.get(ProcedureDraftService)).toBeInstanceOf(
       ProcedureDraftService,
     );

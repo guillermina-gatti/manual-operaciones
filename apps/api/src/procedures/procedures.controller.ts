@@ -261,7 +261,7 @@ export class ProceduresController {
   @ApiResponse({
     ...INVALID,
     description:
-      'El id no es un UUID, el cuerpo es inválido (repetidos, más de 100, ids que no son UUID) o alguna área no existe',
+      'El id no es un UUID, el cuerpo es inválido (repetidos, más de 100, ids que no son UUID), alguna área no existe o se agrega un área inactiva que el procedimiento no tenía',
   })
   @ApiResponse(UNAUTHORIZED)
   @ApiResponse(FORBIDDEN)

@@ -213,8 +213,10 @@ describe('Procedures: areas (integration)', () => {
       .set(admin)
       .expect(200);
 
-    const expected = [VENTAS, inactive, OPERACIONES].sort();
-    expect([...response.body.areaIds].sort()).toEqual(expected);
+    // Same order as the database: by id, as text.
+    const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    const expected = [VENTAS, inactive, OPERACIONES].sort(byId);
+    expect([...response.body.areaIds].sort(byId)).toEqual(expected);
     expect(await storedAreas(seeded.procedureId)).toEqual(expected);
     expect(await versions()).toEqual(before);
   });
