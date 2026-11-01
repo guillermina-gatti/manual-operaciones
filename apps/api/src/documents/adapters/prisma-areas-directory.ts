@@ -1,4 +1,4 @@
-/* Registro de auditoría basado en Logger de Nest*/
+/* Adaptador Prisma para consultas de áreas activas e históricas. */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';

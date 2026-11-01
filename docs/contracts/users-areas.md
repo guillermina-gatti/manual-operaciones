@@ -2,7 +2,7 @@
 
 **Proyecto:** Manual de Operaciones Interactivo con Asistente IA — IntegrarTEC 2026  
 **Equipo responsable:** Equipo A — Seguridad y Plataforma  
-**Estado:** Propuesta técnica para validar con el equipo  
+**Estado:** Propuesta inicial con contratos internos actualizados tras A-13 (PR #30)
 **Módulos relacionados:** Autenticación, Documentos, Procedimientos y Auditoría
 
 ## 1. Objetivo
@@ -18,7 +18,7 @@ El sistema contempla tres roles globales:
 | Rol | Descripción |
 |---|---|
 | `ADMIN` | Administra usuarios, invitaciones, áreas, documentos y procedimientos. |
-| `SUPERVISOR` | Consulta información de sus áreas y puede proponer cambios en los procedimientos. |
+| `SUPERVISOR` | Consulta información de sus áreas; proponer cambios (HU33) queda fuera del MVP actual. |
 | `EMPLOYEE` | Ejecuta procedimientos y consulta documentos y al asistente, según sus áreas asignadas. |
 
 ### Reglas
@@ -72,7 +72,7 @@ Representa un sector organizacional de la empresa.
 - El nombre debe identificar un área de manera inequívoca.
 - Solo administradores pueden crear, modificar o desactivar áreas.
 - No se permite eliminar un área que tenga usuarios o recursos relacionados, según las reglas del MVP.
-- Debe definirse si las áreas inactivas pueden conservar asignaciones históricas.
+- Las áreas inactivas conservan sus referencias históricas; las nuevas asociaciones deben rechazarse en el módulo consumidor.
 
 ### UserArea
 
@@ -100,15 +100,17 @@ Un usuario puede tener múltiples asignaciones y un área puede tener múltiples
 
 ## 5. Contratos compartidos con el Equipo C
 
-El módulo de documentos ya define los siguientes contratos, que deben conservarse.
+Los contratos internos vigentes de Documentos se ampliaron en A-13 (PR #30), manteniendo compatibilidad:
 
 ### UsersDirectory
 
 ```typescript
 export interface DirectoryUser {
   id: string;
+  name: string;
   role: Role;
   areaIds: string[];
+  isActive: boolean;
 }
 
 export abstract class UsersDirectory {
@@ -121,26 +123,31 @@ export abstract class UsersDirectory {
 ### AreasDirectory
 
 ```typescript
+export interface DirectoryArea {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
 export abstract class AreasDirectory {
-  abstract findExistingIds(
-    ids: string[],
-  ): Promise<string[]>;
+  abstract findExistingIds(ids: string[]): Promise<string[]>;
+  abstract findByIds(ids: string[]): Promise<DirectoryArea[]>;
 }
 ```
 
-El Equipo A deberá implementar adaptadores reales usando Prisma y proveerlos mediante inyección de dependencias.
+Equipo A implementó los adaptadores Prisma y en memoria, con pruebas unitarias e inyección de dependencias en Documentos.
 
 **Consideraciones:**
 
 - `UsersDirectory` debe devolver los datos necesarios para que Documentos valide responsables y áreas.
-- `AreasDirectory` debe devolver únicamente los identificadores existentes.
+- `findExistingIds()` mantiene la consulta de existencia; `findByIds()` devuelve `id`, `name` e `isActive`, incluso en áreas inactivas.
 - Las consultas no deben modificar datos.
 - Los errores de infraestructura deben poder traducirse al error de disponibilidad acordado con Documentos (503).
-- Debe acordarse el tratamiento de usuarios y áreas inactivos, sin cambiar unilateralmente estos contratos.
+- Los directorios pueden recuperar referencias históricas; los módulos consumidores controlan nuevas asignaciones y visibilidad.
 
 ## 6. Contrato con autenticación
 
-El Equipo A debe implementar los mecanismos de autenticación y autorización.
+El Equipo A implementó autenticación y autorización en el backend; el alcance de administración de usuarios y áreas sigue por definir para el MVP.
 
 Se conservarán los nombres públicos que utiliza actualmente el módulo de documentos:
 
@@ -153,7 +160,7 @@ El objeto autenticado mantendrá, como mínimo, los campos `id` y `role`, para c
 
 La sesión deberá consultar los permisos actuales, evitando depender de roles o áreas desactualizados dentro del JWT.
 
-Las decisiones sobre refresh tokens, revocación y gestión de sesiones se documentarán junto con la implementación de autenticación.
+La restauración y renovación de sesión se implementaron en A-08/A-09; ver [A-06.5](./A-06.5-restauracion-sesion.md).
 
 ## 7. Reglas de acceso acordadas
 
@@ -189,9 +196,9 @@ Se deberán comprobar:
 - `AreasDirectory` identifica correctamente las áreas existentes.
 - Un fallo de base de datos no se confunde con un registro inexistente.
 
-## 10. Decisiones pendientes
+## 10. Preguntas de planificación inicial (antecedente histórico)
 
-Antes de generar migraciones, validar con el Equipo A y los módulos consumidores:
+Las preguntas siguientes pertenecen a la propuesta previa a las migraciones y acuerdos recientes; no representan, por sí solas, pendientes vigentes. Consultar la matriz A-02 para decisiones abiertas:
 
 - Si `Role` se implementa como enum Prisma o como string validado.
 - Si el nombre de las áreas debe tener una restricción de unicidad, incluida su normalización.
@@ -203,4 +210,4 @@ Antes de generar migraciones, validar con el Equipo A y los módulos consumidore
 
 ---
 
-**Criterio de finalización del contrato:** el Equipo A y los módulos consumidores confirman los modelos, los identificadores, las interfaces públicas y las reglas de acceso antes de crear las migraciones.
+**Seguimiento vigente:** los directorios internos de lectura están implementados. Falta definir el alcance de administración del MVP y verificar las integraciones con los módulos consumidores.

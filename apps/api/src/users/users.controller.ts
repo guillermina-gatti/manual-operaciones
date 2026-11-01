@@ -9,7 +9,7 @@ import { UsersService } from './users.service';
 @ApiBearerAuth()
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN') // Permiso restrictivo del contrato A-06.3; pendiente de ratificación expresa de C.
+@Roles('ADMIN') // Permiso confirmado por Equipo C para consulta de candidatos.
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
