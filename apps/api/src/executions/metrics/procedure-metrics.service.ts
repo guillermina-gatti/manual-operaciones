@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { AuthUser } from '../../common/auth';
+import { AreasDirectory } from '../../documents/ports/areas-directory';
 import { UsersDirectory } from '../../documents/ports/users-directory';
 import { toHttpException } from '../http-errors';
 import { Clock } from '../ports/clock';
@@ -14,6 +15,7 @@ import {
   CatalogProcedureVersion,
   ProceduresCatalog,
 } from '../ports/procedures-catalog';
+import { activeAreaIdsOf } from '../viewer-areas';
 import { ExecutionMetricsRepository } from './execution-metrics.repository';
 import {
   filterableAreaIds,
@@ -60,6 +62,7 @@ export class ProcedureMetricsService {
 
   constructor(
     private readonly users: UsersDirectory,
+    private readonly areas: AreasDirectory,
     private readonly catalog: ProceduresCatalog,
     private readonly metrics: ExecutionMetricsRepository,
     private readonly clock: Clock,
@@ -87,8 +90,13 @@ export class ProcedureMetricsService {
       );
     }
 
-    // Areas come from the directory on every request, never from the session.
-    const viewerAreaIds = (await this.users.findById(user.id))?.areaIds ?? [];
+    // Only the active areas of the viewer, read on every request (viewer-areas.ts). The
+    // ADMIN scope does not depend on them, so it keeps every area.
+    const viewerAreaIds = await activeAreaIdsOf(
+      this.users,
+      this.areas,
+      user.id,
+    );
     const scope = metricsScope(user.role, viewerAreaIds, areaId);
     if (!scope) throw areaNotFound();
 
