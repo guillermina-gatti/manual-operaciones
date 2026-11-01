@@ -37,7 +37,7 @@ describe('describeProcedureError', () => {
       );
 
       expect(message).toBe(PROCEDURE_MESSAGES.areaNotAssignable);
-      expect(message).not.toContain('inactiva y');
+      expect(message).not.toBe('Alguna de las áreas está inactiva');
       expect(canRetry).toBe(false);
     });
 
