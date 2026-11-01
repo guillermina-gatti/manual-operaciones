@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado (27/10/2026):** HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. Siguen T12 en adelante (áreas y visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
+- **Estado (01/11/2026):** HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. HU10 terminada: T12, T13 y T13b hechas, con los e2e de procedimientos en verde (6 suites, 83 tests) y todos los e2e en verde (27 suites, 397 tests). Siguen T14 en adelante (visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
 
 Convenciones:
 
@@ -134,6 +134,7 @@ Convenciones:
 - **Cubre:** R11; E35, E36, E37, E38; P13, P19, P20; D17.
 - **Archivos:** `src/procedures/procedure-areas.service.ts`, `procedures.module.ts` y `procedures.controller.ts` (solo el texto del 400) y sus `.spec.ts`; `test/procedures/area-helpers.ts` y `areas.e2e-spec.ts`.
 - **Verificación, test primero:** inactiva nueva → 400 sin llamar al repositorio; inactiva que ya tenía → se guarda; quitarla → válido; volver a agregarla → 400; procedimiento inexistente con inactiva → 400 y no 404; "no existe" gana sobre "inactiva" en el mensaje; directorio de áreas o base caídos → 503. Las áreas inactivas de los e2e se crean y se borran dentro de cada test, sin tocar el seed ni las fixtures. No se modifica código de otras parejas. Los e2e los corre Micaela.
+- **Estado:** hecha (01/11/2026). Tests unitarios, lint y build en verde; e2e de procedimientos (6 suites, 83 tests) y todos los e2e (27 suites, 397 tests) en verde.
 
 ---
 
