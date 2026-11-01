@@ -3,6 +3,7 @@ import type { Role } from '../../common/auth';
 
 export interface DirectoryUser {
   id: string;
+  name: string;
   role: Role;
   areaIds: string[];
   // Estado vigente; los consumidores deben diferenciar asignaciones nuevas de referencias históricas.
