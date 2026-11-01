@@ -4,6 +4,7 @@ manejando de forma segura la integridad de los datos y traduciendo cualquier err
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -13,6 +14,7 @@ import {
   DownloadUrl,
   FileStorage,
   StorageUnavailableError,
+  StoredFileNotFoundError,
 } from './file-storage';
 
 // 1. Opciones de configuración necesarias para conectar con S3 (Bucket, región, etc.)
@@ -59,6 +61,29 @@ export class S3FileStorage extends FileStorage {
         }),
       ),
     );
+  }
+
+  // Descarga el contenido de un archivo de S3 y lo devuelve como Buffer
+  async get(key: string): Promise<Buffer> {
+    try {
+      const bytes = await this.send('get', key, async () => {
+        const response = await this.client.send(
+          new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+        );
+        if (!response.Body) throw new Error('S3 respondió sin cuerpo');
+        return response.Body.transformToByteArray();
+      });
+      return Buffer.from(bytes);
+    } catch (error) {
+      // Una clave inexistente no es una caída de S3: se informa como "no encontrado"
+      if (
+        error instanceof StorageUnavailableError &&
+        error.cause instanceof NoSuchKey
+      ) {
+        throw new StoredFileNotFoundError(key, { cause: error.cause });
+      }
+      throw error;
+    }
   }
 
   // Elimina un archivo de S3 usando su clave única (key)

@@ -149,21 +149,25 @@ const copy = (record: ExecutionRecord): ExecutionRecord => ({
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
-const empleadoVentas: AuthUser = {
-  id: FIXTURE_USERS.empleadoVentas.id,
-  role: 'EMPLOYEE',
-};
+// As the real guard leaves it in request.user. The service still asks the directory
+// for the areas, so the ones here only complete the shape.
+const asAuthUser = (user: DirectoryUser): AuthUser => ({
+  id: user.id,
+  email: `${user.id}@fixtures.test`,
+  name: `Usuario ${user.role}`,
+  role: user.role,
+  areaIds: [...user.areaIds],
+});
+
+const empleadoVentas = asAuthUser(FIXTURE_USERS.empleadoVentas);
 // A second Ventas employee, so CA4 fails on ownership and not on areas.
 const otroEmpleadoVentas: DirectoryUser = {
   id: '0b000000-0000-4000-8000-000000000099',
   role: 'EMPLOYEE',
   areaIds: [AREA_IDS.ventas],
 };
-const otroVentas: AuthUser = { id: otroEmpleadoVentas.id, role: 'EMPLOYEE' };
-const empleadoOperaciones: AuthUser = {
-  id: FIXTURE_USERS.empleadoOperaciones.id,
-  role: 'EMPLOYEE',
-};
+const otroVentas = asAuthUser(otroEmpleadoVentas);
+const empleadoOperaciones = asAuthUser(FIXTURE_USERS.empleadoOperaciones);
 
 const UNKNOWN_ID = '1f000000-0000-4000-8000-000000000099';
 const CIERRE = PROCEDURE_IDS.cierreDeCaja;
@@ -373,7 +377,10 @@ describe('ExecutionService', () => {
 
     it('404 for a user the directory does not know', async () => {
       await expectNotFound(
-        service.start({ id: UNKNOWN_ID, role: 'EMPLOYEE' }, CIERRE),
+        service.start(
+          asAuthUser({ id: UNKNOWN_ID, role: 'EMPLOYEE', areaIds: [] }),
+          CIERRE,
+        ),
       );
     });
   });

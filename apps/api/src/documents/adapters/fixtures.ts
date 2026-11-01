@@ -13,25 +13,30 @@ export const FIXTURE_USERS = {
     id: '0b000000-0000-4000-8000-000000000001',
     role: 'ADMIN',
     areaIds: [],
+    isActive: true,
   },
   supervisorVentas: {
     id: '0b000000-0000-4000-8000-000000000002',
     role: 'SUPERVISOR',
     areaIds: [AREA_IDS.ventas],
+    isActive: true,
   },
   empleadoVentas: {
     id: '0b000000-0000-4000-8000-000000000003',
     role: 'EMPLOYEE',
     areaIds: [AREA_IDS.ventas],
+    isActive: true,
   },
   supervisorOperaciones: {
     id: '0b000000-0000-4000-8000-000000000004',
     role: 'SUPERVISOR',
     areaIds: [AREA_IDS.operaciones],
+    isActive: true,
   },
   empleadoOperaciones: {
     id: '0b000000-0000-4000-8000-000000000005',
     role: 'EMPLOYEE',
     areaIds: [AREA_IDS.operaciones],
+    isActive: true,
   },
 } satisfies Record<string, DirectoryUser>;

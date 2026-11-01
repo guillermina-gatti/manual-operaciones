@@ -18,6 +18,8 @@ const PHRASES: [HttpOperation, string][] = [
   ['versión nueva', 'la carga de la versión nueva'],
   ['archivo', 'el archivado del documento'],
   ['búsqueda', 'la búsqueda'], // spec 004
+  ['revisión', 'el registro de la revisión'], // spec 005
+  ['métricas', 'la consulta de las métricas'], // spec 007
 ];
 
 describe('toHttpException', () => {
@@ -74,6 +76,19 @@ describe('toHttpException', () => {
         cause: 'x is undefined',
       });
     });
+  });
+
+  // Spec 007, D15: el mismo texto que el 503 de las métricas de procedimientos (pareja B).
+  it('el 503 de las métricas de documentos es el de las métricas de procedimientos', () => {
+    expect(
+      toHttpException(
+        new RepositoryUnavailableError('base caída'),
+        logger,
+        'métricas',
+      ).message,
+    ).toBe(
+      'No se pudo completar la consulta de las métricas. Intentá de nuevo más tarde.',
+    );
   });
 
   it('los textos de la carga y la consulta (spec 001) quedan exactamente iguales', () => {

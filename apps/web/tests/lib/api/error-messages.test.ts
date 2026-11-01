@@ -329,3 +329,39 @@ describe('búsqueda (spec 004)', () => {
     expect(description).toMatchObject({ message, canRetry });
   });
 });
+
+// Spec 005 (T14; plan 005, 7.5): "Marcar como revisado".
+describe('revisión (spec 005)', () => {
+  test('400 de la fecha: el error va junto al campo, sin el texto de la API', () => {
+    const description = describeApiError(
+      new ApiError(400, ['reviewDate tiene que ser posterior a hoy (2026-11-09)']),
+      'review',
+    );
+
+    expect(description.fieldErrors).toEqual({
+      reviewDate: 'La fecha de revisión tiene que ser a partir de mañana.',
+    });
+    expect(description.message).toBe('Revisá los datos marcados en el formulario.');
+    expect(description.canRetry).toBe(false);
+  });
+
+  test.each([
+    [403, 'No tenés permiso para marcar este documento como revisado.', false],
+    [404, 'No se encontró el documento.', false],
+    [503, 'El servicio no está disponible. Probá de nuevo en unos minutos.', true],
+    [0, 'No pudimos conectarnos con el servidor. Revisá tu conexión y probá de nuevo.', true],
+  ])('%i: %s', (status, message, canRetry) => {
+    expect(describeApiError(new ApiError(status, ['Forbidden resource']), 'review')).toMatchObject({
+      message,
+      canRetry,
+    });
+  });
+
+  test('409 ARCHIVED: el documento fue archivado', () => {
+    const error = new ApiError(409, ['El documento está archivado'], undefined, 'ARCHIVED');
+
+    expect(describeApiError(error, 'review').message).toBe(
+      'El documento fue archivado. Ya no se puede modificar.',
+    );
+  });
+});

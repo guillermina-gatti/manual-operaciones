@@ -50,6 +50,7 @@ describe('PrismaUsersDirectory', () => {
     expect(result).toEqual({
       id: 'user-uuid-1',
       role: 'EMPLOYEE',
+      isActive: true,
       areaIds: ['area-uuid-1', 'area-uuid-2'],
     });
   });
@@ -69,7 +70,25 @@ describe('PrismaUsersDirectory', () => {
     expect(result).toEqual({
       id: 'admin-uuid-1',
       role: 'ADMIN',
+      isActive: true,
       areaIds: [],
+    });
+  });
+
+  it('conserva el estado inactivo de un usuario histórico en lugar de devolver null', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-inactivo',
+      name: 'Usuario histórico',
+      role: 'EMPLOYEE',
+      isActive: false,
+      areas: [{ areaId: 'area-uuid-1' }],
+    });
+
+    await expect(directory.findById('user-inactivo')).resolves.toEqual({
+      id: 'user-inactivo',
+      role: 'EMPLOYEE',
+      isActive: false,
+      areaIds: ['area-uuid-1'],
     });
   });
 

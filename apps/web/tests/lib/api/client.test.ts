@@ -18,10 +18,7 @@ const jsonResponse = (status: number, body: unknown) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-const client = createApiClient(() => ({
-  'x-user-id': '0b000000-0000-4000-8000-000000000003',
-  'x-user-role': 'EMPLOYEE',
-}));
+const client = createApiClient(() => ({ Authorization: 'Bearer token-de-prueba' }));
 
 // Devuelve el error que lanza la promesa, para revisar sus campos.
 async function errorOf(promise: Promise<unknown>): Promise<unknown> {
@@ -42,8 +39,7 @@ describe('a dónde pide', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/documents?page=1&limit=20');
     const headers = new Headers(init?.headers);
-    expect(headers.get('x-user-id')).toBe('0b000000-0000-4000-8000-000000000003');
-    expect(headers.get('x-user-role')).toBe('EMPLOYEE');
+    expect(headers.get('Authorization')).toBe('Bearer token-de-prueba');
   });
 
   test.each([
@@ -192,5 +188,90 @@ describe('reason de los 409 (spec 003, D7)', () => {
 
     expect(((await errorOf(client.request('/api/documents/x'))) as ApiError).reason).toBeUndefined();
     expect(((await errorOf(client.request('/api/documents/x'))) as ApiError).reason).toBeUndefined();
+  });
+});
+
+// Plan 002, sección 3.1: con un token vencido la API da 401; el cliente renueva una vez y repite.
+describe('renovación ante un 401', () => {
+  let token = 'vencido';
+  const refreshAuth = vi.fn<() => Promise<boolean>>();
+  const withRefresh = createApiClient(
+    (): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {}),
+    refreshAuth,
+  );
+  const unauthorized = () => jsonResponse(401, { statusCode: 401, message: 'No autenticado' });
+  const sentAuthorization = (call: number) =>
+    new Headers(fetchMock.mock.calls[call][1]?.headers).get('Authorization');
+
+  beforeEach(() => {
+    token = 'vencido';
+    refreshAuth.mockReset();
+  });
+
+  test('si el refresh funciona, repite el pedido con el token nuevo y devuelve su respuesta', async () => {
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(jsonResponse(200, { ok: 1 }));
+    refreshAuth.mockImplementation(async () => {
+      token = 'nuevo';
+      return true;
+    });
+
+    await expect(withRefresh.request('/api/documents')).resolves.toEqual({ ok: 1 });
+
+    expect(refreshAuth).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sentAuthorization(0)).toBe('Bearer vencido');
+    expect(sentAuthorization(1)).toBe('Bearer nuevo');
+  });
+
+  test('repite el mismo pedido: método, cuerpo y señal', async () => {
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(jsonResponse(201, {}));
+    refreshAuth.mockResolvedValue(true);
+    const body = new FormData();
+    body.append('title', 'Manual');
+    const signal = new AbortController().signal;
+
+    await withRefresh.request('/api/documents', { method: 'POST', body, signal });
+
+    const [, retry] = fetchMock.mock.calls[1];
+    expect(retry).toMatchObject({ method: 'POST', body, signal });
+  });
+
+  test('intenta una sola vez: si el pedido repetido da 401, lanza ApiError 401', async () => {
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(unauthorized());
+    refreshAuth.mockResolvedValue(true);
+
+    const error = await errorOf(withRefresh.request('/api/documents'));
+
+    expect(error).toMatchObject({ status: 401 });
+    expect(refreshAuth).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('si el refresh falla, no repite y lanza el 401 original', async () => {
+    fetchMock.mockResolvedValueOnce(unauthorized());
+    refreshAuth.mockResolvedValue(false);
+
+    const error = await errorOf(withRefresh.request('/api/documents'));
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('sin sesión (sin token) un 401 no intenta renovar', async () => {
+    token = '';
+    fetchMock.mockResolvedValueOnce(unauthorized());
+
+    await expect(withRefresh.request('/api/documents')).rejects.toMatchObject({ status: 401 });
+
+    expect(refreshAuth).not.toHaveBeenCalled();
+  });
+
+  test('un 403 no intenta renovar', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(403, { statusCode: 403, message: 'No' }));
+
+    await expect(withRefresh.request('/api/documents')).rejects.toMatchObject({ status: 403 });
+
+    expect(refreshAuth).not.toHaveBeenCalled();
   });
 });

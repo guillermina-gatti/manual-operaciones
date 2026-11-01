@@ -1,7 +1,9 @@
 import {
   canBeOwner,
+  canReview,
   canView,
   listWhere,
+  pendingReviewWhere,
   searchScope,
 } from './document-access.policy';
 
@@ -97,5 +99,49 @@ describe('searchScope', () => {
 
   it('para un EMPLOYEE sin áreas filtra con la lista vacía: no encuentra nada', () => {
     expect(searchScope(empleadoSinAreas)).toEqual({ areaIds: [] });
+  });
+});
+
+// Spec 005, R4 y R6: quién ve el estado de revisión y puede marcar como revisado.
+describe('canReview', () => {
+  const OWNER = 'usuario-responsable';
+  const OTHER = 'otro-usuario';
+  const document = { ownerId: OWNER };
+
+  it('un ADMIN puede, aunque no sea el responsable', () => {
+    expect(canReview({ id: OTHER, role: 'ADMIN' }, document)).toBe(true);
+  });
+
+  it.each(['EMPLOYEE', 'SUPERVISOR'] as const)(
+    'el responsable %s puede',
+    (role) => {
+      expect(canReview({ id: OWNER, role }, document)).toBe(true);
+    },
+  );
+
+  it('E5: otro EMPLOYEE, aunque sea de la misma área, no puede', () => {
+    expect(canReview({ id: OTHER, role: 'EMPLOYEE' }, document)).toBe(false);
+  });
+});
+
+// Spec 005, R5: los documentos por vencer o vencidos que el usuario puede revisar.
+describe('pendingReviewWhere', () => {
+  const LAST_DAY = new Date('2026-12-09T00:00:00.000Z');
+
+  it('para un ADMIN: todos los ACTIVE hasta la fecha límite, de cualquier responsable y área', () => {
+    expect(pendingReviewWhere(admin, 'id-admin', LAST_DAY)).toEqual({
+      status: 'ACTIVE',
+      reviewDate: { lte: LAST_DAY },
+    });
+  });
+
+  it('para los demás: lo que ve (listWhere, solo ACTIVE), del que es responsable, hasta la fecha límite', () => {
+    const where = pendingReviewWhere(empleadoDeVentas, 'id-empleado', LAST_DAY);
+    expect(where).toEqual({
+      ...listWhere(empleadoDeVentas),
+      ownerId: 'id-empleado',
+      reviewDate: { lte: LAST_DAY },
+    });
+    expect(where).toMatchObject({ status: 'ACTIVE' });
   });
 });

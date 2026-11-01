@@ -15,12 +15,14 @@ import {
   useApiResource,
 } from '@/lib/api';
 import { areasDirectory, usersDirectory } from '@/lib/directory';
+import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
 import { parseSearchParam } from '@/lib/documents/search-rules';
-import { useSession } from '@/lib/session';
+import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
 import { SearchResults } from './SearchResults';
 
@@ -45,6 +47,13 @@ export function DocumentList() {
     <div className="flex flex-col gap-6">
       {/* key: al ir atrás o adelante, la caja vuelve a arrancar con el ?q= de la dirección. */}
       <SearchBox key={query ?? ''} query={query} />
+      {/* Spec 005 (F2): el acceso a "Por revisar", con y sin búsqueda. Para quien no es ADMIN ni
+          responsable de nada no muestra nada. */}
+      {status === 'ready' && user && (
+        <div className="flex flex-wrap justify-end gap-3 empty:hidden">
+          <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
+        </div>
+      )}
       {search.kind === 'valid' && status === 'ready' && user ? (
         <>
           {user.role === 'ADMIN' && (
@@ -89,11 +98,38 @@ function DocumentListing() {
     usersDirectory.getNames(ownerIds),
   );
 
-  if (status === 'loading') return LOADING;
-  if (status === 'disabled') {
-    return <ScreenState kind="error" message={describeApiError(new ApiError(401), 'list').message} />;
-  }
-  if (!user) return <ScreenState kind="empty" message="Elegí un usuario de prueba" />;
+if (status === 'loading') return LOADING;
+
+if (status === 'disabled') {
+  return (
+    <ScreenState
+      kind="error"
+      message={describeApiError(new ApiError(401), 'list').message}
+    />
+  );
+}
+
+if (!user) {
+  return REAL_AUTH_ENABLED ? (
+    <ScreenState
+      kind="empty"
+      message="Necesitás iniciar sesión para ver los documentos."
+      action={
+        <Link
+          href="/login"
+          className="text-blue-700 underline dark:text-blue-400"
+        >
+          Ir a iniciar sesión
+        </Link>
+      }
+    />
+  ) : (
+    <ScreenState
+      kind="empty"
+      message="Elegí un usuario de prueba"
+    />
+  );
+}
 
   if (documents.status === 'loading' || documents.status === 'idle') return LOADING;
 
@@ -140,9 +176,7 @@ function DocumentListing() {
 
   // Se espera a los nombres para no mostrar "—" un instante; si fallan, las tarjetas igual se muestran.
   if (areas.status === 'loading' || owners.status === 'loading') return LOADING;
-  const areaNames = Object.fromEntries(
-    (areas.status === 'success' ? areas.data : []).map((area) => [area.id, area.name]),
-  );
+  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
   const ownerNames = owners.status === 'success' ? owners.data : {};
 
   return (

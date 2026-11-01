@@ -6,7 +6,7 @@ import type { TestFile } from './support/files';
 import { docxFile, megabytes, pdfFile } from './support/files';
 import { apiError, documentDetail, mockApi } from './support/mock-api';
 import type { MockedApi } from './support/mock-api';
-import { loginAs, userId } from './support/session';
+import { accessTokenFor, loginAs, userId } from './support/session';
 
 const REVIEW_DATE = '2030-01-15';
 const NOTICE = 'El responsable elegido no tiene acceso a las áreas nuevas. Elegí otro';
@@ -79,8 +79,7 @@ test.describe('E1 · El admin carga un documento', () => {
     const [request] = uploads(api);
     expect(uploads(api)).toHaveLength(1);
     expect(request.headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
-    expect(request.headers['x-user-id']).toBe(userId('admin'));
-    expect(request.headers['x-user-role']).toBe('ADMIN');
+    expect(request.headers.authorization).toBe(`Bearer ${accessTokenFor('admin')}`);
     const body = request.body?.toString('latin1') ?? '';
     expect(body.match(/name="areaIds"/g)).toHaveLength(2);
     expect(body).toContain('filename="manual.pdf"');

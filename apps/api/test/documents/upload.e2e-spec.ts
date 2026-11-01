@@ -12,6 +12,7 @@ import {
   daysFromToday,
   pdfOfSize,
   seedDocument,
+  seedFixtureDirectory,
 } from './helpers';
 
 const TWO_MB = 2 * 1024 * 1024;
@@ -23,6 +24,7 @@ describe('POST /api/documents (integración)', () => {
 
   beforeAll(async () => {
     t = await createDocumentsTestApp();
+    await seedFixtureDirectory(t.prisma);
   });
 
   afterAll(async () => {
@@ -40,14 +42,14 @@ describe('POST /api/documents (integración)', () => {
     jest.restoreAllMocks();
   });
 
-  const upload = () =>
+  const upload = (content: Buffer = pdfOfSize(TWO_MB)) =>
     request(t.app.getHttpServer())
       .post('/api/documents')
       .field('title', '  Manual de caja  ')
       .field('areaIds', AREA_IDS.ventas)
       .field('ownerId', FIXTURE_USERS.supervisorVentas.id)
       .field('reviewDate', daysFromToday(30))
-      .attach('file', pdfOfSize(TWO_MB), {
+      .attach('file', content, {
         filename: 'manual.pdf',
         contentType: 'application/pdf',
       });
@@ -60,14 +62,21 @@ describe('POST /api/documents (integración)', () => {
     expect(t.queue.enqueued).toEqual([]);
   }
 
+  // Los guards rechazan antes de que multer lea el cuerpo. Con 2 MB sin leer, Node cierra el
+  // socket con datos pendientes y supertest recibe ECONNRESET en vez del 401/403. Por eso
+  // estos dos casos mandan un archivo chico: el tamaño no cambia la decisión de los guards.
+  const SMALL_PDF = pdfOfSize(1024);
+
   it('sin cabeceras de autenticación responde 401 y no escribe nada', async () => {
-    await upload().expect(401);
+    await upload(SMALL_PDF).expect(401);
 
     await expectNothingWritten();
   });
 
   it('un EMPLOYEE (rol sin permiso) recibe 403 y no escribe nada (R1)', async () => {
-    await upload().set(authHeaders(FIXTURE_USERS.empleadoVentas)).expect(403);
+    await upload(SMALL_PDF)
+      .set(authHeaders(FIXTURE_USERS.empleadoVentas))
+      .expect(403);
 
     await expectNothingWritten();
   });

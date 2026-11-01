@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { areasDirectory, usersDirectory } from '@/lib/directory';
+import { usersDirectory } from '@/lib/directory';
 import { createFakeAreasDirectory } from '@/lib/directory/fake-areas-directory';
 import { createFakeUsersDirectory } from '@/lib/directory/fake-users-directory';
 import { AREA_IDS, FIXTURE_USERS } from '@/lib/directory/fixtures';
@@ -13,8 +13,8 @@ describe('directorio de áreas simulado', () => {
     const areas = await createFakeAreasDirectory({ delayMs: 0 }).listAreas();
 
     expect(areas).toEqual([
-      { id: AREA_IDS.ventas, name: 'Ventas' },
-      { id: AREA_IDS.operaciones, name: 'Operaciones' },
+      { id: AREA_IDS.ventas, name: 'Ventas', isActive: true },
+      { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: true },
     ]);
   });
 });
@@ -47,18 +47,17 @@ describe('directorio de usuarios simulado', () => {
 });
 
 describe('instancias de @/lib/directory', () => {
-  test('responden después de una demora corta, para que se vea el estado "cargando"', async () => {
+  test('A-06.4 sigue pendiente: getNames conserva transitoriamente la demora simulada', async () => {
     vi.useFakeTimers();
     const resolved = vi.fn();
 
-    const areas = areasDirectory.listAreas().then(resolved);
-    const candidates = usersDirectory.listOwnerCandidates([AREA_IDS.ventas]).then(resolved);
+    const names = usersDirectory.getNames([FIXTURE_USERS.admin.id]).then(resolved);
 
     await vi.advanceTimersByTimeAsync(0);
     expect(resolved).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1000);
-    await Promise.all([areas, candidates]);
-    expect(resolved).toHaveBeenCalledTimes(2);
+    await names;
+    expect(resolved).toHaveBeenCalledTimes(1);
   });
 });

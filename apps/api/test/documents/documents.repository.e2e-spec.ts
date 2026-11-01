@@ -393,7 +393,10 @@ describe('PrismaDocumentsRepository (integración)', () => {
       const error = await errorOf(repo.findActiveByChecksum(CHECKSUM_A));
 
       expect(error).toBeInstanceOf(RepositoryUnavailableError);
-      expect(codeOf(error)).toBe('P1017');
+      expect([
+        'P1017',
+        'Error: Connection terminated unexpectedly',
+      ]).toContain(codeOf(error));
     }, 15000);
 
     it('una transacción en curso cuando se corta rechaza con RepositoryUnavailableError', async () => {

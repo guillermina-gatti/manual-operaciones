@@ -9,16 +9,17 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
+import { Clock, SystemClock } from '../common/clock';
 import { FileStorage } from '../storage/file-storage';
+import { todayInCompany } from './company-date';
 import { canBeOwner } from './document-access.policy';
 import { DocumentsRepository } from './documents.repository';
 import { errorMessage } from './http-errors';
 import { AreasDirectory } from './ports/areas-directory';
 import { AuditLog } from './ports/audit-log';
-import type { AuditAction } from './ports/audit-log';
+import type { AuditAction, ReviewAuditDates } from './ports/audit-log';
 import { UsersDirectory } from './ports/users-directory';
 
-const DEFAULT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
 export const MAX_ORIGINAL_FILE_NAME_LENGTH = 255;
 
 // Recorta nombres largos de archivos sin romper caracteres especiales (como emojis o tildes)
@@ -49,25 +50,20 @@ export interface FileToStore {
 export class DocumentWriteSteps {
   private readonly logger = new Logger(DocumentWriteSteps.name);
 
-  // Formateador de fecha configurado con la zona horaria del sistema
-  private readonly todayFormat = new Intl.DateTimeFormat('en-US', {
-    timeZone: process.env.APP_TIMEZONE || DEFAULT_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-
+  // El reloj es el último parámetro y tiene valor por defecto: quien no lo pasa usa la hora real
+  // (spec 005, D2).
   constructor(
     private readonly areas: AreasDirectory,
     private readonly users: UsersDirectory,
     private readonly documents: DocumentsRepository,
     private readonly storage: FileStorage,
     private readonly audit: AuditLog,
+    private readonly clock: Clock = new SystemClock(),
   ) {}
 
-  // Comprueba que la fecha de revisión no sea hoy ni una fecha pasada
+  // Comprueba que la fecha de revisión no sea hoy ni una fecha pasada, en hora de la empresa
   assertReviewDateIsAfterToday(reviewDate: string): void {
-    const today = this.today();
+    const today = todayInCompany(this.clock.now());
     if (reviewDate <= today) {
       throw new BadRequestException(
         `reviewDate tiene que ser posterior a hoy (${today})`,
@@ -130,12 +126,14 @@ export class DocumentWriteSteps {
   }
 
   // Registra el intento fallido en la auditoría (mejor esfuerzo). Las acciones sobre un documento
-  // existente (spec 003, R13) pasan su documentId; la carga no lo tiene todavía.
+  // existente (spec 003, R13) pasan su documentId; la carga no lo tiene todavía. "Marcar como
+  // revisado" pasa además las fechas que conoce (spec 005, R12).
   async auditFailure(
     action: AuditAction,
     actor: AuthUser,
     status: number,
     documentId?: string,
+    extra?: ReviewAuditDates,
   ): Promise<void> {
     try {
       await this.audit.record({
@@ -144,6 +142,10 @@ export class DocumentWriteSteps {
         ...(documentId && { documentId }),
         result: 'FAILURE',
         detail: String(status),
+        ...(extra?.previousReviewDate && {
+          previousReviewDate: extra.previousReviewDate,
+        }),
+        ...(extra?.newReviewDate && { newReviewDate: extra.newReviewDate }),
         at: new Date(),
       });
     } catch (error) {
@@ -172,15 +174,5 @@ export class DocumentWriteSteps {
         cause: errorMessage(error),
       });
     }
-  }
-
-  // Obtiene la fecha actual formateada en YYYY-MM-DD
-  private today(): string {
-    const parts = Object.fromEntries(
-      this.todayFormat
-        .formatToParts(new Date())
-        .map((part) => [part.type, part.value]),
-    );
-    return `${parts.year}-${parts.month}-${parts.day}`;
   }
 }

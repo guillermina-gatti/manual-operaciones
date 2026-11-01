@@ -4,6 +4,7 @@ import { createDocumentsApi, PAGE_SIZE } from '@/lib/api/documents';
 import type {
   DocumentResponse,
   DocumentSearchResponse,
+  PendingReviewResponse,
   UploadDocumentValues,
 } from '@/lib/api/documents';
 
@@ -286,5 +287,56 @@ describe('searchDocuments', () => {
     const { api } = fakeClient(response);
 
     await expect(api.searchDocuments('caja', 1)).resolves.toEqual(response);
+  });
+});
+
+// Spec 005 (T14; plan 005, 7.6): avisos de vencimiento.
+describe('listPendingReview (F2, F3)', () => {
+  test('pide la página y el límite indicados', async () => {
+    const response: PendingReviewResponse = {
+      data: [
+        {
+          ...DOCUMENT,
+          archivedAt: null,
+          review: { status: 'OVERDUE', lastReviewedAt: null, lastReviewedById: null },
+        },
+      ],
+      total: 1,
+      page: 2,
+      limit: 20,
+      isReviewer: true,
+    };
+    const { api, request } = fakeClient(response);
+
+    await expect(api.listPendingReview(2, 20)).resolves.toEqual(response);
+    expect(request).toHaveBeenCalledWith('/api/documents/pending-review?page=2&limit=20', {
+      signal: undefined,
+    });
+  });
+
+  test('con limit=1, para leer solo la cantidad (D18)', async () => {
+    const { api, request } = fakeClient({ data: [], total: 3, page: 1, limit: 1, isReviewer: true });
+
+    await api.listPendingReview(1, 1);
+
+    expect(request).toHaveBeenCalledWith('/api/documents/pending-review?page=1&limit=1', {
+      signal: undefined,
+    });
+  });
+});
+
+describe('markReviewed (F4)', () => {
+  test('POST con la fecha en JSON', async () => {
+    const { api, request } = fakeClient();
+    const signal = new AbortController().signal;
+
+    await api.markReviewed(ID, '2027-05-09', signal);
+
+    expect(request).toHaveBeenCalledWith(`/api/documents/${ID}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewDate: '2027-05-09' }),
+      signal,
+    });
   });
 });

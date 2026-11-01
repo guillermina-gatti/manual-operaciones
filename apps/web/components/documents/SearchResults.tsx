@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { PAGE_SIZE, describeApiError, searchDocuments, useApiResource } from '@/lib/api';
 import { areasDirectory, usersDirectory } from '@/lib/directory';
+import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { pageCount } from '@/lib/documents/pagination';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
@@ -90,9 +91,7 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
 
   // Se espera a los nombres para no mostrar "—" un instante; si fallan, las tarjetas igual se muestran.
   if (areas.status === 'loading' || owners.status === 'loading') return SEARCHING;
-  const areaNames = Object.fromEntries(
-    (areas.status === 'success' ? areas.data : []).map((area) => [area.id, area.name]),
-  );
+  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
   const ownerNames = owners.status === 'success' ? owners.data : {};
 
   return (

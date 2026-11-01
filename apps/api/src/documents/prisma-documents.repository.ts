@@ -14,6 +14,7 @@ import {
   NewVersion,
   RepositoryTransaction,
   RepositoryUnavailableError,
+  ReviewToRecord,
   SearchPage,
   SearchParams,
   VersionHistoryRecord,
@@ -284,10 +285,19 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
         throw error;
       }
 
-      // 4. La fecha de revisión, solo si vino (R7b).
+      // 4. La fecha de revisión, solo si vino (R7b). Con fecha nueva, la versión cuenta como revisión
+      // y la hizo quien la sube (spec 005, R10, D14); sin fecha, la última revisión no cambia.
+      const now = new Date();
       const row = await client.document.update({
         where: { id },
-        data: { ...(reviewDate && { reviewDate }), updatedAt: new Date() },
+        data: {
+          ...(reviewDate && {
+            reviewDate,
+            lastReviewedAt: now,
+            lastReviewedById: version.uploadedById,
+          }),
+          updatedAt: now,
+        },
         include: documentInclude,
       });
       return toRecord(row);
@@ -340,6 +350,56 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
         where: { id: versionId, documentId },
       });
       return row ? toVersionRecord(row) : null;
+    });
+  }
+
+  // ── Avisos de vencimiento (spec 005).
+
+  // "Por revisar" (R5, D8): la fecha más antigua primero, y el id para que el orden no cambie entre
+  // páginas. Las dos lecturas en la misma transacción, como list.
+  listForReview(
+    where: Prisma.DocumentWhereInput,
+    page: number,
+    limit: number,
+  ): Promise<DocumentPage> {
+    return this.translate(async () => {
+      const [rows, total] = await this.prisma.$transaction([
+        this.prisma.document.findMany({
+          where,
+          orderBy: [{ reviewDate: 'asc' }, { id: 'asc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+          include: documentInclude,
+        }),
+        this.prisma.document.count({ where }),
+      ]);
+      return { data: rows.map(toRecord), total };
+    });
+  }
+
+  count(where: Prisma.DocumentWhereInput): Promise<number> {
+    return this.translate(() => this.prisma.document.count({ where }));
+  }
+
+  // R8: una sola sentencia sobre documents. La fecha y la última revisión se escriben juntas.
+  markReviewed(
+    tx: RepositoryTransaction,
+    id: string,
+    review: ReviewToRecord,
+  ): Promise<DocumentRecord> {
+    const client = tx as unknown as Prisma.TransactionClient;
+    return this.translate(async () => {
+      const row = await client.document.update({
+        where: { id },
+        data: {
+          reviewDate: review.reviewDate,
+          lastReviewedAt: review.at,
+          lastReviewedById: review.reviewedById,
+          updatedAt: review.at,
+        },
+        include: documentInclude,
+      });
+      return toRecord(row);
     });
   }
 
@@ -509,7 +569,7 @@ export function searchRankingSql({ text, scope, page, limit }: SearchParams): Pr
 const PG_CONNECTION_LOST = 'Connection terminated unexpectedly';
 
 // Comprueba si el error de Prisma corresponde a un problema de disponibilidad del servidor
-function isUnavailable(error: unknown): boolean {
+export function isUnavailable(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -541,6 +601,8 @@ function toRecord(row: DocumentRow): DocumentRecord {
     createdById: row.createdById,
     createdAt: row.createdAt,
     archivedAt: row.archivedAt,
+    lastReviewedAt: row.lastReviewedAt,
+    lastReviewedById: row.lastReviewedById,
     currentVersion: toVersionRecord(version),
   };
 }

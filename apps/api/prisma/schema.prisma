@@ -48,6 +48,10 @@ model Document {
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   archivedAt  DateTime?      @map("archived_at") @db.Timestamptz(3)
 
+  // Última revisión (spec 005, R8, R10, R11): null si nunca se revisó. Se escriben siempre juntas.
+  lastReviewedAt   DateTime? @map("last_reviewed_at") @db.Timestamptz(3)
+  lastReviewedById String?   @map("last_reviewed_by_id") @db.Uuid // users de A, solo por ID
+
   areas    DocumentArea[]
   versions DocumentVersion[]
 
@@ -141,7 +145,70 @@ model Chunk {
 //   3. se aplica con `prisma migrate deploy` (no con `migrate dev`, que volvería a comparar);
 //   4. el test test/documents/indexes.e2e-spec.ts exige que los tres sigan existiendo.
 
-// conversations, messages y message_feedback: los define Guille (HU17, HU25).
+// ============================================================
+// HU17 · HU25 · HU35 — dueña: Guille (pareja C)
+// Sin relaciones de Prisma hacia users (pareja A): userId es solo un ID, como en Execution.
+// ============================================================
+
+enum ChatStatus {
+  ANSWERED // respondida con fragmentos
+  NO_INFO // sin información suficiente (HU19)
+  CONFLICT // documentos contradictorios (HU39)
+  AI_UNAVAILABLE // el proveedor de IA no respondió (HU36)
+}
+
+// HU17 · HU21 — dueña: Guille
+model Conversation {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @map("user_id") @db.Uuid // users de A, sin relación Prisma
+  procedureVersionId String?  @map("procedure_version_id") @db.Uuid // versión de Mica, opcional (HU21)
+  stepId             String?  @map("step_id") @db.Uuid // paso de Mica, opcional
+  title              String?  @db.VarChar(200)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  messages Message[]
+
+  @@index([userId, updatedAt])
+  @@map("conversations")
+}
+
+// HU17 · HU35 — una fila por consulta
+model Message {
+  id             String     @id @default(uuid()) @db.Uuid
+  conversationId String     @map("conversation_id") @db.Uuid
+  question       String     @map("question") @db.VarChar(2000)
+  answer         String?    @map("answer") @db.Text
+  status         ChatStatus @map("status")
+  usedChunkIds   String[]   @map("used_chunk_ids") @db.Uuid
+  usedVersionIds String[]   @map("used_version_ids") @db.Uuid
+  modelName      String?    @map("model_name") @db.VarChar(100)
+  latencyMs      Int?       @map("latency_ms")
+  inputTokens    Int?       @map("input_tokens")
+  outputTokens   Int?       @map("output_tokens")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  feedback     MessageFeedback?
+
+  @@index([conversationId, createdAt])
+  @@index([status, createdAt])
+  @@map("messages")
+}
+
+// HU25 — dueña: Guille
+model MessageFeedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @unique @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid // users de A, sin relación Prisma
+  useful    Boolean  @map("useful")
+  comment   String?  @map("comment") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_feedback")
+}
 
 // ============================================================
 // EQUIPO A — SEGURIDAD Y PLATAFORMA
@@ -194,7 +261,8 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  areas UserArea[]
+  areas    UserArea[]
+  sessions Session[]
 
   @@index([role])
   @@index([isActive])
@@ -253,15 +321,42 @@ model UserArea {
   @@map("user_areas")
 }
 
+// ------------------------------------------------------------
+// SESSION / REFRESH TOKEN
+// ------------------------------------------------------------
+//
+// Representa una sesión activa o revocada de un usuario.
+// Almacena el hash del refresh token emitido para soportar:
+// - Rotación obligatoria en cada refresco.
+// - Detección de reutilización (familia de tokens).
+// - Revocación individual (logout) o masiva.
+// ------------------------------------------------------------
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  isRevoked    Boolean   @default(false) @map("is_revoked")
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  userAgent    String?   @map("user_agent") @db.VarChar(500)
+  ipAddress    String?   @map("ip_address") @db.VarChar(45)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
 // ============================================================
 // FUTURAS ENTIDADES DEL EQUIPO A
 // ============================================================
 //
 // Invitation:
 // Invitaciones de un solo uso, con vencimiento de 48 horas.
-//
-// RefreshToken / Session:
-// Gestión de sesiones y revocación de refresh tokens.
 //
 // AuditLog:
 // Registro de cambios administrativos y operaciones sensibles.

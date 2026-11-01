@@ -1,5 +1,6 @@
 /* Usuarios y áreas de prueba en la base de tests, con los UUID de los fixtures (0a… áreas, 0b… usuarios) */
 
+import { PasswordService } from '../src/auth/password.service';
 import type { PrismaClient } from '../src/generated/prisma/client';
 import { AREA_IDS, FIXTURE_USERS } from '../src/documents/adapters/fixtures';
 
@@ -19,8 +20,20 @@ const USER_NAMES: Record<keyof typeof FIXTURE_USERS, string> = {
   empleadoOperaciones: 'Emilio Empleado de Operaciones',
 };
 
-// password_hash es obligatorio. Este valor no es un hash de bcrypt: con él no se puede iniciar sesión.
-const NO_PASSWORD = '!fixture-sin-contraseña';
+// SOLO PARA DESARROLLO Y TESTS. La contraseña de los 5 usuarios de los fixtures, conocida a propósito:
+// con ella el selector de sesión de la web (DevSessionSwitcher) inicia sesión de verdad con
+// POST /api/auth/login. La misma que apps/web/lib/session/dev-credentials.ts. Nunca debe existir un
+// usuario real con ella: el seed no corre en producción ni fuera de localhost (prisma/seed.ts).
+export const DEV_FIXTURE_PASSWORD = 'dev-fixtures-2026';
+
+// El email de cada usuario de los fixtures, por ejemplo supervisorventas@fixtures.test.
+export const fixtureEmail = (key: keyof typeof FIXTURE_USERS): string =>
+  `${key.toLowerCase()}@fixtures.test`;
+
+// El hash bcrypt (el PasswordService de la pareja A), calculado una vez por proceso: cuesta ~70 ms.
+let devPasswordHash: Promise<string> | null = null;
+const getDevPasswordHash = () =>
+  (devPasswordHash ??= new PasswordService().hash(DEV_FIXTURE_PASSWORD));
 
 // Idempotente: deja las 2 áreas, los 5 usuarios y sus áreas exactamente como en los fixtures,
 // sin importar cuántas veces se llame. No toca otros usuarios ni otras áreas.
@@ -32,6 +45,7 @@ export async function seedDirectoryFixtures(
     keyof typeof FIXTURE_USERS,
     (typeof FIXTURE_USERS)[keyof typeof FIXTURE_USERS],
   ][];
+  const passwordHash = await getDevPasswordHash();
 
   await prisma.$transaction([
     ...areas.map(([key, id]) =>
@@ -44,8 +58,8 @@ export async function seedDirectoryFixtures(
     ...users.map(([key, user]) => {
       const data = {
         name: USER_NAMES[key],
-        email: `${key.toLowerCase()}@fixtures.test`,
-        passwordHash: NO_PASSWORD,
+        email: fixtureEmail(key),
+        passwordHash,
         role: user.role,
         isActive: true,
       };

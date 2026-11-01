@@ -1,11 +1,18 @@
 /*Servicio de consultas de documentos */
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
+import { Clock, SystemClock } from '../common/clock';
 import { DownloadUrl, FileStorage } from '../storage/file-storage';
+import { toDbDate, todayInCompany } from './company-date';
+import {
+  documentNotFound,
+  findVisibleDocument,
+  viewerFor,
+} from './document-access';
 import {
   AccessSubject,
-  canView,
   listWhere,
+  pendingReviewWhere,
   searchScope,
 } from './document-access.policy';
 import { DocumentRecord, DocumentsRepository } from './documents.repository';
@@ -24,6 +31,7 @@ import { SearchDocumentsQuery } from './dto/search-documents.query';
 import { toHttpException } from './http-errors';
 import type { HttpOperation } from './http-errors';
 import { UsersDirectory } from './ports/users-directory';
+import { dueSoonThrough, reviewFor } from './review-status';
 import { buildFragment } from './search-fragment';
 
 // Forma del listado (R13). La clase para Swagger la agrega el controller (T19).
@@ -32,6 +40,11 @@ export interface DocumentListResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+// "Por revisar" (spec 005, plan 3.1): la forma del listado, más si el usuario es revisor (D19).
+export interface PendingReviewResponse extends DocumentListResponse {
+  isReviewer: boolean;
 }
 
 // Historial de versiones (spec 003, plan 1.4). La clase para Swagger la agrega el controller (T16).
@@ -47,25 +60,26 @@ export interface DocumentSearchResponse {
   limit: number;
 }
 
-// R11: el mismo error, con el mismo mensaje, para un documento inexistente y para uno no visible.
-const documentNotFound = () =>
-  new NotFoundException('No se encontró el documento');
-
 // Consultas de documentos (plan 1): listado, detalle y descarga.
 @Injectable()
 export class DocumentQueryService {
   private readonly logger = new Logger(DocumentQueryService.name);
 
+  // El reloj es el último parámetro y tiene valor por defecto (spec 005, D2).
   constructor(
     private readonly users: UsersDirectory,
     private readonly documents: DocumentsRepository,
     private readonly storage: FileStorage,
+    private readonly clock: Clock = new SystemClock(),
   ) {}
 
+  // Spec 005 (R4, D6): cada respuesta lleva `review` solo para el ADMIN y el responsable.
   findOne(user: AuthUser, id: string): Promise<DocumentResponse> {
-    return this.mapErrors(async () =>
-      toDocumentResponse(await this.findVisible(user, id)),
-    );
+    return this.mapErrors(async () => {
+      const today = this.today();
+      const record = await this.findVisible(user, id);
+      return toDocumentResponse(record, reviewFor(user, record, today));
+    });
   }
 
   // R12: en cualquier processingStatus, y el enlace se pide solo después de comprobar R10.
@@ -84,6 +98,7 @@ export class DocumentQueryService {
     query: ListDocumentsQuery,
   ): Promise<DocumentListResponse> {
     return this.mapErrors(async () => {
+      const today = this.today();
       const viewer = await this.viewerFor(user);
       const { data, total } = await this.documents.list(
         listWhere(viewer), // la regla de visibilidad vive en la política (R10, D2)
@@ -91,10 +106,47 @@ export class DocumentQueryService {
         query.limit,
       );
       return {
-        data: data.map(toDocumentSummary),
+        data: data.map((record) =>
+          toDocumentSummary(record, reviewFor(user, record, today)),
+        ),
         total,
         page: query.page,
         limit: query.limit,
+      };
+    });
+  }
+
+  // Spec 005 (R5, plan 3.1): los ACTIVE por vencer o vencidos que el usuario puede revisar, los
+  // vencidos primero. Una sola "hoy" para el filtro y las etiquetas (D4). isReviewer le dice a la web
+  // si mostrar el acceso aunque no haya pendientes (D19); nunca hay 403 (D9).
+  pendingReview(
+    user: AuthUser,
+    query: ListDocumentsQuery,
+  ): Promise<PendingReviewResponse> {
+    return this.mapErrors(async () => {
+      const today = this.today();
+      const viewer = await this.viewerFor(user);
+      const lastDay = toDbDate(dueSoonThrough(today));
+      const { data, total } = await this.documents.listForReview(
+        pendingReviewWhere(viewer, user.id, lastDay),
+        query.page,
+        query.limit,
+      );
+      const isReviewer =
+        user.role === 'ADMIN' ||
+        total > 0 ||
+        (await this.documents.count({
+          ...listWhere(viewer),
+          ownerId: user.id,
+        })) > 0;
+      return {
+        data: data.map((record) =>
+          toDocumentSummary(record, reviewFor(user, record, today)),
+        ),
+        total,
+        page: query.page,
+        limit: query.limit,
+        isReviewer,
       };
     });
   }
@@ -107,6 +159,7 @@ export class DocumentQueryService {
   ): Promise<DocumentSearchResponse> {
     return this.mapErrors(
       async () => {
+        const today = this.today();
         const viewer = await this.viewerFor(user);
         const { data, total } = await this.documents.search({
           text: query.q,
@@ -122,6 +175,7 @@ export class DocumentQueryService {
                 parts: buildFragment(fragment.markedText),
                 pageNumber: fragment.pageNumber,
               },
+              reviewFor(user, record, today), // spec 005, D7
             ),
           ),
           total,
@@ -170,25 +224,18 @@ export class DocumentQueryService {
     }
   }
 
-  private async findVisible(
-    user: AuthUser,
-    id: string,
-  ): Promise<DocumentRecord> {
-    // Primero el visor y después el documento, siempre: si se cortara antes para un id inexistente,
-    // la diferencia de tiempo revelaría qué documentos existen.
-    const viewer = await this.viewerFor(user);
-    const record = await this.documents.findByIdWithAreas(id);
-    if (!record || !canView(viewer, record)) throw documentNotFound();
-    return record;
+  // La regla de visibilidad vive en document-access.ts (spec 005, D11): la comparten las consultas y
+  // "Marcar como revisado".
+  private findVisible(user: AuthUser, id: string): Promise<DocumentRecord> {
+    return findVisibleDocument(this.users, this.documents, user, id);
   }
 
-  // El rol sale de la sesión; las áreas, del directorio y no del token (D5).
-  // Si el directorio falla, el error se propaga: nunca se lista sin filtro.
-  private async viewerFor(user: AuthUser): Promise<AccessSubject> {
-    // El ADMIN ve todo y la política no usa sus áreas: no hace falta pedirlas.
-    if (user.role === 'ADMIN') return { role: user.role, areaIds: [] };
-    const found = await this.users.findById(user.id);
-    // Un usuario que el directorio no conoce no ve ningún área.
-    return { role: user.role, areaIds: found?.areaIds ?? [] };
+  private viewerFor(user: AuthUser): Promise<AccessSubject> {
+    return viewerFor(this.users, user);
+  }
+
+  // "Hoy" en hora de la empresa, una vez por pedido (spec 005, plan 1.2).
+  private today(): string {
+    return todayInCompany(this.clock.now());
   }
 }

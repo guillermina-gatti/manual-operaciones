@@ -13,12 +13,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiHeader,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../common/auth';
 import type { AuthUser } from '../common/auth';
 import { AreasResponse } from './dto/areas.response';
@@ -61,19 +56,6 @@ const UNAVAILABLE = { status: 503, description: 'La base no responde' };
 
 @ApiTags('procedures')
 @ApiBearerAuth()
-// Temporary: the auth is simulated with these headers until Pareja A's real login lands.
-// Remove both @ApiHeader and keep @ApiBearerAuth when the guards read the token.
-@ApiHeader({
-  name: 'x-user-id',
-  required: true,
-  description: 'UUID del usuario simulado (temporal)',
-})
-@ApiHeader({
-  name: 'x-user-role',
-  required: true,
-  enum: ['ADMIN', 'SUPERVISOR', 'EMPLOYEE'],
-  description: 'Rol simulado (temporal)',
-})
 @Controller('procedures')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')

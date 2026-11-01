@@ -30,6 +30,7 @@ import {
   DocumentListResponse,
   DocumentQueryService,
   DocumentSearchResponse,
+  PendingReviewResponse,
   VersionHistoryResponse,
 } from './document-query.service';
 import { DocumentLifecycleService } from './document-lifecycle.service';
@@ -44,6 +45,7 @@ import {
   VersionHistoryItem,
 } from './dto/document.response';
 import { ListDocumentsQuery } from './dto/list-documents.query';
+import { MarkReviewedDto } from './dto/mark-reviewed.dto';
 import { SearchDocumentsQuery } from './dto/search-documents.query';
 import type { UploadedFileInput } from './file-inspector';
 
@@ -83,6 +85,19 @@ class DocumentListBody implements DocumentListResponse {
 
   @ApiProperty({ example: 20 })
   limit: number;
+}
+
+// Clase para documentar en Swagger "Por revisar" (spec 005): el listado, más si el usuario es revisor
+class PendingReviewBody
+  extends DocumentListBody
+  implements PendingReviewResponse
+{
+  @ApiProperty({
+    example: true,
+    description:
+      'true si es ADMIN o responsable de algún documento activo que ve, aunque no tenga pendientes',
+  })
+  isReviewer: boolean;
 }
 
 // Clase para documentar en Swagger la respuesta de la búsqueda (spec 004)
@@ -225,6 +240,31 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<DocumentSearchResponse> {
     return this.queries.search(user, query);
+  }
+
+  // Ruta GET /documents/pending-review: "Por revisar" (spec 005, R5). Va ANTES de GET /documents/:id,
+  // como search. Sin @Roles: quien no es responsable de nada recibe la lista vacía, no 403 (D9)
+  @Get('pending-review')
+  @ApiResponse({
+    status: 200,
+    description:
+      'Documentos activos por vencer o vencidos que el usuario puede revisar, los vencidos primero, y si es revisor',
+    type: PendingReviewBody,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'page o limit inválidos (limit va de 1 a 100)',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el directorio de usuarios no responden',
+  })
+  pendingReview(
+    @Query() query: ListDocumentsQuery,
+    @CurrentUser() user: AuthUser,
+  ): Promise<PendingReviewResponse> {
+    return this.queries.pendingReview(user, query);
   }
 
   // Ruta GET /documents/:id: Obtener el detalle de un documento específico por su ID
@@ -386,6 +426,40 @@ export class DocumentsController {
     @Param('versionId', ParseUUIDPipe) versionId: string,
   ): Promise<DownloadUrl> {
     return this.queries.getVersionDownloadUrl(id, versionId);
+  }
+
+  // Ruta POST /documents/:id/review: "Marcar como revisado" (spec 005, R6 a R9; D10). Sin @Roles: el
+  // ADMIN o el responsable, cosa que depende del documento y la decide el servicio
+  @Post(':id/review')
+  @HttpCode(200)
+  @ApiResponse({
+    status: 200,
+    description:
+      'Documento con la fecha de revisión nueva y la última revisión registrada',
+    type: DocumentResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'id inválido, o reviewDate falta, está mal formada o no es posterior a hoy (en hora de Argentina)',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 403,
+    description: 'Ve el documento, pero no es el ADMIN ni el responsable',
+  })
+  @ApiResponse({ status: 404, description: NOT_FOUND_DESCRIPTION })
+  @ApiResponse({ status: 409, description: ARCHIVED_DESCRIPTION })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el directorio no responden; no cambió nada',
+  })
+  markReviewed(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarkReviewedDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentResponse> {
+    return this.lifecycle.markReviewed(id, dto, user);
   }
 
   // Ruta POST /documents/:id/archive: Archivar un documento (spec 003, D5)

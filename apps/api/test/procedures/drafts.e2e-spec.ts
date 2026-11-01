@@ -121,6 +121,19 @@ describe('Procedures: drafts and steps (integration)', () => {
     expect(await storedSteps(draft.versionIds[0])).toHaveLength(0);
   });
 
+  it('R1: the old simulated x-user-* headers are 401 against the real guard, even for an ADMIN, and nothing is written', async () => {
+    await http()
+      .post('/api/procedures')
+      .set({
+        'x-user-id': FIXTURE_USERS.admin.id,
+        'x-user-role': 'ADMIN',
+      })
+      .send({ title: 'X' })
+      .expect(401);
+
+    expect(await t.prisma.procedure.count()).toBe(0);
+  });
+
   it.each([
     ['empty', ''],
     ['only spaces', '   '],

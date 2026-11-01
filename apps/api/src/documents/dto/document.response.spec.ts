@@ -1,6 +1,10 @@
 //El archivo de pruebas para asegurar que el objeto de respuesta cumpla con la estructura esperada
 import type { DocumentRecord } from '../documents.repository';
-import { toDocumentResponse, toDocumentSummary } from './document.response';
+import {
+  toDocumentResponse,
+  toDocumentSearchResult,
+  toDocumentSummary,
+} from './document.response';
 
 const record: DocumentRecord = {
   id: '0c000000-0000-4000-8000-000000000001',
@@ -133,5 +137,51 @@ describe('toDocumentSummary', () => {
     });
 
     expect(summary.archivedAt).toBe('2026-10-24T13:30:00.000Z');
+  });
+});
+
+// Spec 005 (plan 2.1, D6): `review` solo si el servicio lo pasa (ADMIN o responsable).
+describe('review en la respuesta', () => {
+  const review = {
+    status: 'OVERDUE' as const,
+    lastReviewedAt: '2026-05-04T14:12:09.000Z',
+    lastReviewedById: '0b000000-0000-4000-8000-000000000003',
+  };
+  const reviewedRecord: DocumentRecord = {
+    ...record,
+    lastReviewedAt: new Date('2026-05-04T14:12:09.000Z'),
+    lastReviewedById: '0b000000-0000-4000-8000-000000000003',
+  };
+
+  it('con review, el detalle, el listado y la búsqueda lo tienen, con sus tres campos', () => {
+    expect(toDocumentResponse(reviewedRecord, review).review).toStrictEqual(
+      review,
+    );
+    expect(toDocumentSummary(reviewedRecord, review).review).toStrictEqual(
+      review,
+    );
+    expect(
+      toDocumentSearchResult(reviewedRecord, null, review).review,
+    ).toStrictEqual(review);
+  });
+
+  it('sin review, la clave no está y la última revisión del registro no sale por ningún lado', () => {
+    for (const response of [
+      toDocumentResponse(reviewedRecord),
+      toDocumentSummary(reviewedRecord),
+      toDocumentSearchResult(reviewedRecord, null),
+    ]) {
+      expect(response).not.toHaveProperty('review');
+      expect(JSON.stringify(response)).not.toMatch(
+        /lastReviewed|2026-05-04T14:12:09/,
+      );
+    }
+  });
+
+  it('con review, los campos de la última revisión solo están dentro de review', () => {
+    const response = toDocumentResponse(reviewedRecord, review);
+
+    expect(response).not.toHaveProperty('lastReviewedAt');
+    expect(response).not.toHaveProperty('lastReviewedById');
   });
 });

@@ -114,12 +114,12 @@ async rewrites() {
 - `apiUrl` sale de `process.env.API_URL`, **sin** prefijo `NEXT_PUBLIC_`: la dirección del backend se usa solo en el servidor de Next y no termina en el JavaScript del navegador. En desarrollo, si falta, vale `http://localhost:3000` (D3); en producción, si falta, `next.config.ts` lanza un error al arrancar. `next build` corre en modo producción y deja el destino del rewrite fijo en el build, así que **el build también necesita `API_URL`**.
 - `apps/web/.env.example` documenta `API_URL=` sin valor. El frontend **no tiene secretos**: ni credenciales de AWS, ni `JWT_SECRET`, ni claves de IA.
 - Por qué rewrite y no llamar directo al backend: la API no habilita CORS y, según `docs/justificacion.md`, la cookie del refresh token tiene que quedar en el mismo dominio que el frontend.
-- Las cabeceras pasan sin cambios por el rewrite, así que `x-user-id` y `x-user-role` (hoy) y `Authorization` o la cookie (después) llegan al backend.
+- Las cabeceras y las cookies pasan sin cambios por el rewrite, así que `Authorization: Bearer` y la cookie httpOnly del refresh token (`path=/api/auth`) llegan al backend. La cookie queda en el dominio de la web.
 
 **Todas las llamadas pasan por `apiClient`** (`lib/api/client.ts`); ningún componente usa `fetch` directamente.
 
 - URLs relativas (`/api/documents…`), que el rewrite reenvía.
-- Agrega las cabeceras de autenticación que da la sesión (`getAuthHeaders()`, sección 3.1).
+- Agrega las cabeceras de autenticación que da la sesión (`getAuthHeaders()`, sección 3.1). Si un pedido que llevaba token da 401 (token vencido), llama una vez a `refreshSession()` y, si renovó, repite el mismo pedido con el token nuevo; si no, lanza el 401.
 - Respuesta 2xx → JSON tipado. Respuesta con error → lanza `ApiError { status, messages: string[], existingDocumentId? }`, leyendo el formato estándar de Nest (`statusCode`, `message` como texto o arreglo, `error`). Sin conexión, o una respuesta que no es JSON (por ejemplo, el rewrite no encuentra el backend) → `ApiError` con `status: 0`.
 - En la carga envía `FormData` y **no** fija `Content-Type`, para que el navegador ponga el `boundary` del multipart. Repite `areaIds` una vez por área, como pide la API (plan 001, 3.1).
 
@@ -143,15 +143,22 @@ Mismo patrón que el plan 001 (sección 5): los componentes dependen de una **in
 ### 3.1 Sesión del usuario
 
 - Interfaz (`lib/session/session.ts`): `SessionUser = { id, name, role }`, con `Role = 'ADMIN' | 'SUPERVISOR' | 'EMPLOYEE'`; `useSession(): { user: SessionUser | null; status: 'loading' | 'ready' | 'disabled' }`; y `getAuthHeaders(): Record<string, string>`, que usa `apiClient`.
-- Ahora (`lib/session/simulated-session.tsx`): el usuario elegido se guarda en `localStorage` con la clave `sim-session` (el ID de un usuario de `lib/directory/fixtures.ts`). `getAuthHeaders()` devuelve `{ 'x-user-id': id, 'x-user-role': role }`. `DevSessionSwitcher` permite cambiar de usuario y Playwright lo fija con `page.addInitScript`.
-- Sin sesión, las pantallas muestran "Elegí un usuario de prueba" en desarrollo; la API respondería 401.
-- **Protección:** si `process.env.NODE_ENV === 'production'`, la sesión simulada queda **desactivada**: `useSession()` da `{ user: null, status: 'disabled' }` y `getAuthHeaders()` da `{}` aunque haya un `sim-session` guardado, así que la API responde 401. `DevSessionSwitcher` no se renderiza en producción. No se lanza un error porque `next build` corre en modo producción y el layout usa la sesión en todas las páginas: el build (y el CI) fallarían. Igual que en el backend, la sesión simulada no puede funcionar en producción por descuido.
-- **Reemplazo:** `lib/session/index.ts` pasa a reexportar el `SessionProvider`, `useSession` y `getAuthHeaders` de la pareja A (por ejemplo, `Authorization: Bearer <access token>` y la renovación con el refresh token). Se borran `simulated-session.tsx` y `DevSessionSwitcher`, y se saca este último de `layout.tsx`.
+- Ahora (`lib/session/simulated-session.tsx`), **sesión de desarrollo con login real**. Lo único simulado es la pantalla de login, que reemplaza `DevSessionSwitcher`:
+  - **Elegir un usuario** en `DevSessionSwitcher` llama a `selectDevUser(id)`: si ya había sesión, hace `POST /api/auth/logout`; después hace `POST /api/auth/login` con el email del usuario (`<clave del fixture en minúsculas>@fixtures.test`) y la **contraseña de desarrollo** (`lib/session/dev-credentials.ts`, la misma que `DEV_FIXTURE_PASSWORD` del seed de la API). Mientras tanto, `useSession()` da `status: 'loading'`; al terminar da el usuario que devolvió la API. Si el login falla (la API no está levantada o no se corrió el seed), queda sin usuario y el selector muestra "No se pudo iniciar sesión. ¿Está levantada la API y cargado el seed de desarrollo?".
+  - El **accessToken queda solo en memoria** (una variable del módulo), nunca en `localStorage`. `getAuthHeaders()` devuelve `{ Authorization: 'Bearer <accessToken>' }`, o `{}` sin sesión. El refresh token lo maneja la API en su cookie httpOnly.
+  - En `localStorage` (`sim-session`) se guarda **solo el ID** del usuario elegido. Al recargar la página, `restoreSession()` intenta `POST /api/auth/refresh` con la cookie; si el token renovado es de ese usuario (el `sub` del JWT), sigue con él; si no, vuelve a iniciar sesión con la contraseña de desarrollo. Si otra pestaña cambia `sim-session`, esta hace lo mismo.
+  - **Token vencido:** `apiClient` recibe `refreshSession()`. Ante un 401 de un pedido que llevaba token, renueva **una sola vez** con `POST /api/auth/refresh` y repite el pedido. Si hay varios 401 a la vez comparten el mismo refresh, porque la API rota el refresh token y trata como robo que se presente uno ya usado. Si el refresh falla, la sesión termina: sin usuario ni token.
+  - **"Sin sesión"** llama a `selectDevUser(null)`: hace `POST /api/auth/logout` (la API revoca la sesión y borra la cookie), borra el token y `sim-session`.
+  - Si se elige otro usuario antes de que termine un login, gana el último elegido: la respuesta vieja se descarta.
+- Sin sesión, las pantallas muestran "Elegí un usuario de prueba" en desarrollo; la API responde 401. Las pantallas piden datos solo cuando `useSession()` ya tiene `user`, y `user` aparece recién cuando el token está en memoria, así que ningún pedido sale sin token por apuro.
+- **Datos:** la API tiene que tener los 5 usuarios de prueba con la contraseña de desarrollo (hash bcrypt, con el `PasswordService` de la pareja A). Los deja `prisma db seed` en la base de desarrollo y `pnpm --filter api seed:fixtures` en la de tests (`apps/api/test/directory-fixtures.ts`). Es solo para desarrollo y tests: el seed no corre con `NODE_ENV=production` ni fuera de `localhost`.
+- **Protección:** si `process.env.NODE_ENV === 'production'`, la sesión de desarrollo queda **desactivada**: `useSession()` da `{ user: null, status: 'disabled' }`, `getAuthHeaders()` da `{}` aunque haya un `sim-session` guardado, y no se llama nunca a `/api/auth/login` (`selectDevUser`, `restoreSession` y `refreshSession` no hacen nada). La API responde 401. `DevSessionSwitcher` no se renderiza en producción. No se lanza un error porque `next build` corre en modo producción y el layout usa la sesión en todas las páginas: el build (y el CI) fallarían.
+- **Reemplazo:** cuando la pareja A entregue la pantalla de login, `lib/session/index.ts` pasa a reexportar su `SessionProvider`, `useSession`, `getAuthHeaders` y `refreshSession`. Se borran `simulated-session.tsx`, `dev-credentials.ts` y `DevSessionSwitcher`, y se saca este último de `layout.tsx`. `apiClient` y las pantallas no cambian.
 
 ### 3.2 Cliente HTTP
 
-- Ahora: `lib/api/client.ts` es el `apiClient` descripto en la sección 2.
-- **Reemplazo:** si la pareja A entrega su propio cliente (con reintento automático después de renovar el token ante un 401), `lib/api/index.ts` reexporta el suyo, siempre que lance `ApiError` con la misma forma; si no, se lo envuelve con un adaptador de pocas líneas. `lib/api/documents.ts` y los componentes no cambian.
+- Ahora: `lib/api/client.ts` es el `apiClient` descripto en la sección 2: `createApiClient(getAuthHeaders, refreshAuth)`, con el reintento único después de renovar el token ante un 401.
+- **Reemplazo:** si la pareja A entrega su propio cliente, `lib/api/index.ts` reexporta el suyo, siempre que lance `ApiError` con la misma forma; si no, se lo envuelve con un adaptador de pocas líneas. `lib/api/documents.ts` y los componentes no cambian.
 
 ### 3.3 Usuarios (F11) y áreas
 
@@ -262,7 +269,7 @@ En `apps/web/tests/`. Usan `vi.mock` sobre `@/lib/api`, `@/lib/session` y `@/lib
 
 ### 7.2 Tests en el navegador (Playwright)
 
-En `apps/web/e2e/`. `playwright.config.ts` levanta `next dev` con `webServer` y define dos proyectos: **escritorio** (Chromium, 1280×800) y **celular** (dispositivo `Pixel 7`), para cubrir F10. La sesión se fija con `page.addInitScript` escribiendo `sim-session` (sección 3.1).
+En `apps/web/e2e/`. `playwright.config.ts` levanta `next dev` con `webServer` y define dos proyectos: **escritorio** (Chromium, 1280×800) y **celular** (dispositivo `Pixel 7`), para cubrir F10. La sesión se fija con `page.addInitScript` escribiendo `sim-session` (sección 3.1), y la web inicia sesión sola: en la suite principal, `mockApi` atiende `/api/auth/login` (con la contraseña de desarrollo da a cada usuario un JWT de prueba con su ID en `sub`), responde 401 a `/api/auth/refresh` y 200 a `/api/auth/logout`, y guarda esos pedidos aparte (`api.auth`), no en `api.requests`. Los tests comprueban que los pedidos llevan `Authorization: Bearer <token de ese usuario>`.
 
 **Suite principal, con la API simulada en el navegador.** `page.route('**/api/**')` responde con datos fijos, así los 12 escenarios corren sin backend, sin base y sin S3, y se pueden forzar el 409 y el 503. Comprueban lo que solo se ve en un navegador real: navegación entre rutas, redirección después de cargar, elegir un archivo de verdad con `setInputFiles`, `Suspense` y prerender con `cacheComponents`, y que todo se ve y se usa en el celular.
 
@@ -281,7 +288,7 @@ En `apps/web/e2e/`. `playwright.config.ts` levanta `next dev` con `webServer` y 
 | E11 | Clic en "Descargar": se hace la petición a `/download` en ese momento y el navegador recibe la descarga (la ruta de la `url` devuelve un archivo con `Content-Disposition: attachment`; se espera el evento `download`) |
 | E12 | La ruta responde 404: "No se encontró el documento" |
 
-**Prueba de integración, con la API real** (`e2e/integracion/`, se corre aparte: `pnpm --filter web test:e2e:integracion`). Necesita PostgreSQL en Docker y la API levantada sin `S3_BUCKET` (usa `InMemoryFileStorage` y la cola simulada). Pocas pruebas, para comprobar el rewrite y que el contrato coincide:
+**Prueba de integración, con la API real** (`e2e/integracion/`, se corre aparte: `pnpm --filter web test:e2e:integracion`). Necesita PostgreSQL y Redis en Docker, la API levantada sin `S3_BUCKET` (usa `InMemoryFileStorage` y la cola simulada) y los usuarios de prueba con la contraseña de desarrollo (`pnpm --filter api seed:fixtures`). La web inicia sesión de verdad, y los datos que se preparan por la API llevan el Bearer de un login real (`authHeadersFor` de `e2e/support/session.ts`). No se usa `signTestJwt` de la pareja A: está en `apps/api/test/auth/helpers.ts`, que importa `AppModule`, y Playwright no puede cargar los decoradores de Nest. Pocas pruebas, para comprobar el rewrite y que el contrato coincide:
 
 - ADMIN carga un PDF de 2 MB y llega al detalle con "Pendiente" (E1 de punta a punta).
 - ADMIN carga un PDF de **exactamente 10 MB** a través del rewrite y recibe 201 (riesgo de la sección 2).
@@ -307,7 +314,7 @@ Tomadas en la revisión del plan el 23/10/2026.
 | Pregunta | Decisión | Regla |
 | --- | --- | --- |
 | D1 · ¿Los datos se piden desde el servidor de Next (componentes de servidor) o desde el navegador? | Desde el navegador. Según la justificación, el access token dura 15 minutos y el refresh va en cookie: lo más probable es que el token viva en el cliente. Pedir desde el servidor obligaría a reenviar credenciales y a usar la URL absoluta del backend. Si la pareja A guarda la sesión en una cookie legible por el servidor, se puede pasar el listado a componente de servidor más adelante sin cambiar la API | F7, F8 |
-| D2 · ¿Dónde se guarda la sesión simulada? | En `localStorage` (`sim-session`), con `DevSessionSwitcher` para elegir el usuario. Es fácil de fijar en Playwright y no llega a producción (3.1) | F1, F6 |
+| D2 · ¿Dónde se guarda la sesión simulada? | En `localStorage` (`sim-session`), con `DevSessionSwitcher` para elegir el usuario. Es fácil de fijar en Playwright y no llega a producción (3.1). **Actualizada el 29/10/2026**, con el login real de la pareja A: en `sim-session` queda solo el ID del usuario elegido. El selector inicia sesión de verdad con la contraseña de desarrollo y el accessToken vive solo en memoria (3.1) | F1, F6 |
 | D3 · La API y `next dev` usan el puerto 3000 por defecto | Se sigue la convención que ya usa el README: la API en el 3000 (su valor por defecto) y la web en el 3001 (`pnpm --filter web dev -p 3001`). `API_URL` vale `http://localhost:3000` por defecto en desarrollo. No hace falta `PORT` en el `.env.example` de la raíz. Corregida al implementar T02: la primera versión invertía los puertos y obligaba a cambiar el README que usa todo el equipo | — |
 | D4 · Con `cacheComponents`, Next guarda la pantalla anterior oculta (`<Activity>`) y, al volver atrás, el formulario puede reaparecer con los datos | No se pide confirmación al salir, y se acepta que los datos se conserven al volver atrás, porque no le hace daño a nadie. Después de una carga correcta sí se limpia el estado (F13), para que "Cargar documento" siempre empiece vacío. La spec se ajustó en F14, en el caso borde y en P8 | F13, F14 |
 | D5 · ¿Qué muestra el responsable antes de elegir áreas? | Campo deshabilitado con "Elegí primero las áreas". Mostrar solo a los ADMIN sería válido según F11, pero invita a elegir antes de tiempo | F11 |

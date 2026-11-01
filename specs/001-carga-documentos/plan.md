@@ -33,7 +33,7 @@ Regla general: **los controladores no contienen reglas de negocio.** Reciben la 
 src/
 ├── storage/
 │   ├── storage.module.ts            elige la implementación de FileStorage
-│   ├── file-storage.ts              puerto: put, delete, getDownloadUrl
+│   ├── file-storage.ts              puerto: put, get, delete, getDownloadUrl
 │   ├── s3-file-storage.ts           implementación real con S3
 │   └── in-memory-file-storage.ts    para tests y desarrollo sin AWS
 ├── common/auth/                     (simulado hasta que llegue lo de la otra pareja; ver 5.1)
@@ -60,7 +60,7 @@ src/
 | `DocumentAccessPolicy` | Funciones puras: `canView(user, documentAreaIds)`, el `where` de Prisma para el listado según el usuario y `canBeOwner(owner, areaIds)` para R5. |
 | `FileInspector` | Funciones puras: recibe `buffer` y `originalname`, devuelve `{ kind: 'pdf' \| 'txt' \| 'md', mimeType, extension, sizeBytes, checksum }` o lanza 400 o 415. |
 | `DocumentsRepository` (puerto) y `PrismaDocumentsRepository` | Clase abstracta (D10) con `runInTransaction(fn)`, `findActiveByChecksum`, `createWithFirstVersion(tx, ...)`, `list(where, page, limit)` y `findByIdWithAreas`. `runInTransaction` envuelve el `prisma.$transaction` con timeout corto del paso 5 (sección 4), así los servicios no dependen de Prisma. `PrismaDocumentsRepository` la implementa con el `PrismaService` compartido y queda bloqueada hasta que exista (5.6). |
-| `FileStorage` (puerto) y `S3FileStorage` | `put(key, buffer, contentType, checksum)`, `delete(key)` y `getDownloadUrl(key, fileName)`, que vence a los 300 s. |
+| `FileStorage` (puerto) y `S3FileStorage` | `put(key, buffer, contentType, checksum)`, `delete(key)` y `getDownloadUrl(key, fileName)`, que vence a los 300 s. `get(key)` devuelve el contenido como `Buffer`; si la clave no existe lanza `StoredFileNotFoundError` y si el almacenamiento no responde, `StorageUnavailableError` (agregado para el worker de procesamiento (pareja C)). |
 | Puertos externos | `ProcessingQueue`, `AreasDirectory`, `UsersDirectory` y `AuditLog`. Se definen en la sección 5. |
 
 `DocumentsModule` importa `StorageModule` y define con qué implementación se resuelve cada puerto, incluido `DocumentsRepository`. Es el **único lugar** que cambia cuando lleguen las implementaciones reales.
@@ -345,7 +345,7 @@ Son `test/documents/*.e2e-spec.ts`. Usan Supertest con la app real y **PostgreSQ
 
 ### 8.3 Verificación manual con el bucket de desarrollo
 
-`S3FileStorage` no tiene tests automáticos. Se verifica a mano, una vez, con la API levantada contra el bucket de desarrollo:
+`S3FileStorage` tiene tests automáticos (`s3-file-storage.spec.ts`) con el cliente de S3 simulado, sin conectarse a AWS. Lo que sigue siendo manual es la prueba contra un bucket real, que forma parte de T22. Se hace una vez, con la API levantada contra el bucket de desarrollo:
 
 1. Cargar un PDF y comprobar en S3 que el objeto está en `documents/{documentId}/{versionId}.pdf` con el `ContentType` correcto.
 2. Pedir la descarga, abrir la `url` y comprobar que el archivo baja con su nombre original.
@@ -366,7 +366,7 @@ Tomadas en la revisión del plan el 21/10/2026.
 | D6 · ¿S3 local para desarrollo o el bucket real? | El bucket real de desarrollo, con `InMemoryFileStorage` para los tests. MinIO queda opcional mediante `S3_ENDPOINT`, sin tocar el código | R12 |
 | D7 · `PrismaService`, el prefijo `/api`, `ValidationPipe` y Swagger | Son de otra pareja y el plan asume que existen. Si al implementar no existen, se crean en una tarea separada y se avisa al equipo | — |
 | D8 · Nombres de archivo con tildes (multer puede leer `originalname` como latin1) | Se cubre con un test. Si pasa, se usa la opción `defParamCharset: 'utf8'` de multer o se convierte el nombre de latin1 a UTF-8 antes de guardarlo | R9 |
-| D9 · Simplificaciones del MVP | Sin advisory lock ni test de concurrencia para duplicados; sin CHECK en la base; el índice de una sola versión `CURRENT` queda para HU16; `S3FileStorage` se verifica a mano | R8b, R7 |
+| D9 · Simplificaciones del MVP | Sin advisory lock ni test de concurrencia para duplicados; sin CHECK en la base; el índice de una sola versión `CURRENT` queda para HU16; `S3FileStorage` se prueba con el cliente simulado y solo la prueba contra un bucket real es manual (8.3) | R8b, R7 |
 | D10 · ¿Cómo se escriben y prueban los servicios si todavía no existe `PrismaService`? | `DocumentsRepository` pasa a ser un puerto (clase abstracta) con `runInTransaction(fn)`, y los servicios se prueban con mocks. La implementación con Prisma (`PrismaDocumentsRepository`) queda bloqueada hasta que exista `PrismaService` (5.6). Tomada al dividir las tareas | R7, R8, R8b, R13 |
 | D11 · ¿Qué variable de entorno indica el bucket? El plan proponía `S3_DOCUMENTS_BUCKET`, pero `.env.example` ya tenía `S3_BUCKET` | Se reutiliza `S3_BUCKET`, sin agregar una variable nueva: es el mismo bucket privado que lee el worker de Guille, y nuestros objetos ya se separan por el prefijo `documents/` (sección 6). Dos nombres para el mismo bucket se desincronizarían. Tomada al implementar T07 | R9, R12 |
 | D12 · ¿Quién pone el timeout del encolado (paso 5c)? | El adaptador real de la cola, el de Guille (`ProcessingServiceQueueAdapter`, 5.2), no `DocumentUploadService`. El límite general lo da el timeout corto de `runInTransaction` (D10, T18). Si el encolado vence, el adaptador lanza `QueueUnavailableError`, así la carga responde 503 y se deshace todo. Se suma a A3. Tomada al implementar T15 | R7, R8 |

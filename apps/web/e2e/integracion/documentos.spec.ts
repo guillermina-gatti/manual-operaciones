@@ -1,6 +1,8 @@
 // Integración con la API real (T26; plan 002, secciones 2 y 7.2): web en el 3001, rewrite de /api,
 // API en el 3000 sin S3_BUCKET (archivos en memoria) y PostgreSQL en Docker.
 // Se corre aparte: `pnpm --filter web test:e2e:integracion`, con la API levantada (`pnpm dev:api`).
+// La sesión inicia sesión de verdad: los usuarios de prueba tienen que estar cargados con la contraseña
+// de desarrollo (`pnpm --filter api seed:fixtures` en la base de tests, `prisma db seed` en la de desarrollo).
 // Cada corrida carga documentos nuevos en la base de desarrollo: los títulos llevan "[e2e]" y una marca única,
 // y cada archivo tiene contenido distinto, para no chocar con el 409 de una corrida anterior.
 import { randomUUID } from 'node:crypto';
@@ -10,7 +12,7 @@ import type { DocumentResponse } from '../../lib/api';
 import { AREA_IDS } from '../../lib/directory/fixtures';
 import type { TestFile } from '../support/files';
 import { megabytes, pdfFile } from '../support/files';
-import { loginAs, userId } from '../support/session';
+import { authHeadersFor, loginAs, userId } from '../support/session';
 
 const API_URL = 'http://localhost:3000';
 // Única por proceso: dos procesos de Playwright pueden arrancar en el mismo milisegundo.
@@ -55,7 +57,7 @@ async function uploadThroughRewrite(
 ): Promise<DocumentResponse> {
   const file = pdfFile('preparado.pdf', 1024);
   const response = await request.post('/api/documents', {
-    headers: { 'x-user-id': userId('admin'), 'x-user-role': 'ADMIN' },
+    headers: await authHeadersFor(request, 'admin'),
     multipart: {
       file,
       title,

@@ -1,4 +1,7 @@
-import { StorageUnavailableError } from './file-storage';
+import {
+  StorageUnavailableError,
+  StoredFileNotFoundError,
+} from './file-storage';
 import { InMemoryFileStorage } from './in-memory-file-storage';
 
 const KEY = 'documents/doc-1/version-1.pdf';
@@ -40,6 +43,21 @@ describe('InMemoryFileStorage', () => {
     expect(storage.has(KEY)).toBe(false);
   });
 
+  it('get devuelve el contenido guardado', async () => {
+    await storage.put(
+      KEY,
+      Buffer.from('%PDF-1.7'),
+      'application/pdf',
+      CHECKSUM,
+    );
+
+    await expect(storage.get(KEY)).resolves.toEqual(Buffer.from('%PDF-1.7'));
+  });
+
+  it('get con una clave inexistente lanza StoredFileNotFoundError', async () => {
+    await expect(storage.get(KEY)).rejects.toThrow(StoredFileNotFoundError);
+  });
+
   it('getDownloadUrl vence a los 300 s y queda registrado', async () => {
     const now = new Date('2026-10-22T12:00:00.000Z');
     jest.useFakeTimers().setSystemTime(now);
@@ -52,13 +70,14 @@ describe('InMemoryFileStorage', () => {
     ]);
   });
 
-  it.each(['put', 'delete', 'getDownloadUrl'] as const)(
+  it.each(['put', 'get', 'delete', 'getDownloadUrl'] as const)(
     'configurada para fallar en %s, lanza StorageUnavailableError',
     async (method) => {
       storage.failOn(method);
 
       const call = {
         put: () => storage.put(KEY, Buffer.from('x'), 'text/plain', CHECKSUM),
+        get: () => storage.get(KEY),
         delete: () => storage.delete(KEY),
         getDownloadUrl: () => storage.getDownloadUrl(KEY, 'manual.pdf'),
       }[method];

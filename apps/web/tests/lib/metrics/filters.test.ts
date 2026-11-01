@@ -12,8 +12,8 @@ import {
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
 const OPERACIONES = '0a000000-0000-4000-8000-000000000002';
 const AREAS = [
-  { id: VENTAS, name: 'Ventas' },
-  { id: OPERACIONES, name: 'Operaciones' },
+  { id: VENTAS, name: 'Ventas', isActive: true },
+  { id: OPERACIONES, name: 'Operaciones', isActive: true },
 ];
 const params = (query: string) => new URLSearchParams(query);
 
