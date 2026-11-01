@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import type { ExecutionStatus } from '../generated/prisma/client';
+import { AreasDirectory } from '../documents/ports/areas-directory';
 import { UsersDirectory } from '../documents/ports/users-directory';
 import { canAccessProcedure, isOwner } from './execution-access.policy';
 import {
@@ -28,6 +29,7 @@ import {
   CatalogProcedureVersion,
   ProceduresCatalog,
 } from './ports/procedures-catalog';
+import { activeAreaIdsOf } from './viewer-areas';
 
 // One step of the version as the user sees it. Steps not started yet have null dates.
 export interface ExecutionStepView {
@@ -85,6 +87,7 @@ export class ExecutionService {
 
   constructor(
     private readonly users: UsersDirectory,
+    private readonly areas: AreasDirectory,
     private readonly catalog: ProceduresCatalog,
     private readonly executions: ExecutionsRepository,
     private readonly clock: Clock,
@@ -213,11 +216,10 @@ export class ExecutionService {
     }
   }
 
-  // Areas come from the directory on every request, never from the session. A user
-  // the directory does not know has no areas, so every check answers 404.
-  private async areasOf(user: AuthUser): Promise<string[]> {
-    const found = await this.users.findById(user.id);
-    return found?.areaIds ?? [];
+  // Only the active areas of the user, read from the directories on every request
+  // (viewer-areas.ts). Without areas every check answers 404.
+  private areasOf(user: AuthUser): Promise<string[]> {
+    return activeAreaIdsOf(this.users, this.areas, user.id);
   }
 
   // The version the execution was started with (CA1), if the user can still see it:

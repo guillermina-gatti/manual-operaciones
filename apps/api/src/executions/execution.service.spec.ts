@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
 import { AREA_IDS, FIXTURE_USERS } from '../documents/adapters/fixtures';
+import { InMemoryAreasDirectory } from '../documents/adapters/in-memory-areas-directory';
 import { InMemoryUsersDirectory } from '../documents/adapters/in-memory-users-directory';
+import { RepositoryUnavailableError } from '../documents/documents.repository';
+import type { AreasDirectory } from '../documents/ports/areas-directory';
 import type {
   DirectoryUser,
   UsersDirectory,
@@ -207,11 +210,13 @@ const expectConflict = async (promise: Promise<unknown>, reason: string) => {
 describe('ExecutionService', () => {
   let catalog: InMemoryProceduresCatalog;
   let users: UsersDirectory;
+  let areas: AreasDirectory;
   let repository: FakeExecutionsRepository;
   let clock: FakeClock;
   let service: ExecutionService;
 
-  const build = () => new ExecutionService(users, catalog, repository, clock);
+  const build = () =>
+    new ExecutionService(users, areas, catalog, repository, clock);
 
   beforeEach(() => {
     catalog = new InMemoryProceduresCatalog(catalogOnV1());
@@ -219,6 +224,7 @@ describe('ExecutionService', () => {
       ...Object.values(FIXTURE_USERS),
       otroEmpleadoVentas,
     ]);
+    areas = new InMemoryAreasDirectory();
     repository = new FakeExecutionsRepository();
     clock = new FakeClock(new Date('2026-10-27T10:00:00.000Z'));
     service = build();
@@ -429,6 +435,65 @@ describe('ExecutionService', () => {
     });
   });
 
+  // ── deactivated area ──────────────────────────────────────────────────────
+
+  describe('when the only shared area is deactivated', () => {
+    let executionId: string;
+
+    beforeEach(async () => {
+      ({
+        execution: { id: executionId },
+      } = await service.start(empleadoVentas, CIERRE));
+      areas = new InMemoryAreasDirectory([
+        { id: AREA_IDS.ventas, name: 'Ventas', isActive: false },
+        { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: true },
+      ]);
+      service = build();
+    });
+
+    it('findOne answers the same 404 as a missing execution', async () => {
+      const inactive = await expectNotFound(
+        service.findOne(empleadoVentas, executionId),
+      );
+      const missing = await expectNotFound(
+        service.findOne(empleadoVentas, UNKNOWN_ID),
+      );
+      expect(inactive).toBe(missing);
+    });
+
+    it('completeStep answers 404', async () => {
+      await expectNotFound(
+        service.completeStep(empleadoVentas, executionId, V1.steps[0].id),
+      );
+    });
+
+    it('start does not return the execution in progress', async () => {
+      await expectNotFound(service.start(empleadoVentas, CIERRE));
+    });
+
+    it('start answers 404 for a user without an execution in progress', async () => {
+      await expectNotFound(service.start(otroVentas, CIERRE));
+    });
+  });
+
+  it('another inactive area of the user does not take away an active one', async () => {
+    users = new InMemoryUsersDirectory([
+      {
+        ...FIXTURE_USERS.empleadoVentas,
+        areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones],
+      },
+    ]);
+    areas = new InMemoryAreasDirectory([
+      { id: AREA_IDS.ventas, name: 'Ventas', isActive: true },
+      { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: false },
+    ]);
+    service = build();
+
+    const { created } = await service.start(empleadoVentas, CIERRE);
+
+    expect(created).toBe(true);
+  });
+
   // ── procedure moved to another area ───────────────────────────────────────
 
   describe('when the procedure is reassigned to another area', () => {
@@ -492,6 +557,16 @@ describe('ExecutionService', () => {
       jest
         .spyOn(repository, 'findInProgress')
         .mockRejectedValue(new ExecutionsRepositoryUnavailableError('db down'));
+
+      await expect(
+        service.start(empleadoVentas, CIERRE),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('an areas directory that is down is a 503', async () => {
+      jest
+        .spyOn(areas, 'findByIds')
+        .mockRejectedValue(new RepositoryUnavailableError('db down'));
 
       await expect(
         service.start(empleadoVentas, CIERRE),
