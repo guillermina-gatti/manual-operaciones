@@ -7,9 +7,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { AuthUser } from '../common/auth';
+import { AreasDirectory } from '../documents/ports/areas-directory';
 import { toHttpException } from './http-errors';
 import { canManage } from './procedure-access.policy';
-import { ProcedureAreasCatalog } from './procedure-areas.catalog';
 import { ProceduresRepository } from './procedures.repository';
 
 @Injectable()
@@ -18,7 +18,7 @@ export class ProcedureAreasService {
 
   constructor(
     private readonly procedures: ProceduresRepository,
-    private readonly areas: ProcedureAreasCatalog,
+    private readonly areas: AreasDirectory,
   ) {}
 
   // R11: the whole set replaces the previous one. The areas are checked before anything is
@@ -53,7 +53,7 @@ export class ProcedureAreasService {
     procedureId: string,
     areaIds: string[],
   ): Promise<void> {
-    const states = await this.areas.findStates(areaIds);
+    const states = await this.areas.findByIds(areaIds);
     if (states.length !== areaIds.length) {
       throw new BadRequestException('Alguna de las áreas no existe');
     }

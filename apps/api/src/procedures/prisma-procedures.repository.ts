@@ -460,7 +460,7 @@ function toStepRecord(row: StepRow): StepRecord {
   };
 }
 
-export function isUnavailable(error: unknown): boolean {
+function isUnavailable(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
