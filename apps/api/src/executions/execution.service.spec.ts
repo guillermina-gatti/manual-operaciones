@@ -163,8 +163,10 @@ const empleadoVentas = asAuthUser(FIXTURE_USERS.empleadoVentas);
 // A second Ventas employee, so CA4 fails on ownership and not on areas.
 const otroEmpleadoVentas: DirectoryUser = {
   id: '0b000000-0000-4000-8000-000000000099',
+  name: 'Otra Empleada de Ventas',
   role: 'EMPLOYEE',
   areaIds: [AREA_IDS.ventas],
+  isActive: true,
 };
 const otroVentas = asAuthUser(otroEmpleadoVentas);
 const empleadoOperaciones = asAuthUser(FIXTURE_USERS.empleadoOperaciones);
@@ -378,7 +380,13 @@ describe('ExecutionService', () => {
     it('404 for a user the directory does not know', async () => {
       await expectNotFound(
         service.start(
-          asAuthUser({ id: UNKNOWN_ID, role: 'EMPLOYEE', areaIds: [] }),
+          asAuthUser({
+            id: UNKNOWN_ID,
+            name: 'Desconocido',
+            role: 'EMPLOYEE',
+            areaIds: [],
+            isActive: true,
+          }),
           CIERRE,
         ),
       );
