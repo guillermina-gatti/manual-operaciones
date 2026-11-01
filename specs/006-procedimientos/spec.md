@@ -76,7 +76,7 @@ Publicar queda fuera (HU32). Por eso, al terminar esta spec, un empleado todaví
 
 **Áreas (HU10)**
 
-- **R11 · Asignar áreas.** El ADMIN define el conjunto de áreas del procedimiento; el pedido reemplaza el conjunto anterior. Puede ser vacío. No puede tener repetidos, y todas las áreas tienen que existir (400 si no); se aceptan también las inactivas (P13). Se puede cambiar sin importar el estado de sus versiones, incluso si hay un borrador abierto. Como mucho 100 áreas por pedido. Los repetidos se rechazan por formato (400 nombrando el campo `areaIds`) y las inexistentes consultando al directorio (400); si el pedido trae ambos defectos o un procedimiento inexistente con áreas inexistentes, gana el 400.
+- **R11 · Asignar áreas.** El ADMIN define el conjunto de áreas del procedimiento; el pedido reemplaza el conjunto anterior. Puede ser vacío. No puede tener repetidos, y todas las áreas tienen que existir (400 si no). Un área inactiva solo se acepta si el procedimiento ya la tenía: agregar una inactiva que no tenía es 400, conservarla es válido y quitarla también (P13). Se puede cambiar sin importar el estado de sus versiones, incluso si hay un borrador abierto. Como mucho 100 áreas por pedido. Los repetidos se rechazan por formato (400 nombrando el campo `areaIds`); las inexistentes y las inactivas nuevas, consultando el estado de las áreas (400). Si el pedido trae varios defectos, o un procedimiento inexistente con áreas inválidas, gana el 400.
 - **R12 · Efecto inmediato.** El cambio de áreas rige desde el pedido siguiente: un usuario que pierde un área recibe 404 en ese procedimiento, también si tiene una ejecución en curso (acuerdo con la spec 005, P17).
 
 **Visibilidad (HU11)**
@@ -118,6 +118,7 @@ Toda transición que no esté en la tabla es inválida: una versión `PUBLISHED`
 - Un identificador que no es un UUID: 400.
 - Un empleado pide una versión por su identificador, aunque sea la vigente: 403 (R17); el detalle del procedimiento ya le muestra la vigente.
 - Se cambian las áreas mientras alguien ejecuta el procedimiento: rige desde el pedido siguiente (R12).
+- Se desactiva un área que tiene procedimientos asignados: los procedimientos la conservan; el ADMIN puede mantenerla o quitarla, pero no volver a agregarla (R11).
 - El procedimiento solo tiene un borrador y se borra: desaparece el procedimiento con sus áreas, sus pasos y sus adjuntos (R10).
 - Una versión publicada sin pasos no se muestra a SUPERVISOR ni a EMPLOYEE (R13).
 - Falla el directorio de usuarios mientras se lista: 503, no se lista sin filtro (R15).
@@ -149,14 +150,15 @@ Tomadas en la etapa de aclaración (clarify) el 27/10/2026.
 | P10 · ¿Quién es el responsable? | El ADMIN que crea el procedimiento. El nombre y el email que pide el Contrato 3 se leen más adelante, con una ampliación del directorio de la pareja A | R2 |
 | P11 · ¿Título y descripción son del procedimiento o de la versión? | De cada versión: una publicada no cambia cuando se edita el borrador | R5, R16 |
 | P12 · ¿Crear un borrador desde la vigente entra en esta spec? | Sí. En los tests, la versión publicada se inserta a mano | R4 |
-| P13 · ¿Se asignan áreas inactivas? | Sí, se aceptan; la matriz de permisos deja el tema pendiente | R11 |
+| P13 · ¿Se asignan áreas inactivas? | Solo las que el procedimiento ya tenía. Agregar una inactiva nueva es 400 (igual que una inexistente), conservarla o quitarla es válido. Alinea con A-06.2 (`docs/contracts/A-06.2-listado-areas.md`, líneas 72 a 74) | R11 |
 | P14 · ¿Qué tipos, tamaño y cantidad de adjuntos, y cómo se heredan? | Los tipos de `inspectFile` (PDF, `.txt`, `.md`), hasta 10 MB y 5 por paso. Al crear un borrador se comparte el archivo guardado y se borra solo cuando ninguna versión lo usa | R18, R19, R22, R23 |
 | P15 · ¿Cómo se reordena? | Con la lista completa de pasos en el orden nuevo | R8 |
 | P16 · ¿En qué idioma van los mensajes de error HTTP? | En español, como `documents` y `executions`; comentarios e identificadores en inglés | Sección 9 |
 | P17 · ¿Cómo se alinea con la spec 005 de Mayra? | El puerto `ProceduresCatalog` es el de `executions/ports/procedures-catalog.ts`. `areaIds` son las áreas actuales del procedimiento, iguales en `findPublished` y en `findVersion`. Un procedimiento que cambia de área da 404 al empleado que la perdió, también con una ejecución en curso. Una versión sin pasos cuenta como sin versión publicada. `findVersion` devuelve versiones reemplazadas. El adaptador real va con HU32 | R12, R13, plan 7 |
 | P18 · ¿Qué devuelve `PUT /procedures/:id/areas`? | 200 con `{ areaIds }`, las áreas que quedaron, ordenadas. Un conjunto vacío es válido | R11 |
-| P19 · ¿Cómo se valida el pedido de áreas? | Formato en el DTO (arreglo de UUID, sin repetidos, hasta 100) y existencia con `AreasDirectory`. El orden de los chequeos es: rol (403), formato (400), existencia de las áreas (400) y por último el procedimiento (404) | R11 |
+| P19 · ¿Cómo se valida el pedido de áreas? | Formato en el DTO (arreglo de UUID, sin repetidos, hasta 100) y estado de las áreas (existencia e `isActive`) con `ProcedureAreasCatalog`. El orden de los chequeos es: rol (403), formato (400), existencia de las áreas (400), área inactiva nueva (400) y por último el procedimiento (404) | R11 |
 | D16 · ¿Cómo se autentica ahora que está el login real de la Pareja A? | El servidor exige `Authorization: Bearer <jwt>` y rechaza con 401 los headers `x-user-id` y `x-user-role`. El rol y las áreas salen de la base en cada pedido. Los tests de controlador corren detrás del guard real con `real-auth.ts` de Mayra; los e2e firman los tokens con `signTestJwt` de Camila. Swagger pasa de los headers a Bearer. No cambia ninguna regla de negocio ni ninguna respuesta de las rutas | R1, R15 |
+| P20 · ¿Qué pasa con las áreas inactivas y la sesión? | El guard excluye las áreas inactivas de `user.areaIds` (`jwt-auth.guard.ts`, líneas 73 a 78). Para HU11 se decide si se usa `user.areaIds` o `UsersDirectory`; hoy el directorio no filtra las inactivas (`prisma-users-directory.ts`). No se modifica código ajeno: la regla se acuerda con las parejas A y C | R11, R13, R15 |
 
 ## 11. Preguntas abiertas
 
@@ -285,6 +287,29 @@ Escenario: E19 · mover de área
   Entonces el EMPLOYEE de Ventas recibe 404 en su pedido siguiente
   Y un EMPLOYEE de Operaciones lo ve
   (HU10 verifica el cambio de áreas en la base. Que el EMPLOYEE de Ventas reciba 404 y el de Operaciones lo vea se prueba con los GET de HU11, en T17.)
+
+Escenario: E35 · agregar un área inactiva
+  Dado un procedimiento en Ventas y un área inactiva que no tiene asignada
+  Cuando el ADMIN asigna Ventas y esa área inactiva
+  Entonces la respuesta es 400
+  Y el procedimiento sigue únicamente en Ventas
+
+Escenario: E36 · conservar un área que quedó inactiva
+  Dado un procedimiento publicado, con un borrador abierto, en Ventas y en un área que después quedó inactiva
+  Cuando el ADMIN asigna Ventas, esa área y Operaciones
+  Entonces la respuesta es 200 y el procedimiento queda en las tres
+  Y las versiones y sus pasos no cambian
+
+Escenario: E37 · quitar un área inactiva y no poder volver a agregarla
+  Dado un procedimiento en Ventas y en un área inactiva
+  Cuando el ADMIN asigna solo Ventas
+  Entonces la respuesta es 200 y el procedimiento queda en Ventas
+  Y si después asigna Ventas y esa área inactiva, la respuesta es 400
+
+Escenario: E38 · gana el 400
+  Dado un procedimiento que no existe
+  Cuando el ADMIN asigna un área inactiva, o una inexistente junto con una inactiva
+  Entonces la respuesta es 400 (con "no existe" si alguna no existe) y no 404
 
 # --- HU11 · visibilidad ---
 

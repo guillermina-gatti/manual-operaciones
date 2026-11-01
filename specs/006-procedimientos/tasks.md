@@ -7,7 +7,7 @@
 Convenciones:
 
 - Una tarea = un commit, con Conventional Commits y alcance `procedures` (`feat(procedures): …`, `test(procedures): …`, `docs(specs): …`). Las rutas de backend son relativas a `apps/api/`.
-- R1 a R23 son las reglas de la spec; P1 a P17, sus decisiones; E1 a E34, sus escenarios; D1 a D14, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado.
+- R1 a R23 son las reglas de la spec; P1 a P20, sus decisiones; E1 a E38, sus escenarios; D1 a D17, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado.
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - **"Avisar al equipo antes de mergear"** marca las tareas que tocan archivos que usan otras parejas: `schema.prisma`, `prisma/migrations` y `app.module.ts`.
 - **Comandos de Prisma:** `prisma migrate dev`, `prisma migrate deploy` y `prisma generate` los corre Micaela, no el agente. Cuando una tarea cambia `schema.prisma`, el agente hace el cambio, escribe el test y se detiene; Micaela crea la migración con `migrate dev --create-only`, se revisa el SQL juntos (borrando cualquier `DROP INDEX "chunks_..."`) y ella la aplica.
@@ -127,6 +127,13 @@ Convenciones:
 - **Cubre:** R11, R12; E17, E18, E19 (la mitad de las áreas; la otra mitad, en T17); P18, P19.
 - **Archivos:** `src/procedures/dto/set-areas.dto.ts`, `src/procedures/dto/areas.response.ts`, `src/procedures/procedures.controller.ts`, `src/procedures/procedures.module.ts`, `test/procedures/areas.e2e-spec.ts` y sus `.spec.ts`.
 - **Verificación:** asignar y reasignar; 400 con área inexistente, repetida o con formato inválido, sin cambios; 401 y 403; 404 con procedimiento inexistente; mover un procedimiento publicado de Ventas a Operaciones deja sus áreas en Operaciones. Los corre Micaela.
+
+### T13b · Áreas inactivas (R11, P13)
+
+- **Qué hace:** reemplaza `AreasDirectory` en procedimientos por un puerto propio, `ProcedureAreasCatalog`, con su adaptador en memoria y su adaptador Prisma (solo lee `areas`: id e `isActive`). El servicio rechaza con 400 las áreas inactivas que el procedimiento no tenía y deja conservar las que ya tenía; el módulo y el Swagger del 400 se actualizan.
+- **Cubre:** R11; E35, E36, E37, E38; P13, P19, P20; D17.
+- **Archivos:** `src/procedures/procedure-areas.catalog.ts`, `in-memory-procedure-areas.catalog.ts`, `prisma-procedure-areas.catalog.ts`, `procedure-areas.service.ts`, `procedures.module.ts`, `procedures.controller.ts` (solo el texto del 400), `prisma-procedures.repository.ts` (solo exporta `isUnavailable`) y sus `.spec.ts`; `test/procedures/area-helpers.ts`, `areas.e2e-spec.ts` y `areas.catalog.e2e-spec.ts`.
+- **Verificación, test primero:** inactiva nueva → 400 sin llamar al repositorio; inactiva que ya tenía → se guarda; quitarla → válido; volver a agregarla → 400; procedimiento inexistente con inactiva → 400 y no 404; "no existe" gana sobre "inactiva" en el mensaje; catálogo o base caídos → 503. Las áreas inactivas de los e2e se crean y se borran dentro de cada test, sin tocar el seed ni las fixtures. No se modifica código de otras parejas. Los e2e los corre Micaela.
 
 ---
 
