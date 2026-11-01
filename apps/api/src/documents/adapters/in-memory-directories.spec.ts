@@ -22,6 +22,22 @@ describe('InMemoryAreasDirectory', () => {
       areas.findExistingIds([AREA_IDS.ventas, UNKNOWN_ID]),
     ).resolves.toEqual([UNKNOWN_ID]);
   });
+  it('findByIds incluye áreas inactivas, omite desconocidas y deduplica', async () => {
+    const areas = new InMemoryAreasDirectory([
+      { id: AREA_IDS.ventas, name: 'Ventas', isActive: true },
+      { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: false },
+    ]);
+
+    await expect(
+      areas.findByIds([AREA_IDS.ventas, AREA_IDS.operaciones, AREA_IDS.operaciones, UNKNOWN_ID]),
+    ).resolves.toEqual([
+      { id: AREA_IDS.ventas, name: 'Ventas', isActive: true },
+      { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: false },
+    ]);
+    await expect(areas.findExistingIds([AREA_IDS.operaciones])).resolves.toEqual([
+      AREA_IDS.operaciones,
+    ]);
+  });
 });
 
 describe('InMemoryUsersDirectory', () => {
@@ -32,6 +48,7 @@ describe('InMemoryUsersDirectory', () => {
       users.findById(FIXTURE_USERS.empleadoVentas.id),
     ).resolves.toEqual({
       id: FIXTURE_USERS.empleadoVentas.id,
+      name: 'Elena Empleada de Ventas',
       role: 'EMPLOYEE',
       isActive: true,
       areaIds: [AREA_IDS.ventas],
@@ -47,6 +64,7 @@ describe('InMemoryUsersDirectory', () => {
   it('se puede construir con datos propios del test', async () => {
     const propio = {
       id: UNKNOWN_ID,
+      name: 'Responsable histórico de prueba',
       role: 'SUPERVISOR' as const,
       areaIds: [],
       isActive: false,

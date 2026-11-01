@@ -27,6 +27,41 @@ describe('PrismaAreasDirectory', () => {
     directory = new PrismaAreasDirectory(mockPrisma as unknown as PrismaService);
   });
 
+  it('findByIds devuelve nombre y estado, incluso de áreas inactivas', async () => {
+    mockPrisma.area.findMany.mockResolvedValue([
+      { id: 'area-uuid-1', name: 'Ventas', isActive: true },
+      { id: 'area-uuid-2', name: 'Archivo', isActive: false },
+    ]);
+
+    const result = await directory.findByIds([
+      'area-uuid-1',
+      'area-uuid-2',
+      'area-uuid-2',
+      'no-existe',
+    ]);
+
+    expect(mockPrisma.area.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ['area-uuid-1', 'area-uuid-2', 'no-existe'] } },
+      select: { id: true, name: true, isActive: true },
+    });
+    expect(result).toEqual([
+      { id: 'area-uuid-1', name: 'Ventas', isActive: true },
+      { id: 'area-uuid-2', name: 'Archivo', isActive: false },
+    ]);
+  });
+
+  it('findByIds no consulta Prisma cuando la lista está vacía', async () => {
+    await expect(directory.findByIds([])).resolves.toEqual([]);
+    expect(mockPrisma.area.findMany).not.toHaveBeenCalled();
+  });
+
+  it('findByIds traduce fallas de conexión sin simular una lista vacía', async () => {
+    mockPrisma.area.findMany.mockRejectedValue(createPrismaRequestError('P1001'));
+    await expect(directory.findByIds(['area-uuid-1'])).rejects.toThrow(
+      RepositoryUnavailableError,
+    );
+  });
+
   it('devuelve los IDs existentes de entre los solicitados', async () => {
     mockPrisma.area.findMany.mockResolvedValue([
       { id: 'area-uuid-1' },

@@ -49,6 +49,7 @@ describe('PrismaUsersDirectory', () => {
     });
     expect(result).toEqual({
       id: 'user-uuid-1',
+      name: 'Test User',
       role: 'EMPLOYEE',
       isActive: true,
       areaIds: ['area-uuid-1', 'area-uuid-2'],
@@ -69,6 +70,7 @@ describe('PrismaUsersDirectory', () => {
 
     expect(result).toEqual({
       id: 'admin-uuid-1',
+      name: 'Admin User',
       role: 'ADMIN',
       isActive: true,
       areaIds: [],
@@ -86,6 +88,7 @@ describe('PrismaUsersDirectory', () => {
 
     await expect(directory.findById('user-inactivo')).resolves.toEqual({
       id: 'user-inactivo',
+      name: 'Usuario histórico',
       role: 'EMPLOYEE',
       isActive: false,
       areaIds: ['area-uuid-1'],
