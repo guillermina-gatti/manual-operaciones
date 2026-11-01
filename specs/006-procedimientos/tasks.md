@@ -130,10 +130,10 @@ Convenciones:
 
 ### T13b · Áreas inactivas (R11, P13)
 
-- **Qué hace:** reemplaza `AreasDirectory` en procedimientos por un puerto propio, `ProcedureAreasCatalog`, con su adaptador en memoria y su adaptador Prisma (solo lee `areas`: id e `isActive`). El servicio rechaza con 400 las áreas inactivas que el procedimiento no tenía y deja conservar las que ya tenía; el módulo y el Swagger del 400 se actualizan.
+- **Qué hace:** usa `AreasDirectory.findByIds` (A-13, PR #30) para saber si las áreas existen y si están activas, en lugar de `findExistingIds`; no crea puerto propio ni modifica el de la Pareja A. El servicio rechaza con 400 las áreas inactivas que el procedimiento no tenía y deja conservar las que ya tenía; el módulo y el Swagger del 400 se actualizan.
 - **Cubre:** R11; E35, E36, E37, E38; P13, P19, P20; D17.
-- **Archivos:** `src/procedures/procedure-areas.catalog.ts`, `in-memory-procedure-areas.catalog.ts`, `prisma-procedure-areas.catalog.ts`, `procedure-areas.service.ts`, `procedures.module.ts`, `procedures.controller.ts` (solo el texto del 400), `prisma-procedures.repository.ts` (solo exporta `isUnavailable`) y sus `.spec.ts`; `test/procedures/area-helpers.ts`, `areas.e2e-spec.ts` y `areas.catalog.e2e-spec.ts`.
-- **Verificación, test primero:** inactiva nueva → 400 sin llamar al repositorio; inactiva que ya tenía → se guarda; quitarla → válido; volver a agregarla → 400; procedimiento inexistente con inactiva → 400 y no 404; "no existe" gana sobre "inactiva" en el mensaje; catálogo o base caídos → 503. Las áreas inactivas de los e2e se crean y se borran dentro de cada test, sin tocar el seed ni las fixtures. No se modifica código de otras parejas. Los e2e los corre Micaela.
+- **Archivos:** `src/procedures/procedure-areas.service.ts`, `procedures.module.ts` y `procedures.controller.ts` (solo el texto del 400) y sus `.spec.ts`; `test/procedures/area-helpers.ts` y `areas.e2e-spec.ts`.
+- **Verificación, test primero:** inactiva nueva → 400 sin llamar al repositorio; inactiva que ya tenía → se guarda; quitarla → válido; volver a agregarla → 400; procedimiento inexistente con inactiva → 400 y no 404; "no existe" gana sobre "inactiva" en el mensaje; directorio de áreas o base caídos → 503. Las áreas inactivas de los e2e se crean y se borran dentro de cada test, sin tocar el seed ni las fixtures. No se modifica código de otras parejas. Los e2e los corre Micaela.
 
 ---
 

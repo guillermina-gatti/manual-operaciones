@@ -103,10 +103,7 @@ Las áreas se leen de `UsersDirectory` en cada pedido (R15). El ADMIN no las nec
 apps/api/src/procedures/
   procedures.module.ts            procedures.controller.ts
   procedure.service.ts            procedure-draft.service.ts   (borradores y pasos)
-  procedure-areas.service.ts      (asignación de áreas)
-  procedure-areas.catalog.ts      (puerto: existencia y estado de las áreas, D17)
-  in-memory-procedure-areas.catalog.ts   prisma-procedure-areas.catalog.ts
-  procedure-access.policy.ts      step-order.ts                (funciones puras de orden)
+  procedure-areas.service.ts      (asignación de áreas)  procedure-access.policy.ts      step-order.ts                (funciones puras de orden)
   procedures.repository.ts        prisma-procedures.repository.ts
   http-errors.ts
   dto/        create-procedure, update-version, create-step, update-step,
@@ -116,7 +113,7 @@ apps/api/test/procedures/         helpers.ts, indexes, repository y e2e por tema
 specs/006-procedimientos/         spec.md, plan.md, tasks.md
 ```
 
-Cada archivo `.ts` lleva su `.spec.ts` al lado. El módulo usa `{ provide: UsersDirectory, useClass: PrismaUsersDirectory }`, como `ExecutionsModule`; para las áreas, `{ provide: ProcedureAreasCatalog, useClass: PrismaProcedureAreasCatalog }` (D17). `ProceduresModule` se registra en `app.module.ts` (una línea) y, en la última parte, importa `StorageModule`.
+Cada archivo `.ts` lleva su `.spec.ts` al lado. El módulo usa `{ provide: UsersDirectory, useClass: PrismaUsersDirectory }`, como `ExecutionsModule` y `{ provide: AreasDirectory, useClass: PrismaAreasDirectory }` para las áreas (D7, D17). `ProceduresModule` se registra en `app.module.ts` (una línea) y, en la última parte, importa `StorageModule`.
 
 ## 6. Decisiones del plan
 
@@ -126,7 +123,7 @@ Cada archivo `.ts` lleva su `.spec.ts` al lado. El módulo usa `{ provide: Users
 - **D4 · Orden sin huecos.** Agregar, borrar y reordenar pasos ocurre en una transacción con la versión bloqueada. Con `unique(versión, orden)` no deferrable, reordenar se hace en dos pasadas: primero se pasan a órdenes negativos, después a los definitivos. Los identificadores no cambian (R7, R8). La lógica pura (insertar, quitar, validar la lista) vive en `step-order.ts`.
 - **D5 · Copia al crear borrador.** Todo en una transacción: crear la versión, copiar los pasos con `randomUUID()` nuevos y, en la última parte, los adjuntos (R4, R23).
 - **D6 · Borrado.** `DELETE` de una versión `DRAFT` en una transacción; si era la única, se borra también el procedimiento (cascada de pasos y áreas). Una versión que no es `DRAFT` responde 409 antes de tocar nada (R9, R10).
-- **D7 · Puertos ajenos.** Se reutiliza `UsersDirectory` de `documents/ports`. `AreasDirectory` ya no se usa en procedimientos: solo comprueba existencia, y el estado de las áreas se lee con un puerto propio (D17). No se modifica ninguno de los dos puertos.
+- **D7 · Puertos ajenos.** Se reutilizan `UsersDirectory` y `AreasDirectory` de `documents/ports`. El directorio de áreas valida que existan y dice si están activas con `findByIds` (R11, D17); no se modifica ninguno de los dos.
 - **D8 · Errores y códigos propios.** Mi `http-errors.ts` y mi copia de los códigos de Prisma que significan "base caída" (`P1000`, `P1001`, `P1002`, `P1008`, `P1017`, `P2024`, `P2028` y el corte de `pg`). Quedan duplicados con los de `documents` y `executions`; se propone extraerlos más adelante, sin tocar el código de otros ahora.
 - **D9 · Paginación propia.** `ListProceduresQuery` (`page` por defecto 1, `limit` por defecto 20, máximo 100) con las mismas reglas que la de documentos, sin importarla.
 - **D10 · Respuestas.** Mapeo campo por campo: no se devuelven `ownerId` ni claves de almacenamiento. Las fechas, en ISO 8601 UTC.
@@ -136,7 +133,7 @@ Cada archivo `.ts` lleva su `.spec.ts` al lado. El módulo usa `{ provide: Users
 - **D14 · Datos de demostración.** El seed de HU41 va a reutilizar los UUID de procedimientos de Mayra (`1a…`, `1b…`, `1c…`).
 - **D15 · Reemplazo de áreas.** `setAreas(procedureId, areaIds)` del repositorio corre en una transacción: bloquea la fila del procedimiento (`FOR UPDATE`), borra sus áreas y inserta las nuevas; si el procedimiento no existe devuelve `null` y no escribe. El bloqueo evita que dos pedidos simultáneos choquen en la clave compuesta; gana el último. El servicio vive en `procedure-areas.service.ts` y no en el de borradores, que solo depende del repositorio. `http-errors.ts` también traduce el `RepositoryUnavailableError` del directorio a 503 (P19).
 - **D16 · Login real en los tests.** Con el login de la Pareja A (`JwtAuthGuard` con Bearer), los tests de procedimientos se adaptan igual que los de Mayra y sin tocar código ajeno. Los specs de controlador usan `realAuthProviders()`, `bearer()` y `SPEC_USERS` de `test/executions/real-auth.ts`. El spec del módulo hace `overrideGuard(JwtAuthGuard)`, porque el `AuthModule` global no está en juego ahí. Los e2e firman los tokens con `signTestJwt` de `test/auth/helpers.ts`. Swagger pasa de `x-user-*` a Bearer (`@ApiBearerAuth()`). No hay cambio de comportamiento.
-- **D17 · Áreas inactivas con puerto propio.** `ProcedureAreasCatalog.findStates(ids)` devuelve `{ id, isActive }` de las áreas que existen. Su adaptador Prisma solo lee `areas` (id e `isActive`) y nunca escribe. Se usa un puerto propio porque `AreasDirectory` (Documentos) solo comprueba existencia y A-06.2 pide no cambiar su firma, y porque `AreasModule` no exporta `AreasService`. "Ya la tenía" se decide en el servicio con las áreas actuales del procedimiento (`findById`), y solo si el pedido trae alguna inactiva. Entre esa lectura y el reemplazo hay una ventana mínima en la que otro ADMIN podría cambiar el conjunto: límite aceptado (solo ADMIN, caso raro); la transacción de `setAreas` sigue protegiendo la integridad.
+- **D17 · Áreas inactivas con `AreasDirectory.findByIds`.** El puerto de la Pareja A que ya usa Documentos, ampliado en A-13 (PR #30), devuelve `{ id, name, isActive }` de las áreas que existen, activas o inactivas, y omite las inexistentes; `findExistingIds` se conserva. Procedimientos lo usa tal cual, sin puerto propio ni consulta propia a `areas`, y sin modificarlo. La regla sigue `docs/contracts/permissions-matrix.md` (línea 95: agregar un área inactiva es 400, igual que una inexistente; la referencia histórica ya asociada se conserva) y A-06.2. "Ya la tenía" se decide en el servicio con las áreas actuales del procedimiento (`findById`), y solo si el pedido trae alguna inactiva. Entre esa lectura y el reemplazo hay una ventana mínima en la que otro ADMIN podría cambiar el conjunto: límite aceptado (solo ADMIN, caso raro); la transacción de `setAreas` sigue protegiendo la integridad.
 
 ## 7. Contrato con ejecuciones (para HU32)
 
@@ -176,5 +173,5 @@ Cada tarea es un commit con el alcance `procedures` (por ejemplo, `feat(procedur
 - **Mayra (ejecuciones):** `PUT /api/procedures/:id/areas` reemplaza el conjunto de áreas y rige desde el pedido siguiente (R12). El adaptador real de `ProceduresCatalog` leerá `procedure_areas` en el momento, así que `areaIds` es siempre el conjunto actual, también para versiones viejas. Ese adaptador sale con HU32; hasta entonces el catálogo en memoria sigue en `executions.module.ts`.
 - **Pareja C (chat):** HU10 no cambia ni borra ids de versiones ni de pasos. Para `procedureVersionId` y `stepId` conviene guardar versiones publicadas: un borrador y sus pasos pueden borrarse (R10).
 - **Contrato 3 (`getStepContext`):** el modelo ya tiene el paso, la versión, el título, las áreas y el responsable (`ownerId`). Faltan el método del servicio, que reutiliza la política de acceso, y el nombre y el email del responsable, que dependen del directorio de la Pareja A.
-- **Pareja A (áreas):** HU10 lee `areas.id` y `areas.isActive` con un puerto propio (`ProcedureAreasCatalog`) y nunca escribe. No usa `AreasService` ni `AreasDirectory`. La regla de las inactivas sigue A-06.2.
+- **Pareja A (áreas):** HU10 usa `AreasDirectory.findByIds` (A-13) solo para leer; no usa `AreasService` ni modifica el puerto. La regla de las áreas inactivas sigue `permissions-matrix.md` (línea 95) y A-06.2.
 - **A confirmar con A y C:** el guard excluye las áreas inactivas de `user.areaIds` (`jwt-auth.guard.ts`, líneas 73 a 78), pero `PrismaUsersDirectory.findById` no las filtra. Para HU11 y para ejecuciones, esa diferencia decide si un empleado con un área inactiva ve los procedimientos de esa área. No se modifica código ajeno: se acuerda la regla y cada uno la aplica en lo suyo (P20).
