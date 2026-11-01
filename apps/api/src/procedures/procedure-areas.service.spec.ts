@@ -8,7 +8,8 @@ import {
 } from '@nestjs/common';
 import { SPEC_USERS } from '../../test/executions/real-auth';
 import type { AuthUser } from '../common/auth';
-import type { ProcedureAreasCatalog } from './procedure-areas.catalog';
+import { RepositoryUnavailableError } from '../documents/documents.repository';
+import type { AreasDirectory } from '../documents/ports/areas-directory';
 import { ProcedureAreasService } from './procedure-areas.service';
 import { ProceduresRepositoryUnavailableError } from './procedures.repository';
 import type {
@@ -28,25 +29,25 @@ const INACTIVA = '0a000000-0000-4000-8000-000000000003';
 const OTRA_INACTIVA = '0a000000-0000-4000-8000-000000000004';
 const MISSING_AREA = '0a000000-0000-4000-8000-000000000099';
 
-const active = (id: string) => ({ id, isActive: true });
-const inactive = (id: string) => ({ id, isActive: false });
+const active = (id: string) => ({ id, name: `Área ${id}`, isActive: true });
+const inactive = (id: string) => ({ id, name: `Área ${id}`, isActive: false });
 const procedureWith = (areaIds: string[]) => ({ areaIds }) as ProcedureRecord;
 
 describe('ProcedureAreasService', () => {
   let repository: { setAreas: jest.Mock; findById: jest.Mock };
-  let areas: { findStates: jest.Mock };
+  let areas: { findByIds: jest.Mock };
   let loggerError: jest.SpyInstance;
   let service: ProcedureAreasService;
 
   beforeEach(() => {
     repository = { setAreas: jest.fn(), findById: jest.fn() };
-    areas = { findStates: jest.fn() };
+    areas = { findByIds: jest.fn() };
     loggerError = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => {});
     service = new ProcedureAreasService(
       repository as unknown as ProceduresRepository,
-      areas as unknown as ProcedureAreasCatalog,
+      areas as unknown as AreasDirectory,
     );
   });
 
@@ -65,20 +66,20 @@ describe('ProcedureAreasService', () => {
           service.setAreas(user, PROCEDURE_ID, [VENTAS]),
         ).rejects.toBeInstanceOf(ForbiddenException);
 
-        expect(areas.findStates).not.toHaveBeenCalled();
+        expect(areas.findByIds).not.toHaveBeenCalled();
         expect(repository.setAreas).not.toHaveBeenCalled();
       },
     );
 
     it('R11: with active areas it saves the set without reading the procedure', async () => {
-      areas.findStates.mockResolvedValue([active(VENTAS), active(OPERACIONES)]);
+      areas.findByIds.mockResolvedValue([active(VENTAS), active(OPERACIONES)]);
       repository.setAreas.mockResolvedValue([VENTAS, OPERACIONES]);
 
       await expect(
         service.setAreas(ADMIN, PROCEDURE_ID, [VENTAS, OPERACIONES]),
       ).resolves.toEqual([VENTAS, OPERACIONES]);
 
-      expect(areas.findStates).toHaveBeenCalledWith([VENTAS, OPERACIONES]);
+      expect(areas.findByIds).toHaveBeenCalledWith([VENTAS, OPERACIONES]);
       expect(repository.findById).not.toHaveBeenCalled();
       expect(repository.setAreas).toHaveBeenCalledWith(PROCEDURE_ID, [
         VENTAS,
@@ -87,7 +88,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('E18: an area that does not exist is 400 and nothing is saved', async () => {
-      areas.findStates.mockResolvedValue([active(VENTAS)]);
+      areas.findByIds.mockResolvedValue([active(VENTAS)]);
 
       const error = await service
         .setAreas(ADMIN, PROCEDURE_ID, [VENTAS, MISSING_AREA])
@@ -101,7 +102,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('E35: a new inactive area is 400 and nothing is saved', async () => {
-      areas.findStates.mockResolvedValue([active(VENTAS), inactive(INACTIVA)]);
+      areas.findByIds.mockResolvedValue([active(VENTAS), inactive(INACTIVA)]);
       repository.findById.mockResolvedValue(procedureWith([VENTAS]));
 
       const error = await service
@@ -116,7 +117,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('E36: an inactive area the procedure already had is kept', async () => {
-      areas.findStates.mockResolvedValue([
+      areas.findByIds.mockResolvedValue([
         active(VENTAS),
         inactive(INACTIVA),
         active(OPERACIONES),
@@ -135,7 +136,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('E36: keeping one inactive area and adding another inactive one is 400', async () => {
-      areas.findStates.mockResolvedValue([
+      areas.findByIds.mockResolvedValue([
         inactive(INACTIVA),
         inactive(OTRA_INACTIVA),
       ]);
@@ -148,7 +149,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('E37: removing the inactive area does not need to read the procedure', async () => {
-      areas.findStates.mockResolvedValue([active(VENTAS)]);
+      areas.findByIds.mockResolvedValue([active(VENTAS)]);
       repository.setAreas.mockResolvedValue([VENTAS]);
 
       await expect(
@@ -158,7 +159,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('E38: an inactive area for a procedure that does not exist is 400 and not 404', async () => {
-      areas.findStates.mockResolvedValue([inactive(INACTIVA)]);
+      areas.findByIds.mockResolvedValue([inactive(INACTIVA)]);
       repository.findById.mockResolvedValue(null);
 
       await expect(
@@ -168,7 +169,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('E38: with one area missing and another inactive the message says it does not exist', async () => {
-      areas.findStates.mockResolvedValue([inactive(INACTIVA)]);
+      areas.findByIds.mockResolvedValue([inactive(INACTIVA)]);
 
       const error = await service
         .setAreas(ADMIN, PROCEDURE_ID, [INACTIVA, MISSING_AREA])
@@ -186,12 +187,12 @@ describe('ProcedureAreasService', () => {
         [],
       );
 
-      expect(areas.findStates).not.toHaveBeenCalled();
+      expect(areas.findByIds).not.toHaveBeenCalled();
       expect(repository.setAreas).toHaveBeenCalledWith(PROCEDURE_ID, []);
     });
 
     it('is 404 when the procedure does not exist and the areas are fine', async () => {
-      areas.findStates.mockResolvedValue([active(VENTAS)]);
+      areas.findByIds.mockResolvedValue([active(VENTAS)]);
       repository.setAreas.mockResolvedValue(null);
 
       const error = await service
@@ -205,7 +206,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('P19: with an area that does not exist the answer is 400 even if the procedure is missing too', async () => {
-      areas.findStates.mockResolvedValue([]);
+      areas.findByIds.mockResolvedValue([]);
       repository.setAreas.mockResolvedValue(null);
 
       await expect(
@@ -213,9 +214,9 @@ describe('ProcedureAreasService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('503 when the areas catalog is down', async () => {
-      areas.findStates.mockRejectedValue(
-        new ProceduresRepositoryUnavailableError('catálogo caído'),
+    it('503 when the areas directory is down', async () => {
+      areas.findByIds.mockRejectedValue(
+        new RepositoryUnavailableError('directorio caído'),
       );
 
       await expect(
@@ -225,7 +226,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('503 when the procedure cannot be read to compare its areas', async () => {
-      areas.findStates.mockResolvedValue([inactive(INACTIVA)]);
+      areas.findByIds.mockResolvedValue([inactive(INACTIVA)]);
       repository.findById.mockRejectedValue(
         new ProceduresRepositoryUnavailableError('base caída'),
       );
@@ -236,7 +237,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('503 when the repository is down', async () => {
-      areas.findStates.mockResolvedValue([active(VENTAS)]);
+      areas.findByIds.mockResolvedValue([active(VENTAS)]);
       repository.setAreas.mockRejectedValue(
         new ProceduresRepositoryUnavailableError('base caída'),
       );
@@ -247,7 +248,7 @@ describe('ProcedureAreasService', () => {
     });
 
     it('500 on an unexpected error, with the cause in the log and not in the response', async () => {
-      areas.findStates.mockResolvedValue([active(VENTAS)]);
+      areas.findByIds.mockResolvedValue([active(VENTAS)]);
       repository.setAreas.mockRejectedValue(new Error('secret detail'));
 
       const error = await service
