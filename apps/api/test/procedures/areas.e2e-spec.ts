@@ -8,6 +8,7 @@ import {
   authHeaders,
   createProceduresTestApp,
 } from './app-helpers';
+import { createArea, deleteAreas } from './area-helpers';
 import { cleanProcedures, seedProcedure } from './helpers';
 
 const { ventas: VENTAS, operaciones: OPERACIONES } = AREA_IDS;
@@ -31,8 +32,21 @@ describe('Procedures: areas (integration)', () => {
       })
     ).map((row) => row.areaId);
 
+  // The inactive areas of these tests: created here and removed after each test, so the seed and
+  // the fixtures of the other teams are never touched.
+  const createdAreas: string[] = [];
+  const newArea = async (isActive: boolean) => {
+    const id = await createArea(t.prisma, isActive);
+    createdAreas.push(id);
+    return id;
+  };
+
   beforeAll(async () => {
     t = await createProceduresTestApp();
+  });
+
+  afterEach(async () => {
+    await deleteAreas(t.prisma, createdAreas.splice(0));
   });
 
   afterAll(async () => {
@@ -157,5 +171,76 @@ describe('Procedures: areas (integration)', () => {
 
     expect(await storedAreas(seeded.procedureId)).toEqual([OPERACIONES]);
     expect(await versions()).toEqual(before);
+  });
+
+  it('E35: a new inactive area is 400 and the procedure stays in Ventas', async () => {
+    const inactive = await newArea(false);
+    const { procedureId } = await seedProcedure(t.prisma, {
+      areaIds: [VENTAS],
+      versions: [{ versionNumber: 1, status: 'DRAFT' }],
+    });
+
+    const response = await put(procedureId, [VENTAS, inactive])
+      .set(admin)
+      .expect(400);
+
+    expect(response.body.message).toBe('Alguna de las áreas está inactiva');
+    expect(await storedAreas(procedureId)).toEqual([VENTAS]);
+  });
+
+  it('E36: an inactive area the procedure already had is kept, and the versions do not change', async () => {
+    const inactive = await newArea(false);
+    const seeded = await seedProcedure(t.prisma, {
+      areaIds: [VENTAS, inactive],
+      versions: [
+        { versionNumber: 1, status: 'PUBLISHED', stepTitles: ['A', 'B'] },
+        { versionNumber: 2, status: 'DRAFT', stepTitles: ['A', 'B', 'C'] },
+      ],
+    });
+    const versions = () =>
+      t.prisma.procedureVersion.findMany({
+        where: { procedureId: seeded.procedureId },
+        orderBy: { versionNumber: 'asc' },
+        include: { steps: { orderBy: { stepOrder: 'asc' } } },
+      });
+    const before = await versions();
+
+    const response = await put(seeded.procedureId, [
+      VENTAS,
+      inactive,
+      OPERACIONES,
+    ])
+      .set(admin)
+      .expect(200);
+
+    const expected = [VENTAS, inactive, OPERACIONES].sort();
+    expect([...response.body.areaIds].sort()).toEqual(expected);
+    expect(await storedAreas(seeded.procedureId)).toEqual(expected);
+    expect(await versions()).toEqual(before);
+  });
+
+  it('E37: the inactive area can be removed, and then it cannot be added back', async () => {
+    const inactive = await newArea(false);
+    const { procedureId } = await seedProcedure(t.prisma, {
+      areaIds: [VENTAS, inactive],
+      versions: [{ versionNumber: 1, status: 'DRAFT' }],
+    });
+
+    await put(procedureId, [VENTAS]).set(admin).expect(200);
+    expect(await storedAreas(procedureId)).toEqual([VENTAS]);
+
+    await put(procedureId, [VENTAS, inactive]).set(admin).expect(400);
+    expect(await storedAreas(procedureId)).toEqual([VENTAS]);
+  });
+
+  it('E38: an inactive area for a procedure that does not exist is 400 and not 404', async () => {
+    const inactive = await newArea(false);
+
+    await put(randomUUID(), [inactive]).set(admin).expect(400);
+
+    const response = await put(randomUUID(), [inactive, randomUUID()])
+      .set(admin)
+      .expect(400);
+    expect(response.body.message).toBe('Alguna de las áreas no existe');
   });
 });
