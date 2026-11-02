@@ -2,8 +2,6 @@
 
 // A-08b: estado real aislado del selector de desarrollo. A-10a activará este proveedor.
 // El access token vive solamente en memoria. La cookie httpOnly la administra la API.
-// IMPORTANTE: no se restaura identidad tras recargar hasta que A-06.5 se implemente
-// en el backend: el refresh actual devuelve solo { accessToken }, no el usuario.
 import { createContext, useContext, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { login, logout, refresh } from '@/lib/auth/auth-client';
@@ -17,6 +15,7 @@ let accessToken: string | null = null;
 let generation = 0;
 let initialized = false;
 let refreshing: Promise<boolean> | null = null;
+let restoring: Promise<void> | null = null;
 let entering: Promise<SessionUser> | null = null;
 let leaving: Promise<void> | null = null;
 const listeners = new Set<() => void>();
@@ -42,14 +41,54 @@ function tokenSubject(jwt: string): string | null {
 }
 
 /**
- * Estado inicial conservador: sin guardar usuario en localStorage ni leer fixtures.
- * A-06.5 deberá proveer {accessToken,user} en refresh para restaurar al recargar.
+ * Restaura la sesión mediante POST /api/auth/refresh (A-06.5).
+ * Deduplica llamadas concurrentes y protege contra interferencia con login/logout.
  */
-export async function restoreSession(): Promise<void> {
-  generation += 1;
-  accessToken = null;
-  initialized = true;
-  update(EMPTY_SESSION);
+export function restoreSession(): Promise<void> {
+  if (restoring) return restoring;
+
+  const currentGeneration = ++generation;
+  // Iniciar la promesa de refresh sincrónicamente para evitar demoras por microtasks
+  const refreshPromise = refresh();
+
+  const task = (async (): Promise<void> => {
+    // Si hay un logout en curso, esperar que termine para no revivir la sesión.
+    await leaving?.catch(() => undefined);
+    if (currentGeneration !== generation) return;
+
+    try {
+      const result = await refreshPromise;
+      if (currentGeneration !== generation) return;
+
+      // Validación de consistencia: el sub del JWT debe coincidir con el user.id recibido
+      if (tokenSubject(result.accessToken) !== result.user.id) {
+        accessToken = null;
+        update(EMPTY_SESSION);
+        return;
+      }
+
+      accessToken = result.accessToken;
+      const user: SessionUser = {
+        id: result.user.id,
+        name: result.user.name,
+        role: result.user.role,
+      };
+      update({ user, status: 'ready' });
+    } catch {
+      if (currentGeneration !== generation) return;
+      accessToken = null;
+      // Tanto ante 401 como ante fallas de red/servidor, la sesión no queda colgada
+      // en 'loading' y finaliza su ciclo de inicialización.
+      update(EMPTY_SESSION);
+    }
+  })();
+
+  restoring = task;
+  void task.finally(() => {
+    initialized = true;
+    if (restoring === task) restoring = null;
+  }).catch(() => undefined);
+  return task;
 }
 
 /** Login real. El token queda en RAM; los datos visibles provienen del backend. */
@@ -106,6 +145,13 @@ export function refreshSession(): Promise<boolean> {
         return false;
       }
       accessToken = result.accessToken;
+      // Actualiza rol o nombre si el backend devolvió cambios en la rotación
+      const user: SessionUser = {
+        id: result.user.id,
+        name: result.user.name,
+        role: result.user.role,
+      };
+      update({ user, status: 'ready' });
       return true;
     } catch {
       if (currentGeneration === generation) {
@@ -130,11 +176,13 @@ export function logoutSession(): Promise<void> {
   update(EMPTY_SESSION);
   const loginPending = entering;
   const refreshPending = refreshing;
+  const restorePending = restoring;
   const task = (async (): Promise<void> => {
     // Si ya había una solicitud iniciada, esperar que termine antes de revocar
     // para impedir que una respuesta tardía deje una cookie nueva tras el logout.
     await loginPending?.catch(() => undefined);
     await refreshPending?.catch(() => undefined);
+    await restorePending?.catch(() => undefined);
     await logout();
   })();
   leaving = task;
@@ -147,6 +195,18 @@ export function logoutSession(): Promise<void> {
 /** Cabeceras que consumirá lib/api/index.ts al activar el proveedor en A-10a. */
 export function getAuthHeaders(): Record<string, string> {
   return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+}
+
+/** Permite a los tests restablecer el estado del módulo. */
+export function __resetSessionForTests(): void {
+  snapshot = SERVER_SNAPSHOT;
+  accessToken = null;
+  generation = 0;
+  initialized = false;
+  refreshing = null;
+  restoring = null;
+  entering = null;
+  leaving = null;
 }
 
 function subscribe(listener: () => void): () => void {

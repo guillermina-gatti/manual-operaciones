@@ -52,10 +52,16 @@ describe('A-08a: cliente de autenticación', () => {
     expect(sessionStorage.length).toBe(0);
   });
 
-  test('refresh solicita rotación de cookie y recibe el accessToken actual sin asumir A-06.5', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { accessToken: 'nuevo-jwt' }));
+  test('refresh solicita rotación de cookie y recibe el accessToken y user según A-06.5', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, {
+      accessToken: 'nuevo-jwt',
+      user: sampleUser,
+    }));
 
-    await expect(refresh()).resolves.toEqual({ accessToken: 'nuevo-jwt' });
+    await expect(refresh()).resolves.toEqual({
+      accessToken: 'nuevo-jwt',
+      user: sampleUser,
+    });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/auth/refresh');
     expect(init?.method).toBe('POST');

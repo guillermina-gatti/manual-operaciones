@@ -16,10 +16,10 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
-// Contrato actualmente implementado en develop: el refresh solo devuelve accessToken.
-// A-06.5 propone ampliarlo; no anticipamos esa modificación en esta microtarea.
+// Contrato A-06.5 implementado: refresh devuelve accessToken y user.
 export interface RefreshResponse {
   accessToken: string;
+  user: AuthUser;
 }
 
 export interface LogoutResponse {
@@ -117,13 +117,17 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return { accessToken: response.accessToken, user: response.user };
 }
 
-/** Rota la cookie y devuelve el JWT nuevo. A-08b serializará llamadas concurrentes. */
+/** Rota la cookie y devuelve el JWT nuevo y usuario vigente (A-06.5). */
 export async function refresh(): Promise<RefreshResponse> {
   const response = await postAuth('refresh');
-  if (!isRecord(response) || !isNonEmptyString(response.accessToken)) {
+  if (
+    !isRecord(response) ||
+    !isNonEmptyString(response.accessToken) ||
+    !isAuthUser(response.user)
+  ) {
     throw new AuthClientError(0, 'La respuesta del servidor no es válida.');
   }
-  return { accessToken: response.accessToken };
+  return { accessToken: response.accessToken, user: response.user };
 }
 
 /** Revoca la sesión del servidor; la limpieza del estado local corresponde a A-08b. */
