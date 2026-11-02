@@ -67,6 +67,9 @@ export class RefreshHttpResponse {
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   accessToken!: string;
+
+  @ApiProperty({ type: AuthUserSummaryResponse })
+  user!: AuthUserSummaryResponse;
 }
 
 export class LogoutHttpResponse implements LogoutResult {
@@ -168,6 +171,7 @@ export class AuthController {
 
     return {
       accessToken: result.accessToken,
+      user: result.user,
     };
   }
 

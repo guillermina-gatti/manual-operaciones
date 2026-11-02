@@ -41,6 +41,7 @@ export interface LoginResult {
 export interface RefreshResult {
   accessToken: string;
   refreshToken: string;
+  user: AuthUserSummary;
 }
 
 export interface LogoutResult {
@@ -223,6 +224,12 @@ export class AuthService implements OnModuleInit {
     return {
       accessToken,
       refreshToken: rotation.newRefreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     };
   }
 

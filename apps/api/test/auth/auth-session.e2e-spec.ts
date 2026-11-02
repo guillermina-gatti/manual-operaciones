@@ -187,7 +187,15 @@ describe('Auth & Sessions (E2E)', () => {
 
       expect(refreshRes.body).toEqual({
         accessToken: expect.any(String),
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
       });
+      expect(refreshRes.body.passwordHash).toBeUndefined();
+      expect(refreshRes.body.refreshToken).toBeUndefined();
 
       const token2 = extractRefreshTokenCookieValue(refreshRes);
       expect(token2).not.toBe(token1);

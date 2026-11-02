@@ -341,7 +341,55 @@ describe('AuthService', () => {
       expect(result).toEqual({
         accessToken: 'mock-signed-jwt-token',
         refreshToken: newRefreshToken,
+        user: {
+          id: mockUser.id,
+          name: mockUser.name,
+          email: mockUser.email,
+          role: mockUser.role,
+        },
       });
+    });
+
+    it('debe devolver el rol actualizado si el usuario fue modificado en la base de datos', async () => {
+      const rawToken =
+        'validRefreshTokenExampleString123456789012345678901234567890';
+      const newRefreshToken =
+        'newValidRefreshTokenExampleString123456789012345678901234567';
+
+      mockSessionService.rotateSession.mockResolvedValue({
+        status: 'SUCCESS',
+        userId: VALID_USER_ID,
+        newRefreshToken,
+        newSession: {
+          id: 'new-session-id',
+          userId: VALID_USER_ID,
+          tokenHash: 'hash-of-new-token',
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+          isRevoked: false,
+          replacedById: null,
+          createdAt: new Date(),
+          userAgent: null,
+          ipAddress: null,
+        },
+      });
+
+      const updatedUser = {
+        ...mockUser,
+        role: 'ADMIN' as const,
+      };
+      mockPrisma.user.findUnique.mockResolvedValue(updatedUser);
+
+      const result = await service.refresh(rawToken);
+
+      expect(result.user.role).toBe('ADMIN');
+      expect(mockJwtService.signAsync).toHaveBeenCalledWith(
+        {
+          sub: updatedUser.id,
+          email: updatedUser.email,
+          role: 'ADMIN',
+        },
+        expect.any(Object),
+      );
     });
 
     it('debe revocar masivamente las sesiones del usuario ante TOKEN_REUSE_DETECTED y responder 401', async () => {
