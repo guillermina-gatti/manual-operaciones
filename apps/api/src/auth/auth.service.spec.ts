@@ -208,7 +208,7 @@ describe('AuthService', () => {
       });
 
       // No debe exponer hashes internos
-      expect((result.user as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect(result.user).not.toHaveProperty('passwordHash');
       expect(mockRateLimiter.recordFailure).not.toHaveBeenCalled();
     });
 
