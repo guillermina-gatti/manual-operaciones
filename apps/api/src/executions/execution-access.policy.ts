@@ -1,7 +1,7 @@
 /* Who can run a procedure and see an execution (spec 005, CA4) */
 
 // The viewer can execute the procedure if they share at least one area with it.
-// Areas come from UsersDirectory on every request, never from the session.
+// Only the viewer's active areas, read on every request, never from the session (viewer-areas.ts).
 export function canAccessProcedure(
   viewerAreaIds: string[],
   procedureAreaIds: string[],

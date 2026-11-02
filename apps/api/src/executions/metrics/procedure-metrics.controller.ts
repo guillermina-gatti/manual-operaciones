@@ -51,7 +51,7 @@ export class ProcedureMetricsController {
   @ApiResponse({
     status: 503,
     description:
-      'La base, el catálogo de procedimientos o el directorio de usuarios no responden',
+      'La base, el catálogo de procedimientos o los directorios de usuarios y áreas no responden',
   })
   async procedures(
     @Query() query: ProcedureMetricsQueryDto,

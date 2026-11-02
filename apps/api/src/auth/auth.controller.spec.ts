@@ -260,9 +260,17 @@ describe('AuthController', () => {
       const incomingToken = generateRefreshToken();
       const rotatedToken = generateRefreshToken();
 
+      const mockUser = {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'Empleado Prueba',
+        email: 'empleado@empresa.com',
+        role: 'EMPLOYEE' as const,
+      };
+
       mockAuthService.refresh.mockResolvedValue({
         accessToken: 'new-jwt-access-token',
         refreshToken: rotatedToken,
+        user: mockUser,
       });
 
       const req = createMockRequest({
@@ -294,6 +302,7 @@ describe('AuthController', () => {
 
       expect(response).toEqual({
         accessToken: 'new-jwt-access-token',
+        user: mockUser,
       });
       expect(
         (response as unknown as Record<string, unknown>).refreshToken,

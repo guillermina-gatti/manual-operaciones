@@ -1,6 +1,8 @@
 /* Wires the executions feature: which implementation backs each port (spec 005) */
 import { Module } from '@nestjs/common';
+import { PrismaAreasDirectory } from '../documents/adapters/prisma-areas-directory';
 import { PrismaUsersDirectory } from '../documents/adapters/prisma-users-directory';
+import { AreasDirectory } from '../documents/ports/areas-directory';
 import { UsersDirectory } from '../documents/ports/users-directory';
 import { InMemoryProceduresCatalog } from './adapters/in-memory-procedures-catalog';
 import { ExecutionService } from './execution.service';
@@ -28,6 +30,7 @@ import { PrismaExecutionsRepository } from './prisma-executions.repository';
     },
     { provide: ProceduresCatalog, useClass: InMemoryProceduresCatalog }, // until Mica's catalog
     { provide: UsersDirectory, useClass: PrismaUsersDirectory },
+    { provide: AreasDirectory, useClass: PrismaAreasDirectory },
     { provide: ExecutionsRepository, useClass: PrismaExecutionsRepository },
     { provide: Clock, useClass: SystemClock },
   ],

@@ -132,7 +132,7 @@ describe('SessionService', () => {
         userAgent: 'Mozilla/5.0 Test Browser',
         ipAddress: '192.168.1.100',
       });
-      expect((result.session as Record<string, unknown>).tokenHash).toBeUndefined();
+      expect(result.session).not.toHaveProperty('tokenHash');
     });
 
     it('debe aceptar userAgent e ipAddress nulos o indefinidos', async () => {
@@ -242,7 +242,7 @@ describe('SessionService', () => {
         userAgent: 'Browser',
         ipAddress: '127.0.0.1',
       });
-      expect((result as unknown as Record<string, unknown>).tokenHash).toBeUndefined();
+      expect(result).not.toHaveProperty('tokenHash');
     });
 
     it('debe devolver null de forma inmediata si el token no cumple con el formato base64url', async () => {

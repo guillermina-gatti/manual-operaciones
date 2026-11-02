@@ -16,8 +16,10 @@ import { seedDirectoryFixtures } from '../directory-fixtures';
 // from areas. Only exists in the test database (manual_test).
 export const OTRO_EMPLEADO_VENTAS: DirectoryUser = {
   id: '0b000000-0000-4000-8000-000000000099',
+  name: 'Otra Empleada de Ventas',
   role: 'EMPLOYEE',
   areaIds: [AREA_IDS.ventas],
+  isActive: true,
 };
 
 export interface ExecutionsTestApp {
@@ -48,9 +50,9 @@ export async function createExecutionsTestApp(): Promise<ExecutionsTestApp> {
 
 // Idempotent, like seedDirectoryFixtures.
 async function seedSecondVentasEmployee(prisma: PrismaService): Promise<void> {
-  const { id, role, areaIds } = OTRO_EMPLEADO_VENTAS;
+  const { id, name, role, areaIds } = OTRO_EMPLEADO_VENTAS;
   const data = {
-    name: 'Otra Empleada de Ventas',
+    name,
     email: 'otroempleadoventas@executions.test',
     passwordHash: '!fixture-sin-contraseña', // not a bcrypt hash: cannot log in
     role,
