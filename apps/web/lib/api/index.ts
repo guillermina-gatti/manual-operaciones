@@ -28,6 +28,7 @@ export { PAGE_SIZE } from './documents';
 export type {
   ChangeAreasValues,
   DocumentListResponse,
+  DocumentReference,
   DocumentResponse,
   DocumentReview,
   DocumentSearchResponse,

@@ -14,8 +14,6 @@ import {
   listDocuments,
   useApiResource,
 } from '@/lib/api';
-import { areasDirectory, usersDirectory } from '@/lib/directory';
-import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
 import { parseSearchParam } from '@/lib/documents/search-rules';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
@@ -86,16 +84,6 @@ function DocumentListing() {
   // La clave incluye al usuario: al cambiar de usuario de prueba se vuelve a pedir.
   const documents = useApiResource(user ? `documents?page=${page}&user=${user.id}` : null, (signal) =>
     listDocuments(page, signal),
-  );
-
-  // Nombres de áreas y responsables: una vez por página, no por tarjeta (la API manda solo IDs, Q1).
-  const areas = useApiResource(user ? 'areas' : null, () => areasDirectory.listAreas());
-  const ownerIds =
-    documents.status === 'success'
-      ? [...new Set(documents.data.data.map((document) => document.ownerId))]
-      : [];
-  const owners = useApiResource(ownerIds.length > 0 ? `owners:${ownerIds.join(',')}` : null, () =>
-    usersDirectory.getNames(ownerIds),
   );
 
 if (status === 'loading') return LOADING;
@@ -174,11 +162,7 @@ if (!user) {
     );
   }
 
-  // Se espera a los nombres para no mostrar "—" un instante; si fallan, las tarjetas igual se muestran.
-  if (areas.status === 'loading' || owners.status === 'loading') return LOADING;
-  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
-  const ownerNames = owners.status === 'success' ? owners.data : {};
-
+  // Spec 008 (F1): los nombres del responsable y de las áreas vienen en cada documento.
   return (
     <div className="flex flex-col gap-6">
       {isAdmin && (
@@ -192,12 +176,7 @@ if (!user) {
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((document) => (
           <li key={document.id} className="min-w-0">
-            <DocumentCard
-              document={document}
-              areaNames={areaNames}
-              ownerName={ownerNames[document.ownerId]}
-              isAdmin={isAdmin}
-            />
+            <DocumentCard document={document} isAdmin={isAdmin} />
           </li>
         ))}
       </ul>

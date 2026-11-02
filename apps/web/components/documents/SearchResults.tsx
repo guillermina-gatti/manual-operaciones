@@ -5,8 +5,6 @@
 import Link from 'next/link';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { PAGE_SIZE, describeApiError, searchDocuments, useApiResource } from '@/lib/api';
-import { areasDirectory, usersDirectory } from '@/lib/directory';
-import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { pageCount } from '@/lib/documents/pagination';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
@@ -35,17 +33,6 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
   const results = useApiResource(
     `search?q=${encodeURIComponent(query)}&page=${page}&user=${userId}`,
     (signal) => searchDocuments(query, page, signal),
-  );
-
-  // Nombres de áreas y responsables, una vez por página, como en el listado (la API manda solo IDs).
-  const areas = useApiResource('areas', () => areasDirectory.listAreas());
-  const ownerIds =
-    results.status === 'success'
-      ? [...new Set(results.data.data.map((result) => result.ownerId))]
-      : [];
-  const owners = useApiResource(
-    ownerIds.length > 0 ? `owners:${ownerIds.join(',')}` : null,
-    () => usersDirectory.getNames(ownerIds),
   );
 
   if (results.status === 'loading' || results.status === 'idle') return SEARCHING;
@@ -89,11 +76,7 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
     );
   }
 
-  // Se espera a los nombres para no mostrar "—" un instante; si fallan, las tarjetas igual se muestran.
-  if (areas.status === 'loading' || owners.status === 'loading') return SEARCHING;
-  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
-  const ownerNames = owners.status === 'success' ? owners.data : {};
-
+  // Spec 008 (F1, P2): los nombres vienen en cada resultado, como en el listado.
   return (
     <div className="flex flex-col gap-6">
       <p aria-live="polite" className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -103,12 +86,7 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((result) => (
           <li key={result.id} className="min-w-0">
-            <SearchResultCard
-              result={result}
-              areaNames={areaNames}
-              ownerName={ownerNames[result.ownerId]}
-              isAdmin={isAdmin}
-            />
+            <SearchResultCard result={result} isAdmin={isAdmin} />
           </li>
         ))}
       </ul>

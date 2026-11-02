@@ -152,13 +152,25 @@ function describeConflict(error: ApiError, context: ErrorContext): ErrorDescript
   }
 }
 
+// Spec 008 (F7): los rechazos por responsable o área inactivos (R5, R7) tienen su propio texto; los
+// demás 400 de esos campos siguen con el de FIELD_MESSAGES.
+const INACTIVE_MESSAGES: ReadonlyArray<readonly [string, string]> = [
+  ['ownerId: el responsable está inactivo', 'El responsable está inactivo. Elegí otro.'],
+  [
+    'areaIds: están inactivas las áreas',
+    'Hay áreas inactivas entre las que agregaste. Sacalas para guardar.',
+  ],
+];
+
 // Cada texto de la API empieza con el nombre del campo ("title must…", "ownerId: …").
 // La excepción conocida es "Falta el archivo o está vacío", que nombra el archivo sin el campo.
 function describeUploadBadRequest(apiMessages: string[]): ErrorDescription {
   const fieldErrors: ErrorDescription['fieldErrors'] = {};
   for (const text of apiMessages) {
     const field = fieldOf(text);
-    if (field) fieldErrors[field] = FIELD_MESSAGES[field];
+    if (!field) continue;
+    const inactive = INACTIVE_MESSAGES.find(([prefix]) => text.startsWith(prefix));
+    fieldErrors[field] = inactive?.[1] ?? FIELD_MESSAGES[field];
   }
 
   const hasFields = Object.keys(fieldErrors).length > 0;

@@ -6,6 +6,7 @@ import { PendingReviewList } from '@/components/documents/PendingReviewList';
 import { ApiError } from '@/lib/api';
 import type { DocumentSummary, PendingReviewResponse, ReviewStatus } from '@/lib/api';
 import type { SessionState } from '@/lib/session';
+import { personRef, referencesOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   listPendingReview: vi.fn(),
@@ -49,10 +50,11 @@ function doc(n: number, reviewDate: string, status: ReviewStatus): DocumentSumma
     status: 'ACTIVE',
     areaIds: [VENTAS],
     ownerId: ELENA,
+    ...referencesOf(ELENA, [VENTAS]),
     reviewDate,
     createdById: ELENA,
     createdAt: '2026-10-23T15:00:00.000Z',
-    review: { status, lastReviewedAt: null, lastReviewedById: null },
+    review: { status, lastReviewedAt: null, lastReviewedById: null, lastReviewedBy: null },
     currentVersion: {
       id: `22222222-2222-4222-8222-${String(n).padStart(12, '0')}`,
       versionNumber: 1,
@@ -95,6 +97,18 @@ describe('PendingReviewList (F3)', () => {
     expect(within(cards[0]).getByText('04/11/2026')).toBeInTheDocument();
     expect(within(cards[1]).getByText('Vence pronto')).toBeInTheDocument();
     expect(mocks.listPendingReview).toHaveBeenCalledWith(1, 20, expect.any(AbortSignal));
+  });
+
+  test('spec 008, E6 y E9: el responsable inactivo sale de la respuesta, sin pedir nombres', async () => {
+    mocks.listPendingReview.mockResolvedValue(
+      response([{ ...doc(1, '2026-11-04', 'OVERDUE'), owner: personRef(ELENA, false) }]),
+    );
+    render(<PendingReviewList />);
+
+    const [card] = await screen.findAllByRole('article');
+    expect(within(card).getByText('Elena Empleada de Ventas (inactivo)')).toBeInTheDocument();
+    expect(mocks.getNames).not.toHaveBeenCalled();
+    expect(mocks.listAreas).not.toHaveBeenCalled();
   });
 
   test('E13: sin pendientes → "No tenés documentos para revisar"', async () => {

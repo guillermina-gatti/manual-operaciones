@@ -7,8 +7,7 @@ import { useId, useState } from 'react';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { describeApiError, listVersions, useApiResource } from '@/lib/api';
 import type { VersionHistoryItem } from '@/lib/api';
-import { usersDirectory } from '@/lib/directory';
-import { formatCreatedAt } from '@/lib/documents/format';
+import { formatCreatedAt, formatPerson } from '@/lib/documents/format';
 import { DownloadButton } from './DownloadButton';
 import { ProcessingStatusBadge } from './ProcessingStatusBadge';
 
@@ -62,15 +61,6 @@ function HistoryContent({
     listVersions(documentId, signal),
   );
 
-  const uploaderIds =
-    versions.status === 'success'
-      ? [...new Set(versions.data.data.map((version) => version.uploadedById))]
-      : [];
-  const names = useApiResource(
-    uploaderIds.length > 0 ? `names:${uploaderIds.join(',')}` : null,
-    () => usersDirectory.getNames(uploaderIds),
-  );
-
   if (versions.status === 'loading' || versions.status === 'idle') {
     return <ScreenState kind="loading" label="Cargando el historial…" />;
   }
@@ -81,9 +71,7 @@ function HistoryContent({
     );
   }
 
-  const nameOf = (userId: string) =>
-    names.status === 'success' ? (names.data[userId] ?? '—') : names.status === 'error' ? '—' : '…';
-
+  // Spec 008 (P3, F1): quien subió cada versión viene en la respuesta.
   return (
     <ol aria-label="Versiones" className="flex flex-col gap-3">
       {versions.data.data.map((version) => (
@@ -91,7 +79,7 @@ function HistoryContent({
           key={version.id}
           documentId={documentId}
           version={version}
-          uploadedBy={nameOf(version.uploadedById)}
+          uploadedBy={formatPerson(version.uploadedBy)}
           openUrl={openUrl}
         />
       ))}

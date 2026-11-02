@@ -11,9 +11,14 @@ import { Button } from '@/components/ui/Button';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { ApiError, describeApiError, getDocument, useApiResource } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
-import { areasDirectory, usersDirectory } from '@/lib/directory';
-import { toAreaNameMap } from '@/lib/directory/areas-directory';
-import { formatCreatedAt, formatDay, formatReviewDate, formatSize } from '@/lib/documents/format';
+import {
+  formatAreas,
+  formatCreatedAt,
+  formatDay,
+  formatPerson,
+  formatReviewDate,
+  formatSize,
+} from '@/lib/documents/format';
 import { useSession } from '@/lib/session';
 import { ArchiveDialog } from './ArchiveDialog';
 import { ChangeAreasForm } from './ChangeAreasForm';
@@ -29,7 +34,6 @@ type Panel = 'areas' | 'version';
 // El mismo formato que acepta la API (ParseUUIDPipe). Otro id no puede existir.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const MISSING = '—';
 const NOT_FOUND = describeApiError(new ApiError(404), 'detail').message;
 
 const LOADING = (
@@ -52,21 +56,6 @@ export function DocumentDetail() {
   const document = useApiResource(user && validId ? `document:${id}:${user.id}` : null, (signal) =>
     getDocument(id, signal),
   );
-  // El responsable y, si hubo una revisión, quién la hizo (spec 005, R11): un solo pedido.
-  const nameIds =
-    document.status === 'success'
-      ? [
-          ...new Set(
-            [document.data.ownerId, document.data.review?.lastReviewedById].filter(
-              (id): id is string => Boolean(id),
-            ),
-          ),
-        ]
-      : [];
-  const areas = useApiResource(user && validId ? 'areas' : null, () => areasDirectory.listAreas());
-  const owners = useApiResource(nameIds.length > 0 ? `names:${nameIds.join(',')}` : null, () =>
-    usersDirectory.getNames(nameIds),
-  );
 
   if (status === 'loading') return LOADING;
   if (status === 'disabled') {
@@ -84,18 +73,10 @@ export function DocumentDetail() {
     );
   }
 
-  // Se espera a los nombres para no mostrar "—" un instante; si fallan, se muestra "—".
-  if (areas.status === 'loading' || owners.status === 'loading') return LOADING;
-
+  // Spec 008 (F1): el responsable, las áreas y quien hizo la última revisión vienen en la respuesta.
   const doc = document.data;
-  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
-  const names = owners.status === 'success' ? owners.data : {};
-  const ownerName = names[doc.ownerId];
   const lastReview = doc.review?.lastReviewedAt
-    ? {
-        day: formatDay(doc.review.lastReviewedAt),
-        by: doc.review.lastReviewedById ? names[doc.review.lastReviewedById] : undefined,
-      }
+    ? { day: formatDay(doc.review.lastReviewedAt), by: formatPerson(doc.review.lastReviewedBy) }
     : null;
   const version = doc.currentVersion;
   const archived = doc.status === 'ARCHIVED';
@@ -147,15 +128,13 @@ export function DocumentDetail() {
       )}
 
       <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[auto_1fr]">
-        <Field label="Áreas">
-          {doc.areaIds.map((areaId) => areaNames[areaId] ?? MISSING).join(', ') || MISSING}
-        </Field>
-        <Field label="Responsable">{ownerName ?? MISSING}</Field>
+        <Field label="Áreas">{formatAreas(doc.areas)}</Field>
+        <Field label="Responsable">{formatPerson(doc.owner)}</Field>
         <Field label="Fecha de revisión">{formatReviewDate(doc.reviewDate)}</Field>
         {/* R11: cuándo y quién hizo la última revisión; nunca revisado, no se muestra. */}
         {lastReview && (
           <Field label="Última revisión">
-            {lastReview.day}, por {lastReview.by ?? MISSING}
+            {lastReview.day}, por {lastReview.by}
           </Field>
         )}
         <Field label="Cargado">{formatCreatedAt(doc.createdAt)}</Field>

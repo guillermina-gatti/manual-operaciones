@@ -7,6 +7,7 @@ import type {
   PendingReviewResponse,
   UploadDocumentValues,
 } from '@/lib/api/documents';
+import { referencesOf } from '../../support/documents';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 
@@ -18,6 +19,7 @@ const DOCUMENT: DocumentResponse = {
   status: 'ACTIVE',
   areaIds: ['0a000000-0000-4000-8000-000000000001'],
   ownerId: '0b000000-0000-4000-8000-000000000002',
+  ...referencesOf('0b000000-0000-4000-8000-000000000002', ['0a000000-0000-4000-8000-000000000001']),
   reviewDate: '2027-03-01',
   createdById: '0b000000-0000-4000-8000-000000000001',
   createdAt: '2026-10-23T15:00:00.000Z',
@@ -298,7 +300,12 @@ describe('listPendingReview (F2, F3)', () => {
         {
           ...DOCUMENT,
           archivedAt: null,
-          review: { status: 'OVERDUE', lastReviewedAt: null, lastReviewedById: null },
+          review: {
+            status: 'OVERDUE',
+            lastReviewedAt: null,
+            lastReviewedById: null,
+            lastReviewedBy: null,
+          },
         },
       ],
       total: 1,

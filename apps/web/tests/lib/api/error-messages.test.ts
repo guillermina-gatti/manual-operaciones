@@ -227,6 +227,46 @@ describe('ciclo de vida (spec 003)', () => {
     expect(result.message).toBe('Revisá los datos marcados en el formulario.');
   });
 
+  // Spec 008 (T12, F7): los rechazos por responsable o área inactivos llevan su propio texto.
+  describe.each(['upload', 'areas'] as const)('spec 008 en "%s"', (context) => {
+    test('E11 y E17: responsable inactivo → su texto en el campo del responsable', () => {
+      const result = describeApiError(
+        new ApiError(400, ['ownerId: el responsable está inactivo']),
+        context,
+      );
+
+      expect(result.fieldErrors).toEqual({ ownerId: 'El responsable está inactivo. Elegí otro.' });
+      expect(result.message).toBe('Revisá los datos marcados en el formulario.');
+    });
+
+    test('E12 y E14: área inactiva agregada → su texto en el campo de las áreas', () => {
+      const result = describeApiError(
+        new ApiError(400, ['areaIds: están inactivas las áreas 0a000000-0000-4000-8000-000000000003']),
+        context,
+      );
+
+      expect(result.fieldErrors).toEqual({
+        areaIds: 'Hay áreas inactivas entre las que agregaste. Sacalas para guardar.',
+      });
+    });
+
+    test('los demás 400 de esos campos siguen con su texto de siempre', () => {
+      const result = describeApiError(
+        new ApiError(400, [
+          'areaIds: no existen las áreas 0a000000-0000-4000-8000-000000000009',
+          'ownerId: el responsable no comparte ningún área con el documento',
+        ]),
+        context,
+      );
+
+      expect(result.fieldErrors).toEqual({
+        areaIds: 'Elegí al menos un área de la lista.',
+        ownerId:
+          'El responsable tiene que pertenecer a alguna de las áreas elegidas, o ser administrador.',
+      });
+    });
+  });
+
   test('400 en la versión nueva: archivo y fecha van a su campo', () => {
     const result = describeApiError(
       new ApiError(400, ['reviewDate tiene que ser posterior a hoy (2026-10-23)']),

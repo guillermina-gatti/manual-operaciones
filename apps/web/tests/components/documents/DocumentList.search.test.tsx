@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DocumentSearchResult } from '@/lib/api';
 import type { SessionState } from '@/lib/session';
 import { DocumentList } from '@/components/documents/DocumentList';
+import { referencesOf } from '../../support/documents';
 
 // Spec 004 (T15; F1, F2, F3, F6; D11). Aparte de DocumentList.test.tsx, para no cambiar sus mocks.
 const mocks = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ const RESULT: DocumentSearchResult = {
   status: 'ACTIVE',
   areaIds: [VENTAS],
   ownerId: SERGIO,
+  ...referencesOf(SERGIO, [VENTAS]),
   reviewDate: '2027-03-01',
   createdById: SERGIO,
   createdAt: '2026-10-23T15:00:00.000Z',

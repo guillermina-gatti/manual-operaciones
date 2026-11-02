@@ -87,7 +87,7 @@ test('con pendingReview simulado, la responsable ve "Por revisar (1)" y entra a 
     title: 'Manual de caja',
     ownerId: FIXTURE_USERS.empleadoVentas.id,
     reviewDate: '2026-11-04',
-    review: { status: 'OVERDUE', lastReviewedAt: null, lastReviewedById: null },
+    review: { status: 'OVERDUE', lastReviewedAt: null, lastReviewedById: null, lastReviewedBy: null },
   });
   const api = await mockApi(page, {
     list: () => ({ status: 200, body: listResponse([document]) }),

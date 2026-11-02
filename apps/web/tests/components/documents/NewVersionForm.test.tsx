@@ -7,6 +7,7 @@ import type { DocumentResponse } from '@/lib/api';
 import { AREA_IDS, FIXTURE_USERS } from '@/lib/directory/fixtures';
 import { COMPANY_TIME_ZONE } from '@/lib/documents/format';
 import { tomorrowIn } from '@/lib/documents/review-date';
+import { referencesOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({ uploadVersion: vi.fn() }));
 
@@ -27,6 +28,7 @@ const DOCUMENT: DocumentResponse = {
   status: 'ACTIVE',
   areaIds: [AREA_IDS.ventas],
   ownerId: FIXTURE_USERS.supervisorVentas.id,
+  ...referencesOf(FIXTURE_USERS.supervisorVentas.id, [AREA_IDS.ventas]),
   reviewDate: '2027-03-01',
   createdById: FIXTURE_USERS.admin.id,
   createdAt: '2026-10-23T15:00:00.000Z',

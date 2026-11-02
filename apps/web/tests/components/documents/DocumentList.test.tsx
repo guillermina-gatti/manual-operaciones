@@ -5,6 +5,7 @@ import type { DocumentListResponse, DocumentSummary } from '@/lib/api';
 import { ApiError } from '@/lib/api';
 import type { SessionState } from '@/lib/session';
 import { DocumentList } from '@/components/documents/DocumentList';
+import { areaRef, personRef, referencesOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   listDocuments: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('next/navigation', () => ({
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
 const SERGIO = '0b000000-0000-4000-8000-000000000002';
+const COMPRAS = '0a000000-0000-4000-8000-000000000003';
 
 const ADMIN: SessionState = {
   user: { id: '0b000000-0000-4000-8000-000000000001', name: 'Ana Administradora', role: 'ADMIN' },
@@ -54,6 +56,7 @@ function doc(n: number, title = `Documento ${n}`): DocumentSummary {
     status: 'ACTIVE',
     areaIds: [VENTAS],
     ownerId: SERGIO,
+    ...referencesOf(SERGIO, [VENTAS]),
     reviewDate: '2027-03-01',
     createdById: ADMIN.user!.id,
     createdAt: '2026-10-23T15:00:00.000Z',
@@ -115,18 +118,44 @@ describe('listado (F7)', () => {
     expect(await cardTitles()).toEqual(['Documento 3', 'Documento 1', 'Documento 2']);
   });
 
-  test('cada tarjeta muestra los nombres de las áreas y del responsable', async () => {
+  test('spec 008, E1 y E9: los nombres salen de la respuesta, sin pedir el catálogo ni getNames', async () => {
     render(<DocumentList />);
 
     const card = (await screen.findAllByRole('article'))[0];
     expect(within(card).getByText('Ventas')).toBeInTheDocument();
     expect(within(card).getByText('Sergio Supervisor de Ventas')).toBeInTheDocument();
-    expect(mocks.getNames).toHaveBeenCalledWith([SERGIO]);
+    expect(mocks.getNames).not.toHaveBeenCalled();
+    expect(mocks.listAreas).not.toHaveBeenCalled();
   });
 
-  test('si fallan los nombres, las tarjetas igual se muestran con "—"', async () => {
-    mocks.getNames.mockRejectedValue(new Error('sin directorio'));
-    mocks.listAreas.mockRejectedValue(new Error('sin directorio'));
+  test('spec 008, E3 y E4: responsable y área inactivos, con la palabra', async () => {
+    mocks.listDocuments.mockResolvedValue(
+      page([
+        {
+          ...doc(1),
+          areaIds: [VENTAS, COMPRAS],
+          areas: [areaRef(VENTAS), { id: COMPRAS, name: 'Compras', isActive: false }],
+          owner: personRef(SERGIO, false),
+        },
+      ]),
+    );
+    render(<DocumentList />);
+
+    const card = (await screen.findAllByRole('article'))[0];
+    expect(within(card).getByText('Ventas, Compras (inactiva)')).toBeInTheDocument();
+    expect(within(card).getByText('Sergio Supervisor de Ventas (inactivo)')).toBeInTheDocument();
+  });
+
+  test('spec 008, E10: sin nombre en la respuesta, "—"', async () => {
+    mocks.listDocuments.mockResolvedValue(
+      page([
+        {
+          ...doc(1),
+          owner: { id: SERGIO, name: null, isActive: false },
+          areas: [{ id: VENTAS, name: null, isActive: false }],
+        },
+      ]),
+    );
     render(<DocumentList />);
 
     const card = (await screen.findAllByRole('article'))[0];

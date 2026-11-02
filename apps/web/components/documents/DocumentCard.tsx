@@ -1,31 +1,24 @@
-// Tarjeta de un documento en el listado (F7). Recibe los nombres ya resueltos: la API manda solo IDs (Q1)
-// y el listado los pide una vez para toda la página.
+// Tarjeta de un documento en el listado (F7). Desde la spec 008, los nombres del responsable y de las
+// áreas vienen en la respuesta (F1), con "(inactivo)" o "(inactiva)" si corresponde (F2).
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { DocumentSummary } from '@/lib/api';
-import { formatCreatedAt, formatReviewDate } from '@/lib/documents/format';
+import {
+  formatAreas,
+  formatCreatedAt,
+  formatPerson,
+  formatReviewDate,
+} from '@/lib/documents/format';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 
 interface DocumentCardProps {
   document: DocumentSummary;
-  // Nombre de cada área, por ID.
-  areaNames: Record<string, string>;
-  ownerName?: string;
   isAdmin: boolean;
   // Spec 004: lo que va al final de la tarjeta, por ejemplo el fragmento de un resultado de búsqueda.
   children?: ReactNode;
 }
 
-const MISSING = '—';
-
-export function DocumentCard({
-  document,
-  areaNames,
-  ownerName,
-  isAdmin,
-  children,
-}: DocumentCardProps) {
-  const areas = document.areaIds.map((id) => areaNames[id] ?? MISSING).join(', ');
+export function DocumentCard({ document, isAdmin, children }: DocumentCardProps) {
   const fileName = document.currentVersion.originalFileName;
 
   return (
@@ -57,9 +50,9 @@ export function DocumentCard({
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-zinc-500 dark:text-zinc-400">Áreas</dt>
-        <dd className="min-w-0 break-words">{areas || MISSING}</dd>
+        <dd className="min-w-0 break-words">{formatAreas(document.areas)}</dd>
         <dt className="text-zinc-500 dark:text-zinc-400">Responsable</dt>
-        <dd className="min-w-0 break-words">{ownerName ?? MISSING}</dd>
+        <dd className="min-w-0 break-words">{formatPerson(document.owner)}</dd>
         <dt className="text-zinc-500 dark:text-zinc-400">Revisión</dt>
         <dd>{formatReviewDate(document.reviewDate)}</dd>
         <dt className="text-zinc-500 dark:text-zinc-400">Cargado</dt>

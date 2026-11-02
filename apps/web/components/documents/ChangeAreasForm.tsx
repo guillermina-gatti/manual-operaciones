@@ -1,9 +1,10 @@
 'use client';
 
 // Panel para cambiar las áreas de un documento (spec 003, R3 a R5, P2; plan 003, 6.2).
-// Reutiliza AreasField y OwnerField de la carga: si con las áreas nuevas el responsable deja de ser
-// válido, OwnerField lo borra y pide elegir otro en la misma operación. Como la carga, usa estado
-// controlado: ante un error no se pierde nada de lo elegido (F4 del plan 002).
+// Reutiliza AreasField y OwnerField de la carga. Desde la spec 008 (F4, P5), el responsable actual no se
+// borra aunque esté inactivo o pierda el acceso: si lo perdió, la API responde 400 y el error queda en
+// el campo, para elegir otro en la misma operación. Como la carga, usa estado controlado: ante un error
+// no se pierde nada de lo elegido (F4 del plan 002).
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
@@ -69,6 +70,10 @@ function AreasForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Corta un segundo envío que llegue antes de que React dibuje el botón deshabilitado (F5).
   const submittingRef = useRef(false);
+  // Spec 008 (F6, PD10): los candidatos se piden solo con las áreas activas elegidas, porque el
+  // endpoint de candidatos rechaza las inactivas. Las inactivas que el documento ya tiene se conservan.
+  const inactiveAreaIds = new Set(areas.filter((area) => area.isActive === false).map((area) => area.id));
+  const activeAreaIds = areaIds.filter((id) => !inactiveAreaIds.has(id));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,7 +121,9 @@ function AreasForm({
       />
 
       <OwnerField
-        areaIds={areaIds}
+        areaIds={activeAreaIds}
+        onlyInactiveAreas={areaIds.length > 0 && activeAreaIds.length === 0}
+        currentOwner={document.owner}
         value={ownerId}
         error={errors.ownerId}
         onChange={(next, notice) => {

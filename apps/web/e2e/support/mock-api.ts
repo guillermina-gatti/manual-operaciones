@@ -15,6 +15,7 @@ import type {
 } from "../../lib/api";
 import { AREAS, AREA_IDS, FIXTURE_USERS } from "../../lib/directory/fixtures";
 import { filterOwnerCandidates } from "../../lib/documents/owner-candidates";
+import { personRef, referencesOf, reviewOf } from "../../tests/support/documents";
 import {
   DEV_FIXTURE_PASSWORD,
   devEmail,
@@ -315,17 +316,31 @@ export function documentDetail(
   overrides: Partial<DocumentResponse> = {},
 ): DocumentResponse {
   const id = overrides.id ?? nextId();
+  const ownerId = overrides.ownerId ?? FIXTURE_USERS.supervisorVentas.id;
+  const areaIds = overrides.areaIds ?? [AREA_IDS.ventas];
   return {
     id,
     title: "Manual de caja",
     description: null,
     status: "ACTIVE",
-    areaIds: [AREA_IDS.ventas],
-    ownerId: FIXTURE_USERS.supervisorVentas.id,
     reviewDate: "2027-03-01",
     createdById: FIXTURE_USERS.admin.id,
     createdAt: "2026-10-23T15:00:00.000Z",
     ...overrides,
+    // Spec 008: owner y areas salen de ownerId y areaIds, con los nombres de los fixtures, salvo
+    // que el escenario los pase (por ejemplo, inactivos).
+    ownerId,
+    areaIds,
+    owner: overrides.owner ?? referencesOf(ownerId, areaIds).owner,
+    areas: overrides.areas ?? referencesOf(ownerId, areaIds).areas,
+    ...(overrides.review && {
+      review: {
+        ...overrides.review,
+        lastReviewedBy:
+          overrides.review.lastReviewedBy ??
+          reviewOf(overrides.review).lastReviewedBy,
+      },
+    }),
     currentVersion: {
       id: `22222222-2222-4222-8222-${id.slice(-12)}`,
       versionNumber: 1,
@@ -386,6 +401,7 @@ export function versionHistory(
         : `manual-v${number}.pdf`,
       processingStatus: isCurrent ? current.processingStatus : "READY",
       uploadedById: FIXTURE_USERS.admin.id,
+      uploadedBy: personRef(FIXTURE_USERS.admin.id),
       createdAt: `2026-10-${String(10 + number).padStart(2, "0")}T15:00:00.000Z`,
     });
   }

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DocumentSearchResponse, DocumentSearchResult, SearchFragment } from '@/lib/api';
 import { ApiError } from '@/lib/api';
 import { SearchResults } from '@/components/documents/SearchResults';
+import { personRef, referencesOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   searchDocuments: vi.fn(),
@@ -43,6 +44,7 @@ function result(n: number, fragment: SearchFragment | null = null): DocumentSear
     status: 'ACTIVE',
     areaIds: [VENTAS],
     ownerId: SERGIO,
+    ...referencesOf(SERGIO, [VENTAS]),
     reviewDate: '2027-03-01',
     createdById: SERGIO,
     createdAt: '2026-10-23T15:00:00.000Z',
@@ -116,6 +118,20 @@ describe('SearchResults (spec 004, F4, F5)', () => {
     const [card] = await screen.findAllByRole('article');
     expect(card.querySelector('mark')).toBeNull();
     expect(within(card).queryByText(/Página/)).not.toBeInTheDocument();
+  });
+
+  test('spec 008, E2 y E9: el responsable inactivo sale de la respuesta, sin pedir nombres', async () => {
+    mocks.searchDocuments.mockResolvedValue(
+      response([{ ...result(1), owner: personRef(SERGIO, false) }]),
+    );
+
+    renderResults();
+
+    const [card] = await screen.findAllByRole('article');
+    expect(within(card).getByText('Sergio Supervisor de Ventas (inactivo)')).toBeInTheDocument();
+    expect(within(card).getByText('Ventas')).toBeInTheDocument();
+    expect(mocks.getNames).not.toHaveBeenCalled();
+    expect(mocks.listAreas).not.toHaveBeenCalled();
   });
 
   test('R9: muestra los resultados en el orden de la API', async () => {

@@ -6,6 +6,7 @@ import { ApiError } from '@/lib/api';
 import type { VersionHistoryItem } from '@/lib/api';
 import { createFakeUsersDirectory } from '@/lib/directory/fake-users-directory';
 import { FIXTURE_USERS } from '@/lib/directory/fixtures';
+import { personRef } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   listVersions: vi.fn(),
@@ -39,6 +40,8 @@ const version = (
   uploadedById: FIXTURE_USERS.admin.id,
   createdAt: `2026-10-2${versionNumber}T15:00:00.000Z`,
   ...overrides,
+  // Spec 008: quien la subió, con el nombre de los fixtures, salvo que el test lo pase.
+  uploadedBy: overrides.uploadedBy ?? personRef(overrides.uploadedById ?? FIXTURE_USERS.admin.id),
 });
 const V3 = version(3, {
   status: 'CURRENT',
@@ -145,14 +148,27 @@ describe('VersionHistory (spec 003, R12; plan 003, 6.5)', () => {
     expect(mocks.listVersions).toHaveBeenCalledTimes(2);
   });
 
-  test('si no se conocen los nombres, muestra "—"', async () => {
-    mocks.getNames.mockResolvedValue({});
+  test('spec 008, E10: si la API no encontró a quien la subió, muestra "—"', async () => {
+    mocks.listVersions.mockResolvedValue({
+      data: [{ ...V3, uploadedBy: { id: V3.uploadedById, name: null, isActive: false } }, V2],
+    });
     const user = userEvent.setup();
     const list = await openHistory(user);
 
-    await waitFor(() =>
-      expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent('Subida por —'),
+    expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent('Subida por —');
+  });
+
+  test('spec 008, E7: quien la subió, inactivo, con "(inactivo)" y sin pedir nombres', async () => {
+    mocks.listVersions.mockResolvedValue({
+      data: [V3, { ...V2, uploadedBy: personRef(FIXTURE_USERS.admin.id, false) }],
+    });
+    const user = userEvent.setup();
+    const list = await openHistory(user);
+
+    expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent(
+      'Subida por Ana Administradora (inactivo)',
     );
+    expect(mocks.getNames).not.toHaveBeenCalled();
   });
 
   test('al cerrarla y volver a abrirla no pide de nuevo', async () => {
