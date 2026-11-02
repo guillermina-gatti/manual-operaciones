@@ -377,6 +377,75 @@ export async function seedProcessedVersion(
   return ids;
 }
 
+// Spec 008 (T03, PD12): áreas y usuarios propios de un test, activos o no, y cómo desactivarlos.
+// El nombre del área es único en la base: se le agrega el UUID. Lo que se crea con estos helpers
+// se borra con deleteSeededDirectory (antes, cleanDocuments, para que no queden documentos que lo usen).
+export async function seedArea(
+  prisma: PrismaService,
+  opts: { name: string; isActive?: boolean },
+): Promise<string> {
+  const id = randomUUID();
+  await prisma.area.create({
+    data: { id, name: `${opts.name} (${id})`, isActive: opts.isActive ?? true },
+  });
+  return id;
+}
+
+export async function seedUser(
+  prisma: PrismaService,
+  opts: {
+    name: string;
+    role: DirectoryUser['role'];
+    areaIds: string[];
+    isActive?: boolean;
+  },
+): Promise<string> {
+  const id = randomUUID();
+  await prisma.user.create({
+    data: {
+      id,
+      name: opts.name,
+      email: `fixture-${id}@fixtures.test.invalid`,
+      passwordHash: await getTestFixturePasswordHash(),
+      role: opts.role,
+      isActive: opts.isActive ?? true,
+      areas: {
+        createMany: { data: opts.areaIds.map((areaId) => ({ areaId })) },
+      },
+    },
+  });
+  return id;
+}
+
+export async function setUserActive(
+  prisma: PrismaService,
+  userId: string,
+  isActive: boolean,
+): Promise<void> {
+  await prisma.user.update({ where: { id: userId }, data: { isActive } });
+}
+
+export async function setAreaActive(
+  prisma: PrismaService,
+  areaId: string,
+  isActive: boolean,
+): Promise<void> {
+  await prisma.area.update({ where: { id: areaId }, data: { isActive } });
+}
+
+export async function deleteSeededDirectory(
+  prisma: PrismaService,
+  seeded: { userIds?: string[]; areaIds?: string[] },
+): Promise<void> {
+  const userIds = seeded.userIds ?? [];
+  const areaIds = seeded.areaIds ?? [];
+  await prisma.userArea.deleteMany({
+    where: { OR: [{ userId: { in: userIds } }, { areaId: { in: areaIds } }] },
+  });
+  await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  await prisma.area.deleteMany({ where: { id: { in: areaIds } } });
+}
+
 // Spec 007 (T04, D10): deja una versión en el estado de procesamiento que pida el test, sin pasar
 // por el worker. Sirve para sembrar una versión vigente en error (processingFailed).
 export async function setProcessingStatus(

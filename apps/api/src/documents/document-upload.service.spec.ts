@@ -85,7 +85,7 @@ const recordFrom = (data: NewDocument): DocumentRecord => ({
 
 describe('DocumentUploadService', () => {
   let events: string[];
-  let areas: { findExistingIds: jest.Mock };
+  let areas: { findByIds: jest.Mock };
   let users: { findById: jest.Mock };
   let repository: {
     findActiveByChecksum: jest.Mock;
@@ -108,9 +108,11 @@ describe('DocumentUploadService', () => {
     events = [];
 
     areas = {
-      findExistingIds: jest.fn((ids: string[]) =>
+      findByIds: jest.fn((ids: string[]) =>
         Promise.resolve(
-          ids.filter((id) => Object.values<string>(AREA_IDS).includes(id)),
+          ids
+            .filter((id) => Object.values<string>(AREA_IDS).includes(id))
+            .map((id) => ({ id, name: id, isActive: true })),
         ),
       ),
     };
@@ -211,7 +213,7 @@ describe('DocumentUploadService', () => {
         await expect(service.upload(fake, dto(), admin)).rejects.toThrow(
           UnsupportedMediaTypeException,
         );
-        expect(areas.findExistingIds).not.toHaveBeenCalled();
+        expect(areas.findByIds).not.toHaveBeenCalled();
         expect(repository.findActiveByChecksum).not.toHaveBeenCalled();
         expectNothingWritten();
       });
@@ -274,6 +276,51 @@ describe('DocumentUploadService', () => {
 
         await expect(upload).rejects.toThrow(BadRequestException);
         await expect(upload).rejects.toThrow(UNKNOWN_AREA);
+        expectNothingWritten();
+      });
+
+      it('spec 008, E11: responsable inactivo: 400 y no se guarda nada', async () => {
+        const inactive = {
+          ...FIXTURE_USERS.empleadoVentas,
+          id: '0b000000-0000-4000-8000-000000000098',
+          isActive: false,
+        };
+        users.findById.mockImplementation((id: string) =>
+          Promise.resolve(id === inactive.id ? inactive : null),
+        );
+
+        const upload = service.upload(
+          pdf(),
+          dto({ ownerId: inactive.id }),
+          admin,
+        );
+
+        await expect(upload).rejects.toThrow(
+          'ownerId: el responsable está inactivo',
+        );
+        expectNothingWritten();
+      });
+
+      it('spec 008, E12: área inactiva: 400 que la nombra y no se guarda nada', async () => {
+        areas.findByIds.mockImplementation((ids: string[]) =>
+          Promise.resolve(
+            ids.map((id) => ({
+              id,
+              name: id,
+              isActive: id !== AREA_IDS.operaciones,
+            })),
+          ),
+        );
+
+        const upload = service.upload(
+          pdf(),
+          dto({ areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones] }),
+          admin,
+        );
+
+        await expect(upload).rejects.toThrow(
+          `areaIds: están inactivas las áreas ${AREA_IDS.operaciones}`,
+        );
         expectNothingWritten();
       });
 

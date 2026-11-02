@@ -128,8 +128,12 @@ export class DocumentLifecycleService {
           return current;
         }
 
-        await this.steps.assertAreasExist(dto.areaIds);
-        await this.steps.assertOwnerCanSeeDocument(ownerId, dto.areaIds);
+        // Spec 008 (R7, R8): las agregadas tienen que estar activas; las que ya tenía se conservan
+        await this.steps.assertAreasCanBeAssigned(dto.areaIds, current.areaIds);
+        // Spec 008 (R6, P5): el actual no se rechaza por inactivo, pero tiene que seguir teniendo acceso
+        await this.steps.assertOwnerCanSeeDocument(ownerId, dto.areaIds, {
+          isNew: ownerId !== current.ownerId,
+        });
 
         // Aplica el cambio bajo transacción y bloqueo
         return this.documents.runInTransaction(async (tx) => {

@@ -31,6 +31,8 @@ import type { ProcessingQueue } from './ports/processing-queue';
 import type { UsersDirectory } from './ports/users-directory';
 
 const UNKNOWN_AREA = '0a000000-0000-4000-8000-000000000099';
+// Spec 008: un área que existe pero está inactiva.
+const INACTIVE_AREA = '0a000000-0000-4000-8000-000000000003';
 const DOCUMENT_ID = '0c000000-0000-4000-8000-000000000001';
 const OTHER_DOCUMENT = '0c000000-0000-4000-8000-000000000002';
 const UUID =
@@ -91,7 +93,7 @@ const documentRecord = (
 
 describe('DocumentLifecycleService', () => {
   let events: string[];
-  let areas: { findExistingIds: jest.Mock };
+  let areas: { findByIds: jest.Mock };
   let users: { findById: jest.Mock };
   let repository: {
     runInTransaction: jest.Mock;
@@ -116,8 +118,12 @@ describe('DocumentLifecycleService', () => {
     events = [];
 
     areas = {
-      findExistingIds: jest.fn((ids: string[]) =>
-        Promise.resolve(ids.filter((id) => id !== UNKNOWN_AREA)),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          ids
+            .filter((id) => id !== UNKNOWN_AREA)
+            .map((id) => ({ id, name: id, isActive: id !== INACTIVE_AREA })),
+        ),
       ),
     };
     const fixtureUsers = Object.values(FIXTURE_USERS);
@@ -311,6 +317,33 @@ describe('DocumentLifecycleService', () => {
       expect(repository.runInTransaction).not.toHaveBeenCalled();
     });
 
+    it('spec 008, E14: agregar un área inactiva → 400 areaIds, sin abrir la transacción', async () => {
+      const change = service.changeAreas(
+        DOCUMENT_ID,
+        { areaIds: [AREA_IDS.ventas, INACTIVE_AREA] },
+        admin,
+      );
+
+      await expect(change).rejects.toThrow(
+        `areaIds: están inactivas las áreas ${INACTIVE_AREA}`,
+      );
+      expect(repository.runInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('spec 008, E13: un área inactiva que el documento ya tiene se conserva', async () => {
+      repository.findByIdWithAreas.mockResolvedValue(
+        documentRecord({ areaIds: [AREA_IDS.ventas, INACTIVE_AREA] }),
+      );
+
+      await service.changeAreas(
+        DOCUMENT_ID,
+        { areaIds: [AREA_IDS.ventas, INACTIVE_AREA, AREA_IDS.operaciones] },
+        admin,
+      );
+
+      expect(repository.replaceAreas).toHaveBeenCalled();
+    });
+
     it('E6: el responsable actual pierde el acceso → 400 ownerId y no se abre la transacción', async () => {
       repository.findByIdWithAreas.mockResolvedValue(
         documentRecord({ ownerId: FIXTURE_USERS.supervisorVentas.id }),
@@ -354,6 +387,94 @@ describe('DocumentLifecycleService', () => {
 
       await expect(change).rejects.toThrow(/^ownerId: /);
       expect(repository.runInTransaction).not.toHaveBeenCalled();
+    });
+
+    describe('spec 008: responsable inactivo (R5, R6)', () => {
+      // Un EMPLOYEE de Ventas desactivado, responsable de un documento de Ventas y Operaciones.
+      const inactiveOwner = {
+        id: '0b000000-0000-4000-8000-000000000098',
+        name: 'Ana Pérez',
+        role: 'EMPLOYEE' as const,
+        areaIds: [AREA_IDS.ventas],
+        isActive: false,
+      };
+      const withInactiveOwner = () =>
+        documentRecord({
+          areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones],
+          ownerId: inactiveOwner.id,
+        });
+
+      beforeEach(() => {
+        const fixtureUsers = [...Object.values(FIXTURE_USERS), inactiveOwner];
+        users.findById.mockImplementation((id: string) =>
+          Promise.resolve(fixtureUsers.find((user) => user.id === id) ?? null),
+        );
+      });
+
+      it('E15: sin ownerId, el responsable inactivo con acceso se conserva', async () => {
+        repository.findByIdWithAreas.mockResolvedValue(withInactiveOwner());
+
+        await service.changeAreas(
+          DOCUMENT_ID,
+          { areaIds: [AREA_IDS.ventas] },
+          admin,
+        );
+
+        expect(repository.replaceAreas).toHaveBeenCalledWith(
+          TX,
+          DOCUMENT_ID,
+          [AREA_IDS.ventas],
+          undefined,
+        );
+      });
+
+      it('con el mismo ownerId que el actual tampoco se valida si está activo', async () => {
+        repository.findByIdWithAreas.mockResolvedValue(withInactiveOwner());
+
+        await expect(
+          service.changeAreas(
+            DOCUMENT_ID,
+            { areaIds: [AREA_IDS.ventas], ownerId: inactiveOwner.id },
+            admin,
+          ),
+        ).resolves.toMatchObject({ ownerId: inactiveOwner.id });
+      });
+
+      it('E16: sin ownerId, el responsable inactivo que pierde el acceso → 400 de acceso', async () => {
+        repository.findByIdWithAreas.mockResolvedValue(withInactiveOwner());
+
+        await expect(
+          service.changeAreas(DOCUMENT_ID, toOperaciones, admin),
+        ).rejects.toThrow(
+          'ownerId: el responsable no comparte ningún área con el documento',
+        );
+      });
+
+      it('E17: un ownerId nuevo inactivo → 400 y no se abre la transacción', async () => {
+        const change = service.changeAreas(
+          DOCUMENT_ID,
+          { areaIds: [AREA_IDS.ventas], ownerId: inactiveOwner.id },
+          admin,
+        );
+
+        await expect(change).rejects.toThrow(
+          'ownerId: el responsable está inactivo',
+        );
+        expect(repository.runInTransaction).not.toHaveBeenCalled();
+      });
+
+      it('R11: sin cambios reales, no valida aunque el responsable esté inactivo', async () => {
+        repository.findByIdWithAreas.mockResolvedValue(withInactiveOwner());
+
+        await service.changeAreas(
+          DOCUMENT_ID,
+          { areaIds: [AREA_IDS.operaciones, AREA_IDS.ventas] },
+          admin,
+        );
+
+        expect(users.findById).not.toHaveBeenCalled();
+        expect(repository.replaceAreas).not.toHaveBeenCalled();
+      });
     });
 
     describe('D4: sin cambios', () => {
@@ -972,7 +1093,7 @@ describe('DocumentLifecycleService.markReviewed (R6 a R9)', () => {
       }),
     };
     service = new DocumentLifecycleService(
-      { findExistingIds: jest.fn() } as unknown as AreasDirectory,
+      { findByIds: jest.fn() } as unknown as AreasDirectory,
       users as unknown as UsersDirectory,
       repository as unknown as DocumentsRepository,
       { put: jest.fn(), delete: jest.fn() } as unknown as FileStorage,

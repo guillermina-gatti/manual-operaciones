@@ -17,6 +17,23 @@ import type { UsersDirectory } from './ports/users-directory';
 
 const UNKNOWN_AREA = '0a000000-0000-4000-8000-000000000099';
 const EXISTING_DOCUMENT = '0c000000-0000-4000-8000-000000000001';
+// Spec 008: dos áreas inactivas, además de las de los fixtures.
+const COMPRAS = '0a000000-0000-4000-8000-000000000003';
+const LOGISTICA = '0a000000-0000-4000-8000-000000000004';
+const AREAS = [
+  { id: AREA_IDS.ventas, name: 'Ventas', isActive: true },
+  { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: true },
+  { id: COMPRAS, name: 'Compras', isActive: false },
+  { id: LOGISTICA, name: 'Logística', isActive: false },
+];
+const NEW_OWNER = { isNew: true };
+const INACTIVE_EMPLOYEE = {
+  id: '0b000000-0000-4000-8000-000000000098',
+  name: 'Ana Pérez',
+  role: 'EMPLOYEE' as const,
+  areaIds: [AREA_IDS.ventas],
+  isActive: false,
+};
 
 // 22/10/2026 a las 12:00 en Buenos Aires (UTC−3).
 const NOON_IN_BUENOS_AIRES = new Date('2026-10-22T15:00:00.000Z');
@@ -52,7 +69,7 @@ const FILE = {
 };
 
 describe('DocumentWriteSteps', () => {
-  let areas: { findExistingIds: jest.Mock };
+  let areas: { findExistingIds: jest.Mock; findByIds: jest.Mock };
   let users: { findById: jest.Mock };
   let repository: { findActiveByChecksum: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
@@ -67,11 +84,12 @@ describe('DocumentWriteSteps', () => {
       .mockImplementation(() => undefined);
 
     areas = {
-      findExistingIds: jest.fn((ids: string[]) =>
-        Promise.resolve(ids.filter((id) => id !== UNKNOWN_AREA)),
+      findExistingIds: jest.fn(),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(AREAS.filter((area) => ids.includes(area.id))),
       ),
     };
-    const fixtureUsers = Object.values(FIXTURE_USERS);
+    const fixtureUsers = [...Object.values(FIXTURE_USERS), INACTIVE_EMPLOYEE];
     users = {
       findById: jest.fn((id: string) =>
         Promise.resolve(fixtureUsers.find((user) => user.id === id) ?? null),
@@ -146,38 +164,94 @@ describe('DocumentWriteSteps', () => {
     });
   });
 
-  describe('assertAreasExist (R5 de la spec 001)', () => {
-    it('con todas las áreas existentes pasa', async () => {
+  describe('assertAreasCanBeAssigned (R5 de la spec 001; R7, R8 y R10 de la spec 008)', () => {
+    it('con todas las áreas existentes y activas pasa', async () => {
       await expect(
-        steps.assertAreasExist([AREA_IDS.ventas, AREA_IDS.operaciones]),
+        steps.assertAreasCanBeAssigned([AREA_IDS.ventas, AREA_IDS.operaciones]),
       ).resolves.toBeUndefined();
     });
 
     it('un área inexistente da 400 que la nombra', async () => {
       await expect(
-        steps.assertAreasExist([AREA_IDS.ventas, UNKNOWN_AREA]),
+        steps.assertAreasCanBeAssigned([AREA_IDS.ventas, UNKNOWN_AREA]),
       ).rejects.toThrow(
         new BadRequestException(
           `areaIds: no existen las áreas ${UNKNOWN_AREA}`,
         ),
       );
     });
+
+    it('E12: en la carga, un área inactiva da 400 que la nombra', async () => {
+      await expect(
+        steps.assertAreasCanBeAssigned([AREA_IDS.ventas, COMPRAS]),
+      ).rejects.toThrow(
+        new BadRequestException(
+          `areaIds: están inactivas las áreas ${COMPRAS}`,
+        ),
+      );
+    });
+
+    it('E14: agregar un área inactiva al cambiar las áreas da 400', async () => {
+      await expect(
+        steps.assertAreasCanBeAssigned(
+          [AREA_IDS.ventas, LOGISTICA],
+          [AREA_IDS.ventas],
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          `areaIds: están inactivas las áreas ${LOGISTICA}`,
+        ),
+      );
+    });
+
+    it('E13: un área inactiva que el documento ya tiene se conserva', async () => {
+      await expect(
+        steps.assertAreasCanBeAssigned(
+          [COMPRAS, AREA_IDS.operaciones],
+          [AREA_IDS.ventas, COMPRAS],
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('R10: con un área inexistente y una inactiva, gana la inexistente', async () => {
+      await expect(
+        steps.assertAreasCanBeAssigned([LOGISTICA, UNKNOWN_AREA]),
+      ).rejects.toThrow(
+        new BadRequestException(
+          `areaIds: no existen las áreas ${UNKNOWN_AREA}`,
+        ),
+      );
+    });
+
+    it('usa una sola llamada a findByIds y ninguna a findExistingIds', async () => {
+      await steps.assertAreasCanBeAssigned(
+        [AREA_IDS.ventas, COMPRAS],
+        [COMPRAS],
+      );
+
+      expect(areas.findByIds).toHaveBeenCalledTimes(1);
+      expect(areas.findExistingIds).not.toHaveBeenCalled();
+    });
   });
 
   describe('assertOwnerCanSeeDocument (R5 de la spec 001)', () => {
     it('un SUPERVISOR de un área compartida pasa', async () => {
       await expect(
-        steps.assertOwnerCanSeeDocument(FIXTURE_USERS.supervisorVentas.id, [
-          AREA_IDS.ventas,
-        ]),
+        steps.assertOwnerCanSeeDocument(
+          FIXTURE_USERS.supervisorVentas.id,
+          [AREA_IDS.ventas],
+          NEW_OWNER,
+        ),
       ).resolves.toBeUndefined();
     });
 
     it('un ADMIN sin áreas pasa', async () => {
       await expect(
-        steps.assertOwnerCanSeeDocument(FIXTURE_USERS.admin.id, [
-          AREA_IDS.operaciones,
-        ]),
+        steps.assertOwnerCanSeeDocument(
+          FIXTURE_USERS.admin.id,
+          [AREA_IDS.operaciones],
+          NEW_OWNER,
+        ),
       ).resolves.toBeUndefined();
     });
 
@@ -186,17 +260,66 @@ describe('DocumentWriteSteps', () => {
         steps.assertOwnerCanSeeDocument(
           '0b000000-0000-4000-8000-000000000099',
           [AREA_IDS.ventas],
+          NEW_OWNER,
         ),
       ).rejects.toThrow(
         new BadRequestException('ownerId: el responsable no existe'),
       );
     });
 
+    it('spec 008, E11 y E17: un responsable nuevo inactivo da 400', async () => {
+      await expect(
+        steps.assertOwnerCanSeeDocument(
+          INACTIVE_EMPLOYEE.id,
+          [AREA_IDS.ventas],
+          { isNew: true },
+        ),
+      ).rejects.toThrow(
+        new BadRequestException('ownerId: el responsable está inactivo'),
+      );
+    });
+
+    it('spec 008, E15: el responsable actual inactivo, con acceso, pasa', async () => {
+      await expect(
+        steps.assertOwnerCanSeeDocument(
+          INACTIVE_EMPLOYEE.id,
+          [AREA_IDS.ventas],
+          { isNew: false },
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('spec 008, E16: el responsable actual inactivo, sin acceso, da el 400 de acceso', async () => {
+      await expect(
+        steps.assertOwnerCanSeeDocument(
+          INACTIVE_EMPLOYEE.id,
+          [AREA_IDS.operaciones],
+          { isNew: false },
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'ownerId: el responsable no comparte ningún área con el documento',
+        ),
+      );
+    });
+
+    it('spec 008, R10: un responsable nuevo inactivo y sin acceso da el 400 de inactivo', async () => {
+      await expect(
+        steps.assertOwnerCanSeeDocument(
+          INACTIVE_EMPLOYEE.id,
+          [AREA_IDS.operaciones],
+          { isNew: true },
+        ),
+      ).rejects.toThrow('ownerId: el responsable está inactivo');
+    });
+
     it('un responsable sin acceso a las áreas da 400', async () => {
       await expect(
-        steps.assertOwnerCanSeeDocument(FIXTURE_USERS.empleadoOperaciones.id, [
-          AREA_IDS.ventas,
-        ]),
+        steps.assertOwnerCanSeeDocument(
+          FIXTURE_USERS.empleadoOperaciones.id,
+          [AREA_IDS.ventas],
+          NEW_OWNER,
+        ),
       ).rejects.toThrow(
         new BadRequestException(
           'ownerId: el responsable no comparte ningún área con el documento',

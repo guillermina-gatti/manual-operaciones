@@ -169,7 +169,7 @@ export class DocumentsController {
   @ApiResponse({
     status: 400,
     description:
-      'Datos inválidos, falta el archivo, área inexistente o responsable sin acceso',
+      'Datos inválidos, falta el archivo, área inexistente o inactiva, o responsable inactivo o sin acceso',
   })
   @ApiResponse({ status: 401, description: 'Sin autenticación' })
   @ApiResponse({
@@ -313,7 +313,7 @@ export class DocumentsController {
   @ApiResponse({
     status: 400,
     description:
-      'id o datos inválidos, área inexistente o responsable sin acceso a las áreas nuevas',
+      'id o datos inválidos, área inexistente, área inactiva agregada, responsable nuevo inactivo o responsable sin acceso a las áreas nuevas',
   })
   @ApiResponse({ status: 401, description: 'Sin autenticación' })
   @ApiResponse({ status: 403, description: ADMIN_ONLY_DESCRIPTION })

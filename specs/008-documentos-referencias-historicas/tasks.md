@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (02/11/2026):** ninguna empezada. T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
+- **Estado (02/11/2026):** T01 a T04 y T08 a T12 **hechas**, sin commits (los hace el usuario). T05 a T07, T13 y T14 esperan `UsersDirectory.findByIds` de la pareja A. T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
 
 ## Qué se puede hacer ya y qué espera a la pareja A
 
@@ -59,7 +59,7 @@ Convenciones:
   Falla porque el método no existe. Los tests de las specs 001 y 003 sobre áreas inexistentes pasan sin cambios.
 - **Depende de:** —
 - **Commit:** `feat(api): rechazar las áreas inactivas agregadas a un documento`
-- **Estado:** pendiente.
+- **Estado:** hecha. Fallaron primero los 6 tests nuevos (el método no existía). Los mocks de áreas de `document-upload.service.spec.ts` y `document-lifecycle.service.spec.ts` pasan de `findExistingIds` a `findByIds`; se suman E13 y E14 en el del ciclo de vida.
 
 ### T02 · Validar el responsable nuevo inactivo
 
@@ -73,7 +73,7 @@ Convenciones:
   Falla porque hoy el responsable inactivo pasa.
 - **Depende de:** — (se puede hacer en paralelo con T01; si van una después de otra, el segundo commit ajusta el mismo archivo)
 - **Commit:** `feat(api): rechazar un responsable nuevo inactivo`
-- **Estado:** pendiente.
+- **Estado:** hecha. Fallaron primero los 4 tests de inactivo (el responsable inactivo pasaba). `isNew` en el cambio de áreas es `ownerId !== current.ownerId`, con `ownerId = dto.ownerId ?? current.ownerId`: lo mismo que pide la tarea. Se suman E11 y E12 en `document-upload.service.spec.ts`.
 
 ### T03 · Integración de las validaciones
 
@@ -99,7 +99,7 @@ Convenciones:
   Falla en E11, E12, E14 y E17 si se corre sin T01 y T02.
 - **Depende de:** T01, T02
 - **Commit:** `test(api): probar las asignaciones con usuarios y áreas inactivos`
-- **Estado:** pendiente.
+- **Estado:** hecha. 12 tests; `test:e2e documents`: 13 suites, 255 tests, todos pasan. No se corrió contra el código sin T01 y T02 (ya estaban hechas al escribir la suite). Además de la tarea: la carga con responsable y áreas activos sigue dando 201, y el mismo `ownerId` inactivo que el actual pasa (R6). Los helpers suman `deleteSeededDirectory` para borrar lo creado.
 
 ### T04 · Referencias: tipos y búsqueda en memoria
 
@@ -115,7 +115,7 @@ Convenciones:
   Falla porque el archivo no existe.
 - **Depende de:** —
 - **Commit:** `feat(api): armar las referencias de usuarios y áreas de los documentos`
-- **Estado:** pendiente.
+- **Estado:** hecha. Falló primero (el archivo no existía); 10 tests. Diferencia con el plan (1.1): `ReferenceLookup.from` recibe un tercer parámetro opcional, los IDs buscados, para que `has` cuente como resueltos los que se buscaron y no existen (PD5 no los vuelve a pedir).
 
 ### T05 · Buscar las referencias en lote ⏳ espera `UsersDirectory.findByIds`
 
@@ -183,7 +183,7 @@ Convenciones:
 - **Verificación:** test primero, `format.test.ts`: `formatPerson` → "Ana Pérez", "Ana Pérez (inactivo)" y "—" con `name: null` (sin "(inactivo)"); `formatArea` → "Compras (inactiva)"; `formatAreas([])` → "—". Falla porque las funciones no existen. `pnpm --filter web exec tsc --noEmit` en verde.
 - **Depende de:** —
 - **Commit:** `feat(web): agregar las referencias con nombre a los tipos de documentos`
-- **Estado:** pendiente.
+- **Estado:** hecha. `format-references.test.ts` falló primero (8 tests). Los datos de prueba usan el apoyo nuevo `tests/support/documents.ts` (`personRef`, `areaRef`, `referencesOf`, `reviewOf`), que también usa el mock de Playwright (`e2e/support/mock-api.ts`, `avisos.spec.ts`, `smoke.spec.ts`) para que compile. `tsc` en verde.
 
 ### T09 · Pantallas de consulta
 
@@ -197,7 +197,7 @@ Convenciones:
   - los tests que hoy simulan `getNames` o `listAreas` pasan a usar `owner` y `areas`.
 - **Depende de:** T08. **Se puede hacer ya** con respuestas simuladas, pero **se mergea con T06 o después** (PD11).
 - **Commit:** `feat(web): mostrar los nombres que trae la respuesta de documentos`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin mergear antes de T06 (PD11). Los componentes se cambiaron antes de escribir los tests nuevos: no hay corrida en rojo de esta tarea. Se reemplazaron los tests que comprobaban `getNames` (listado, detalle) por los de la respuesta, y se sumaron E3 a E6, E9 y E10.
 
 ### T10 · Historial de versiones
 
@@ -207,7 +207,7 @@ Convenciones:
 - **Verificación:** test primero: una versión subida por un ADMIN inactivo muestra "(inactivo)" (**E7**); `uploadedBy.name: null` → "—"; sin llamadas a `getNames`.
 - **Depende de:** T08. **Se puede hacer ya**; se mergea con T06 o después (PD11).
 - **Commit:** `feat(web): mostrar quién subió cada versión desde la respuesta`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin mergear antes de T06. Los 2 tests nuevos fallaron primero. El dato de prueba `version()` arma `uploadedBy` desde `uploadedById`.
 
 ### T11 · `OwnerField` y cambio de áreas
 
@@ -226,7 +226,7 @@ Convenciones:
   - `UploadDocumentForm.test.tsx` y `upload-fields.test.tsx` pasan sin cambios (F5).
 - **Depende de:** T08. **Se puede hacer ya**; se mergea con T06 o después (PD11), porque usa `document.owner`.
 - **Commit:** `feat(web): conservar el responsable actual al cambiar las áreas`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin mergear antes de T06. Fallaron primero 5 tests de `OwnerField` y 4 de `ChangeAreasForm`. **Cambio de comportamiento:** el test E6 de la spec 003 ("el responsable de Ventas se borra con el aviso") pasa a comprobar lo contrario, como piden P5 y F4: no se borra, se manda sin `ownerId` y el 400 de la API queda en el campo. E1 de la spec 003 ya no espera que el responsable se vacíe antes de elegir otro.
 
 ### T12 · Mensajes de los errores nuevos
 
@@ -236,7 +236,7 @@ Convenciones:
 - **Verificación:** test primero: `ownerId: el responsable está inactivo` → "El responsable está inactivo. Elegí otro." en `ownerId`; `areaIds: están inactivas las áreas …` → "Hay áreas inactivas entre las que agregaste. Sacalas para guardar." en `areaIds`; `ownerId: el responsable no comparte …` y `areaIds: no existen …` → los textos de hoy.
 - **Depende de:** —. Se puede mergear cuando quiera; tiene sentido después de T03.
 - **Commit:** `feat(web): explicar los rechazos por responsable o área inactivos`
-- **Estado:** pendiente.
+- **Estado:** hecha. Fallaron primero 4 tests (2 por contexto, carga y áreas).
 
 ### T13 · Playwright contra la API real ⏳ espera `UsersDirectory.findByIds`
 
