@@ -23,7 +23,7 @@ import { StartExecutionDto } from './dto/start-execution.dto';
 import { ExecutionService } from './execution.service';
 
 const UNAUTHORIZED = { status: 401, description: 'Sin autenticación' };
-// Provisional: until it is agreed whether ADMIN and SUPERVISOR can execute.
+// Only EMPLOYEE executes; ADMIN and SUPERVISOR get 403 (agreed with pair A, permissions matrix).
 const FORBIDDEN = {
   status: 403,
   description: 'El rol no puede ejecutar procedimientos (solo EMPLOYEE)',
@@ -36,7 +36,7 @@ const EXECUTION_NOT_FOUND = {
 const UNAVAILABLE = {
   status: 503,
   description:
-    'La base, el catálogo de procedimientos o el directorio de usuarios no responden',
+    'La base, el catálogo de procedimientos o los directorios de usuarios y áreas no responden',
 };
 
 @ApiTags('executions')

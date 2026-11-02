@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import type { AuthUser } from '../../common/auth';
 import { AREA_IDS, FIXTURE_USERS } from '../../documents/adapters/fixtures';
+import { InMemoryAreasDirectory } from '../../documents/adapters/in-memory-areas-directory';
 import { InMemoryUsersDirectory } from '../../documents/adapters/in-memory-users-directory';
 import { RepositoryUnavailableError } from '../../documents/documents.repository';
+import { AreasDirectory } from '../../documents/ports/areas-directory';
 import { UsersDirectory } from '../../documents/ports/users-directory';
 import { InMemoryProceduresCatalog } from '../adapters/in-memory-procedures-catalog';
 import {
@@ -108,15 +110,28 @@ const SUPERVISOR_VENTAS = as(FIXTURE_USERS.supervisorVentas);
 
 describe('ProcedureMetricsService', () => {
   let users: UsersDirectory;
+  let areas: AreasDirectory;
   let catalog: InMemoryProceduresCatalog;
   let repository: FakeMetricsRepository;
   const build = () =>
-    new ProcedureMetricsService(users, catalog, repository, new FixedClock());
+    new ProcedureMetricsService(
+      users,
+      areas,
+      catalog,
+      repository,
+      new FixedClock(),
+    );
   const procedureIds = (view: { procedures: { procedureId: string }[] }) =>
     view.procedures.map((p) => p.procedureId);
+  const ventasInactive = () =>
+    new InMemoryAreasDirectory([
+      { id: AREA_IDS.ventas, name: 'Ventas', isActive: false },
+      { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: true },
+    ]);
 
   beforeEach(() => {
     users = new InMemoryUsersDirectory();
+    areas = new InMemoryAreasDirectory();
     catalog = new InMemoryProceduresCatalog();
     repository = new FakeMetricsRepository(AGGREGATES);
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
@@ -195,6 +210,41 @@ describe('ProcedureMetricsService', () => {
 
       expect(view.procedures).toEqual([]);
       expect(view.areaIds).toEqual([]);
+    });
+  });
+
+  describe('deactivated areas', () => {
+    it('a supervisor whose only area is deactivated sees nothing and cannot filter by it', async () => {
+      areas = ventasInactive();
+
+      const view = await build().procedures(SUPERVISOR_VENTAS, {});
+
+      expect(view.procedures).toEqual([]);
+      expect(view.areaIds).toEqual([]);
+    });
+
+    it('a supervisor asking for their deactivated area gets a 404, without reading metrics', async () => {
+      areas = ventasInactive();
+
+      await expect(
+        build().procedures(SUPERVISOR_VENTAS, { areaId: AREA_IDS.ventas }),
+      ).rejects.toThrow(new NotFoundException('No se encontró el área'));
+      expect(repository.windows).toEqual([]);
+    });
+
+    it('ADMIN keeps every area, also the deactivated one', async () => {
+      areas = ventasInactive();
+
+      const all = await build().procedures(ADMIN, {});
+      const ventas = await build().procedures(ADMIN, {
+        areaId: AREA_IDS.ventas,
+      });
+
+      expect(procedureIds(all)).toEqual([
+        PROCEDURE_IDS.cierreDeCaja,
+        PROCEDURE_IDS.recepcionMercaderia,
+      ]);
+      expect(procedureIds(ventas)).toEqual([PROCEDURE_IDS.cierreDeCaja]);
     });
   });
 
@@ -283,6 +333,18 @@ describe('ProcedureMetricsService', () => {
       await expect(build().procedures(ADMIN, {})).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
+    });
+
+    it('an areas directory that is down is a 503', async () => {
+      areas = {
+        findExistingIds: () => Promise.resolve([]),
+        findByIds: () =>
+          Promise.reject(new RepositoryUnavailableError('directorio caído')),
+      };
+
+      await expect(
+        build().procedures(SUPERVISOR_VENTAS, {}),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
   });
 });
