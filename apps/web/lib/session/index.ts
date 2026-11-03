@@ -1,10 +1,9 @@
-// A-09: selector temporal entre sesión de desarrollo y sesión real.
-// La elección se resuelve al compilar Next.js; reiniciar el servidor al cambiar .env.local.
-// Los tests E2E existentes usan por defecto el selector de fixtures.
+// A-10a.1: La sesión real es el comportamiento predeterminado de la aplicación.
+// Solo se desactiva si se define explícitamente NEXT_PUBLIC_REAL_AUTH='false'.
 import * as real from './real-session';
 import * as simulated from './simulated-session';
 
-export const REAL_AUTH_ENABLED = process.env.NEXT_PUBLIC_REAL_AUTH === 'true';
+export const REAL_AUTH_ENABLED = process.env.NEXT_PUBLIC_REAL_AUTH !== 'false';
 
 export const SessionProvider = REAL_AUTH_ENABLED
   ? real.SessionProvider
