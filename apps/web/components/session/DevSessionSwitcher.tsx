@@ -1,15 +1,11 @@
 'use client';
 
-// Selector de prueba: desaparece cuando se activa la autenticación real.
+// Selector de prueba: desaparece cuando se activa la autenticación real o en producción.
 import type { ChangeEvent } from 'react';
 import { FIXTURE_USERS } from '@/lib/directory/fixtures';
-import {
-  REAL_AUTH_ENABLED,
-  selectDevUser,
-  useDevLoginError,
-  useSession,
-} from '@/lib/session';
+import { REAL_AUTH_ENABLED } from '@/lib/session';
 import type { Role } from '@/lib/session';
+import { selectDevUser, useDevLoginError, useSession } from '@/lib/session/simulated-session';
 
 const ROLE_LABELS: Record<Role, string> = {
   ADMIN: 'Administrador',
@@ -20,10 +16,13 @@ const ROLE_LABELS: Record<Role, string> = {
 const USERS = Object.values(FIXTURE_USERS);
 
 export function DevSessionSwitcher() {
+  if (REAL_AUTH_ENABLED || process.env.NODE_ENV === 'production') return null;
+  return <DevSessionSwitcherContent />;
+}
+
+function DevSessionSwitcherContent() {
   const { user, status } = useSession();
   const loginError = useDevLoginError();
-
-  if (REAL_AUTH_ENABLED || process.env.NODE_ENV === 'production') return null;
 
   return (
     <aside className="mx-4 mb-4 mt-auto rounded-lg border sm:fixed sm:bottom-4 sm:right-4 sm:z-50 sm:m-0 sm:w-72 border-amber-400 bg-amber-50 p-3 text-sm text-amber-950 shadow-lg dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">

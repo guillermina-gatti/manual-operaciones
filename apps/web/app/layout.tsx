@@ -1,9 +1,15 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { DevSessionSwitcher } from '@/components/session/DevSessionSwitcher';
 import { SessionControls } from '@/components/session/SessionControls';
 import { SessionProvider } from '@/lib/session';
 import './globals.css';
+
+// Selector de desarrollo: en producción se elimina por completo del bundle.
+let DevSessionSwitcher: React.ComponentType | null = null;
+if (process.env.NODE_ENV !== 'production') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  DevSessionSwitcher = require('@/components/session/DevSessionSwitcher').DevSessionSwitcher;
+}
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -27,7 +33,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
         <SessionProvider>
           <SessionControls />
           {children}
-          <DevSessionSwitcher />
+          {DevSessionSwitcher && <DevSessionSwitcher />}
         </SessionProvider>
       </body>
     </html>
