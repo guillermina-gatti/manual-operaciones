@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listAreas: vi.fn(),
   getNames: vi.fn(),
   searchParams: new URLSearchParams(),
+  realAuthEnabled: true,
 }));
 
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -19,10 +20,16 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   listDocuments: mocks.listDocuments,
 }));
 
-vi.mock('@/lib/session', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/session')>()),
-  useSession: mocks.useSession,
-}));
+vi.mock('@/lib/session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session')>();
+  return {
+    ...actual,
+    useSession: mocks.useSession,
+    get REAL_AUTH_ENABLED() {
+      return mocks.realAuthEnabled;
+    },
+  };
+});
 
 vi.mock('@/lib/directory', () => ({
   areasDirectory: { listAreas: mocks.listAreas },
@@ -76,6 +83,7 @@ const page = (data: DocumentSummary[], total = data.length, pageNumber = 1): Doc
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.realAuthEnabled = true;
   mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(EMPLOYEE);
   mocks.listDocuments.mockResolvedValue(page([doc(1)]));
@@ -242,7 +250,22 @@ describe('estados (spec sección 7)', () => {
 });
 
 describe('sesión', () => {
-  test('sin usuario no pide nada y muestra "Elegí un usuario de prueba"', () => {
+  test('sin usuario no pide nada y ofrece iniciar sesión', () => {
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    render(<DocumentList />);
+
+    expect(
+      screen.getByText('Necesitás iniciar sesión para ver los documentos.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ir a iniciar sesión' })).toHaveAttribute(
+      'href',
+      '/login',
+    );
+    expect(mocks.listDocuments).not.toHaveBeenCalled();
+  });
+
+  test('sin usuario con autenticación simulada muestra "Elegí un usuario de prueba" y no pide nada', () => {
+    mocks.realAuthEnabled = false;
     mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
     render(<DocumentList />);
 

@@ -4,12 +4,22 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { RequireRole } from '@/components/session/RequireRole';
 import type { Role, SessionState } from '@/lib/session';
 
-const mocks = vi.hoisted(() => ({ useSession: vi.fn(), mounted: vi.fn() }));
-
-vi.mock('@/lib/session', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/session')>()),
-  useSession: mocks.useSession,
+const mocks = vi.hoisted(() => ({
+  useSession: vi.fn(),
+  mounted: vi.fn(),
+  realAuthEnabled: true,
 }));
+
+vi.mock('@/lib/session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session')>();
+  return {
+    ...actual,
+    useSession: mocks.useSession,
+    get REAL_AUTH_ENABLED() {
+      return mocks.realAuthEnabled;
+    },
+  };
+});
 
 // Un contenido que registra si llegó a arrancar: si se monta, corre su efecto.
 function Formulario() {
@@ -34,6 +44,7 @@ function renderGuard() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.realAuthEnabled = true;
 });
 
 describe('RequireRole (F1)', () => {
@@ -67,7 +78,22 @@ describe('RequireRole (F1)', () => {
     );
   });
 
-  test('sin sesión muestra "Elegí un usuario de prueba" y no monta el contenido', () => {
+  test('sin sesión ofrece iniciar sesión y no monta el contenido', () => {
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    renderGuard();
+
+    expect(
+      screen.getByText('Necesitás iniciar sesión para acceder a esta sección.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ir a iniciar sesión' })).toHaveAttribute(
+      'href',
+      '/login',
+    );
+    expect(mocks.mounted).not.toHaveBeenCalled();
+  });
+
+  test('sin sesión con autenticación simulada muestra "Elegí un usuario de prueba" y no monta el contenido', () => {
+    mocks.realAuthEnabled = false;
     mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
     renderGuard();
 
