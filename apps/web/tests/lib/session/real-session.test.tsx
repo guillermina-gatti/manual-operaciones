@@ -261,5 +261,120 @@ describe('A-08b: estado real aislado', () => {
         expect(result.current).toEqual({ user: null, status: 'ready' }),
       );
     });
+
+    test('expone estado loading mientras la restauración está en curso', async () => {
+      const gate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.refresh.mockReturnValueOnce(gate.promise);
+
+      const { result } = renderHook(() => useSession(), { wrapper });
+
+      // Inmediatamente tras montar, antes de resolver el refresh, el estado es 'loading'
+      expect(result.current).toEqual({ user: null, status: 'loading' });
+
+      // Tras resolver, transiciona a ready con el usuario
+      gate.resolve({ accessToken: token(USER.id, 1), user: USER });
+      await waitFor(() =>
+        expect(result.current).toEqual({
+          user: { id: USER.id, name: USER.name, role: 'ADMIN' },
+          status: 'ready',
+        }),
+      );
+    });
+
+    test('login ejecutado durante una restauración pendiente prevalece y descarta la respuesta tardía', async () => {
+      const restoreGate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.refresh.mockReturnValueOnce(restoreGate.promise);
+
+      const SECOND_USER = {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Grace Hopper',
+        email: 'grace@example.com',
+        role: 'EMPLOYEE' as const,
+      };
+
+      auth.login.mockResolvedValueOnce({
+        accessToken: token(SECOND_USER.id, 99),
+        user: SECOND_USER,
+      });
+
+      const { result } = renderHook(() => useSession(), { wrapper });
+      const restoringTask = restoreSession();
+      expect(result.current.status).toBe('loading');
+
+      // Se ejecuta login mientras restoreSession sigue esperando a restoreGate
+      await act(async () => {
+        await loginSession(SECOND_USER.email, 'password123');
+      });
+
+      expect(result.current).toEqual({
+        user: { id: SECOND_USER.id, name: SECOND_USER.name, role: 'EMPLOYEE' },
+        status: 'ready',
+      });
+      expect(getAuthHeaders()).toEqual({
+        Authorization: `Bearer ${token(SECOND_USER.id, 99)}`,
+      });
+
+      // La respuesta tardía de la restauración original resuelve ahora
+      restoreGate.resolve({ accessToken: token(USER.id, 1), user: USER });
+      await act(async () => {
+        await restoringTask;
+      });
+
+      // Debe mantenerse el usuario del login, la restauración tardía se descartó
+      expect(result.current).toEqual({
+        user: { id: SECOND_USER.id, name: SECOND_USER.name, role: 'EMPLOYEE' },
+        status: 'ready',
+      });
+      expect(getAuthHeaders()).toEqual({
+        Authorization: `Bearer ${token(SECOND_USER.id, 99)}`,
+      });
+    });
+
+    test('los consumidores reciben ordenadamente las transiciones loading -> ready autenticado -> ready no autenticado', async () => {
+      const history: Array<{ user: string | null; status: string }> = [];
+
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion'));
+      const { result } = renderHook(() => {
+        const session = useSession();
+        const current = { user: session.user?.name ?? null, status: session.status };
+        const last = history.at(-1);
+        if (!last || last.user !== current.user || last.status !== current.status) {
+          history.push(current);
+        }
+        return session;
+      }, { wrapper });
+
+      // Esperar a que pase a no autenticado
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      expect(result.current.user).toBeNull();
+
+      // Login exitoso
+      await act(async () => {
+        await loginSession(USER.email, 'clave');
+      });
+      expect(result.current.status).toBe('ready');
+      expect(result.current.user?.name).toBe('Ada Lovelace');
+
+      // Logout exitoso
+      await act(async () => {
+        await logoutSession();
+      });
+      expect(result.current.status).toBe('ready');
+      expect(result.current.user).toBeNull();
+
+      // Verificar que la secuencia completa de transiciones ocurrió en el orden exacto:
+      // 1. Restauración inicial en curso (loading, sin usuario)
+      // 2. Restauración finalizada sin sesión (ready, sin usuario)
+      // 3. Login en curso (loading, sin usuario)
+      // 4. Login exitoso (ready, usuario Ada Lovelace)
+      // 5. Logout exitoso (ready, sin usuario)
+      expect(history).toEqual([
+        { user: null, status: 'loading' },
+        { user: null, status: 'ready' },
+        { user: null, status: 'loading' },
+        { user: 'Ada Lovelace', status: 'ready' },
+        { user: null, status: 'ready' },
+      ]);
+    });
   });
 });
