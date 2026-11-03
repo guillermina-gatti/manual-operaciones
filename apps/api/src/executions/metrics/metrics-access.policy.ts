@@ -6,7 +6,7 @@ import type { Role } from '../../common/auth';
 export type MetricsScope = { all: true } | { all: false; areaIds: string[] };
 
 // null: the viewer cannot see what they asked for, answered with a 404 like any other
-// resource of someone else. Areas come from UsersDirectory, never from the session.
+// resource of someone else. viewerAreaIds are only the active ones (viewer-areas.ts).
 export function metricsScope(
   role: Role,
   viewerAreaIds: string[],

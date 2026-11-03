@@ -1,6 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { JwtAuthGuard } from '../common/auth';
+import { AreasDirectory } from '../documents/ports/areas-directory';
 import { UsersDirectory } from '../documents/ports/users-directory';
+import { PrismaAreasDirectory } from '../documents/adapters/prisma-areas-directory';
 import { PrismaUsersDirectory } from '../documents/adapters/prisma-users-directory';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,6 +40,7 @@ describe('ExecutionsModule', () => {
       InMemoryProceduresCatalog,
     );
     expect(moduleRef.get(UsersDirectory)).toBeInstanceOf(PrismaUsersDirectory);
+    expect(moduleRef.get(AreasDirectory)).toBeInstanceOf(PrismaAreasDirectory);
     expect(moduleRef.get(ExecutionsRepository)).toBeInstanceOf(
       PrismaExecutionsRepository,
     );

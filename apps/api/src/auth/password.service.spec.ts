@@ -193,7 +193,9 @@ describe('PasswordService', () => {
       const unexpectedError = new Error(
         'Fallo crítico en biblioteca nativa C++ / OpenSSL',
       );
-      jest.spyOn(bcrypt, 'compare').mockRejectedValueOnce(unexpectedError);
+      jest
+        .spyOn(bcrypt, 'compare')
+        .mockImplementationOnce(() => Promise.reject(unexpectedError));
 
       await expect(service.compare(plainPassword, validHash)).rejects.toThrow(
         'Fallo crítico en biblioteca nativa C++ / OpenSSL',

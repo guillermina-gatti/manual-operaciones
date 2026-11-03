@@ -183,11 +183,12 @@ describe('Executions (integration)', () => {
     expect(rows).toBe(1);
   });
 
-  it('401 without a session and 403 for ADMIN', async () => {
+  it('401 without a session and 403 for ADMIN and SUPERVISOR', async () => {
     await http()
       .post('/api/executions')
       .send({ procedureId: CIERRE })
       .expect(401);
     await start(authHeaders(FIXTURE_USERS.admin)).expect(403);
+    await start(authHeaders(FIXTURE_USERS.supervisorVentas)).expect(403);
   });
 });
