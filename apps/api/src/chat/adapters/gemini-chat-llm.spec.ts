@@ -1,7 +1,8 @@
 // Spec 009 (T03, R13): la respuesta de Gemini en partes, con el mismo prompt que answer.
 // El modelo es el simulado del AI SDK: ningún test llama a Gemini.
+import { APICallError } from 'ai';
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test';
-import type { Passage } from '../ports/chat-llm';
+import { LlmCutError, type Passage } from '../ports/chat-llm';
 import { GeminiChatLlm } from './gemini-chat-llm';
 
 const PASSAGES: Passage[] = [
@@ -107,5 +108,66 @@ describe('GeminiChatLlm.stream (spec 009, R13)', () => {
 
         await expect(collect(stream.textStream)).rejects.toThrow('model down');
         await expect(stream.final).rejects.toThrow('model down');
+    });
+});
+
+// Diagnóstico de la spec 009: si el pedido se corta (por tiempo o porque el usuario se fue), el error
+// dice el último error del proveedor (cuota, alta demanda…), no solo "se cortó". Para el usuario no
+// cambia nada: el servicio igual responde ai_unavailable.
+describe('GeminiChatLlm.stream: el motivo real del proveedor al cortar', () => {
+    const HIGH_DEMAND = 'This model is currently experiencing high demand. Please try again later.';
+    const CUT = 'El modelo no empezó a responder a tiempo';
+
+    // Un modelo que falla con este error en cada intento (el SDK reintenta los "retryable").
+    const failingModel = (statusCode: number, message: string, isRetryable: boolean) =>
+        new MockLanguageModelV4({
+            doStream: async () => {
+                throw new APICallError({ message, url: 'https://gemini.test', requestBodyValues: {}, statusCode, isRetryable });
+            },
+        });
+
+    it('cortado mientras el SDK espera para reintentar un 503: el error dice el 503 y el corte', async () => {
+        const llm = new GeminiChatLlm(failingModel(503, HIGH_DEMAND, true), 'gemini-test');
+        const controller = new AbortController();
+        const stream = llm.stream('¿plazo?', PASSAGES, controller.signal);
+        const reading = collect(stream.textStream);
+
+        await new Promise((resolve) => setTimeout(resolve, 200)); // el primer intento ya falló
+        controller.abort(new Error(CUT));
+
+        const error = await reading.catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(LlmCutError);
+        expect(error).toMatchObject({ reason: CUT, providerError: `HTTP 503: ${HIGH_DEMAND}` });
+        expect((error as Error).message).toBe(`HTTP 503: ${HIGH_DEMAND} (pedido cortado: ${CUT})`);
+        await expect(stream.final).rejects.toBe(error);
+    });
+
+    it('cortado sin errores del proveedor: el error dice solo el corte', async () => {
+        const model = new MockLanguageModelV4({
+            // Un modelo que nunca manda nada (la transmisión queda abierta).
+            doStream: async () => ({ stream: new ReadableStream({ start: () => undefined }) }) as never,
+        });
+        const llm = new GeminiChatLlm(model, 'gemini-test');
+        const controller = new AbortController();
+        const stream = llm.stream('¿plazo?', PASSAGES, controller.signal);
+        const reading = collect(stream.textStream);
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        controller.abort(new Error(CUT));
+
+        const error = await reading.catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(LlmCutError);
+        expect(error).toMatchObject({ reason: CUT, providerError: undefined });
+        expect((error as Error).message).toBe(`Pedido cortado: ${CUT}`);
+    });
+
+    it('sin corte, un error del proveedor que no se reintenta (cuota) sale con su mensaje', async () => {
+        const quota = 'You exceeded your current quota, please check your plan and billing details.';
+        const llm = new GeminiChatLlm(failingModel(429, quota, false), 'gemini-test');
+
+        const stream = llm.stream('¿plazo?', PASSAGES, new AbortController().signal);
+
+        await expect(collect(stream.textStream)).rejects.toThrow(quota);
+        await expect(stream.final).rejects.toThrow(quota);
     });
 });

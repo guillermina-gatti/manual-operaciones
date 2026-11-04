@@ -13,6 +13,19 @@ export interface LlmAnswer {
     outputTokens?: number;
 }
 
+// Spec 009: el pedido al modelo se cortó (por tiempo o porque el usuario se fue). providerError es el
+// último error del proveedor antes del corte, si hubo (cuota, alta demanda…): así el log dice el
+// motivo real y no solo "se cortó". El mensaje empieza por ese motivo.
+export class LlmCutError extends Error {
+    constructor(
+        readonly reason: string,
+        readonly providerError?: string,
+    ) {
+        super(providerError ? `${providerError} (pedido cortado: ${reason})` : `Pedido cortado: ${reason}`);
+        this.name = 'LlmCutError';
+    }
+}
+
 // Spec 009 (R12): la respuesta en partes y, al terminar, lo mismo que answer.
 export interface LlmStream {
     textStream: AsyncIterable<string>; // las partes del texto, en orden

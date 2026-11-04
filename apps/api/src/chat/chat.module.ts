@@ -1,8 +1,8 @@
 // Módulo del chat (HU17). Reutiliza el EmbeddingProvider de ProcessingModule.
-import { google } from '@ai-sdk/google';
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ProcessingModule } from '../processing/processing.module';
-import { CHAT_MODEL_ID, GeminiChatLlm } from './adapters/gemini-chat-llm';
+import { createChatLlm } from './adapters/gemini-chat-llm';
 import { PrismaChatRepository } from './adapters/prisma-chat-repository';
 import { PrismaChatRetrieval } from './adapters/prisma-chat-retrieval';
 import { ChatController } from './chat.controller';
@@ -22,8 +22,10 @@ import { ChatRetrieval } from './ports/chat-retrieval';
         { provide: ChatRetrieval, useClass: PrismaChatRetrieval },
         { provide: ChatRepository, useClass: PrismaChatRepository },
         {
+            // El modelo de chat sale de GEMINI_CHAT_MODEL (gemini-2.5-flash por defecto).
             provide: ChatLlm,
-            useFactory: () => new GeminiChatLlm(google(CHAT_MODEL_ID), CHAT_MODEL_ID),
+            inject: [ConfigService],
+            useFactory: (config: ConfigService) => createChatLlm(config),
         },
     ],
 })

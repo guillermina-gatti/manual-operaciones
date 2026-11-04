@@ -1,6 +1,7 @@
 // Spec 009 (T06): los tiempos de espera (R9, D12) y el corte del cliente (R11, D13).
 import { Logger } from '@nestjs/common';
 import { UNAVAILABLE_TEXT } from './chat-pipeline';
+import { ChatLlm, LlmCutError, type LlmAnswer, type LlmStream, type Passage } from './ports/chat-llm';
 import {
     ChatStreamService,
     EMBEDDING_TIMEOUT_MS,
@@ -148,5 +149,59 @@ describe('ChatStreamService: tiempos y corte (spec 009, T06)', () => {
         await running;
 
         expect(jest.getTimerCount()).toBe(0);
+    });
+});
+
+// Diagnóstico: cuando el corte por tiempo llega mientras el proveedor falla (cuota, alta demanda…),
+// el log dice ese motivo; para el usuario no cambia nada (ai_unavailable, como siempre).
+describe('ChatStreamService: el log dice el motivo real del proveedor', () => {
+    class OverloadedLlm extends ChatLlm {
+        async answer(): Promise<LlmAnswer> {
+            throw new Error('no se usa');
+        }
+        stream(_q: string, _p: Passage[], signal: AbortSignal): LlmStream {
+            const cut = new Promise<never>((_, reject) =>
+                signal.addEventListener('abort', () =>
+                    reject(new LlmCutError((signal.reason as Error).message, 'HTTP 503: high demand')),
+                ),
+            );
+            cut.catch(() => undefined);
+            async function* parts(): AsyncGenerator<string> {
+                yield await cut;
+            }
+            return { textStream: parts(), final: cut };
+        }
+    }
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+        jest.restoreAllMocks();
+    });
+
+    it('el aviso del log empieza por el error del proveedor, y done sigue siendo ai_unavailable', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const repo = new FakeRepository();
+        const service = new ChatStreamService(
+            new FakeEmbeddings(),
+            new FakeRetrieval([chunk()]),
+            new OverloadedLlm(),
+            repo,
+        );
+        const sink = new RecordingSink();
+        const opened = await service.open(USER, { message: '¿Plazo?' });
+        const running = service.run(USER, opened, sink, new AbortController().signal);
+
+        await jest.advanceTimersByTimeAsync(FIRST_TEXT_TIMEOUT_MS);
+        await running;
+
+        expect(warn).toHaveBeenCalledWith(
+            'Falló la llamada al modelo: LlmCutError: HTTP 503: high demand (pedido cortado: El modelo no empezó a responder a tiempo)',
+        );
+        expect(sink.final).toMatchObject({ status: 'ai_unavailable', answer: UNAVAILABLE_TEXT });
+        expect(repo.saved[0].status).toBe('ai_unavailable');
     });
 });
