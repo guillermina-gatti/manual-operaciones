@@ -3,7 +3,8 @@
 // - integracion: contra la API real en el puerto 3000, con Docker. `pnpm test:e2e:integracion` (T26).
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 3001;
+const REAL_AUTH = process.env.NEXT_PUBLIC_REAL_AUTH === 'true';
+const PORT = REAL_AUTH ? 3002 : 3001;
 const INTEGRATION_DIR = /e2e[\\/]integracion[\\/]/;
 
 export default defineConfig({
@@ -41,8 +42,11 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec next dev -p ${PORT}`,
     url: `http://localhost:${PORT}`,
-    // En desarrollo reutiliza la web si ya está corriendo; en CI la levanta siempre.
-    reuseExistingServer: !process.env.CI,
+    // Nunca reutiliza un servidor previo para evitar mezclar sesión simulada y sesión real.
+    reuseExistingServer: false,
     timeout: 120_000,
+    env: {
+      NEXT_PUBLIC_REAL_AUTH: REAL_AUTH ? 'true' : 'false',
+    },
   },
 });
