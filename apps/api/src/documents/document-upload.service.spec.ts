@@ -625,3 +625,103 @@ describe('DocumentUploadService', () => {
     });
   });
 });
+
+// Spec 008 (T06; plan 1.4, PD5): la respuesta de la carga lleva owner y areas, buscados antes de escribir.
+describe('DocumentUploadService: referencias con nombre (spec 008)', () => {
+  let events: string[];
+  let areas: { findByIds: jest.Mock; findExistingIds: jest.Mock };
+  let users: { findById: jest.Mock };
+  let repository: {
+    findActiveByChecksum: jest.Mock;
+    runInTransaction: jest.Mock;
+    createWithFirstVersion: jest.Mock;
+  };
+  let service: DocumentUploadService;
+
+  const ventas = { id: AREA_IDS.ventas, name: 'Ventas', isActive: true };
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(NOON_IN_BUENOS_AIRES);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    events = [];
+    areas = {
+      findByIds: jest.fn(() => {
+        events.push('areas');
+        return Promise.resolve([ventas]);
+      }),
+      findExistingIds: jest.fn(),
+    };
+    users = {
+      findById: jest.fn((id: string) => {
+        events.push('users');
+        return Promise.resolve(
+          Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        );
+      }),
+    };
+    repository = {
+      findActiveByChecksum: jest.fn().mockResolvedValue(null),
+      runInTransaction: jest.fn(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          events.push('begin');
+          return fn(TX);
+        },
+      ),
+      createWithFirstVersion: jest.fn((_tx: unknown, data: NewDocument) =>
+        Promise.resolve(recordFrom(data)),
+      ),
+    };
+    service = new DocumentUploadService(
+      areas as unknown as AreasDirectory,
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      {
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+      } as unknown as FileStorage,
+      { enqueue: jest.fn().mockResolvedValue(undefined) } as ProcessingQueue,
+      { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditLog,
+    );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('E8: responde owner y areas con nombre, sin review', async () => {
+    const response = await service.upload(pdf(), dto(), admin);
+
+    expect(response.owner).toStrictEqual({
+      id: FIXTURE_USERS.supervisorVentas.id,
+      name: FIXTURE_USERS.supervisorVentas.name,
+      isActive: true,
+    });
+    expect(response.areas).toStrictEqual([ventas]);
+    expect(response).not.toHaveProperty('review');
+  });
+
+  it('PD5: los nombres se piden antes de escribir', async () => {
+    await service.upload(pdf(), dto(), admin);
+
+    expect(events.indexOf('begin')).toBeGreaterThan(
+      events.lastIndexOf('areas'),
+    );
+    expect(events.indexOf('begin')).toBeGreaterThan(
+      events.lastIndexOf('users'),
+    );
+  });
+
+  it('R13: el directorio caído al buscar los nombres es 503 y no se escribió nada', async () => {
+    // La primera llamada valida las áreas; la segunda, la de los nombres, falla.
+    areas.findByIds
+      .mockResolvedValueOnce([ventas])
+      .mockRejectedValueOnce(new RepositoryUnavailableError('caído'));
+
+    await expect(service.upload(pdf(), dto(), admin)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(repository.runInTransaction).not.toHaveBeenCalled();
+    expect(repository.createWithFirstVersion).not.toHaveBeenCalled();
+  });
+});

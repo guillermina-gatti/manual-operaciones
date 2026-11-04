@@ -105,6 +105,7 @@ describe('Avisos de vencimiento (integración)', () => {
         status: 'DUE_SOON',
         lastReviewedAt: null,
         lastReviewedById: null,
+        lastReviewedBy: null,
       });
     });
 
@@ -172,6 +173,7 @@ describe('Avisos de vencimiento (integración)', () => {
         status: null,
         lastReviewedAt: null,
         lastReviewedById: null,
+        lastReviewedBy: null,
       });
       expect((await pending(admin)).data).toEqual([]);
     });
@@ -375,6 +377,12 @@ describe('Avisos de vencimiento (integración)', () => {
         status: 'UP_TO_DATE',
         lastReviewedAt: NOW.toISOString(),
         lastReviewedById: FIXTURE_USERS.empleadoVentas.id,
+        // Spec 008 (E8): quien la hizo, con nombre.
+        lastReviewedBy: {
+          id: FIXTURE_USERS.empleadoVentas.id,
+          name: expect.any(String) as string,
+          isActive: true,
+        },
       });
       expect(body.currentVersion.id).toBe(doc.versionId);
 
@@ -518,6 +526,11 @@ describe('Avisos de vencimiento (integración)', () => {
         status: 'OVERDUE',
         lastReviewedAt: lastReview.at.toISOString(),
         lastReviewedById: lastReview.byId,
+        lastReviewedBy: {
+          id: lastReview.byId,
+          name: expect.any(String) as string,
+          isActive: true,
+        },
       });
     });
 

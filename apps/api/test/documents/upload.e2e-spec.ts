@@ -101,7 +101,20 @@ describe('POST /api/documents (integración)', () => {
       description: 'Cierre diario',
       status: 'ACTIVE',
       areaIds: [AREA_IDS.ventas],
+      // Spec 008 (P4, E8): los nombres salen de la base de tests.
+      areas: [
+        {
+          id: AREA_IDS.ventas,
+          name: expect.any(String) as string,
+          isActive: true,
+        },
+      ],
       ownerId: FIXTURE_USERS.supervisorVentas.id,
+      owner: {
+        id: FIXTURE_USERS.supervisorVentas.id,
+        name: expect.any(String) as string,
+        isActive: true,
+      },
       reviewDate: expect.any(String),
       createdById: admin.id,
       createdAt: expect.any(String),

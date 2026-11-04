@@ -1,9 +1,12 @@
 /* Spec 008: las referencias a personas y áreas que llevan las respuestas de documentos, con su nombre
-y su estado actuales (R1). Acá está solo lo que no consulta nada (plan 008, 1.1; PD1): qué IDs pide una
-respuesta y cómo se arma cada referencia con lo que devolvieron los directorios. La búsqueda en lote
-(DocumentReferences) espera UsersDirectory.findByIds, de la pareja A (T05). */
+y su estado actuales (R1). Lo puro (qué IDs pide una respuesta y cómo se arma cada referencia) y la
+búsqueda en lote, DocumentReferences (plan 008, 1.1; PD1). */
 
+import { Logger } from '@nestjs/common';
 import type { DocumentRecord } from './documents.repository';
+import { findUsersByIds } from './find-users-by-ids';
+import type { AreasDirectory } from './ports/areas-directory';
+import type { UsersDirectory } from './ports/users-directory';
 
 // Lo único que sale de una persona o un área (R3). name es null si el directorio no la encontró (R12).
 export interface DocumentReference {
@@ -84,6 +87,30 @@ export class ReferenceLookup {
       ids.areaIds.every((id) => this.searched.areas.has(id))
     );
   }
+
+  // Los IDs que todavía no se buscaron, sin repetidos (PD5).
+  missing(ids: ReferenceIds): ReferenceIds {
+    return {
+      userIds: [...new Set(ids.userIds)].filter(
+        (id) => !this.searched.users.has(id),
+      ),
+      areaIds: [...new Set(ids.areaIds)].filter(
+        (id) => !this.searched.areas.has(id),
+      ),
+    };
+  }
+
+  // Lo de las dos búsquedas junto (PD5: lo que faltaba se pidió después).
+  merge(other: ReferenceLookup): ReferenceLookup {
+    return new ReferenceLookup(
+      new Map([...this.users, ...other.users]),
+      new Map([...this.areas, ...other.areas]),
+      {
+        users: new Set([...this.searched.users, ...other.searched.users]),
+        areas: new Set([...this.searched.areas, ...other.searched.areas]),
+      },
+    );
+  }
 }
 
 // Los IDs de una respuesta con uno o más documentos: responsables y áreas de todos, y quien hizo la
@@ -101,4 +128,51 @@ export function referenceIdsOf(
     }
   }
   return { userIds: [...userIds], areaIds: [...areaIds] };
+}
+
+// La búsqueda en lote (PD1): una clase común, como DocumentWriteSteps, que construyen los servicios con
+// los directorios que ya reciben. Un pedido de usuarios y uno de áreas, en paralelo, sin repetidos y
+// sin llamar con listas vacías. Un directorio caído deja pasar RepositoryUnavailableError (R13).
+export class DocumentReferences {
+  private readonly logger = new Logger(DocumentReferences.name);
+
+  constructor(
+    private readonly users: UsersDirectory,
+    private readonly areas: AreasDirectory,
+  ) {}
+
+  async lookup(ids: ReferenceIds): Promise<ReferenceLookup> {
+    const userIds = [...new Set(ids.userIds)];
+    const areaIds = [...new Set(ids.areaIds)];
+    const [users, areas] = await Promise.all([
+      // TODO(spec 008): users.findByIds(userIds) cuando esté en develop (ver find-users-by-ids.ts).
+      userIds.length > 0 ? findUsersByIds(this.users, userIds) : [],
+      areaIds.length > 0 ? this.areas.findByIds(areaIds) : [],
+    ]);
+    return ReferenceLookup.from(users, areas, { userIds, areaIds });
+  }
+
+  // Spec 008 (PD5): en las escrituras, los nombres se buscan antes de escribir. Si el registro que
+  // devolvió la escritura trae un ID que no se buscó (otra escritura en paralelo), se pide después.
+  // Si ese pedido falla, la escritura ya está guardada: la referencia sale con name null (R12) y el
+  // fallo queda en el log, sin convertir la respuesta en un error.
+  async complete(
+    lookup: ReferenceLookup,
+    ids: ReferenceIds,
+  ): Promise<ReferenceLookup> {
+    const missing = lookup.missing(ids);
+    if (missing.userIds.length === 0 && missing.areaIds.length === 0) {
+      return lookup;
+    }
+    try {
+      return lookup.merge(await this.lookup(missing));
+    } catch (error) {
+      this.logger.warn(
+        `No se pudieron buscar los nombres después de escribir: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return lookup;
+    }
+  }
 }

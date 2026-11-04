@@ -186,7 +186,7 @@ export class DocumentsController {
   @ApiResponse({
     status: 503,
     description:
-      'El almacenamiento, la base o la cola no responden; no se guardó nada',
+      'El almacenamiento, la base, la cola o el directorio no responden; no se guardó nada',
   })
   upload(
     @UploadedFile() file: UploadedFileInput | undefined,
@@ -208,7 +208,10 @@ export class DocumentsController {
     description: 'page o limit inválidos (limit va de 1 a 100)',
   })
   @ApiResponse({ status: 401, description: 'Sin autenticación' })
-  @ApiResponse({ status: 503, description: 'La base no responde' })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el directorio no responden',
+  })
   list(
     @Query() query: ListDocumentsQuery,
     @CurrentUser() user: AuthUser,
@@ -233,7 +236,7 @@ export class DocumentsController {
   @ApiResponse({ status: 401, description: 'Sin autenticación' })
   @ApiResponse({
     status: 503,
-    description: 'La base o el directorio de usuarios no responden',
+    description: 'La base o el directorio (usuarios o áreas) no responden',
   })
   search(
     @Query() query: SearchDocumentsQuery,
@@ -258,7 +261,7 @@ export class DocumentsController {
   @ApiResponse({ status: 401, description: 'Sin autenticación' })
   @ApiResponse({
     status: 503,
-    description: 'La base o el directorio de usuarios no responden',
+    description: 'La base o el directorio (usuarios o áreas) no responden',
   })
   pendingReview(
     @Query() query: ListDocumentsQuery,
@@ -273,7 +276,10 @@ export class DocumentsController {
   @ApiResponse({ status: 400, description: 'El id no es un UUID' })
   @ApiResponse({ status: 401, description: 'Sin autenticación' })
   @ApiResponse({ status: 404, description: NOT_FOUND_DESCRIPTION })
-  @ApiResponse({ status: 503, description: 'La base no responde' })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el directorio no responden',
+  })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthUser,
@@ -321,7 +327,7 @@ export class DocumentsController {
   @ApiResponse({ status: 409, description: ARCHIVED_DESCRIPTION })
   @ApiResponse({
     status: 503,
-    description: 'La base no responde; no cambió nada',
+    description: 'La base o el directorio no responden; no cambió nada',
   })
   changeAreas(
     @Param('id', ParseUUIDPipe) id: string,
@@ -365,7 +371,7 @@ export class DocumentsController {
   @ApiResponse({
     status: 503,
     description:
-      'El almacenamiento, la base o la cola no responden; no se guardó nada',
+      'El almacenamiento, la base, la cola o el directorio no responden; no se guardó nada',
   })
   addVersion(
     @Param('id', ParseUUIDPipe) id: string,
@@ -392,7 +398,10 @@ export class DocumentsController {
     description: 'Solo el ADMIN ve el historial',
   })
   @ApiResponse({ status: 404, description: 'El documento no existe' })
-  @ApiResponse({ status: 503, description: 'La base no responde' })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el directorio no responden',
+  })
   listVersions(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<VersionHistoryResponse> {
@@ -481,7 +490,7 @@ export class DocumentsController {
   })
   @ApiResponse({
     status: 503,
-    description: 'La base no responde; no cambió nada',
+    description: 'La base o el directorio no responden; no cambió nada',
   })
   archive(
     @Param('id', ParseUUIDPipe) id: string,

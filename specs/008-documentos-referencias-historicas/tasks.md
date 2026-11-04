@@ -2,11 +2,21 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (02/11/2026):** T01 a T04 y T08 a T12 **hechas**, sin commits (los hace el usuario). T05 a T07, T13 y T14 esperan `UsersDirectory.findByIds` de la pareja A. T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
+- **Estado (04/11/2026):** T01 a T14 **hechas**, sin commits (los hace el usuario). T05 y T06 usan la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) mientras `UsersDirectory.findByIds` no está en develop. Falta solo reemplazarla cuando llegue, y mandar los [avisos a la pareja A](#avisos-a-la-pareja-a-pd13). T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
+
+## Función temporal `findUsersByIds`
+
+`UsersDirectory.findByIds(ids)` todavía no está en develop. Para no frenar T05 y T06 (la web se rompía porque la API no mandaba `owner`, `areas`, `lastReviewedBy` ni `uploadedBy`), está `src/documents/find-users-by-ids.ts`, sin tocar los puertos ni los adaptadores de la pareja A:
+
+- saca los repetidos y llama a `UsersDirectory.findById` en paralelo, una vez por cada ID distinto, y omite los que no existen: el mismo comportamiento que confirmó la pareja A para `findByIds` (Q1);
+- la usa un solo lugar, `DocumentReferences.lookup` (`document-references.ts`), marcado con `TODO(spec 008)`;
+- **cuando `findByIds` esté en develop:** `lookup` pasa a llamar a `this.users.findByIds(userIds)`, se borra `find-users-by-ids.ts` y su bloque de tests en `document-references.spec.ts` (`findUsersByIds (temporal, …)`). Los tests de `DocumentReferences` que cuentan llamadas a `findById` pasan a contar `findByIds`.
+
+Diferencia con el plan (sección 9 de la spec, "en lote"): mientras dure, una página con N responsables distintos hace N consultas de usuarios en vez de una.
 
 ## Qué se puede hacer ya y qué espera a la pareja A
 
-`UsersDirectory.findByIds(ids)` todavía no existe (spec, "Depende de"). Cada tarea dice si lo necesita:
+`UsersDirectory.findByIds(ids)` todavía no existe (spec, "Depende de"). Desde el 04/11/2026, T05 a T07, T13 y T14 se pueden hacer con la función temporal de arriba. Cada tarea dice si lo necesita:
 
 | Tarea | ¿Se puede hacer ya? | Por qué |
 | --- | --- | --- |
@@ -14,16 +24,16 @@
 | T02 · Validar el responsable nuevo inactivo | **Sí** | Usa `UsersDirectory.findById`, que ya trae `isActive` |
 | T03 · Integración de las validaciones | **Sí** | Depende de T01 y T02 |
 | T04 · Referencias: tipos y búsqueda en memoria | **Sí** | Es puro: no llama a los directorios |
-| T05 · Buscar las referencias en lote | **No: espera `findByIds`** | Llama a `UsersDirectory.findByIds` |
-| T06 · Respuestas con nombres | **No: espera `findByIds`** | Depende de T05 |
-| T07 · Integración de las respuestas | **No: espera `findByIds`** | Depende de T06 |
+| T05 · Buscar las referencias en lote | **Hecha, con `findUsersByIds`** | Cambia a `UsersDirectory.findByIds` cuando esté |
+| T06 · Respuestas con nombres | **Hecha** | Depende de T05 |
+| T07 · Integración de las respuestas | **Hecha** | Depende de T06 |
 | T08 · Web: tipos y formatos | **Sí** | Solo tipos y funciones puras |
 | T09 · Web: pantallas de consulta | **Sí, con respuestas simuladas** | Se mergea con T06 o después (PD11) |
 | T10 · Web: historial de versiones | **Sí, con respuestas simuladas** | Se mergea con T06 o después (PD11) |
 | T11 · Web: `OwnerField` y cambio de áreas | **Sí, con respuestas simuladas** | Se mergea con T06 o después (PD11) |
 | T12 · Web: mensajes de los errores nuevos | **Sí** | Se puede mergear después de T03 |
-| T13 · Playwright contra la API real | **No: espera `findByIds`** | Necesita T06 y T09 a T11 |
-| T14 · Verificación | **No: espera `findByIds`** | Necesita todas |
+| T13 · Playwright contra la API real | **Hecha** | Con la API levantada contra `manual_test` |
+| T14 · Verificación | **Hecha** | Salvo el reemplazo por `findByIds`, que espera a la pareja A |
 
 Convenciones:
 
@@ -117,7 +127,7 @@ Convenciones:
 - **Commit:** `feat(api): armar las referencias de usuarios y áreas de los documentos`
 - **Estado:** hecha. Falló primero (el archivo no existía); 10 tests. Diferencia con el plan (1.1): `ReferenceLookup.from` recibe un tercer parámetro opcional, los IDs buscados, para que `has` cuente como resueltos los que se buscaron y no existen (PD5 no los vuelve a pedir).
 
-### T05 · Buscar las referencias en lote ⏳ espera `UsersDirectory.findByIds`
+### T05 · Buscar las referencias en lote
 
 - **Qué hace:** suma a `document-references.ts` la clase `DocumentReferences(users, areas)` con `lookup(ids)`: `users.findByIds` y `areas.findByIds` en paralelo, sin repetidos, sin llamar con una lista vacía, y `ReferenceLookup.from` con los resultados (PD1). Un directorio caído deja pasar `RepositoryUnavailableError`.
 - **Cubre:** R1, R12, R13; sección 9 de la spec (en lote); PD1; plan sección 1.1.
@@ -129,9 +139,9 @@ Convenciones:
   - un directorio que lanza `RepositoryUnavailableError` → `lookup` la lanza.
 - **Depende de:** T04 y **`UsersDirectory.findByIds` de la pareja A** (en el puerto, en `PrismaUsersDirectory` y en `InMemoryUsersDirectory`). Antes de empezar, confirmar Q1 (plan 8.2).
 - **Commit:** `feat(api): buscar en lote los nombres de las referencias`
-- **Estado:** bloqueada.
+- **Estado:** hecha, con la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) en vez de `users.findByIds`. Fallaron primero (no existían `DocumentReferences` ni `find-users-by-ids.ts`); 8 tests nuevos (3 de la función temporal, 5 de `DocumentReferences`). Además de la tarea, `ReferenceLookup` suma `missing(ids)` y `merge(other)`, y `DocumentReferences` suma `complete(lookup, ids)`, para PD5 (lo que aparece recién en el resultado de una escritura).
 
-### T06 · Respuestas con nombres ⏳ espera `UsersDirectory.findByIds`
+### T06 · Respuestas con nombres
 
 - **Qué hace:**
   - `dto/document.response.ts`: `DocumentReferenceResponse` (Swagger); `owner`, `areas`, `review.lastReviewedBy` y `uploadedBy`, sin sacar los IDs (P1); los mapeos reciben el `ReferenceLookup` como parámetro obligatorio (PD2; plan 1.2);
@@ -147,9 +157,9 @@ Convenciones:
   - los `*.spec.ts` que construyen `DocumentQueryService` suman el directorio de áreas.
 - **Depende de:** T05 (y por eso, de `findByIds`). Conviene después de T01 y T02, que tocan los mismos servicios.
 - **Commit:** `feat(api): devolver los nombres del responsable, las áreas y la revisión`
-- **Estado:** bloqueada.
+- **Estado:** hecha. `document.response.spec.ts` se reescribió con un `ReferenceLookup` armado a mano (19 tests); se suman 7 en `document-query.service.spec.ts`, 3 en `document-upload.service.spec.ts` y 5 en `document-lifecycle.service.spec.ts`. Ajustes en tests existentes: los `review` esperados suman `lastReviewedBy`, el historial suma `uploadedBy`, y el test de R11 con responsable inactivo ya no espera cero llamadas a `findById` (ahora se llama para los nombres, no para validar). Los mapeos reciben el `DocumentReviewInfo` de `review-status.ts` (sin `lastReviewedBy`); el DTO de Swagger lo suma. `api test`: 85 suites, 1324 tests; `tsc` y `lint` en verde. `test:e2e documents` (con la confirmación del usuario para resetear `manual_test`): 13 suites, 255 tests, todos pasan, después de ajustar las respuestas enteras de `upload`, `lifecycle` y `reviews` (suman `owner`, `areas`, `lastReviewedBy` y `uploadedBy`; los nombres con `expect.any(String)`, porque salen de la base de tests). Ese ajuste es la segunda parte de T07; falta su suite nueva.
 
-### T07 · Integración de las respuestas ⏳ espera `UsersDirectory.findByIds`
+### T07 · Integración de las respuestas
 
 - **Qué hace:** la suite nueva `test/documents/references.e2e-spec.ts` y el ajuste de las suites existentes que comparan respuestas enteras.
 - **Cubre:** E1 a E8 y E10 a nivel API; R3; plan sección 4.2.
@@ -168,7 +178,7 @@ Convenciones:
   - las suites de las specs 001 a 007 pasan, con los `toStrictEqual` de respuestas enteras ajustados.
 - **Depende de:** T06
 - **Commit:** `test(api): probar los nombres de las referencias en las respuestas`
-- **Estado:** bloqueada.
+- **Estado:** hecha. `references.e2e-spec.ts`: 13 tests (E1 a E7, las cinco escrituras de E8 y E10), con la comprobación de R3 (`expectOnlyReferenceKeys`) donde hay referencias. No hubo corrida en rojo: T06 ya estaba hecha. Los usuarios y el área propios (Ana, Rita, Compras) se crean con los helpers de T03 y se borran al terminar. E10 se arma con un `ownerId` que no existe: la tabla no tiene clave foránea a `users`. `test:e2e documents` (con la confirmación del usuario para resetear `manual_test`): 14 suites, 268 tests, todos pasan.
 
 ## Web
 
@@ -226,7 +236,7 @@ Convenciones:
   - `UploadDocumentForm.test.tsx` y `upload-fields.test.tsx` pasan sin cambios (F5).
 - **Depende de:** T08. **Se puede hacer ya**; se mergea con T06 o después (PD11), porque usa `document.owner`.
 - **Commit:** `feat(web): conservar el responsable actual al cambiar las áreas`
-- **Estado:** hecha, sin mergear antes de T06. Fallaron primero 5 tests de `OwnerField` y 4 de `ChangeAreasForm`. **Cambio de comportamiento:** el test E6 de la spec 003 ("el responsable de Ventas se borra con el aviso") pasa a comprobar lo contrario, como piden P5 y F4: no se borra, se manda sin `ownerId` y el 400 de la API queda en el campo. E1 de la spec 003 ya no espera que el responsable se vacíe antes de elegir otro.
+- **Estado:** hecha, sin mergear antes de T06. Fallaron primero 5 tests de `OwnerField` y 4 de `ChangeAreasForm`. **Cambio de comportamiento:** el test E6 de la spec 003 ("el responsable de Ventas se borra con el aviso") pasa a comprobar lo contrario, como piden P5 y F4: no se borra, se manda sin `ownerId` y el 400 de la API queda en el campo. E1 de la spec 003 ya no espera que el responsable se vacíe antes de elegir otro. **Arreglo posterior (04/11/2026):** E20 de `OwnerField.test.tsx` fallaba a veces con la suite completa. `waitForCandidates` contaba opciones, y con `currentOwner` el responsable actual ya es una opción antes de que lleguen los candidatos. Ahora también espera que el select esté habilitado.
 
 ### T12 · Mensajes de los errores nuevos
 
@@ -238,19 +248,22 @@ Convenciones:
 - **Commit:** `feat(web): explicar los rechazos por responsable o área inactivos`
 - **Estado:** hecha. Fallaron primero 4 tests (2 por contexto, carga y áreas).
 
-### T13 · Playwright contra la API real ⏳ espera `UsersDirectory.findByIds`
+### T13 · Playwright contra la API real
 
 - **Qué hace:** `e2e/integracion/referencias.spec.ts`, con el recorrido de la sección 4.4 del plan.
 - **Cubre:** E3, E4, E13, E15, E19 de punta a punta.
-- **Archivos:** `apps/web/e2e/integracion/referencias.spec.ts` y, si hace falta, la siembra de `e2e/support`.
+- **Archivos:** `apps/web/e2e/integracion/referencias.spec.ts` y `apps/api/test/documents/seed-references.ts` (la siembra; ver Estado).
 - **Verificación:** con la API y la base levantadas: el listado y el detalle muestran "(inactivo)" e "(inactiva)"; el ADMIN abre el cambio de áreas, ve al responsable inactivo elegido, agrega Operaciones y guarda; el detalle sigue con el mismo responsable y con Compras (inactiva) y Operaciones. Las demás de `e2e/integracion` pasan.
 - **Depende de:** T06, T09, T11
 - **Commit:** `test(web): recorrer los documentos con referencias inactivas`
-- **Estado:** bloqueada.
+- **Estado:** hecha. Pasa contra la API real (verificado antes con `pg_stat_activity` que la API estaba conectada a `manual_test` y no a `manual`), junto con las otras 12 de `e2e/integracion`. La siembra se corre con `execSync` y un solo texto de comando: con `execFileSync` y `shell: true`, Node avisaba que los argumentos no se escapan.
+  - **Siembra:** no hay endpoint para desactivar usuarios ni áreas, y la API no deja cargar con inactivos (R5, R7). Por eso el documento lo siembra `apps/api/test/documents/seed-references.ts`, que el spec corre con el `ts-node` de la API. Crea un responsable y un área propios de la corrida, el documento de Ventas y de esa área, y después los desactiva. Escribe solo en `TEST_DATABASE_URL` y corta si no es una base local `_test`, con los mismos controles que `seed:fixtures`. No suma scripts a `package.json`.
+  - **Primer intento:** no se corrió porque la API del puerto 3000 estaba conectada a la base `manual`, y el recorrido escribe.
+  - **Para correrla:** `DATABASE_URL=<la TEST_DATABASE_URL de apps/api/.env> pnpm dev:api`; después `pnpm --filter api seed:fixtures` y `pnpm --filter web test:e2e:integracion`, que corre también las demás de `e2e/integracion`.
 
 ## Verificación final
 
-### T14 · Verificación de la feature ⏳ espera `UsersDirectory.findByIds`
+### T14 · Verificación de la feature
 
 - **Qué hace:** corre todo, confirma que cada escenario tiene sus tests (tabla de la sección 5 del plan, marcando cada fila), hace las mutaciones de control y anota el resultado en este archivo.
 - **Cubre:** spec sección 11 completa; plan secciones 4 y 5.
@@ -271,7 +284,34 @@ Convenciones:
   6. **Avisos a la pareja A** (PD13): que `getNames` y sus fixtures quedaron sin uso en Documentos (P8); los campos de R1 y R2 como contrato; y, si Q1 sigue abierta, la respuesta de `findByIds` con un ID que no existe. Los manda Matías.
 - **Depende de:** T01 a T13
 - **Commit:** `docs(specs): verificar referencias históricas en documentos`
-- **Estado:** bloqueada.
+- **Estado:** hecha el 04/11/2026, salvo el reemplazo de `findUsersByIds`: cuando `findByIds` esté en develop, reemplazarla (ver [la función temporal](#función-temporal-findusersbyids)) y volver a correr todo.
+  1. **Todo en verde:**
+     - API: `lint` y `tsc` sin errores; `test`, 85 suites y 1324 tests; `test:e2e` completo, 27 suites y 403 tests. Para correrlo hubo que resetear `manual_test`, con la confirmación del usuario.
+     - Web: `lint` y `tsc` sin errores; `test`, 63 archivos y 775 tests; Playwright simulado (escritorio y celular), 108 tests; `e2e/integracion`, 13 tests.
+     - **Arreglos en el Playwright simulado (`e2e/ciclo-de-vida.spec.ts`)**, que T09 y T11 no habían corrido:
+       - E1: el handler simulado del PATCH de áreas ahora recalcula `owner` y `areas`, como la API real. Antes el detalle seguía mostrando "Ventas".
+       - E6 (spec 003): pasa a probar el comportamiento de P5, F4 y E16. El responsable actual no se borra, el pedido sale sin `ownerId`, el 400 de la API queda en el campo y después se elige otro.
+     - Ningún error de otras parejas.
+  2. **Swagger** (`/api/docs-json`): `owner`, `areas`, `review.lastReviewedBy` y `uploadedBy` con `DocumentReferenceResponse` (solo `id`, `name` nullable e `isActive`). Los 400 nuevos están en la carga y en el cambio de áreas; los 503 mencionan el directorio.
+  3. **Mutaciones de control:** las siete hacen fallar tests, y cada archivo se restauró byte por byte. Se aplicaron una por vez, con un script que copia el archivo, lo muta, corre los tests y lo restaura.
+     - Validar `isActive` del responsable que no cambia: falla E15 (write-steps y lifecycle).
+     - No validar las áreas agregadas: fallan E12 y E14.
+     - Tratar como agregadas las que ya estaban: falla E13.
+     - Pedir siempre el revisor: falla E5 (references y query).
+     - Copiar la referencia entera: falla R3 (references y document.response).
+     - En `OwnerField`, borrar al actual: fallan E19, P5, E16 y E21.
+     - Pedir candidatos con todas las áreas: falla E21 (`ChangeAreasForm`).
+  4. **Tabla de la sección 5 del plan:** cada fila tiene sus tests, con el nombre del escenario, en las capas que pide el plan, y pasan. E9 queda en las cinco pantallas web: `DocumentList`, `SearchResults`, `PendingReviewList`, `DocumentDetail` y `VersionHistory`.
+  5. **Archivos de la pareja A sin cambios:** `git diff --stat develop...HEAD` y `git status` sobre esos caminos, vacíos. `getNames` y `listAreas` en `components/documents` solo aparecen en `ChangeAreasForm` y `UploadDocumentForm` (`listAreas`).
+  6. **Avisos a la pareja A:** redactados abajo; los manda Matías.
+
+## Avisos a la pareja A (PD13)
+
+Para mandar (Matías):
+
+1. **`getNames` quedó sin uso en Documentos (P8).** Las pantallas toman los nombres de la respuesta de la API. `usersDirectory.getNames` y sus fixtures ya no se llaman desde `components/documents`; si nadie más los usa, se pueden sacar.
+2. **El contrato de las respuestas (R1, R2).** Todas las respuestas de documentos traen `owner`, `areas` (en el orden de `areaIds`), `review.lastReviewedBy` (solo cuando va `review`) y, en el historial, `uploadedBy`. Cada referencia trae solo `{ id, name, isActive }`; `name` es `null` si el directorio no la encontró. Los IDs siguen (`ownerId`, `areaIds`, `lastReviewedById`, `uploadedById`).
+3. **`UsersDirectory.findByIds` (Q1).** Mientras no esté en develop, Documentos usa una función temporal: un `findById` por cada ID distinto. Cuando lo agreguen al puerto, a `PrismaUsersDirectory` y a `InMemoryUsersDirectory`, con el comportamiento acordado (sin repetidos, activos e inactivos, omitiendo los que no existen), avísennos para reemplazarla.
 
 ---
 
@@ -285,9 +325,9 @@ Se pueden hacer ya:
   T10 ◄─ T08          (se mergea con T06 o después)
   T11 ◄─ T08          (se mergea con T06 o después)
 
-Esperan UsersDirectory.findByIds (pareja A):
-  T05 ◄─ T04, findByIds
-  T06 ◄─ T05          (mejor después de T01 y T02)
+Con la función temporal findUsersByIds, hasta UsersDirectory.findByIds (pareja A):
+  T05 ◄─ T04          (hecha)
+  T06 ◄─ T05          (hecha)
   T07 ◄─ T06
   T13 ◄─ T06, T09, T11
   T14 ◄─ T01 a T13

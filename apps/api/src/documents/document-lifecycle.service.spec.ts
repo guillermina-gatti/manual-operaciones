@@ -14,6 +14,7 @@ import { Clock } from '../common/clock';
 import { StorageUnavailableError } from '../storage/file-storage';
 import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
+import { InMemoryAreasDirectory } from './adapters/in-memory-areas-directory';
 import { DocumentLifecycleService } from './document-lifecycle.service';
 import {
   ConcurrentVersionError,
@@ -466,14 +467,20 @@ describe('DocumentLifecycleService', () => {
       it('R11: sin cambios reales, no valida aunque el responsable esté inactivo', async () => {
         repository.findByIdWithAreas.mockResolvedValue(withInactiveOwner());
 
-        await service.changeAreas(
+        const response = await service.changeAreas(
           DOCUMENT_ID,
           { areaIds: [AREA_IDS.operaciones, AREA_IDS.ventas] },
           admin,
         );
 
-        expect(users.findById).not.toHaveBeenCalled();
+        // Spec 008 (plan 1.4): el directorio se consulta solo para los nombres de la respuesta, no
+        // para validar: no hay 400 y responde al responsable inactivo con su nombre.
         expect(repository.replaceAreas).not.toHaveBeenCalled();
+        expect(response.owner).toStrictEqual({
+          id: inactiveOwner.id,
+          name: inactiveOwner.name,
+          isActive: false,
+        });
       });
     });
 
@@ -1093,7 +1100,7 @@ describe('DocumentLifecycleService.markReviewed (R6 a R9)', () => {
       }),
     };
     service = new DocumentLifecycleService(
-      { findByIds: jest.fn() } as unknown as AreasDirectory,
+      new InMemoryAreasDirectory(),
       users as unknown as UsersDirectory,
       repository as unknown as DocumentsRepository,
       { put: jest.fn(), delete: jest.fn() } as unknown as FileStorage,
@@ -1152,6 +1159,12 @@ describe('DocumentLifecycleService.markReviewed (R6 a R9)', () => {
       status: 'UP_TO_DATE',
       lastReviewedAt: NOW.toISOString(),
       lastReviewedById: empleadoVentas.id,
+      // Spec 008 (E8): quien la hizo, con nombre.
+      lastReviewedBy: {
+        id: empleadoVentas.id,
+        name: FIXTURE_USERS.empleadoVentas.name,
+        isActive: true,
+      },
     });
   });
 
@@ -1419,5 +1432,176 @@ describe('DocumentLifecycleService.markReviewed (R6 a R9)', () => {
       });
       expect(entry).not.toHaveProperty('previousReviewDate');
     });
+  });
+});
+
+// Spec 008 (T06; plan 1.4, PD5): las escrituras responden owner y areas, y los nombres se piden antes
+// de escribir.
+describe('DocumentLifecycleService: referencias con nombre (spec 008)', () => {
+  const OTHER_OWNER = FIXTURE_USERS.empleadoVentas.id;
+  const current = documentRecord({
+    areaIds: [AREA_IDS.ventas],
+    ownerId: FIXTURE_USERS.supervisorVentas.id,
+  });
+
+  let events: string[];
+  let areas: InMemoryAreasDirectory;
+  let users: { findById: jest.Mock };
+  let repository: {
+    runInTransaction: jest.Mock;
+    findByIdWithAreas: jest.Mock;
+    lockForUpdate: jest.Mock;
+    replaceAreas: jest.Mock;
+    archive: jest.Mock;
+  };
+  let warn: jest.SpyInstance;
+  let service: DocumentLifecycleService;
+
+  const fromFixtures = (id: string) =>
+    Promise.resolve(
+      Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+    );
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(NOON_IN_BUENOS_AIRES);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    events = [];
+    areas = new InMemoryAreasDirectory();
+    users = {
+      findById: jest.fn((id: string) => {
+        events.push(`user:${id}`);
+        return fromFixtures(id);
+      }),
+    };
+    repository = {
+      runInTransaction: jest.fn(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          events.push('begin');
+          return fn(TX);
+        },
+      ),
+      findByIdWithAreas: jest.fn().mockResolvedValue(current),
+      lockForUpdate: jest.fn().mockResolvedValue(current),
+      replaceAreas: jest.fn(
+        (_tx: unknown, id: string, areaIds: string[], ownerId?: string) =>
+          Promise.resolve(
+            documentRecord({
+              id,
+              areaIds,
+              ownerId: ownerId ?? current.ownerId,
+            }),
+          ),
+      ),
+      archive: jest.fn(() =>
+        Promise.resolve({
+          ...current,
+          status: 'ARCHIVED',
+          archivedAt: new Date(),
+        }),
+      ),
+    };
+    service = new DocumentLifecycleService(
+      areas,
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      { put: jest.fn(), delete: jest.fn() } as unknown as FileStorage,
+      { enqueue: jest.fn() } as unknown as ProcessingQueue,
+      { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditLog,
+    );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('E8: el cambio de áreas responde los nombres de cómo quedó, buscados antes de escribir', async () => {
+    const response = await service.changeAreas(
+      DOCUMENT_ID,
+      {
+        areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones],
+        ownerId: OTHER_OWNER,
+      },
+      admin,
+    );
+
+    expect(response.owner).toStrictEqual({
+      id: OTHER_OWNER,
+      name: FIXTURE_USERS.empleadoVentas.name,
+      isActive: true,
+    });
+    expect(response.areas.map((area) => area.name)).toEqual([
+      'Ventas',
+      'Operaciones',
+    ]);
+    expect(events.indexOf('begin')).toBeGreaterThan(
+      events.lastIndexOf(`user:${OTHER_OWNER}`),
+    );
+  });
+
+  it('E8: archivar responde owner y areas', async () => {
+    const response = await service.archive(DOCUMENT_ID, admin);
+
+    expect(response.status).toBe('ARCHIVED');
+    expect(response.owner.name).toBe(FIXTURE_USERS.supervisorVentas.name);
+    expect(response.areas.map((area) => area.name)).toEqual(['Ventas']);
+  });
+
+  it('R13: el directorio de áreas caído antes de escribir es 503 y no se escribió nada', async () => {
+    jest
+      .spyOn(areas, 'findByIds')
+      .mockRejectedValue(new RepositoryUnavailableError('caído'));
+
+    await expect(service.archive(DOCUMENT_ID, admin)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(repository.runInTransaction).not.toHaveBeenCalled();
+    expect(repository.archive).not.toHaveBeenCalled();
+  });
+
+  it('PD5: un responsable que aparece recién en el resultado se pide después', async () => {
+    // Otra escritura cambió el responsable entre la lectura y el bloqueo.
+    repository.archive.mockResolvedValue({
+      ...current,
+      status: 'ARCHIVED',
+      ownerId: OTHER_OWNER,
+    });
+
+    const response = await service.archive(DOCUMENT_ID, admin);
+
+    expect(response.owner).toStrictEqual({
+      id: OTHER_OWNER,
+      name: FIXTURE_USERS.empleadoVentas.name,
+      isActive: true,
+    });
+    expect(events.indexOf(`user:${OTHER_OWNER}`)).toBeGreaterThan(
+      events.indexOf('begin'),
+    );
+  });
+
+  it('PD5: si ese pedido falla, la escritura se responde igual, con name null, y queda en el log', async () => {
+    repository.archive.mockResolvedValue({
+      ...current,
+      status: 'ARCHIVED',
+      ownerId: OTHER_OWNER,
+    });
+    users.findById.mockImplementation((id: string) =>
+      id === OTHER_OWNER
+        ? Promise.reject(new RepositoryUnavailableError('caído'))
+        : fromFixtures(id),
+    );
+
+    const response = await service.archive(DOCUMENT_ID, admin);
+
+    expect(response.status).toBe('ARCHIVED');
+    expect(response.owner).toStrictEqual({
+      id: OTHER_OWNER,
+      name: null,
+      isActive: false,
+    });
+    expect(warn).toHaveBeenCalled();
   });
 });

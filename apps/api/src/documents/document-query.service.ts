@@ -15,6 +15,12 @@ import {
   pendingReviewWhere,
   searchScope,
 } from './document-access.policy';
+import {
+  DocumentReferences,
+  ReferenceIds,
+  ReferenceLookup,
+  referenceIdsOf,
+} from './document-references';
 import { DocumentRecord, DocumentsRepository } from './documents.repository';
 import {
   DocumentResponse,
@@ -30,8 +36,16 @@ import { ListDocumentsQuery } from './dto/list-documents.query';
 import { SearchDocumentsQuery } from './dto/search-documents.query';
 import { toHttpException } from './http-errors';
 import type { HttpOperation } from './http-errors';
+import { AreasDirectory } from './ports/areas-directory';
 import { UsersDirectory } from './ports/users-directory';
 import { dueSoonThrough, reviewFor } from './review-status';
+import type { DocumentReviewInfo } from './review-status';
+
+// Un documento de la respuesta con su review, si corresponde (spec 005, R4).
+interface WithReview {
+  record: DocumentRecord;
+  review?: DocumentReviewInfo;
+}
 import { buildFragment } from './search-fragment';
 
 // Forma del listado (R13). La clase para Swagger la agrega el controller (T19).
@@ -64,21 +78,28 @@ export interface DocumentSearchResponse {
 @Injectable()
 export class DocumentQueryService {
   private readonly logger = new Logger(DocumentQueryService.name);
+  private readonly references: DocumentReferences;
 
-  // El reloj es el último parámetro y tiene valor por defecto (spec 005, D2).
+  // El reloj es el último parámetro y tiene valor por defecto (spec 005, D2). Spec 008 (plan 1.3): el
+  // directorio de áreas va antes del repositorio, para los nombres de las áreas.
   constructor(
     private readonly users: UsersDirectory,
+    areas: AreasDirectory,
     private readonly documents: DocumentsRepository,
     private readonly storage: FileStorage,
     private readonly clock: Clock = new SystemClock(),
-  ) {}
+  ) {
+    this.references = new DocumentReferences(users, areas);
+  }
 
   // Spec 005 (R4, D6): cada respuesta lleva `review` solo para el ADMIN y el responsable.
   findOne(user: AuthUser, id: string): Promise<DocumentResponse> {
     return this.mapErrors(async () => {
       const today = this.today();
       const record = await this.findVisible(user, id);
-      return toDocumentResponse(record, reviewFor(user, record, today));
+      const [item] = this.withReviews(user, [record], today);
+      const refs = await this.lookupFor([item]);
+      return toDocumentResponse(record, refs, item.review);
     });
   }
 
@@ -106,9 +127,7 @@ export class DocumentQueryService {
         query.limit,
       );
       return {
-        data: data.map((record) =>
-          toDocumentSummary(record, reviewFor(user, record, today)),
-        ),
+        data: await this.summaries(user, data, today),
         total,
         page: query.page,
         limit: query.limit,
@@ -140,9 +159,7 @@ export class DocumentQueryService {
           ownerId: user.id,
         })) > 0;
       return {
-        data: data.map((record) =>
-          toDocumentSummary(record, reviewFor(user, record, today)),
-        ),
+        data: await this.summaries(user, data, today),
         total,
         page: query.page,
         limit: query.limit,
@@ -157,34 +174,39 @@ export class DocumentQueryService {
     user: AuthUser,
     query: SearchDocumentsQuery,
   ): Promise<DocumentSearchResponse> {
-    return this.mapErrors(
-      async () => {
-        const today = this.today();
-        const viewer = await this.viewerFor(user);
-        const { data, total } = await this.documents.search({
-          text: query.q,
-          scope: searchScope(viewer),
-          page: query.page,
-          limit: query.limit,
-        });
-        return {
-          data: data.map(({ record, fragment }) =>
-            toDocumentSearchResult(
-              record,
-              fragment && {
-                parts: buildFragment(fragment.markedText),
-                pageNumber: fragment.pageNumber,
-              },
-              reviewFor(user, record, today), // spec 005, D7
-            ),
+    return this.mapErrors(async () => {
+      const today = this.today();
+      const viewer = await this.viewerFor(user);
+      const { data, total } = await this.documents.search({
+        text: query.q,
+        scope: searchScope(viewer),
+        page: query.page,
+        limit: query.limit,
+      });
+      // Spec 005 (D7): el estado de revisión, como en el listado.
+      const items = this.withReviews(
+        user,
+        data.map(({ record }) => record),
+        today,
+      );
+      const refs = await this.lookupFor(items);
+      return {
+        data: data.map(({ record, fragment }, index) =>
+          toDocumentSearchResult(
+            record,
+            fragment && {
+              parts: buildFragment(fragment.markedText),
+              pageNumber: fragment.pageNumber,
+            },
+            refs,
+            items[index].review,
           ),
-          total,
-          page: query.page,
-          limit: query.limit,
-        };
-      },
-      'búsqueda',
-    );
+        ),
+        total,
+        page: query.page,
+        limit: query.limit,
+      };
+    }, 'búsqueda');
   }
 
   // Spec 003, R12: solo el ADMIN llega acá (lo controla el guard), así que no hay filtro de
@@ -195,7 +217,14 @@ export class DocumentQueryService {
         throw documentNotFound();
       }
       const versions = await this.documents.listVersions(id);
-      return { data: versions.map(toVersionHistoryItem) };
+      // Spec 008 (P3): quién subió cada versión, en un solo lookup.
+      const refs = await this.lookup({
+        userIds: versions.map((version) => version.uploadedById),
+        areaIds: [],
+      });
+      return {
+        data: versions.map((version) => toVersionHistoryItem(version, refs)),
+      };
     });
   }
 
@@ -232,6 +261,52 @@ export class DocumentQueryService {
 
   private viewerFor(user: AuthUser): Promise<AccessSubject> {
     return viewerFor(this.users, user);
+  }
+
+  // El listado y "Por revisar": cada documento con su review y sus nombres.
+  private async summaries(
+    user: AuthUser,
+    records: DocumentRecord[],
+    today: string,
+  ): Promise<DocumentSummary[]> {
+    const items = this.withReviews(user, records, today);
+    const refs = await this.lookupFor(items);
+    return items.map(({ record, review }) =>
+      toDocumentSummary(record, refs, review),
+    );
+  }
+
+  // Spec 005 (R4, D6): review solo para el ADMIN y el responsable.
+  private withReviews(
+    user: AuthUser,
+    records: DocumentRecord[],
+    today: string,
+  ): WithReview[] {
+    return records.map((record) => ({
+      record,
+      review: reviewFor(user, record, today),
+    }));
+  }
+
+  // Spec 008 (plan 1.3): un solo lookup por respuesta, con los IDs de toda la página. El revisor, solo
+  // de los documentos que llevan review (PD3).
+  private lookupFor(items: WithReview[]): Promise<ReferenceLookup> {
+    return this.lookup(
+      referenceIdsOf(
+        items.map(({ record, review }) => ({
+          record,
+          withReview: review !== undefined,
+        })),
+      ),
+    );
+  }
+
+  // Una página vacía no consulta los directorios.
+  private lookup(ids: ReferenceIds): Promise<ReferenceLookup> {
+    if (ids.userIds.length === 0 && ids.areaIds.length === 0) {
+      return Promise.resolve(ReferenceLookup.from([], []));
+    }
+    return this.references.lookup(ids);
   }
 
   // "Hoy" en hora de la empresa, una vez por pedido (spec 005, plan 1.2).

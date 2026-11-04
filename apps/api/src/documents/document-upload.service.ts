@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { AuthUser } from '../common/auth';
 import { Clock, SystemClock } from '../common/clock';
 import { FileStorage } from '../storage/file-storage';
+import { DocumentReferences, referenceIdsOf } from './document-references';
 import { DocumentWriteSteps, truncateFileName } from './document-write-steps';
 import { DocumentRecord, DocumentsRepository } from './documents.repository';
 import { CreateDocumentDto } from './dto/create-document.dto';
@@ -26,6 +27,7 @@ import { UsersDirectory } from './ports/users-directory';
 export class DocumentUploadService {
   private readonly logger = new Logger(DocumentUploadService.name);
   private readonly steps: DocumentWriteSteps;
+  private readonly references: DocumentReferences;
 
   // Inyección de todas las dependencias necesarias (puertos y repositorios)
   constructor(
@@ -45,6 +47,7 @@ export class DocumentUploadService {
       audit,
       clock,
     );
+    this.references = new DocumentReferences(users, areas);
   }
 
   // Método principal que ejecuta el proceso completo de carga
@@ -58,11 +61,24 @@ export class DocumentUploadService {
       const inspected = await this.validateBeforeWriting(file, dto);
       const uploaded = file as UploadedFileInput;
 
-      // 2. Procede a escribir en almacenamiento y base de datos
+      // 2. Spec 008 (PD5, R13): los nombres, antes de escribir. Con el directorio caído es 503 y no
+      //    se guardó nada.
+      const refs = await this.references.lookup({
+        userIds: [dto.ownerId],
+        areaIds: dto.areaIds,
+      });
+
+      // 3. Procede a escribir en almacenamiento y base de datos
       const record = await this.write(uploaded, inspected, dto, actor);
 
-      // 3. Devuelve la respuesta formateada
-      return toDocumentResponse(record);
+      // 4. Devuelve la respuesta formateada, sin review (como siempre) y con los nombres (P4)
+      return toDocumentResponse(
+        record,
+        await this.references.complete(
+          refs,
+          referenceIdsOf([{ record, withReview: false }]),
+        ),
+      );
     } catch (error) {
       const failure = toHttpException(error, this.logger, 'carga');
       // Registra el fallo en la auditoría si la carga fracasó
