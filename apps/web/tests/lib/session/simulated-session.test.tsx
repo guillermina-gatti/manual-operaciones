@@ -11,10 +11,13 @@ import {
   restoreSession,
   selectDevUser,
   useSession,
-} from '@/lib/session';
+} from '@/lib/session/simulated-session';
 import { DEV_FIXTURE_PASSWORD } from '@/lib/session/dev-credentials';
 import { fakeAccessToken, fakeAuthApi } from '../../support/session';
 import type { FakeAuthApi } from '../../support/session';
+
+// Aísla la sesión simulada para que apiClient use sus cabeceras y refresh en esta suite de tests
+vi.mock('@/lib/session', () => import('@/lib/session/simulated-session'));
 
 const empleadoVentas = FIXTURE_USERS.empleadoVentas;
 const admin = FIXTURE_USERS.admin;
