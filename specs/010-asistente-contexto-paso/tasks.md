@@ -206,7 +206,7 @@ Convenciones:
   Si algún test de la pareja B falla por el montaje, **no se cambia su test**: se frena y se avisa.
 - **Depende de:** T10.
 - **Commit:** `feat(web): mostrar el asistente del paso en la ejecución` (commit propio, para que la pareja B lo revise).
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T12 · Playwright: preguntar desde la ejecución
 
@@ -220,7 +220,7 @@ Convenciones:
   Las demás suites de Playwright simulado pasan sin cambios.
 - **Depende de:** T11.
 - **Commit:** `test(web): preguntar al asistente desde un paso de la ejecución`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ## Verificación final
 

@@ -72,6 +72,9 @@ export interface ApiHandlers {
   markReviewed?: Handler; // POST /api/documents/:id/review
   // Spec 009 (T14): el asistente.
   chatStream?: Handler; // POST /api/chat/stream
+  // Spec 010 (T12): la ejecución, para el asistente de un paso. El handler recibe (id, stepId).
+  execution?: Handler; // GET /api/executions/:id
+  completeStep?: Handler; // POST /api/executions/:id/steps/:stepId/complete
 }
 
 // Spec 005 (T23): el listado pide en segundo plano la cantidad de "Por revisar" (F2). Un test que no
@@ -100,6 +103,16 @@ const ID = "([^/]+)";
 const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
   { name: "areas", method: "GET", path: /^\/api\/areas$/ },
   { name: "chatStream", method: "POST", path: /^\/api\/chat\/stream$/ },
+  {
+    name: "execution",
+    method: "GET",
+    path: new RegExp(`^/api/executions/${ID}$`),
+  },
+  {
+    name: "completeStep",
+    method: "POST",
+    path: new RegExp(`^/api/executions/${ID}/steps/${ID}/complete$`),
+  },
   { name: "users", method: "GET", path: /^\/api\/users$/ },
   { name: "list", method: "GET", path: /^\/api\/documents$/ },
   { name: "upload", method: "POST", path: /^\/api\/documents$/ },
