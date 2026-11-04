@@ -3,13 +3,14 @@
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthClientError } from '@/lib/auth/auth-client';
-import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
+import { REAL_AUTH_ENABLED, sanitizeReturnTo, useSession } from '@/lib/session';
 import { loginSession } from '@/lib/session/real-session';
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, status } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,7 +27,8 @@ export function LoginForm() {
     try {
       await loginSession(email.trim(), password);
       setPassword('');
-      router.replace('/documentos');
+      const target = sanitizeReturnTo(searchParams.get('returnTo'));
+      router.replace(target);
     } catch (cause) {
       setError(
         cause instanceof AuthClientError

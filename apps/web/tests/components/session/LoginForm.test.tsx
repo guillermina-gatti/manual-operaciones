@@ -8,14 +8,32 @@ const mocks = vi.hoisted(() => ({
   loginSession: vi.fn(),
   useSession: vi.fn(),
   replace: vi.fn(),
+  searchParams: new URLSearchParams(),
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }) }));
-vi.mock('@/lib/session', () => ({ REAL_AUTH_ENABLED: true, useSession: mocks.useSession }));
-vi.mock('@/lib/session/real-session', () => ({ loginSession: mocks.loginSession }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: mocks.replace }),
+  useSearchParams: () => mocks.searchParams,
+}));
+vi.mock('@/lib/session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session')>();
+  return {
+    ...actual,
+    REAL_AUTH_ENABLED: true,
+    useSession: mocks.useSession,
+  };
+});
+vi.mock('@/lib/session/real-session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session/real-session')>();
+  return {
+    ...actual,
+    loginSession: mocks.loginSession,
+  };
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
   mocks.loginSession.mockResolvedValue({ id: 'id', name: 'Ada', role: 'ADMIN' });
 });
@@ -69,5 +87,62 @@ describe('A-09: pantalla de login real', () => {
     expect(screen.getByText(/Ya ingresaste como/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ir a documentos' })).toHaveAttribute('href', '/documentos');
     expect(screen.queryByLabelText('Contraseña')).not.toBeInTheDocument();
+  });
+
+  describe('redirección segura post-login (A-10b.1)', () => {
+    test('redirige a la ruta solicitada cuando returnTo es válido', async () => {
+      mocks.searchParams = new URLSearchParams('returnTo=%2Fdocumentos%2Fnuevo');
+      const user = userEvent.setup();
+      render(<LoginForm />);
+      await user.type(screen.getByRole('textbox', { name: 'Correo electrónico' }), 'ada@example.com');
+      await user.type(screen.getByLabelText('Contraseña'), 'clave-segura');
+      await user.click(screen.getByRole('button', { name: 'Iniciar sesión' }));
+
+      await waitFor(() => expect(mocks.loginSession).toHaveBeenCalled());
+      expect(mocks.replace).toHaveBeenCalledWith('/documentos/nuevo');
+    });
+
+    test('redirige a la ruta con query params preservados cuando returnTo es válido', async () => {
+      mocks.searchParams = new URLSearchParams('returnTo=%2Fejecuciones%3Fstep%3D2');
+      const user = userEvent.setup();
+      render(<LoginForm />);
+      await user.type(screen.getByRole('textbox', { name: 'Correo electrónico' }), 'ada@example.com');
+      await user.type(screen.getByLabelText('Contraseña'), 'clave-segura');
+      await user.click(screen.getByRole('button', { name: 'Iniciar sesión' }));
+
+      await waitFor(() => expect(mocks.loginSession).toHaveBeenCalled());
+      expect(mocks.replace).toHaveBeenCalledWith('/ejecuciones?step=2');
+    });
+
+    test('redirige a /documentos por defecto si returnTo no está presente', async () => {
+      mocks.searchParams = new URLSearchParams();
+      const user = userEvent.setup();
+      render(<LoginForm />);
+      await user.type(screen.getByRole('textbox', { name: 'Correo electrónico' }), 'ada@example.com');
+      await user.type(screen.getByLabelText('Contraseña'), 'clave-segura');
+      await user.click(screen.getByRole('button', { name: 'Iniciar sesión' }));
+
+      await waitFor(() => expect(mocks.loginSession).toHaveBeenCalled());
+      expect(mocks.replace).toHaveBeenCalledWith('/documentos');
+    });
+
+    test.each([
+      ['URL externa https', 'https://evil.com/phishing'],
+      ['URL protocol-relative', '//evil.com'],
+      ['URL con barra invertida', '/\\evil.com'],
+      ['bucle a /login', '/login'],
+      ['esquema javascript', 'javascript:alert(1)'],
+      ['ruta relativa sin barra', 'documentos/nuevo'],
+    ])('rechaza %s y redirige de forma segura a /documentos', async (_, maliciousUrl) => {
+      mocks.searchParams = new URLSearchParams({ returnTo: maliciousUrl });
+      const user = userEvent.setup();
+      render(<LoginForm />);
+      await user.type(screen.getByRole('textbox', { name: 'Correo electrónico' }), 'ada@example.com');
+      await user.type(screen.getByLabelText('Contraseña'), 'clave-segura');
+      await user.click(screen.getByRole('button', { name: 'Iniciar sesión' }));
+
+      await waitFor(() => expect(mocks.loginSession).toHaveBeenCalled());
+      expect(mocks.replace).toHaveBeenCalledWith('/documentos');
+    });
   });
 });

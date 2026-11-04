@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NEXT_PUBLIC_REAL_AUTH=false next dev",
+    "dev:real-auth": "NEXT_PUBLIC_REAL_AUTH=true next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test --project=escritorio --project=celular",
-    "test:e2e:integracion": "playwright test --project=integracion"
+    "test:e2e:integracion": "playwright test --project=integracion",
+    "test:e2e:real-auth": "NEXT_PUBLIC_REAL_AUTH=true playwright test"
   },
   "dependencies": {
     "ai": "^7.0.140",
