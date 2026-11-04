@@ -2,7 +2,7 @@
 
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
@@ -110,8 +110,13 @@ export class FixedClock extends Clock {
 // instancias propias del test, así se pueden revisar (y nunca se usa el bucket real).
 // Prisma va contra la base de tests (test/setup-env.ts).
 // Spec 005 (T11): con `clock`, "hoy" sale de ese reloj; sin él, de la hora real, como antes.
+// Spec 009 (T09, PD11): con `configure`, el test reemplaza más proveedores (por ejemplo, el modelo y
+// los embeddings del chat). Las suites de documentos no lo usan.
 export async function createDocumentsTestApp(
-  options: { clock?: Clock } = {},
+  options: {
+    clock?: Clock;
+    configure?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
+  } = {},
 ): Promise<DocumentsTestApp> {
   const storage = new InMemoryFileStorage();
   const queue = new FakeProcessingQueue();
@@ -126,6 +131,9 @@ export async function createDocumentsTestApp(
     .useValue(audit);
   if (options.clock) {
     builder = builder.overrideProvider(Clock).useValue(options.clock);
+  }
+  if (options.configure) {
+    builder = options.configure(builder);
   }
   const moduleRef = await builder.compile();
 

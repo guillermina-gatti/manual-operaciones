@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (04/11/2026):** todas pendientes. T01 a T09 son la API, T10 a T14 la web y T15, la [verificación](#t15--verificación-de-la-feature).
+- **Estado (04/11/2026):** T01 a T14 hechas, sin commits; falta T15 (verificación). T01 a T09 son la API, T10 a T14 la web y T15, la [verificación](#t15--verificación-de-la-feature).
 
 ## Antes de empezar
 
@@ -72,7 +72,7 @@ Convenciones:
   Falla porque el método no existe. Después, `chat.service.spec.ts` sigue compilando y pasando sin cambios.
 - **Depende de:** —
 - **Commit:** `feat(api): agregar el streaming al puerto del modelo del chat`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026), sin commit. 3 tests; fallaron primero (el método no existía). `chat.service.spec.ts` compila y pasa sin cambios.
 
 ### T03 · Streaming con Gemini
 
@@ -89,7 +89,7 @@ Convenciones:
   Falla porque el método no existe.
 - **Depende de:** T02.
 - **Commit:** `feat(api): transmitir la respuesta de Gemini en partes`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 4 tests con `MockLanguageModelV4`; fallaron primero (usaba el método por defecto). `streamText` no lanza los errores: llegan como partes de `fullStream`, y el adaptador los convierte en rechazo de las partes y de `final`. El test no importa `@ai-sdk/provider` (no es dependencia directa de la API).
 
 ### T04 · Enlace a la búsqueda
 
@@ -110,7 +110,7 @@ Convenciones:
   La tabla se copia en T11, para la web. Falla porque el archivo no existe.
 - **Depende de:** —
 - **Commit:** `feat(api): armar el enlace a la búsqueda cuando la IA no responde`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 9 tests; fallaron primero.
 
 ### T05 · Servicio de streaming: eventos y guardado
 
@@ -130,7 +130,7 @@ Convenciones:
   Falla porque el servicio no existe.
 - **Depende de:** T01, T02, T04.
 - **Commit:** `feat(api): transmitir la respuesta del asistente con eventos`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 18 tests; fallaron primero. Los simulados están en `src/chat/testing/chat-fakes.ts` (copias de los de Guille más un modelo que transmite en partes). Además de la tarea: una falla de la recuperación después de abrir la transmisión es un evento `error` con 503.
 
 ### T06 · Tiempos de espera y corte del cliente
 
@@ -148,7 +148,7 @@ Convenciones:
   Falla porque no hay tiempos.
 - **Depende de:** T05.
 - **Commit:** `feat(api): cortar la respuesta del asistente por tiempo o si el usuario se va`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 8 tests en `chat-stream.timeouts.spec.ts`; fallaron 7 primero (no había tiempos). Además de la tarea: si el cliente corta durante el embedding, no se llama al modelo.
 
 ### T07 · Las dos rutas responden lo mismo
 
@@ -167,7 +167,7 @@ Convenciones:
   `done` además trae `searchUrl` solo con `ai_unavailable`. Como T05 ya está hecha, no hay corrida en rojo: se comprueba con una mutación (cambiar `MAX_COSINE_DISTANCE` en el servicio nuevo hace fallar el caso del umbral) y se restaura.
 - **Depende de:** T06.
 - **Commit:** `test(api): comparar las respuestas de las dos rutas del chat`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 7 casos. Como `prepareChat` es compartida, el umbral no se puede cambiar solo en el servicio nuevo: la mutación de control fue devolver todos los fragmentos en vez de los citados, que hizo fallar 2 casos; se restauró.
 
 ### T08 · Ruta `POST /api/chat/stream`
 
@@ -185,7 +185,7 @@ Convenciones:
   Falla porque el archivo no existe. La ruta se prueba de punta a punta en T09. `pnpm --filter api exec tsc --noEmit` y `lint` en verde.
 - **Depende de:** T06.
 - **Commit:** `feat(api): exponer POST /api/chat/stream con eventos SSE`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 4 tests del escritor; la ruta se prueba en T09. `tsc` y `lint` en verde.
 
 ### T09 · Integración de la ruta nueva
 
@@ -204,7 +204,7 @@ Convenciones:
   Las suites de documentos pasan sin cambios. **Pedir la confirmación del usuario** antes de resetear `manual_test`.
 - **Depende de:** T08.
 - **Commit:** `test(api): probar la ruta de streaming del asistente de punta a punta`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 7 tests; pasaron en la primera corrida (T08 ya estaba hecha), con la confirmación del usuario para resetear `manual_test`. `test:e2e "chat|documents"`: 15 suites, 275 tests.
 
 ## Web
 
@@ -223,7 +223,7 @@ Convenciones:
   Falla porque el método no existe. Los tests de `request` pasan sin cambios, y `git diff` de `client.ts` solo muestra líneas agregadas.
 - **Depende de:** —
 - **Commit:** `feat(web): agregar al cliente HTTP la lectura de transmisiones`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 8 tests en `client-stream.test.ts`; fallaron primero. **Diferencias con el plan:** `stream` se agrega en una interfaz nueva, `StreamingApiClient extends ApiClient`, porque varios tests (también los de Ejecuciones, de la pareja B) arman un `ApiClient` a mano con solo `request`; la única línea cambiada de `client.ts` es el tipo que devuelve `createApiClient`. `stream` reusa `send` sin cambiarlo, así que el pedido lleva `Accept: application/json` (la API no lo mira); no se agregó `Accept: text/event-stream` para no tocar `send`. `lib/api/index.ts` suma el export del tipo.
 
 ### T11 · Lector SSE, `askStream`, enlace y citas
 
@@ -239,7 +239,7 @@ Convenciones:
   Falla porque los archivos no existen.
 - **Depende de:** T10.
 - **Commit:** `feat(web): leer la transmisión del asistente`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 28 tests; fallaron primero. `lib/api/index.ts` exporta `askStream`, `ChatStreamError` y los tipos del chat. Al quitar marcas sin cruce también se quita el espacio anterior ("Ver [S1] y [S9]." → "Ver y.").
 
 ### T12 · Pantalla `/asistente`: mensajes y transmisión
 
@@ -259,7 +259,7 @@ Convenciones:
   Falla porque la pantalla no existe.
 - **Depende de:** T11.
 - **Commit:** `feat(web): agregar la pantalla del asistente con la respuesta de a partes`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 9 tests; fallaron primero. El estado de la conversación está en `components/chat/chat-state.ts`.
 
 ### T13 · Fuentes, citas y estados de la respuesta
 
@@ -281,7 +281,7 @@ Convenciones:
   Falla porque no hay fuentes ni estados.
 - **Depende de:** T12.
 - **Commit:** `feat(web): mostrar las fuentes y el respaldo con la búsqueda en el asistente`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 10 tests en `ChatScreen.states.test.tsx`. La primera corrida en rojo no valía (al test le faltaba el `render`); después del verde se comprobó con la versión de T12 de `ChatMessage`: fallan 8 de 10. Se corrigió el nombre accesible del botón de fuente (faltaba el espacio entre el número y el título).
 
 ### T14 · Acceso desde `/documentos` y Playwright
 
@@ -301,7 +301,7 @@ Convenciones:
   Las demás suites de Playwright simulado pasan sin cambios.
 - **Depende de:** T13.
 - **Commit:** `feat(web): abrir el asistente desde Documentos`
-- **Estado:** pendiente.
+- **Estado:** hecha, sin commit. 3 tests nuevos en `DocumentList.test.tsx` (2 fallaron primero) y 3 en `asistente.spec.ts`, en escritorio y celular. Playwright simulado completo: 114 tests.
 
 ## Verificación final
 
