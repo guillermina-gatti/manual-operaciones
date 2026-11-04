@@ -1,9 +1,10 @@
 // Spec 009 (T03, R13): la respuesta de Gemini en partes, con el mismo prompt que answer.
 // El modelo es el simulado del AI SDK: ningún test llama a Gemini.
 import { APICallError } from 'ai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test';
 import { LlmCutError, type Passage } from '../ports/chat-llm';
-import { GeminiChatLlm } from './gemini-chat-llm';
+import { GeminiChatLlm, createChatLlm } from './gemini-chat-llm';
 
 const PASSAGES: Passage[] = [
     { ref: 'S1', documentTitle: 'Manual de compras', section: 'Aprobaciones', content: 'Pedir aprobación.' },
@@ -236,5 +237,50 @@ describe('GeminiChatLlm: el paso en el prompt (spec 010)', () => {
 
         expect(userText(model.doGenerateCalls[0].prompt)).toBe(PASSAGES_TEXT);
         expect(systemOf(model.doGenerateCalls[1].prompt)).toEqual(systemOf(model.doGenerateCalls[0].prompt));
+    });
+});
+
+// Razonamiento 'low' (diagnóstico del 04/11/2026): los modelos de la familia 3 razonan por defecto
+// antes del primer texto y, sin partes, el corte de 15 s llegaba antes que la respuesta.
+describe("GeminiChatLlm: razonamiento 'low' en las dos rutas", () => {
+    it("answer y stream le piden al modelo reasoning 'low'", async () => {
+        const model = modelWith(['Hola [S1].']);
+        const llm = new GeminiChatLlm(model, 'gemini-test');
+
+        await llm.answer('¿Cómo pido?', PASSAGES);
+        await collect(llm.stream('¿Cómo pido?', PASSAGES, new AbortController().signal).textStream);
+
+        expect(model.doGenerateCalls[0].reasoning).toBe('low');
+        expect(model.doStreamCalls[0].reasoning).toBe('low');
+    });
+
+    // Con el proveedor real de Google y un fetch simulado: lo que viaja en el pedido a Gemini.
+    function googleCapturing(bodies: Record<string, unknown>[]) {
+        const fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
+            bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
+            const part = { candidates: [{ content: { role: 'model', parts: [{ text: 'Hola [S1].' }] }, finishReason: 'STOP' }] };
+            const streaming = String(_url).includes('streamGenerateContent');
+            return streaming
+                ? new Response(`data: ${JSON.stringify(part)}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
+                : new Response(JSON.stringify(part), { headers: { 'Content-Type': 'application/json' } });
+        };
+        return createGoogleGenerativeAI({ apiKey: 'clave-de-test', fetch });
+    }
+
+    it.each([
+        ['gemini-2.5-flash', { thinkingBudget: 6554 }],
+        ['gemini-3.8-flash', { thinkingLevel: 'low' }],
+    ])('con %s, el SDK lo traduce al thinkingConfig de su familia, en answer y en stream', async (modelId, expected) => {
+        const bodies: Record<string, unknown>[] = [];
+        const google = googleCapturing(bodies);
+        const llm = createChatLlm({ get: () => modelId }, (id) => google(id));
+
+        await llm.answer('¿Cómo pido?', PASSAGES);
+        await collect(llm.stream('¿Cómo pido?', PASSAGES, new AbortController().signal).textStream);
+
+        expect(bodies).toHaveLength(2);
+        for (const body of bodies) {
+            expect((body.generationConfig as Record<string, unknown>).thinkingConfig).toEqual(expected);
+        }
     });
 });

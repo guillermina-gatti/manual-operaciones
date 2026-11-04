@@ -10,6 +10,10 @@ import { ChatLlm, LlmCutError, type LlmAnswer, type LlmStream, type Passage } fr
 // El modelo de embeddings es otro y no cambia (processing/adapters/gemini-embedding-provider.ts).
 export const DEFAULT_CHAT_MODEL_ID = 'gemini-2.5-flash';
 export const CHAT_TIMEOUT_MS = 15_000;
+// Razonamiento bajo en las dos rutas: los modelos de la familia 3 razonan por defecto antes del primer
+// texto, sin mandar partes, y eso puede comerse el corte de 15 s. El SDK lo traduce por familia:
+// thinkingLevel 'low' en la 3 y un thinkingBudget (6554 en gemini-2.5-flash) en la 2.5.
+export const CHAT_REASONING = 'low';
 
 export function chatModelId(value: string | undefined): string {
     const id = value?.trim();
@@ -47,6 +51,7 @@ export class GeminiChatLlm extends ChatLlm {
             prompt: buildPrompt(question, passages, context),
             abortSignal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
             maxRetries: 1,
+            reasoning: CHAT_REASONING,
         });
 
         return {
@@ -73,6 +78,7 @@ export class GeminiChatLlm extends ChatLlm {
             prompt: buildPrompt(question, passages, context),
             abortSignal: signal,
             maxRetries: 1,
+            reasoning: CHAT_REASONING,
             onError: ({ error }) => remember(error), // el error se lanza desde las partes
         });
         const cutError = () =>
