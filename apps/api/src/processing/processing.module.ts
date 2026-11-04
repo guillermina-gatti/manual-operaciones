@@ -84,6 +84,6 @@ import { DEFAULT_REDIS_URL, redisConnectionFromUrl } from './redis-connection';
     },
     ProcessingWorker,
   ],
-  exports: [ProcessingQueue],
+  exports: [ProcessingQueue, EmbeddingProvider],
 })
-export class ProcessingModule {}
+export class ProcessingModule { }
