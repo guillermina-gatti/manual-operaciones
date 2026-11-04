@@ -1,17 +1,26 @@
 import 'reflect-metadata';
 import { ConfigService } from '@nestjs/config';
-import { BullMqProcessingQueue } from './adapters/bullmq-processing-queue';
-import { redisConnectionFromUrl } from './redis-connection';
-import { ProcessDocumentHandler } from './process-document.handler';
-import { ProcessingQueueClient, ProcessingWorker } from './processing.runtime';
+import { BullMqProcessingQueue } from '../../src/processing/adapters/bullmq-processing-queue';
+import { redisConnectionFromUrl } from '../../src/processing/redis-connection';
+import { ProcessDocumentHandler } from '../../src/processing/process-document.handler';
+import {
+  ProcessingQueueClient,
+  ProcessingWorker,
+} from '../../src/processing/processing.runtime';
 
-const connection = redisConnectionFromUrl(process.env.TEST_REDIS_URL ?? 'redis://localhost:6379/1');
+const connection = redisConnectionFromUrl(
+  process.env.TEST_REDIS_URL ?? 'redis://localhost:6379/1',
+);
 const configWithWorker = { get: () => undefined } as unknown as ConfigService;
 
-async function waitFor(condition: () => boolean, timeoutMs: number): Promise<void> {
+async function waitFor(
+  condition: () => boolean,
+  timeoutMs: number,
+): Promise<void> {
   const started = Date.now();
   while (!condition()) {
-    if (Date.now() - started > timeoutMs) throw new Error('Se agotó el tiempo esperando al worker');
+    if (Date.now() - started > timeoutMs)
+      throw new Error('Se agotó el tiempo esperando al worker');
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
@@ -49,7 +58,10 @@ describe('ProcessingWorker (Redis real)', () => {
         return 'ready';
       },
     } as unknown as ProcessDocumentHandler;
-    const disabled = { get: (key: string) => (key === 'PROCESSING_WORKER_ENABLED' ? 'false' : undefined) } as unknown as ConfigService;
+    const disabled = {
+      get: (key: string) =>
+        key === 'PROCESSING_WORKER_ENABLED' ? 'false' : undefined,
+    } as unknown as ConfigService;
     const worker = new ProcessingWorker(connection, handler, disabled);
 
     try {

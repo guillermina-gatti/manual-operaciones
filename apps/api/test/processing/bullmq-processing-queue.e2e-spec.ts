@@ -1,12 +1,15 @@
 import { Queue } from 'bullmq';
-import { QueueUnavailableError } from '../../documents/ports/processing-queue';
+import { QueueUnavailableError } from '../../src/documents/ports/processing-queue';
 import {
   BullMqProcessingQueue,
   PROCESS_DOCUMENT_JOB,
   ProcessDocumentJobData,
-} from './bullmq-processing-queue';
+} from '../../src/processing/adapters/bullmq-processing-queue';
 
-const REDIS = { host: process.env.TEST_REDIS_HOST ?? 'localhost', port: Number(process.env.TEST_REDIS_PORT ?? 6379) };
+const REDIS = {
+  host: process.env.TEST_REDIS_HOST ?? 'localhost',
+  port: Number(process.env.TEST_REDIS_PORT ?? 6379),
+};
 
 describe('BullMqProcessingQueue (Redis real)', () => {
   let queue: Queue<ProcessDocumentJobData>;
@@ -43,16 +46,24 @@ describe('BullMqProcessingQueue (Redis real)', () => {
   });
 
   it('lanza QueueUnavailableError si la cola no responde dentro del tiempo límite', async () => {
-    const stalled = { add: () => new Promise<never>(() => undefined) } as unknown as Queue<ProcessDocumentJobData>;
+    const stalled = {
+      add: () => new Promise<never>(() => undefined),
+    } as unknown as Queue<ProcessDocumentJobData>;
     const adapter = new BullMqProcessingQueue(stalled, 50);
 
-    await expect(adapter.enqueue('ver-1')).rejects.toBeInstanceOf(QueueUnavailableError);
+    await expect(adapter.enqueue('ver-1')).rejects.toBeInstanceOf(
+      QueueUnavailableError,
+    );
   });
 
   it('convierte cualquier error de la cola en QueueUnavailableError', async () => {
-    const broken = { add: () => Promise.reject(new Error('ECONNREFUSED')) } as unknown as Queue<ProcessDocumentJobData>;
+    const broken = {
+      add: () => Promise.reject(new Error('ECONNREFUSED')),
+    } as unknown as Queue<ProcessDocumentJobData>;
     const adapter = new BullMqProcessingQueue(broken);
 
-    await expect(adapter.enqueue('ver-1')).rejects.toBeInstanceOf(QueueUnavailableError);
+    await expect(adapter.enqueue('ver-1')).rejects.toBeInstanceOf(
+      QueueUnavailableError,
+    );
   });
 });

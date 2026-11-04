@@ -1,12 +1,15 @@
 import 'reflect-metadata';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { PrismaModule } from '../prisma/prisma.module';
-import { PrismaService } from '../prisma/prisma.service';
-import { ProcessingQueue } from '../documents/ports/processing-queue';
-import { BullMqProcessingQueue } from './adapters/bullmq-processing-queue';
-import { ProcessingModule } from './processing.module';
-import { ProcessingQueueClient, ProcessingWorker } from './processing.runtime';
+import { PrismaModule } from '../../src/prisma/prisma.module';
+import { PrismaService } from '../../src/prisma/prisma.service';
+import { ProcessingQueue } from '../../src/documents/ports/processing-queue';
+import { BullMqProcessingQueue } from '../../src/processing/adapters/bullmq-processing-queue';
+import { ProcessingModule } from '../../src/processing/processing.module';
+import {
+  ProcessingQueueClient,
+  ProcessingWorker,
+} from '../../src/processing/processing.runtime';
 
 process.env.GOOGLE_GENERATIVE_AI_API_KEY ??= 'clave-de-prueba'; // el modelo no se invoca acá
 const redisUrl = process.env.TEST_REDIS_URL ?? 'redis://localhost:6379/1';
