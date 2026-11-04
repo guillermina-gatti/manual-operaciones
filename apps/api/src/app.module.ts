@@ -12,6 +12,7 @@ import { ProceduresModule } from './procedures/procedures.module';
 import { RedisModule } from './redis/redis.module';
 import { UsersModule } from './users/users.module';
 import { ProcessingModule } from './processing/processing.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ProcessingModule } from './processing/processing.module';
     ExecutionsModule,
     ProceduresModule,
     ProcessingModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
