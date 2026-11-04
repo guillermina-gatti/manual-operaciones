@@ -62,6 +62,12 @@ class TestAuthzProbeController {
     return { role: user.role };
   }
 
+  @Get('employee-only')
+  @Roles('EMPLOYEE')
+  getEmployeeOnly(@CurrentUser() user: AuthUser): { role: string } {
+    return { role: user.role };
+  }
+
   @Post('area-access')
   @HttpCode(HttpStatus.OK)
   async checkAreaAccess(
@@ -256,6 +262,35 @@ describe('Authorization: Guards, Roles & AccessService (E2E)', () => {
         .expect(200)
         .expect({ role: 'ADMIN' });
     });
+
+    it('permite acceso a EMPLOYEE en rutas decoradas con @Roles("EMPLOYEE") y rechaza con 403 a ADMIN y SUPERVISOR', async () => {
+      const employee = await sandbox.createUser({ role: 'EMPLOYEE' });
+      const supervisor = await sandbox.createUser({ role: 'SUPERVISOR' });
+      const admin = await sandbox.createUser({ role: 'ADMIN' });
+
+      const empToken = signTestJwt({ sub: employee.id, role: 'EMPLOYEE' });
+      const supToken = signTestJwt({ sub: supervisor.id, role: 'SUPERVISOR' });
+      const adminToken = signTestJwt({ sub: admin.id, role: 'ADMIN' });
+
+      // EMPLOYEE accede y recibe 200
+      await http()
+        .get('/api/test-authz/employee-only')
+        .set('Authorization', `Bearer ${empToken}`)
+        .expect(200)
+        .expect({ role: 'EMPLOYEE' });
+
+      // ADMIN recibe 403 en ruta decorada exclusivamente con @Roles('EMPLOYEE')
+      await http()
+        .get('/api/test-authz/employee-only')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(403);
+
+      // SUPERVISOR recibe 403 en ruta decorada exclusivamente con @Roles('EMPLOYEE')
+      await http()
+        .get('/api/test-authz/employee-only')
+        .set('Authorization', `Bearer ${supToken}`)
+        .expect(403);
+    });
   });
 
   describe('AccessService.assertAreaAccess contra PostgreSQL real', () => {
@@ -296,6 +331,25 @@ describe('Authorization: Guards, Roles & AccessService (E2E)', () => {
         .post('/api/test-authz/area-access')
         .set('Authorization', `Bearer ${empToken}`)
         .send({ areaIds: [areaB.id] })
+        .expect(404);
+    });
+
+    it('rechaza con 404 a SUPERVISOR al intentar acceder a un recurso asociado a un área activa a la cual no pertenece (not found para no revelar existencia)', async () => {
+      const activeAreaA = await sandbox.createArea({ isActive: true });
+      const activeAreaB = await sandbox.createArea({ isActive: true });
+
+      const supervisor = await sandbox.createUser({
+        role: 'SUPERVISOR',
+        areaIds: [activeAreaA.id],
+      });
+
+      const supToken = signTestJwt({ sub: supervisor.id, role: 'SUPERVISOR' });
+
+      // SUPERVISOR asignado solo a activeAreaA recibe 404 al acceder a activeAreaB
+      await http()
+        .post('/api/test-authz/area-access')
+        .set('Authorization', `Bearer ${supToken}`)
+        .send({ areaIds: [activeAreaB.id] })
         .expect(404);
     });
 

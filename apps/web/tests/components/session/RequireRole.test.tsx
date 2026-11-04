@@ -87,6 +87,36 @@ describe('RequireRole (F1)', () => {
         '/documentos',
       );
     });
+
+    test('con role="EMPLOYEE" renderiza el contenido para EMPLOYEE', () => {
+      mocks.useSession.mockReturnValue(sessionOf('EMPLOYEE'));
+      render(
+        <RequireRole role="EMPLOYEE" deniedMessage="Solo los empleados pueden ejecutar procedimientos.">
+          <Formulario />
+        </RequireRole>,
+      );
+
+      expect(screen.getByText('Formulario de carga')).toBeInTheDocument();
+      expect(mocks.mounted).toHaveBeenCalledTimes(1);
+    });
+
+    test.each(['ADMIN', 'SUPERVISOR'] as const)(
+      'con role="EMPLOYEE" deniega el acceso a %s y no monta el contenido',
+      (role) => {
+        mocks.useSession.mockReturnValue(sessionOf(role));
+        render(
+          <RequireRole role="EMPLOYEE" deniedMessage="Solo los empleados pueden ejecutar procedimientos.">
+            <Formulario />
+          </RequireRole>,
+        );
+
+        expect(
+          screen.getByText('Solo los empleados pueden ejecutar procedimientos.'),
+        ).toBeInTheDocument();
+        expect(screen.queryByText('Formulario de carga')).not.toBeInTheDocument();
+        expect(mocks.mounted).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('soporte de múltiples roles (prop roles)', () => {
@@ -101,13 +131,16 @@ describe('RequireRole (F1)', () => {
       );
     }
 
-    test('permite el acceso si el rol del usuario está incluido en la lista', () => {
-      mocks.useSession.mockReturnValue(sessionOf('SUPERVISOR'));
-      renderMultiGuard();
+    test.each(['ADMIN', 'SUPERVISOR'] as const)(
+      'permite el acceso si el rol %s está incluido en la lista',
+      (role) => {
+        mocks.useSession.mockReturnValue(sessionOf(role));
+        renderMultiGuard();
 
-      expect(screen.getByText('Formulario de carga')).toBeInTheDocument();
-      expect(mocks.mounted).toHaveBeenCalledTimes(1);
-    });
+        expect(screen.getByText('Formulario de carga')).toBeInTheDocument();
+        expect(mocks.mounted).toHaveBeenCalledTimes(1);
+      },
+    );
 
     test('deniega el acceso y no monta el contenido si el rol no está en la lista', () => {
       mocks.useSession.mockReturnValue(sessionOf('EMPLOYEE'));
