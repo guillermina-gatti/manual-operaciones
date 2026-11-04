@@ -140,26 +140,93 @@ describe('GeminiChatLlm.stream: el motivo real del proveedor al cortar', () => {
         expect(error).toBeInstanceOf(LlmCutError);
         expect(error).toMatchObject({ reason: CUT, providerError: `HTTP 503: ${HIGH_DEMAND}` });
         expect((error as Error).message).toBe(`HTTP 503: ${HIGH_DEMAND} (pedido cortado: ${CUT})`);
+        expect((error as LlmCutError).progress).toBeUndefined(); // el error del proveedor ya lo explica
         await expect(stream.final).rejects.toBe(error);
     });
 
-    it('cortado sin errores del proveedor: el error dice solo el corte', async () => {
-        const model = new MockLanguageModelV4({
-            // Un modelo que nunca manda nada (la transmisión queda abierta).
-            doStream: async () => ({ stream: new ReadableStream({ start: () => undefined }) }) as never,
-        });
+    // Corta y devuelve el error con el que terminó la lectura.
+    async function cutAfter(model: MockLanguageModelV4, ms: number): Promise<LlmCutError> {
         const llm = new GeminiChatLlm(model, 'gemini-test');
         const controller = new AbortController();
         const stream = llm.stream('¿plazo?', PASSAGES, controller.signal);
         const reading = collect(stream.textStream);
-
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, ms));
         controller.abort(new Error(CUT));
-
         const error = await reading.catch((e: unknown) => e);
         expect(error).toBeInstanceOf(LlmCutError);
+        await expect(stream.final).rejects.toBe(error);
+        return error as LlmCutError;
+    }
+
+    // Una transmisión abierta que manda estas partes y después no manda nada más.
+    const openStream = (chunks: StreamPart[]) =>
+        new ReadableStream({
+            start(controller) {
+                for (const chunk of chunks) controller.enqueue(chunk);
+            },
+        });
+
+    it('cortado sin ninguna respuesta de Gemini: el log dice que no había contestado nada', async () => {
+        const model = new MockLanguageModelV4({
+            // Como un fetch colgado: doStream no termina hasta que se corta el pedido.
+            doStream: ({ abortSignal }) =>
+                new Promise((_, reject) => abortSignal?.addEventListener('abort', () => reject(abortSignal.reason))),
+        });
+
+        const error = await cutAfter(model, 50);
+
         expect(error).toMatchObject({ reason: CUT, providerError: undefined });
-        expect((error as Error).message).toBe(`Pedido cortado: ${CUT}`);
+        expect(error.progress).toMatch(/^Gemini no había contestado nada \(\d+ ms\)$/);
+        expect(error.message).toBe(`Pedido cortado: ${CUT}; ${error.progress}`);
+    });
+
+    it('cortado con Gemini que contestó sin partes: el log dice cuándo contestó y que no mandó texto', async () => {
+        const model = new MockLanguageModelV4({
+            doStream: async () => ({ stream: openStream([]) }) as never,
+        });
+
+        const error = await cutAfter(model, 50);
+
+        expect(error).toMatchObject({ reason: CUT, providerError: undefined });
+        expect(error.progress).toMatch(/^Gemini contestó a los \d+ ms, pero sin texto ni otras partes$/);
+        expect(error.message).toBe(`Pedido cortado: ${CUT}; ${error.progress}`);
+    });
+
+    it('cortado con Gemini razonando: el log dice qué partes llegaron sin texto', async () => {
+        const model = new MockLanguageModelV4({
+            doStream: async () =>
+                ({
+                    stream: openStream([
+                        { type: 'stream-start', warnings: [] },
+                        { type: 'reasoning-start', id: 'r1' },
+                        { type: 'reasoning-delta', id: 'r1', delta: 'Pienso…' },
+                        { type: 'reasoning-delta', id: 'r1', delta: '…más' },
+                    ]),
+                }) as never,
+        });
+
+        const error = await cutAfter(model, 50);
+
+        expect(error.progress).toMatch(
+            /^Gemini contestó a los \d+ ms, pero sin texto \(partes: reasoning-start, reasoning-delta\)$/,
+        );
+    });
+
+    it('cortado después de mandar texto: el log dice cuántas partes de texto llegaron', async () => {
+        const model = new MockLanguageModelV4({
+            doStream: async () =>
+                ({
+                    stream: openStream([
+                        { type: 'text-start', id: 't1' },
+                        { type: 'text-delta', id: 't1', delta: 'El plazo ' },
+                        { type: 'text-delta', id: 't1', delta: 'es ' },
+                    ]),
+                }) as never,
+        });
+
+        const error = await cutAfter(model, 50);
+
+        expect(error.progress).toMatch(/^Gemini contestó a los \d+ ms y mandó 2 partes de texto$/);
     });
 
     it('sin corte, un error del proveedor que no se reintenta (cuota) sale con su mensaje', async () => {

@@ -19,11 +19,15 @@ export interface LlmAnswer {
 // último error del proveedor antes del corte, si hubo (cuota, alta demanda…): así el log dice el
 // motivo real y no solo "se cortó". El mensaje empieza por ese motivo.
 export class LlmCutError extends Error {
+    // progress: qué había hecho el proveedor al cortar (si había contestado y qué partes mandó), para el
+    // log. Solo cuando no hay providerError, que ya lo explica.
     constructor(
         readonly reason: string,
         readonly providerError?: string,
+        readonly progress?: string,
     ) {
-        super(providerError ? `${providerError} (pedido cortado: ${reason})` : `Pedido cortado: ${reason}`);
+        const cut = progress ? `${reason}; ${progress}` : reason;
+        super(providerError ? `${providerError} (pedido cortado: ${cut})` : `Pedido cortado: ${cut}`);
         this.name = 'LlmCutError';
     }
 }

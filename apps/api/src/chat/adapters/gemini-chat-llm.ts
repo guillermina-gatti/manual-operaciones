@@ -66,14 +66,17 @@ export class GeminiChatLlm extends ChatLlm {
     // quien llama, con la señal. streamText no lanza los errores: llegan como partes de fullStream,
     // y acá se convierten en un rechazo de las partes y de final.
     // Si el pedido se corta, rechaza con LlmCutError, con el último error del proveedor: los errores
-    // de cada intento (también los que el SDK reintenta) se anotan envolviendo el modelo.
+    // de cada intento (también los que el SDK reintenta) se anotan envolviendo el modelo. Sin error del
+    // proveedor, el LlmCutError dice si Gemini había contestado y qué mandó (solo para el log).
     stream(question: string, passages: Passage[], signal: AbortSignal, context?: StepContext): LlmStream {
         let lastProviderError: unknown;
+        // Un error que llega con el pedido ya cortado es el corte (fetch rechaza con su motivo), no del proveedor.
         const remember = (error: unknown) => {
-            if (!isAbort(error)) lastProviderError = error;
+            if (!isAbort(error) && !signal.aborted) lastProviderError = error;
         };
+        const progress = new CutProgress(typeof this.model !== 'string');
         const result = streamText({
-            model: withErrorTracking(this.model, remember),
+            model: withErrorTracking(this.model, remember, () => progress.responded()),
             system: SYSTEM_PROMPT,
             prompt: buildPrompt(question, passages, context),
             abortSignal: signal,
@@ -85,6 +88,7 @@ export class GeminiChatLlm extends ChatLlm {
             new LlmCutError(
                 reasonOf(signal.reason),
                 lastProviderError === undefined ? undefined : describeProviderError(lastProviderError),
+                lastProviderError === undefined ? progress.describe() : undefined,
             );
         const modelName = this.modelName;
 
@@ -101,6 +105,7 @@ export class GeminiChatLlm extends ChatLlm {
             let text = '';
             try {
                 for await (const part of result.fullStream) {
+                    progress.saw(part.type);
                     if (part.type === 'text-delta') {
                         text += part.text;
                         yield part.text;
@@ -133,14 +138,21 @@ export class GeminiChatLlm extends ChatLlm {
 // El modelo envuelto: cada intento de doStream que falla se anota (el SDK reintenta por fuera del
 // modelo, así que acá se ven también los errores que después se reintentan). Un ID de texto (modelo
 // del gateway) no se puede envolver: queda solo lo que avisa onError.
-function withErrorTracking(model: LanguageModel, remember: (error: unknown) => void): LanguageModel {
+// onResponse: Gemini contestó (llegó la respuesta HTTP y empieza la transmisión).
+function withErrorTracking(
+    model: LanguageModel,
+    remember: (error: unknown) => void,
+    onResponse: () => void,
+): LanguageModel {
     if (typeof model === 'string') return model;
     return wrapLanguageModel({
         model,
         middleware: {
             wrapStream: async ({ doStream }) => {
                 try {
-                    return await doStream();
+                    const response = await doStream();
+                    onResponse();
+                    return response;
                 } catch (error) {
                     remember(error);
                     throw error;
@@ -149,6 +161,45 @@ function withErrorTracking(model: LanguageModel, remember: (error: unknown) => v
         },
     });
 }
+
+// Qué había hecho Gemini al cortar, para el log: si contestó (y a los cuántos ms del pedido) y qué
+// partes mandó. canSeeResponse: con un ID de texto no se envuelve el modelo y no se sabe cuándo contestó.
+class CutProgress {
+    private readonly startedAt = Date.now();
+    private respondedAfterMs?: number;
+    private textParts = 0;
+    private readonly otherParts = new Set<string>();
+
+    constructor(private readonly canSeeResponse: boolean) {}
+
+    responded(): void {
+        this.respondedAfterMs ??= Date.now() - this.startedAt;
+    }
+
+    saw(type: string): void {
+        if (type === 'text-delta') this.textParts++;
+        else if (!SDK_PARTS.has(type)) this.otherParts.add(type);
+    }
+
+    describe(): string | undefined {
+        const sawParts = this.textParts > 0 || this.otherParts.size > 0;
+        if (this.respondedAfterMs === undefined && !sawParts) {
+            return this.canSeeResponse ? `Gemini no había contestado nada (${Date.now() - this.startedAt} ms)` : undefined;
+        }
+        const when = this.respondedAfterMs === undefined ? '' : ` a los ${this.respondedAfterMs} ms`;
+        if (this.textParts > 0) {
+            const count = this.textParts === 1 ? '1 parte' : `${this.textParts} partes`;
+            return `Gemini contestó${when} y mandó ${count} de texto`;
+        }
+        if (this.otherParts.size > 0) {
+            return `Gemini contestó${when}, pero sin texto (partes: ${[...this.otherParts].join(', ')})`;
+        }
+        return `Gemini contestó${when}, pero sin texto ni otras partes`;
+    }
+}
+
+// Partes que arma el SDK, no Gemini.
+const SDK_PARTS = new Set(['start', 'start-step', 'error', 'abort']);
 
 const isAbort = (error: unknown) => error instanceof Error && error.name === 'AbortError';
 
