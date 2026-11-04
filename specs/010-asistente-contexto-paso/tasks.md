@@ -246,7 +246,17 @@ Convenciones:
   5. **Avisos:** a Guille (sección 12 de la spec) y a Mayra (sección 13). Los manda Matías.
 - **Depende de:** T01 a T12.
 - **Commit:** `docs(specs): verificar el contexto del paso en el asistente`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026), con dos puntos abiertos y sin la prueba manual con Gemini real (la hace Matías).
+- **Resultado:**
+  1. **Todo en verde, salvo una suite de la pareja A:**
+     - API: lint y tsc sin errores; `test`: 103 suites, 1515 tests.
+     - API `test:e2e` completo, con `manual_test` reseteado (confirmado por Matías): 33 de 34 suites, 429 de 435 tests. Fallan 6 de `test/auth/auth-directory-catalog.e2e-spec.ts` (A-15), que espera la tabla `areas` vacía; las suites de documentos, ejecuciones y procedimientos dejan cargadas las áreas de fixtures (`upsert`, igual que en `develop`). No depende de la spec 010; no se corrió sobre `develop` para confirmarlo.
+     - `test:e2e "chat|documents|executions"`: 19 suites, 315 tests.
+     - Web: lint y tsc sin errores; `test`: 72 archivos, 843 tests; Playwright simulado (escritorio y celular): 116 tests; build bien.
+  2. **Lo protegido, sin cambios** contra `develop`. `ExecutionView.tsx`: solo el diff de T11 (7 líneas más, 4 menos).
+  3. **Swagger, a medias:** las dos rutas usan `ChatRequestDto`, y la de streaming documenta el 400 y el 404 del contexto. Pero `ChatRequestDto` sale sin propiedades: el DTO de Guille no tiene `@ApiProperty` (tampoco en `develop`) y el proyecto no usa el plugin de Swagger de Nest, así que `context` no aparece. Arreglarlo es sumar `@ApiPropertyOptional({ type: ChatContextDto })` en `context` (y, si se quiere, en los otros dos campos), en el DTO de Guille: pendiente de decisión.
+  4. **Mutaciones de control:** las siete atrapadas por los tests unitarios y de componentes (E8, E10 y E12 en `chat-context.spec.ts` y `chat-stream.service.spec.ts`; E6 en la paridad; E3 en `chat-stream.service.spec.ts`; E5 en `gemini-chat-llm.spec.ts`; E14 en `ExecutionChatPanel.test.tsx`, sacando la `key` y el vaciado del hook a la vez). Archivos restaurados.
+  5. **Avisos:** listos para que los mande Matías.
 
 ---
 
