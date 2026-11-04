@@ -23,7 +23,7 @@ import { Pagination } from './Pagination';
 import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
 import { SearchResults } from './SearchResults';
-import { BUTTON_PRIMARY, TEXT_LINK } from './design';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, TEXT_LINK } from './design';
 
 const LOADING = (
   <ScreenState kind="loading" label="Cargando documentos…">
@@ -46,6 +46,10 @@ export function DocumentList() {
           responsable de nada no muestra nada. */}
       {status === 'ready' && user && (
         <div className="flex flex-wrap justify-end gap-3 empty:hidden">
+          {/* Spec 009 (F1, D11): el acceso al asistente, hasta que el menú (pareja A) tenga el enlace. */}
+          <Link href="/asistente" className={BUTTON_SECONDARY}>
+            Preguntale al asistente <span aria-hidden="true">✦</span>
+          </Link>
           <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
         </div>
       )}

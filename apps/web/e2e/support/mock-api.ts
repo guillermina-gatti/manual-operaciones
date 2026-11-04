@@ -28,6 +28,10 @@ export interface Reply {
   body?: unknown;
   // Para simular una respuesta lenta (por ejemplo, para ver "Cargando…").
   delayMs?: number;
+  // Spec 009 (PD12): una respuesta que no es JSON, por ejemplo eventos SSE. El cuerpo va entero:
+  // la transmisión de a partes se prueba en Vitest.
+  contentType?: string;
+  rawBody?: string;
 }
 
 // Lo que el test necesita del pedido para decidir y para comprobar.
@@ -66,6 +70,8 @@ export interface ApiHandlers {
   // Spec 005 (T23): los avisos de vencimiento. Sin `pendingReview`, ver DEFAULT_PENDING_REVIEW.
   pendingReview?: Handler; // GET /api/documents/pending-review
   markReviewed?: Handler; // POST /api/documents/:id/review
+  // Spec 009 (T14): el asistente.
+  chatStream?: Handler; // POST /api/chat/stream
 }
 
 // Spec 005 (T23): el listado pide en segundo plano la cantidad de "Por revisar" (F2). Un test que no
@@ -93,6 +99,7 @@ export interface MockedApi {
 const ID = "([^/]+)";
 const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
   { name: "areas", method: "GET", path: /^\/api\/areas$/ },
+  { name: "chatStream", method: "POST", path: /^\/api\/chat\/stream$/ },
   { name: "users", method: "GET", path: /^\/api\/users$/ },
   { name: "list", method: "GET", path: /^\/api\/documents$/ },
   { name: "upload", method: "POST", path: /^\/api\/documents$/ },
@@ -283,8 +290,10 @@ export async function mockApi(
         await new Promise((resolve) => setTimeout(resolve, reply.delayMs));
       await route.fulfill({
         status: reply.status,
-        contentType: "application/json",
-        body: reply.body === undefined ? "" : JSON.stringify(reply.body),
+        contentType: reply.contentType ?? "application/json",
+        body:
+          reply.rawBody ??
+          (reply.body === undefined ? "" : JSON.stringify(reply.body)),
       });
       return;
     }
@@ -474,5 +483,16 @@ export function apiError(
   return {
     status,
     body: { statusCode: status, message, error: "Error", ...extra },
+  };
+}
+
+// Spec 009 (PD12): una respuesta 200 de POST /api/chat/stream con estos eventos SSE.
+export function sseReply(events: Array<[string, unknown]>): Reply {
+  return {
+    status: 200,
+    contentType: "text/event-stream",
+    rawBody: events
+      .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      .join(""),
   };
 }

@@ -110,6 +110,30 @@ describe('botón "Cargar documento" (F1)', () => {
   });
 });
 
+// Spec 009 (F1, D11): el acceso al asistente, mientras el menú no tenga el enlace.
+describe('acceso al asistente (spec 009, E16)', () => {
+  test.each([
+    ['un EMPLOYEE', EMPLOYEE],
+    ['un ADMIN', ADMIN],
+  ])('%s ve "Preguntale al asistente", con enlace a /asistente', async (_who, session) => {
+    mocks.useSession.mockReturnValue(session);
+    render(<DocumentList />);
+
+    expect(await screen.findByRole('link', { name: 'Preguntale al asistente' })).toHaveAttribute(
+      'href',
+      '/asistente',
+    );
+  });
+
+  test('sin sesión no aparece', async () => {
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    render(<DocumentList />);
+
+    await screen.findByText(/usuario de prueba|iniciar sesión/i);
+    expect(screen.queryByRole('link', { name: 'Preguntale al asistente' })).not.toBeInTheDocument();
+  });
+});
+
 describe('listado (F7)', () => {
   test('E8: muestra exactamente las tarjetas de la respuesta y en el mismo orden', async () => {
     mocks.listDocuments.mockResolvedValue(page([doc(3), doc(1), doc(2)]));

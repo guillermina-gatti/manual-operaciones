@@ -1,5 +1,6 @@
 // Único punto de entrada de lib/api: los componentes importan de '@/lib/api', nunca de un archivo interno.
 import { getAuthHeaders, refreshSession } from '@/lib/session';
+import { createChatApi } from './chat';
 import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
 import { createExecutionsApi } from './executions';
@@ -51,7 +52,7 @@ export type {
 
 export { ApiError } from './api-error';
 export { createApiClient } from './client';
-export type { ApiClient, GetAuthHeaders, RefreshAuth } from './client';
+export type { ApiClient, GetAuthHeaders, RefreshAuth, StreamingApiClient } from './client';
 export { describeApiError } from './error-messages';
 export type { ErrorContext, ErrorDescription, UploadField } from './error-messages';
 export { useApiResource } from './use-api-resource';
@@ -76,3 +77,8 @@ export type {
 } from './metrics';
 export { describeMetricsError, METRICS_MESSAGES } from './metrics-errors';
 export type { MetricsErrorDescription } from './metrics-errors';
+
+// Spec 009 (HU20): POST /api/chat/stream, con el mismo cliente.
+export const { askStream } = createChatApi(apiClient);
+export { ChatStreamError } from './chat';
+export type { ChatRequestBody, ChatResult, ChatResultStatus, ChatSource, ChatStreamDone } from './chat';
