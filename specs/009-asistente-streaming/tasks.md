@@ -53,7 +53,11 @@ Convenciones:
   3. Después de mover: `chat.service.spec.ts` sigue en verde, y `git diff --exit-code src/chat/chat.service.spec.ts` no muestra cambios.
 - **Depende de:** traer `develop`.
 - **Commit:** `refactor(api): extraer la orquestación del chat sin cambiar su comportamiento`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026), sin commit.
+  - **Antes:** `chat.service.spec.ts` en verde (8 tests).
+  - **Test primero:** `chat-pipeline.spec.ts` falló porque el archivo no existía; ahora pasan sus 13 tests.
+  - **Después:** `chat.service.spec.ts` sigue en verde sin cambios (`git diff --exit-code` vacío). `api test`: 93 suites, 1402 tests; `tsc` y `lint` en verde.
+  - **Además de lo pedido:** `saveResult` recibe el inicio (`startedAt`) y mide la latencia en el mismo punto que antes (al guardar); `prepareChat` recibe el `logger` de `ChatService`, así el aviso del embedding sale con el mismo contexto.
 
 ### T02 · Método de streaming en el puerto del modelo
 
