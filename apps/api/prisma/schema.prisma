@@ -110,6 +110,7 @@ model Chunk {
   chunkIndex        Int      @map("chunk_index") // orden dentro de la versión
   content           String // texto del fragmento
   pageNumber        Int?     @map("page_number") // para citar la fuente
+  section           String?  @db.Text // título de la sección; nulo si el fragmento no tiene título (HU18)
   tokenCount        Int?     @map("token_count")
   areaIds           String[] @map("area_ids") @db.Uuid // copia de document_areas
   isActive          Boolean  @default(false) @map("is_active") // true solo si documento ACTIVE + versión CURRENT + READY
