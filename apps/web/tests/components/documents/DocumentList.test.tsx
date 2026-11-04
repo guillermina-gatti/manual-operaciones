@@ -137,7 +137,7 @@ describe('acceso al asistente (spec 009, E16)', () => {
     mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
     render(<DocumentList />);
 
-    await screen.findByText(/usuario de prueba|iniciar sesión/i);
+    await screen.findByText('Necesitás iniciar sesión para ver los documentos.');
     expect(screen.queryByRole('link', { name: 'Preguntale al asistente' })).not.toBeInTheDocument();
   });
 });
