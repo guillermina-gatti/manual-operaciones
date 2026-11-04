@@ -3,7 +3,8 @@
    para no saturar la API de embeddings. PROCESSING_WORKER_ENABLED=false lo apaga. */
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConnectionOptions, Queue, Worker } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
+import type { ConnectionOptions } from 'bullmq';
 import { PROCESSING_QUEUE_NAME, ProcessDocumentJobData } from './adapters/bullmq-processing-queue';
 import { ProcessDocumentHandler } from './process-document.handler';
 

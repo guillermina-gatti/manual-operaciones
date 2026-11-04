@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProceduresModule } from './procedures/procedures.module';
 import { RedisModule } from './redis/redis.module';
 import { UsersModule } from './users/users.module';
+import { ProcessingModule } from './processing/processing.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { UsersModule } from './users/users.module';
     DocumentsModule,
     ExecutionsModule,
     ProceduresModule,
+    ProcessingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
