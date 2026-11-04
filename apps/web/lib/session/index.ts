@@ -31,3 +31,4 @@ export const restoreSession = simulated && !REAL_AUTH_ENABLED
 
 export { ROLES } from './session';
 export type { Role, SessionState, SessionStatus, SessionUser } from './session';
+export { DEFAULT_REDIRECT, buildLoginReturnUrl, sanitizeReturnTo } from './safe-redirect';
