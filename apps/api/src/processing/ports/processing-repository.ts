@@ -46,4 +46,8 @@ export abstract class ProcessingRepository {
     versionId: string,
     plan: (state: LockedState) => ChunkRow[],
   ): Promise<CommitOutcome>;
+
+  // Marca la versión FAILED con el motivo visible para el ADMIN (processingError).
+  // Si la versión ya no existe, no hace nada.
+  abstract markFailed(versionId: string, message: string): Promise<void>;
 }

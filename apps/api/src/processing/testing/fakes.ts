@@ -46,6 +46,9 @@ export class FakeProcessingRepository extends ProcessingRepository {
   afterFind?: (repo: FakeProcessingRepository) => void;
   beforeCommit?: (repo: FakeProcessingRepository) => void;
 
+  // Motivos de fallo registrados por markFailed, por versión.
+  failures = new Map<string, string>();
+
   private lockHeld = false;
   isLockHeld(): boolean {
     return this.lockHeld;
@@ -56,6 +59,13 @@ export class FakeProcessingRepository extends ProcessingRepository {
     const snapshot = found ? { ...found } : null;
     this.afterFind?.(this);
     return snapshot;
+  }
+
+  async markFailed(versionId: string, message: string): Promise<void> {
+    const version = this.versions.get(versionId);
+    if (!version) return;
+    version.processingStatus = 'FAILED';
+    this.failures.set(versionId, message);
   }
 
   async commitLocked(
