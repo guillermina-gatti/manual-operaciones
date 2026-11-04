@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { DocumentListSkeleton } from '@/components/documents/DocumentListSkeleton';
+import { PageHeader } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 
 export const metadata: Metadata = {
@@ -13,8 +14,11 @@ export const metadata: Metadata = {
 
 export default function DocumentosPage() {
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
-      <h1 className="text-2xl font-semibold">Documentos</h1>
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
+      <PageHeader
+        title="Documentos"
+        subtitle="Los documentos vigentes de tus áreas. Buscá, descargá y revisá."
+      />
       <Suspense
         fallback={
           <ScreenState kind="loading" label="Cargando documentos…">

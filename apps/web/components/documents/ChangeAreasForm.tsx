@@ -7,7 +7,7 @@
 // no se pierde nada de lo elegido (F4 del plan 002).
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from './design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { changeAreas, describeApiError, useApiResource } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
@@ -137,13 +137,18 @@ function AreasForm({
       {submitError && <FormErrorBanner message={submitError} />}
 
       <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={submitting} aria-busy={submitting}>
+        <button type="submit" className={BUTTON_PRIMARY} disabled={submitting} aria-busy={submitting}>
           {submitting ? 'Guardando…' : 'Guardar áreas'}
-        </Button>
+        </button>
         {onCancel && (
-          <Button variant="secondary" onClick={onCancel} disabled={submitting}>
+          <button
+            type="button"
+            className={BUTTON_SECONDARY}
+            onClick={onCancel}
+            disabled={submitting}
+          >
             Cancelar
-          </Button>
+          </button>
         )}
       </div>
     </form>

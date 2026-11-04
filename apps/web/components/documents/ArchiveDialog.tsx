@@ -4,9 +4,9 @@
 // showModal(): el navegador resuelve el foco atrapado, Escape y el fondo inerte. Solo existe mientras
 // está abierto; el detalle lo cierra al recibir onClose u onArchived.
 import { useEffect, useId, useRef, useState } from 'react';
-import { Button } from '@/components/ui/Button';
 import { archiveDocument, describeApiError } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
+import { BUTTON_DANGER, BUTTON_SECONDARY, ERROR_BOX } from './design';
 
 export const ARCHIVE_CONFIRMATION =
   '¿Seguro que querés archivar este documento? Va a dejar de verse para los demás usuarios y no se puede deshacer.';
@@ -66,37 +66,35 @@ function OpenArchiveDialog({ documentId, onClose, onArchived }: Omit<ArchiveDial
       onCancel={(event) => {
         if (archivingRef.current) event.preventDefault();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-zinc-900 shadow-xl backdrop:bg-black/50 dark:bg-zinc-900 dark:text-zinc-100"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-borde bg-blanco p-8 text-texto shadow-xl backdrop:bg-texto/50"
     >
-      <h2 id={`${id}-title`} className="text-lg font-semibold">
+      <h2 id={`${id}-title`} className="text-2xl font-bold">
         Archivar documento
       </h2>
       <p id={`${id}-text`} className="mt-2">
         {ARCHIVE_CONFIRMATION}
       </p>
       {error && (
-        <p
-          role="alert"
-          className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
+        <p role="alert" className={`${ERROR_BOX} mt-4`}>
           {error}
         </p>
       )}
       <div className="mt-6 flex flex-wrap justify-end gap-3">
-        <Button
+        <button
+          type="button"
+          className={BUTTON_SECONDARY}
           data-initial-focus
-          variant="secondary"
           disabled={archiving}
           onClick={() => dialogRef.current?.close()}
         >
           Cancelar
-        </Button>
+        </button>
         <button
           type="button"
           onClick={archive}
           disabled={archiving}
           aria-busy={archiving}
-          className="inline-flex min-h-11 items-center justify-center rounded-md bg-red-700 px-4 font-medium text-white transition-colors hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-red-500 dark:text-zinc-950 dark:hover:bg-red-400"
+          className={BUTTON_DANGER}
         >
           {archiving ? 'Archivando…' : 'Archivar'}
         </button>

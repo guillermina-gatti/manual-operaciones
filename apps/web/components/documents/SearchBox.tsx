@@ -6,8 +6,8 @@
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
 import { SEARCH_MAX, SEARCH_MIN, parseSearchParam } from '@/lib/documents/search-rules';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, ERROR_TEXT, SearchIcon } from './design';
 
 interface SearchBoxProps {
   // El ?q= de la dirección, tal cual (null si no hay búsqueda).
@@ -46,31 +46,40 @@ export function SearchBox({ query }: SearchBoxProps) {
   }
 
   return (
-    <form role="search" onSubmit={submit} noValidate className="flex flex-col gap-1">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          type="search"
-          aria-label="Buscar documentos"
-          placeholder="Buscar en títulos, descripciones y contenido"
-          maxLength={SEARCH_MAX}
-          value={value}
-          onChange={(event) => {
-            setValue(event.target.value);
-            setWarning(undefined);
-          }}
-          aria-invalid={warning ? true : undefined}
-          aria-describedby={warning ? errorId : undefined}
-          className="min-h-11 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-3 text-zinc-900 focus-visible:outline-2 focus-visible:outline-blue-600 sm:flex-1 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-        />
-        <Button type="submit">Buscar</Button>
+    <form role="search" onSubmit={submit} noValidate className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative min-w-0 sm:flex-1">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-texto-suave" />
+          <input
+            type="search"
+            aria-label="Buscar documentos"
+            placeholder="Buscá también adentro de los documentos… (no importan las tildes)"
+            maxLength={SEARCH_MAX}
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setWarning(undefined);
+            }}
+            aria-invalid={warning ? true : undefined}
+            aria-describedby={warning ? errorId : undefined}
+            className="min-h-14 w-full min-w-0 rounded-xl border border-borde bg-blanco pr-4 pl-12 text-texto placeholder:text-texto-suave aria-[invalid=true]:border-peligro"
+          />
+        </div>
+        <button type="submit" className={`${BUTTON_PRIMARY} min-h-14`}>
+          Buscar
+        </button>
         {hasSearch && (
-          <Button variant="secondary" onClick={() => router.push('/documentos')}>
+          <button
+            type="button"
+            className={`${BUTTON_SECONDARY} min-h-14`}
+            onClick={() => router.push('/documentos')}
+          >
             Borrar búsqueda
-          </Button>
+          </button>
         )}
       </div>
       {warning && (
-        <p id={errorId} role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p id={errorId} role="alert" className={ERROR_TEXT}>
           {warning}
         </p>
       )}

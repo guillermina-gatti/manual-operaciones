@@ -9,6 +9,7 @@ import { pageCount } from '@/lib/documents/pagination';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
 import { SearchResultCard } from './SearchResultCard';
+import { TEXT_LINK } from './design';
 
 interface SearchResultsProps {
   // El texto ya validado y recortado (parseSearchParam).
@@ -18,7 +19,7 @@ interface SearchResultsProps {
   isAdmin: boolean;
 }
 
-const LINK = 'text-blue-700 underline dark:text-blue-400';
+const LINK = TEXT_LINK;
 
 const SEARCHING = (
   <ScreenState kind="loading" label="Buscando…">
@@ -79,11 +80,11 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
   // Spec 008 (F1, P2): los nombres vienen en cada resultado, como en el listado.
   return (
     <div className="flex flex-col gap-6">
-      <p aria-live="polite" className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p aria-live="polite" className="text-sm text-texto-suave">
         {total === 1 ? '1 resultado' : `${total} resultados`} para «{query}»
       </p>
 
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((result) => (
           <li key={result.id} className="min-w-0">
             <SearchResultCard result={result} isAdmin={isAdmin} />

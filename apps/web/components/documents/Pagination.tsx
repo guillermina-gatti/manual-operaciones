@@ -22,11 +22,12 @@ function pageHref(page: number, query: string | undefined, basePath: string): st
   return params.length === 0 ? basePath : `${basePath}?${params.join('&')}`;
 }
 
-// Al menos 44 × 44 px, para tocarlos en el celular (F10).
+// Al menos 44 × 44 px, para tocarlos en el celular (F10). Como los filtros del diseño: la actual en
+// bosque, las demás blancas con borde.
 const ITEM =
-  'inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-3 text-sm';
-const LINK = `${ITEM} border border-zinc-300 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:hover:bg-zinc-800`;
-const CURRENT = `${ITEM} bg-blue-700 font-semibold text-white dark:bg-blue-500 dark:text-zinc-950`;
+  'inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm';
+const LINK = `${ITEM} border border-borde bg-blanco font-semibold text-bosque hover:bg-salvia`;
+const CURRENT = `${ITEM} bg-bosque font-semibold text-blanco`;
 
 export function Pagination({
   currentPage,

@@ -5,6 +5,7 @@ import { useId } from 'react';
 import { FieldError } from '@/components/ui/FieldError';
 import type { Area } from '@/lib/directory';
 import { displayAreaName } from '@/lib/directory/areas-directory';
+import { CHIP, HINT, LABEL } from './design';
 
 interface AreasFieldProps {
   areas: Area[];
@@ -31,18 +32,22 @@ export function AreasField({ areas, selected, onChange, error }: AreasFieldProps
     <fieldset
       aria-invalid={error ? true : undefined}
       aria-describedby={error ? errorId : undefined}
-      className="flex min-w-0 flex-col gap-1"
+      className="flex min-w-0 flex-col gap-2"
     >
-      <legend className="font-medium">Áreas</legend>
+      <legend className={`${LABEL} mb-2`}>Áreas</legend>
       {visibleAreas.length === 0 ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">No hay áreas disponibles</p>
+        <p className={HINT}>No hay áreas disponibles</p>
       ) : (
-        <div className="flex flex-wrap gap-x-6">
+        <div className="flex flex-wrap gap-3">
           {visibleAreas.map((area) => (
-            <label key={area.id} className="flex min-h-11 items-center gap-2">
+            // Casilla con forma de chip: marcada, en el verde de las áreas.
+            <label
+              key={area.id}
+              className={`${CHIP} min-h-11 cursor-pointer gap-2 border border-borde bg-blanco px-3 has-checked:border-chip-area-texto has-checked:bg-chip-area has-checked:text-chip-area-texto`}
+            >
               <input
                 type="checkbox"
-                className="size-5"
+                className="size-5 accent-bosque"
                 checked={selected.includes(area.id)}
                 onChange={(event) => toggle(area.id, event.target.checked)}
               />

@@ -23,10 +23,7 @@ import { Pagination } from './Pagination';
 import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
 import { SearchResults } from './SearchResults';
-
-// Enlace con forma de botón principal (mismo estilo que Button, 44 px de alto: F10).
-const LINK_BUTTON =
-  'inline-flex min-h-11 items-center justify-center rounded-md bg-blue-700 px-4 font-medium text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400';
+import { BUTTON_PRIMARY, TEXT_LINK } from './design';
 
 const LOADING = (
   <ScreenState kind="loading" label="Cargando documentos…">
@@ -56,7 +53,7 @@ export function DocumentList() {
         <>
           {user.role === 'ADMIN' && (
             <div className="flex justify-end">
-              <Link href="/documentos/nuevo" className={LINK_BUTTON}>
+              <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
                 Cargar documento
               </Link>
             </div>
@@ -105,7 +102,7 @@ if (!user) {
       action={
         <Link
           href="/login"
-          className="text-blue-700 underline dark:text-blue-400"
+          className={TEXT_LINK}
         >
           Ir a iniciar sesión
         </Link>
@@ -137,7 +134,7 @@ if (!user) {
         kind="empty"
         message="Todavía no hay documentos"
         action={
-          <Link href="/documentos/nuevo" className={LINK_BUTTON}>
+          <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
             Cargar el primer documento
           </Link>
         }
@@ -154,7 +151,7 @@ if (!user) {
         kind="empty"
         message="Esta página no existe"
         action={
-          <Link href="/documentos" className="text-blue-700 underline dark:text-blue-400">
+          <Link href="/documentos" className={TEXT_LINK}>
             Ir a la primera página
           </Link>
         }
@@ -167,13 +164,13 @@ if (!user) {
     <div className="flex flex-col gap-6">
       {isAdmin && (
         <div className="flex justify-end">
-          <Link href="/documentos/nuevo" className={LINK_BUTTON}>
+          <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
             Cargar documento
           </Link>
         </div>
       )}
 
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((document) => (
           <li key={document.id} className="min-w-0">
             <DocumentCard document={document} isAdmin={isAdmin} />

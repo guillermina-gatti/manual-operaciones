@@ -18,6 +18,7 @@ import { useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { TEXT_LINK } from './design';
 
 const BASE_PATH = '/documentos/por-revisar';
 
@@ -66,7 +67,7 @@ export function PendingReviewList() {
         kind="empty"
         message="Esta página no existe"
         action={
-          <Link href={BASE_PATH} className="text-blue-700 underline dark:text-blue-400">
+          <Link href={BASE_PATH} className={TEXT_LINK}>
             Ir a la primera página
           </Link>
         }
@@ -77,7 +78,7 @@ export function PendingReviewList() {
   // Spec 008 (F1): los nombres vienen en cada documento, como en el listado.
   return (
     <div className="flex flex-col gap-6">
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((document) => (
           <li key={document.id} className="min-w-0">
             <DocumentCard document={document} isAdmin={isAdmin} />

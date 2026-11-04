@@ -3,6 +3,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { UploadDocumentForm } from '@/components/documents/UploadDocumentForm';
+import { BACK_LINK, Card, PageHeader } from '@/components/documents/design';
 import { RequireRole } from '@/components/session/RequireRole';
 
 export const metadata: Metadata = {
@@ -11,16 +12,18 @@ export const metadata: Metadata = {
 
 export default function NuevoDocumentoPage() {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
-      <Link
-        href="/documentos"
-        className="inline-flex min-h-11 items-center self-start text-blue-700 hover:underline dark:text-blue-400"
-      >
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8">
+      <Link href="/documentos" className={BACK_LINK}>
         <span aria-hidden="true">←&nbsp;</span>Volver a Documentos
       </Link>
-      <h1 className="text-2xl font-semibold">Cargar documento</h1>
+      <PageHeader
+        title="Cargar documento"
+        subtitle="Subí un PDF, .txt o .md y elegí quién lo cuida."
+      />
       <RequireRole role="ADMIN" deniedMessage="No tenés permiso para cargar documentos.">
-        <UploadDocumentForm />
+        <Card>
+          <UploadDocumentForm />
+        </Card>
       </RequireRole>
     </main>
   );

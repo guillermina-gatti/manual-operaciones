@@ -5,6 +5,7 @@
 // documento, aunque no tenga pendientes (D19).
 import Link from 'next/link';
 import { listPendingReview, useApiResource } from '@/lib/api';
+import { BUTTON_SECONDARY } from './design';
 
 interface PendingReviewLinkProps {
   // La clave incluye al usuario: al cambiar de sesión se vuelve a pedir.
@@ -12,9 +13,8 @@ interface PendingReviewLinkProps {
   isAdmin: boolean;
 }
 
-// Con forma de botón secundario y 44 px de alto, como Button (F10 del plan 002).
-const LINK_SECONDARY =
-  'inline-flex min-h-11 items-center justify-center rounded-md border border-zinc-300 bg-white px-4 font-medium text-zinc-900 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800';
+// Con forma de botón secundario del diseño, 48 px de alto (F10 del plan 002).
+const LINK_SECONDARY = BUTTON_SECONDARY;
 
 const describeCount = (total: number) =>
   total === 0 ? 'ningún documento' : total === 1 ? '1 documento' : `${total} documentos`;

@@ -142,7 +142,9 @@ describe('listado (F7)', () => {
     render(<DocumentList />);
 
     const card = (await screen.findAllByRole('article'))[0];
-    expect(within(card).getByText('Ventas, Compras (inactiva)')).toBeInTheDocument();
+    // Un chip por área: el área inactiva lleva la palabra en su propio chip.
+    expect(within(card).getByText('Ventas')).toBeInTheDocument();
+    expect(within(card).getByText('Compras (inactiva)')).toBeInTheDocument();
     expect(within(card).getByText('Sergio Supervisor de Ventas (inactivo)')).toBeInTheDocument();
   });
 

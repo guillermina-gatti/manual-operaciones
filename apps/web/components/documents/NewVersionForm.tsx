@@ -5,7 +5,7 @@
 // Cada 409 se explica según su reason (D7).
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from './design';
 import { describeApiError, uploadVersion } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
 import { validateFile, validateReviewDate } from '@/lib/documents/validate-upload';
@@ -107,13 +107,18 @@ export function NewVersionForm({ document, onDone, onCancel }: NewVersionFormPro
       )}
 
       <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={submitting} aria-busy={submitting}>
+        <button type="submit" className={BUTTON_PRIMARY} disabled={submitting} aria-busy={submitting}>
           {submitting ? 'Cargando…' : 'Subir versión'}
-        </Button>
+        </button>
         {onCancel && (
-          <Button variant="secondary" onClick={onCancel} disabled={submitting}>
+          <button
+            type="button"
+            className={BUTTON_SECONDARY}
+            onClick={onCancel}
+            disabled={submitting}
+          >
             Cancelar
-          </Button>
+          </button>
         )}
       </div>
     </form>

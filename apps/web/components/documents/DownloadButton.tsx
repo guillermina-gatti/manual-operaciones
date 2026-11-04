@@ -3,7 +3,7 @@
 // Botón "Descargar" del detalle (F8). El enlace firmado vence a los 5 minutos: se pide a la API
 // en cada clic, se abre y se olvida. Nunca se pide al mostrar la pantalla ni se guarda.
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/Button';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, ERROR_TEXT } from './design';
 import { describeApiError, getDownloadUrl, getVersionDownloadUrl } from '@/lib/api';
 
 interface DownloadButtonProps {
@@ -14,6 +14,8 @@ interface DownloadButtonProps {
   label?: string;
   // Cómo se abre el enlace. Los tests pasan la suya: jsdom no deja reemplazar location.assign.
   openUrl?: (url: string) => void;
+  // En el historial va como secundario, para no llenar la pantalla de botones primarios.
+  secondary?: boolean;
 }
 
 // location.assign y no window.open: los navegadores bloquean las ventanas que se abren después de un await.
@@ -35,6 +37,7 @@ export function DownloadButton({
   versionId,
   label,
   openUrl = assignLocation,
+  secondary = false,
 }: DownloadButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,11 +74,18 @@ export function DownloadButton({
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <Button onClick={download} disabled={busy} aria-busy={busy} aria-label={label}>
+      <button
+        type="button"
+        className={secondary ? BUTTON_SECONDARY : BUTTON_PRIMARY}
+        onClick={download}
+        disabled={busy}
+        aria-busy={busy}
+        aria-label={label}
+      >
         {busy ? 'Preparando…' : 'Descargar'}
-      </Button>
+      </button>
       {error && (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className={ERROR_TEXT}>
           {error}
         </p>
       )}

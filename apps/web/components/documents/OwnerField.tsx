@@ -8,12 +8,12 @@
 // lo dice la API (R6). Las áreas que llegan acá son solo las activas, porque el endpoint de
 // candidatos rechaza las inactivas.
 import { useEffect, useEffectEvent, useId } from 'react';
-import { Button } from '@/components/ui/Button';
 import { FieldError } from '@/components/ui/FieldError';
 import { useApiResource } from '@/lib/api';
 import type { DocumentReference } from '@/lib/api';
 import { usersDirectory } from '@/lib/directory';
 import { formatPerson } from '@/lib/documents/format';
+import { BUTTON_SECONDARY, ERROR_TEXT, HINT, INPUT, LABEL } from './design';
 import type { Role } from '@/lib/session';
 
 export const OWNER_NO_LONGER_VALID =
@@ -86,7 +86,7 @@ export function OwnerField({
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <label htmlFor={id} className="font-medium">
+      <label htmlFor={id} className={LABEL}>
         Responsable
       </label>
       <select
@@ -96,7 +96,7 @@ export function OwnerField({
         onChange={(event) => onChange(event.target.value, undefined)}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className="min-h-11 w-full rounded-md border border-zinc-300 bg-white px-3 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900"
+        className={INPUT}
       >
         <option value="">Elegí un responsable</option>
         {showCurrentOwner && <option value={currentOwner.id}>{formatPerson(currentOwner)}</option>}
@@ -107,18 +107,18 @@ export function OwnerField({
         ))}
       </select>
       {hint && (
-        <p id={hintId} className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p id={hintId} className={HINT}>
           {hint}
         </p>
       )}
       {candidates.status === 'error' && (
         <div className="flex flex-wrap items-center gap-3">
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className={ERROR_TEXT}>
             No pudimos cargar la lista de responsables.
           </p>
-          <Button variant="secondary" onClick={candidates.reload}>
+          <button type="button" className={BUTTON_SECONDARY} onClick={candidates.reload}>
             Reintentar
-          </Button>
+          </button>
         </div>
       )}
       <FieldError id={errorId} message={error} />

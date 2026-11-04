@@ -7,7 +7,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
 import { FieldError } from '@/components/ui/FieldError';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { describeApiError, uploadDocument, useApiResource } from '@/lib/api';
@@ -22,6 +21,7 @@ import { FileField } from './FileField';
 import { FormErrorBanner } from './FormErrorBanner';
 import { OwnerField } from './OwnerField';
 import { ReviewDateField } from './ReviewDateField';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, HINT, INPUT, LABEL } from './design';
 
 const EMPTY: UploadFormValues = {
   file: null,
@@ -32,8 +32,6 @@ const EMPTY: UploadFormValues = {
   reviewDate: '',
 };
 
-const INPUT =
-  'min-h-11 w-full rounded-md border border-zinc-300 bg-white px-3 aria-[invalid=true]:border-red-600 dark:border-zinc-600 dark:bg-zinc-900';
 
 export function UploadDocumentForm() {
   const router = useRouter();
@@ -139,7 +137,7 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
   const field = (name: string) => `${id}-${name}`;
 
   return (
-    <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-6">
+    <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-8">
       <FileField
         file={values.file}
         error={errors.file}
@@ -149,8 +147,8 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
         }}
       />
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={field('title')} className="font-medium">
+      <div className="flex flex-col gap-2">
+        <label htmlFor={field('title')} className={LABEL}>
           Título
         </label>
         <input
@@ -164,8 +162,8 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
         <FieldError id={field('title-error')} message={errors.title} />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={field('description')} className="font-medium">
+      <div className="flex flex-col gap-2">
+        <label htmlFor={field('description')} className={LABEL}>
           Descripción (opcional)
         </label>
         <textarea
@@ -179,7 +177,7 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
             .filter(Boolean)
             .join(' ')}
         />
-        <p id={field('description-count')} className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p id={field('description-count')} className={HINT}>
           {values.description.length}/{DESCRIPTION_MAX}
         </p>
         <FieldError id={field('description-error')} message={errors.description} />
@@ -219,13 +217,13 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
       )}
 
       <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={submitting} aria-busy={submitting}>
+        <button type="submit" className={BUTTON_PRIMARY} disabled={submitting} aria-busy={submitting}>
           {submitting ? 'Cargando…' : 'Cargar documento'}
-        </Button>
+        </button>
         {/* F14: salir no pide confirmación. */}
         <Link
           href="/documentos"
-          className="inline-flex min-h-11 items-center justify-center rounded-md border border-zinc-300 px-4 font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+          className={BUTTON_SECONDARY}
         >
           Cancelar
         </Link>
