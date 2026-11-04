@@ -10,6 +10,7 @@ import { apiError, documentDetail, mockApi, versionHistory } from './support/moc
 import type { ApiHandlers, ApiRequest, Reply } from './support/mock-api';
 import { loginAs } from './support/session';
 import type { TestUser } from './support/session';
+import { referencesOf } from '../tests/support/documents';
 
 const R14 =
   '¿Seguro que querés archivar este documento? Va a dejar de verse para los demás usuarios y no se puede deshacer.';
@@ -49,7 +50,9 @@ async function openDocument(
     detail: ok,
     changeAreas: (request) => {
       const body = JSON.parse(request.body!.toString('utf8')) as { areaIds: string[]; ownerId?: string };
-      state.document = { ...state.document, areaIds: body.areaIds, ownerId: body.ownerId ?? state.document.ownerId };
+      const ownerId = body.ownerId ?? state.document.ownerId;
+      // Spec 008: como la API real, owner y areas con nombre salen de cómo quedó el documento.
+      state.document = { ...state.document, areaIds: body.areaIds, ownerId, ...referencesOf(ownerId, body.areaIds) };
       return ok();
     },
     uploadVersion: (request) => {
@@ -208,31 +211,48 @@ test.describe('E5 · Falla al subir la versión', () => {
   });
 });
 
+// Spec 008 (P5, F4; E16): el responsable actual ya no se borra al cambiar las áreas. Se manda sin
+// ownerId; si perdió el acceso, la API responde 400 y el error queda en el campo, para elegir otro.
 test.describe('E6 · El responsable perdería el acceso', () => {
-  test('al pasar a Operaciones aparece "…Elegí otro" y no se envía hasta elegir', async ({ page }) => {
+  test('al pasar a Operaciones el actual sigue elegido, el 400 de la API queda en el campo y se elige otro', async ({
+    page,
+  }) => {
     const { api } = await openDocument(page, {
       document: { ownerId: FIXTURE_USERS.supervisorVentas.id },
+      overrides: (defaults) => ({
+        changeAreas: (request) => {
+          const body = JSON.parse(request.body!.toString('utf8')) as { ownerId?: string };
+          return body.ownerId
+            ? defaults.changeAreas!(request)
+            : apiError(400, ['ownerId: el responsable no comparte ningún área con el documento']);
+        },
+      }),
     });
 
     await page.getByRole('button', { name: 'Cambiar áreas' }).click();
     await page.getByRole('checkbox', { name: 'Operaciones' }).check();
     await page.getByRole('checkbox', { name: 'Ventas' }).uncheck();
 
+    const owner = page.getByRole('combobox', { name: 'Responsable' });
+    await expect(owner).toHaveValue(FIXTURE_USERS.supervisorVentas.id);
     await expect(
       page.getByText('El responsable elegido no tiene acceso a las áreas nuevas. Elegí otro'),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await page.getByRole('button', { name: 'Guardar áreas' }).click();
-    await expect(page.getByText('Elegí un responsable.')).toBeVisible();
-    expect(requestsTo(api.requests, 'PATCH', '/areas')).toHaveLength(0);
+    await expect(
+      page.getByText('El responsable tiene que pertenecer a alguna de las áreas elegidas, o ser administrador.'),
+    ).toBeVisible();
+    await expect(owner).toHaveValue(FIXTURE_USERS.supervisorVentas.id);
+    const [rejected] = requestsTo(api.requests, 'PATCH', '/areas');
+    expect(JSON.parse(rejected.body!.toString('utf8'))).toEqual({ areaIds: [AREA_IDS.operaciones] });
 
-    await page
-      .getByRole('combobox', { name: 'Responsable' })
-      .selectOption(FIXTURE_USERS.supervisorOperaciones.id);
+    await owner.selectOption(FIXTURE_USERS.supervisorOperaciones.id);
     await page.getByRole('button', { name: 'Guardar áreas' }).click();
 
     await expect(page.getByRole('status').filter({ hasText: 'Áreas actualizadas' })).toBeVisible();
-    const [patch] = requestsTo(api.requests, 'PATCH', '/areas');
-    expect(JSON.parse(patch.body!.toString('utf8'))).toEqual({
+    const patches = requestsTo(api.requests, 'PATCH', '/areas');
+    expect(patches).toHaveLength(2);
+    expect(JSON.parse(patches[1].body!.toString('utf8'))).toEqual({
       areaIds: [AREA_IDS.operaciones],
       ownerId: FIXTURE_USERS.supervisorOperaciones.id,
     });

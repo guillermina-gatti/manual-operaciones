@@ -48,8 +48,13 @@ const optionNames = () =>
   within(select())
     .getAllByRole('option')
     .map((option) => option.textContent);
+// Habilitado y con opciones: con currentOwner (spec 008), el responsable actual ya es una opción
+// antes de que lleguen los candidatos, así que contar opciones solo no alcanza.
 const waitForCandidates = () =>
-  waitFor(() => expect(within(select()).getAllByRole('option').length).toBeGreaterThan(1));
+  waitFor(() => {
+    expect(select()).toBeEnabled();
+    expect(within(select()).getAllByRole('option').length).toBeGreaterThan(1);
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();
