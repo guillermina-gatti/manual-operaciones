@@ -3,12 +3,14 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProcessingModule } from '../processing/processing.module';
 import { createChatLlm } from './adapters/gemini-chat-llm';
+import { PrismaChatContextStore } from './adapters/prisma-chat-context-store';
 import { PrismaChatRepository } from './adapters/prisma-chat-repository';
 import { PrismaChatRetrieval } from './adapters/prisma-chat-retrieval';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { ChatStreamController } from './chat-stream.controller';
 import { ChatStreamService } from './chat-stream.service';
+import { ChatContextStore } from './ports/chat-context-store';
 import { ChatLlm } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval } from './ports/chat-retrieval';
@@ -21,6 +23,7 @@ import { ChatRetrieval } from './ports/chat-retrieval';
         ChatStreamService, // spec 009
         { provide: ChatRetrieval, useClass: PrismaChatRetrieval },
         { provide: ChatRepository, useClass: PrismaChatRepository },
+        { provide: ChatContextStore, useClass: PrismaChatContextStore }, // spec 010
         {
             // El modelo de chat sale de GEMINI_CHAT_MODEL (gemini-2.5-flash por defecto).
             provide: ChatLlm,

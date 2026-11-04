@@ -37,9 +37,15 @@ export class ChatStreamController {
     @ApiBody({ type: ChatRequestDto })
     @ApiProduces('text/event-stream')
     @ApiResponse({ status: 200, description: EVENTS_DESCRIPTION })
-    @ApiResponse({ status: 400, description: 'Pedido inválido' })
+    @ApiResponse({
+        status: 400,
+        description: 'Pedido inválido (también un context mal formado) o una conversación de otro paso (spec 010)',
+    })
     @ApiResponse({ status: 401, description: 'Sin sesión o sesión vencida' })
-    @ApiResponse({ status: 404, description: 'La conversación no existe o es de otro usuario' })
+    @ApiResponse({
+        status: 404,
+        description: 'La conversación no existe o es de otro usuario, o el paso del context no está disponible (spec 010)',
+    })
     @ApiResponse({ status: 503, description: 'La base no responde al resolver la conversación' })
     async stream(
         @CurrentUser() user: AuthUser,

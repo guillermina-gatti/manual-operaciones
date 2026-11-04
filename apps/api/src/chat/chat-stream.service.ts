@@ -4,8 +4,10 @@ import {
     Injectable,
     Logger,
     NotFoundException,
+    Optional,
     ServiceUnavailableException,
 } from '@nestjs/common';
+import type { Role } from '../common/auth';
 import { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatRequest } from './chat.contract';
 import {
@@ -18,8 +20,10 @@ import {
     saveResult,
     unavailable,
 } from './chat-pipeline';
+import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
 import { buildSearchUrl } from './chat-search-url';
 import type { ChatEventSink } from './chat-stream.types';
+import { ChatContextStore } from './ports/chat-context-store';
 import { ChatLlm } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval } from './ports/chat-retrieval';
@@ -37,6 +41,8 @@ export interface OpenedChat {
     conversationId: string;
     question: string;
     startedAt: number;
+    // Spec 010: el paso desde el que se pregunta, ya validado; sin contexto, undefined.
+    stepContext?: StepContext;
 }
 
 @Injectable()
@@ -48,13 +54,18 @@ export class ChatStreamService {
         private readonly retrieval: ChatRetrieval,
         private readonly llm: ChatLlm,
         private readonly repository: ChatRepository,
+        // Spec 010: para validar el contexto del paso. Opcional, así los tests de la spec 009 no cambian.
+        @Optional() private readonly contextStore?: ChatContextStore,
     ) { }
 
     // Antes de transmitir (R2): resolver la conversación. 404 si no es del usuario; cualquier otro
     // error, 503 (PD7). Los errores de acá salen como JSON, porque todavía no se abrió la transmisión.
-    async open(user: ChatUser, request: ChatRequest): Promise<OpenedChat> {
+    async open(user: ChatUser & { role?: Role }, request: ChatRequest): Promise<OpenedChat> {
         const startedAt = Date.now();
         const question = request.message.trim();
+
+        // Spec 010 (R3 a R5, R7): el paso, antes de resolver la conversación (404, 400 o 503 en JSON).
+        const stepContext = await openStepContext(this.contextStore, user, request);
 
         let conversationId: string | null;
         try {
@@ -66,18 +77,19 @@ export class ChatStreamService {
         if (!conversationId) {
             throw new NotFoundException('Conversación no encontrada');
         }
-        return { conversationId, question, startedAt };
+        await rememberConversationStep(this.contextStore, request, conversationId, stepContext);
+        return { conversationId, question, startedAt, stepContext };
     }
 
     // Transmite: start, los delta y un solo evento final (done o error), R3. Si el cliente corta, no
     // se manda nada más ni se guarda (R11, D13).
     async run(user: ChatUser, opened: OpenedChat, sink: ChatEventSink, clientSignal: AbortSignal): Promise<void> {
-        const { conversationId, question, startedAt } = opened;
+        const { conversationId, question, startedAt, stepContext } = opened;
         sink.start({ conversationId });
 
         let outcome: Outcome;
         try {
-            outcome = await this.answer(user, question, sink, clientSignal);
+            outcome = await this.answer(user, question, sink, clientSignal, stepContext);
         } catch (error) {
             if (clientSignal.aborted) return;
             // Lo que no es de la IA (por ejemplo, la base al recuperar): no hay done posible.
@@ -108,9 +120,12 @@ export class ChatStreamService {
         question: string,
         sink: ChatEventSink,
         clientSignal: AbortSignal,
+        stepContext?: StepContext,
     ): Promise<Outcome> {
         const embeddings = withTimeout(this.embeddings, EMBEDDING_TIMEOUT_MS);
-        const prepared = await prepareChat(embeddings, this.retrieval, user, question, this.logger);
+        // Spec 010 (R8): con el paso, el embedding usa su título y la pregunta.
+        const searchText = stepContext ? `${stepContext.stepTitle}\n${question}` : question;
+        const prepared = await prepareChat(embeddings, this.retrieval, user, question, this.logger, searchText);
         if (prepared.kind === 'done') {
             return prepared.outcome;
         }
@@ -127,7 +142,7 @@ export class ChatStreamService {
             if (!clientSignal.aborted) sink.delta({ text });
         });
         try {
-            const stream = this.llm.stream(question, prepared.passages, controller.signal);
+            const stream = this.llm.stream(question, prepared.passages, controller.signal, stepContext);
             for await (const part of stream.textStream) {
                 clearTimeout(idle);
                 idle = setTimeout(cut('El modelo dejó de responder'), IDLE_TIMEOUT_MS);

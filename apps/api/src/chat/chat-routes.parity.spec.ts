@@ -5,6 +5,9 @@ import { MAX_COSINE_DISTANCE } from './chat-pipeline';
 import { ChatService } from './chat.service';
 import { ChatStreamService } from './chat-stream.service';
 import {
+    CONTEXT_STEP,
+    CONTEXT_VERSION,
+    FakeContextStore,
     FakeEmbeddings,
     FakeLlm,
     FakeRepository,
@@ -80,5 +83,52 @@ describe('las dos rutas del chat responden lo mismo (spec 009, E2)', () => {
 
         const withoutLatency = ({ latencyMs: _latency, ...rest }: { latencyMs: number }) => rest;
         expect(streamed.repo.saved.map(withoutLatency)).toEqual(actual.repo.saved.map(withoutLatency));
+    });
+});
+
+// Spec 010 (T07, R13, E6): las dos rutas también responden lo mismo con el contexto del paso, y le
+// pasan al modelo el mismo contexto y al embedding el mismo texto.
+describe('las dos rutas del chat responden lo mismo con contexto (spec 010, E6)', () => {
+    const context = { procedureVersionId: CONTEXT_VERSION, stepId: CONTEXT_STEP };
+
+    beforeEach(() => {
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it.each(CASES.filter((c) => c.name !== 'sin áreas'))('$name', async (c) => {
+        const user = { ...USER, role: 'EMPLOYEE' as const };
+        const message = '¿Qué hago acá?';
+
+        const actual = deps(c);
+        const actualStore = new FakeContextStore();
+        const service = new ChatService(actual.embeddings, actual.retrieval, actual.llm, actual.repo, actualStore);
+        const viaPost = await service.ask(user, { message, context });
+
+        const streamed = deps(c);
+        const streamedStore = new FakeContextStore();
+        const streamService = new ChatStreamService(
+            streamed.embeddings,
+            streamed.retrieval,
+            streamed.llm,
+            streamed.repo,
+            streamedStore,
+        );
+        const sink = new RecordingSink();
+        const opened = await streamService.open(user, { message, context });
+        await streamService.run(user, opened, sink, new AbortController().signal);
+
+        const { searchUrl: _searchUrl, ...sameShape } = sink.final!;
+        expect(sameShape).toEqual(viaPost);
+        expect(streamed.llm.contexts).toEqual(actual.llm.contexts);
+        expect(streamed.embeddings.texts).toEqual(actual.embeddings.texts);
+        expect(streamedStore.saved).toEqual(actualStore.saved);
+        expect(actualStore.saved).toEqual([{ conversationId: 'conv-new', step: context }]);
+        if (c.embeddings !== 'fail') {
+            expect(actual.embeddings.texts).toEqual([['Contar el efectivo\n¿Qué hago acá?']]);
+        }
     });
 });

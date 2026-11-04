@@ -2,6 +2,8 @@
 // Guille), que no se importan para no tocar su archivo, más un modelo que transmite en partes.
 import { EmbeddingProvider } from '../../processing/ports/embedding-provider';
 import type { ChatStreamDone, ChatStreamErrorBody, ChatEventSink } from '../chat-stream.types';
+import type { StepContext, StepRecord } from '../chat-context';
+import { ChatContextStore, type ConversationStep } from '../ports/chat-context-store';
 import { ChatLlm, type LlmAnswer, type LlmStream, type Passage } from '../ports/chat-llm';
 import { ChatRepository, type SaveMessageInput } from '../ports/chat-repository';
 import { ChatRetrieval, type RetrievedChunk } from '../ports/chat-retrieval';
@@ -25,12 +27,14 @@ export function chunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
 
 export class FakeEmbeddings extends EmbeddingProvider {
     calls = 0;
+    texts: string[][] = []; // spec 010: con qué texto se pidió cada embedding
     // fail: rechaza; hang: no responde nunca (para los tiempos de espera).
     constructor(private readonly mode: 'ok' | 'fail' | 'hang' = 'ok') {
         super();
     }
     async embedMany(texts: string[]): Promise<number[][]> {
         this.calls++;
+        this.texts.push(texts);
         if (this.mode === 'fail') throw new Error('embedding down');
         if (this.mode === 'hang') return new Promise(() => undefined);
         return texts.map(() => [0.1, 0.2, 0.3]);
@@ -55,6 +59,7 @@ export type LlmStep = string | { wait: number } | { fail: string } | { hang: tru
 export class FakeLlm extends ChatLlm {
     lastPassages: Passage[] = [];
     signals: AbortSignal[] = [];
+    contexts: Array<StepContext | undefined> = []; // spec 010: el contexto de cada llamada
     constructor(private readonly steps: LlmStep[] | null) {
         super();
     }
@@ -68,15 +73,17 @@ export class FakeLlm extends ChatLlm {
         return step && typeof step === 'object' && 'fail' in step ? step.fail : undefined;
     }
 
-    async answer(_question: string, passages: Passage[]): Promise<LlmAnswer> {
+    async answer(_question: string, passages: Passage[], context?: StepContext): Promise<LlmAnswer> {
         this.lastPassages = passages;
+        this.contexts.push(context);
         if (this.steps === null) throw new Error('model down');
         if (this.failure) throw new Error(this.failure);
         return { text: this.text, modelName: 'fake-model', inputTokens: 10, outputTokens: 5 };
     }
 
-    stream(_question: string, passages: Passage[], signal: AbortSignal): LlmStream {
+    stream(_question: string, passages: Passage[], signal: AbortSignal, context?: StepContext): LlmStream {
         this.lastPassages = passages;
+        this.contexts.push(context);
         this.signals.push(signal);
         const steps = this.steps;
         let text = '';
@@ -172,5 +179,48 @@ export class RecordingSink implements ChatEventSink {
     get final(): ChatStreamDone | undefined {
         const last = this.events.find((e) => e.event === 'done');
         return last?.event === 'done' ? last.data : undefined;
+    }
+}
+
+// --- Spec 010: el contexto del paso ------------------------------------------------------------------
+
+export const CONTEXT_VERSION = '0e000000-0000-4000-8000-000000000002';
+export const CONTEXT_STEP = '0f000000-0000-4000-8000-000000000003';
+
+// Un paso 3 "Contar el efectivo" de la versión vigente de un procedimiento del área de USER.
+export function stepRecord(overrides: { description?: string; areaIds?: string[] } = {}): StepRecord {
+    return {
+        version: { id: CONTEXT_VERSION, procedureId: 'procedure-1', versionNumber: 2, status: 'PUBLISHED', title: 'Cierre de caja' },
+        step: {
+            id: CONTEXT_STEP,
+            procedureVersionId: CONTEXT_VERSION,
+            stepOrder: 3,
+            title: 'Contar el efectivo',
+            description: overrides.description ?? 'Contá billetes y monedas.',
+        },
+        procedureAreaIds: overrides.areaIds ?? USER.areaIds,
+        versions: [{ versionNumber: 2, status: 'PUBLISHED', stepCount: 4 }],
+    };
+}
+
+export class FakeContextStore extends ChatContextStore {
+    saved: Array<{ conversationId: string; step: ConversationStep }> = [];
+    constructor(
+        private readonly record: StepRecord | null = stepRecord(),
+        private readonly conversations: Record<string, ConversationStep | null> = {},
+    ) {
+        super();
+    }
+    async findStep(): Promise<StepRecord | null> {
+        return this.record;
+    }
+    async hasInProgressExecution(): Promise<boolean> {
+        return false;
+    }
+    async findConversationStep(_userId: string, conversationId: string): Promise<ConversationStep | null | undefined> {
+        return conversationId in this.conversations ? this.conversations[conversationId] : undefined;
+    }
+    async setConversationStep(conversationId: string, step: ConversationStep): Promise<void> {
+        this.saved.push({ conversationId, step });
     }
 }

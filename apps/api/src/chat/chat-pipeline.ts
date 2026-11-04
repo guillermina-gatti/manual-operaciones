@@ -37,12 +37,14 @@ export type Prepared =
     | { kind: 'ready'; chunks: RetrievedChunk[]; passages: Passage[] };
 
 // Antes del modelo: áreas, embedding de la pregunta, recuperación con el umbral y pasajes S1, S2…
+// Spec 010 (R8): searchText es el texto del embedding; con el paso, el título del paso y la pregunta.
 export async function prepareChat(
     embeddings: EmbeddingProvider,
     retrieval: ChatRetrieval,
     user: ChatUser,
     question: string,
     logger: Logger,
+    searchText: string = question,
 ): Promise<Prepared> {
     // Sin áreas asignadas no hay nada que el usuario pueda consultar.
     if (user.areaIds.length === 0) {
@@ -51,7 +53,7 @@ export async function prepareChat(
 
     let queryVector: number[];
     try {
-        [queryVector] = await embeddings.embedMany([question]);
+        [queryVector] = await embeddings.embedMany([searchText]);
     } catch (error) {
         logger.warn(`Falló el embedding de la consulta: ${String(error)}`);
         return { kind: 'done', outcome: unavailable() };

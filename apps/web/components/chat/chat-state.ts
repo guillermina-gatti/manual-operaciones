@@ -2,7 +2,8 @@
 import type { ChatResultStatus, ChatSource } from '@/lib/api';
 
 // Además de los estados de la API: transmitiendo, cortada, con error y pedido inválido (400 o 404).
-export type AssistantStatus = 'streaming' | ChatResultStatus | 'cut' | 'error' | 'invalid';
+// Spec 010: step-gone, el paso ya no está disponible (F5).
+export type AssistantStatus = 'streaming' | ChatResultStatus | 'cut' | 'error' | 'invalid' | 'step-gone';
 
 export interface UserMessage {
   id: number;

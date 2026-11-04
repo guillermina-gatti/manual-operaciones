@@ -262,3 +262,33 @@ describe('chat-pipeline (spec 009, T01)', () => {
         });
     });
 });
+
+// Spec 010 (T05, R8): con el paso, el embedding se calcula con otro texto (el título del paso y la
+// pregunta). Por defecto, la pregunta, como siempre.
+describe('prepareChat: el texto del embedding (spec 010)', () => {
+    class RecordingEmbeddings extends EmbeddingProvider {
+        texts: string[][] = [];
+        async embedMany(texts: string[]): Promise<number[][]> {
+            this.texts.push(texts);
+            return texts.map(() => [0.1, 0.2, 0.3]);
+        }
+    }
+
+    it('E3: con searchText, el embedding recibe ese texto', async () => {
+        const embeddings = new RecordingEmbeddings();
+
+        const searchText = 'Contar el efectivo\n¿qué hago acá?';
+
+        await prepareChat(embeddings, new FakeRetrieval([chunk()]), USER, '¿qué hago acá?', logger, searchText);
+
+        expect(embeddings.texts).toEqual([[searchText]]);
+    });
+
+    it('sin searchText, la pregunta', async () => {
+        const embeddings = new RecordingEmbeddings();
+
+        await prepareChat(embeddings, new FakeRetrieval([chunk()]), USER, '¿qué hago acá?', logger);
+
+        expect(embeddings.texts).toEqual([['¿qué hago acá?']]);
+    });
+});

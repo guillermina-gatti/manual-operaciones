@@ -32,6 +32,8 @@ export type ChatStreamDone = ChatResult & { searchUrl?: string };
 export interface ChatRequestBody {
   message: string;
   conversationId?: string;
+  // Spec 010: el paso desde el que se pregunta.
+  context?: { procedureVersionId: string; stepId: string };
 }
 
 export interface AskStreamHandlers {

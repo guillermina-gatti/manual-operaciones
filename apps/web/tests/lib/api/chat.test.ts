@@ -110,3 +110,25 @@ describe('askStream (spec 009)', () => {
     await expect(createChatApi(client).askStream({ message: 'hola' })).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
+
+describe('askStream con el contexto del paso (spec 010, T09)', () => {
+  const sentBody = (client: { stream: ReturnType<typeof vi.fn> }) =>
+    JSON.parse((client.stream.mock.calls[0] as [string, RequestInit])[1].body as string) as Record<string, unknown>;
+
+  test('manda context cuando viene', async () => {
+    const client = clientReturning(bodyOf([event('start', { conversationId: 'c-1' }), event('done', DONE)]));
+    const context = { procedureVersionId: 'v-1', stepId: 's-1' };
+
+    await createChatApi(client).askStream({ message: 'hola', context });
+
+    expect(sentBody(client)).toEqual({ message: 'hola', context });
+  });
+
+  test('sin context, el cuerpo no lo lleva', async () => {
+    const client = clientReturning(bodyOf([event('start', { conversationId: 'c-1' }), event('done', DONE)]));
+
+    await createChatApi(client).askStream({ message: 'hola' });
+
+    expect(sentBody(client)).not.toHaveProperty('context');
+  });
+});

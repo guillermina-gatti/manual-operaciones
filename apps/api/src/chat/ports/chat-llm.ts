@@ -1,4 +1,6 @@
 // Puerto del modelo de lenguaje. La implementación real usa Gemini a través del AI SDK.
+import type { StepContext } from '../chat-context';
+
 export interface Passage {
     ref: string; // S1, S2, ... (marca que el modelo debe citar)
     documentTitle: string;
@@ -33,14 +35,15 @@ export interface LlmStream {
 }
 
 export abstract class ChatLlm {
-    abstract answer(question: string, passages: Passage[]): Promise<LlmAnswer>;
+    // Spec 010 (R6): con context, el paso desde el que se pregunta va al prompt como datos.
+    abstract answer(question: string, passages: Passage[], context?: StepContext): Promise<LlmAnswer>;
 
     // No es abstracto, para que las clases que ya extienden ChatLlm sigan compilando: por defecto
     // usa answer y entrega el texto en una sola parte. La señal corta antes de empezar.
-    stream(question: string, passages: Passage[], signal: AbortSignal): LlmStream {
+    stream(question: string, passages: Passage[], signal: AbortSignal, context?: StepContext): LlmStream {
         const final = signal.aborted
             ? Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('Pedido cortado'))
-            : this.answer(question, passages);
+            : this.answer(question, passages, context);
         // Quien solo lee las partes no deja un rechazo sin manejar en final.
         final.catch(() => undefined);
         async function* parts(): AsyncGenerator<string> {

@@ -39,7 +39,7 @@ Convenciones:
   Falla porque hoy `{}` pasa. Después, `chat.service.spec.ts` sigue en verde sin cambios.
 - **Depende de:** —
 - **Commit:** `feat(api): validar la forma del contexto del chat`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T02 · Validación y visibilidad del paso
 
@@ -58,7 +58,7 @@ Convenciones:
   Falla porque el archivo no existe.
 - **Depende de:** —
 - **Commit:** `feat(api): validar el paso del contexto con las reglas de procedimientos`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T03 · `ChatContextStore` y una conversación por paso
 
@@ -78,7 +78,7 @@ Convenciones:
   Falla porque las funciones no existen. El adaptador de Prisma se prueba en T08.
 - **Depende de:** T02.
 - **Commit:** `feat(api): guardar el paso de la conversación del chat`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T04 · El paso en el prompt
 
@@ -95,7 +95,7 @@ Convenciones:
   Falla porque el bloque no existe. `chat.service.spec.ts` compila sin cambios.
 - **Depende de:** T02.
 - **Commit:** `feat(api): sumar el paso del procedimiento al prompt del asistente`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026). El test de E16 (sin contexto, sin consultas a la base) quedó en `chat-stream.service.spec.ts`, junto con T06.
 
 ### T05 · El paso en la búsqueda de fragmentos
 
@@ -109,7 +109,7 @@ Convenciones:
   Falla porque el parámetro no existe. `chat.service.spec.ts` y los tests de paridad pasan sin cambios.
 - **Depende de:** —
 - **Commit:** `feat(api): buscar fragmentos con el título del paso`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T06 · El contexto en la ruta de streaming
 
@@ -123,7 +123,7 @@ Convenciones:
   - sin contexto, los tests de la spec 009 pasan sin cambios.
 - **Depende de:** T03, T04, T05.
 - **Commit:** `feat(api): usar el contexto del paso en la ruta de streaming`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T07 · El contexto en `POST /api/chat` y la paridad
 
@@ -135,7 +135,7 @@ Convenciones:
   - el diff de `chat.service.ts` es solo el parámetro opcional y el paso del contexto.
 - **Depende de:** T06.
 - **Commit:** `feat(api): usar el contexto del paso en POST /api/chat`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T08 · Integración del contexto
 
@@ -154,7 +154,7 @@ Convenciones:
   Las suites de chat y de documentos pasan sin cambios. **Pedir la confirmación del usuario** antes de resetear `manual_test`.
 - **Depende de:** T07.
 - **Commit:** `test(api): probar el contexto del paso de punta a punta`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026). Corrió con `manual_test` reseteado.
 
 ## Web
 
@@ -166,7 +166,7 @@ Convenciones:
 - **Verificación:** antes y después, `ChatScreen.test.tsx` y `ChatScreen.states.test.tsx` en verde, sin cambios. Test primero en `chat.test.ts`: `askStream` manda `context` cuando viene, y no lo manda cuando no.
 - **Depende de:** —
 - **Commit:** `refactor(web): extraer la conversación del asistente a un hook`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026).
 
 ### T10 · `ChatPanel` y `ExecutionChatPanel`
 
@@ -187,7 +187,7 @@ Convenciones:
   Falla porque los componentes no existen.
 - **Depende de:** T09.
 - **Commit:** `feat(web): agregar el panel del asistente para un paso`
-- **Estado:** pendiente.
+- **Estado:** hecha (04/11/2026). El paso no disponible es un estado propio, `step-gone`, en vez de sumarlo a `invalid`: lleva el enlace a la búsqueda.
 
 ### T11 · Montar el panel en `ExecutionView` (pareja B)
 

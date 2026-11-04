@@ -91,6 +91,15 @@ function AssistantBody({ message, onRetry, busy }: { message: AssistantMessage }
 
     case 'invalid':
       return <p className="font-semibold text-rosa-alerta-texto">{message.notice}</p>;
+
+    // Spec 010 (F5): el paso ya no está disponible; queda la búsqueda sin el asistente.
+    case 'step-gone':
+      return (
+        <>
+          <p className="font-semibold text-rosa-alerta-texto">{message.notice}</p>
+          <SearchLink url={buildSearchUrl(message.question)} />
+        </>
+      );
   }
 }
 

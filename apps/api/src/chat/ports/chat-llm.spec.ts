@@ -56,3 +56,27 @@ describe('ChatLlm.stream por defecto (spec 009, R12)', () => {
         expect(llm.calls).toBe(0);
     });
 });
+
+describe('ChatLlm.stream por defecto con contexto (spec 010, R6)', () => {
+    it('le pasa el contexto del paso a answer', async () => {
+        const received: unknown[] = [];
+        class RecordingLlm extends ChatLlm {
+            async answer(_q: string, _p: Passage[], context?: unknown): Promise<LlmAnswer> {
+                received.push(context);
+                return REPLY;
+            }
+        }
+        const context = {
+            procedureVersionId: 'v',
+            stepId: 's',
+            procedureTitle: 'Cierre',
+            stepOrder: 3,
+            stepTitle: 'Contar',
+            stepDescription: '',
+        };
+
+        await collect(new RecordingLlm().stream('¿plazo?', PASSAGES, new AbortController().signal, context).textStream);
+
+        expect(received).toEqual([context]);
+    });
+});

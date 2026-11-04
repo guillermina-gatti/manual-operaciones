@@ -316,7 +316,7 @@ Escenario: el montaje no cambia la pantalla de ejecución
 5. **El montaje en `ExecutionView.tsx`** (D10, F9) lo hace Matías, en una tarea y un commit aparte. Cambian solo estas líneas:
    - el import de `ExecutionChatPanel`;
    - `<ExecutionChatPanel execution={execution} />` dentro del `aside` reservado;
-   - `hidden` pasa a `hidden={completed}`;
+   - `hidden` pasa a `hidden={completed}`. Es el único cambio en su marcado, aprobado por Matías (04/11/2026). Con `hidden` fijo el panel nunca se vería, y al terminar la ejecución el `aside` quedaría vacío pero anunciado por los lectores de pantalla;
    - el comentario del hueco.
 
    No cambian la lógica, los estilos ni los tests. Su test "keeps a place for the assistant next to the steps" sigue pasando, porque el `aside` conserva `data-slot="chat-panel"`. El PR se lo pasamos para que lo revise.
