@@ -41,7 +41,7 @@ export type Prepared =
     | { kind: 'done'; outcome: Outcome }
     | { kind: 'ready'; chunks: RetrievedChunk[]; passages: Passage[] };
 
-// Antes del modelo: áreas, embedding de la pregunta, recuperación con el umbral y pasajes S1, S2…
+// Antes del modelo: áreas, charla, embedding de la pregunta, recuperación con el umbral y pasajes S1, S2…
 // Spec 010 (R8): searchText es el texto del embedding; con el paso, el título del paso y la pregunta.
 export async function prepareChat(
     embeddings: EmbeddingProvider,
@@ -51,16 +51,16 @@ export async function prepareChat(
     logger: Logger,
     searchText: string = question,
 ): Promise<Prepared> {
+    // Sin áreas asignadas no hay nada que el usuario pueda consultar, ni siquiera un saludo.
+    if (user.areaIds.length === 0) {
+        return { kind: 'done', outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [] } };
+    }
+
     // Charla básica (saludos, despedidas, agradecimientos y preguntas sobre el asistente): respuesta
     // fija, sin buscar ni llamar al modelo. El estado sigue siendo answered y sin fuentes.
     const reply = smallTalkReply(question);
     if (reply !== null) {
         return { kind: 'done', outcome: { status: 'answered', answer: reply, chunks: [] } };
-    }
-
-    // Sin áreas asignadas no hay nada que el usuario pueda consultar.
-    if (user.areaIds.length === 0) {
-        return { kind: 'done', outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [] } };
     }
 
     let queryVector: number[];
