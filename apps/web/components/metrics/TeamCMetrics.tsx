@@ -6,6 +6,7 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { metricsQuery, useApiResource } from '@/lib/api';
+import { ERROR_TEXT } from '@/components/documents/design';
 import { formatDuration } from '@/lib/executions/format';
 import { teamCMetrics } from '@/lib/metrics';
 import type { PanelFilters } from '@/lib/metrics/filters';
@@ -34,14 +35,15 @@ export function TeamCMetrics({ filters, userId }: TeamCMetricsProps) {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Asistente y documentos
+        <h2 id={headingId} className="text-2xl font-bold text-texto">
+          Documentos y asistente
         </h2>
-        <p className="text-zinc-600 dark:text-zinc-300">
-          Las preparan los equipos del asistente y de documentos.
+        <p className="text-texto-suave">
+          Las preparan los equipos de documentos y del asistente.
         </p>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <DocumentMetricsCard filters={filters} state={documents} />
         <TeamCCard
           title="Asistente"
           upcoming="Preguntas, preguntas sin respuesta, latencia y costo."
@@ -55,7 +57,6 @@ export function TeamCMetrics({ filters, userId }: TeamCMetricsProps) {
             ['Costo', usdFormat.format(data.costUsd)],
           ]}
         />
-        <DocumentMetricsCard filters={filters} state={documents} />
       </div>
     </section>
   );
@@ -69,15 +70,17 @@ interface TeamCCardProps<T> {
   render: (data: T) => [string, string][];
 }
 
+// While pair C has not delivered it, the card keeps a dashed border: something still to come.
 function TeamCCard<T>({ title, upcoming, resource, render }: TeamCCardProps<T>) {
+  const headingId = useId();
   let body: ReactNode;
   if (resource.status === 'success' && resource.data) {
     body = (
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
         {render(resource.data).map(([label, value]) => (
           <div key={label} className="flex flex-col">
-            <dt className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{label}</dt>
-            <dd className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">{value}</dd>
+            <dt className="text-sm font-semibold text-texto-suave">{label}</dt>
+            <dd className="text-2xl font-extrabold text-bosque tabular-nums">{value}</dd>
           </div>
         ))}
       </dl>
@@ -85,23 +88,28 @@ function TeamCCard<T>({ title, upcoming, resource, render }: TeamCCardProps<T>) 
   } else if (resource.status === 'success') {
     body = (
       <>
-        <p className="font-medium text-zinc-800 dark:text-zinc-200">Todavía no disponible.</p>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">Va a mostrar: {upcoming}</p>
+        <p className="font-semibold text-texto">Todavía no disponible.</p>
+        <p className="text-sm text-texto-suave">Va a mostrar: {upcoming}</p>
       </>
     );
   } else if (resource.status === 'error') {
     body = (
-      <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+      <p role="alert" className={ERROR_TEXT}>
         No pudimos cargar estas métricas.
       </p>
     );
   } else {
-    body = <p className="text-sm text-zinc-600 dark:text-zinc-400">Cargando…</p>;
+    body = <p className="text-sm text-texto-suave">Cargando…</p>;
   }
 
   return (
-    <article className="flex min-h-36 flex-col gap-2 rounded-xl border border-dashed border-zinc-300 bg-white/70 p-5 dark:border-zinc-700 dark:bg-zinc-900/60">
-      <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">{title}</h3>
+    <article
+      aria-labelledby={headingId}
+      className="flex min-h-36 min-w-0 flex-col gap-3 rounded-2xl border-2 border-dashed border-borde bg-blanco p-6 sm:p-8"
+    >
+      <h3 id={headingId} className="text-[22px] font-bold text-texto">
+        {title}
+      </h3>
       {body}
     </article>
   );
