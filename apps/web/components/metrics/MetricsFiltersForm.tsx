@@ -1,7 +1,7 @@
 'use client';
 
-// Area and period of the panel. Applying, a quick period or "Limpiar filtros" only change the
-// address; the panel reads it from there. Whoever uses it mounts it with key={href}, so going
+// Area and period of the panel. Choosing an area or a quick period applies at once; "Aplicar"
+// is for dates edited by hand. Every way, as "Limpiar filtros", only changes the address; the panel reads it from there. Whoever uses it mounts it with key={href}, so going
 // back or forward shows the filters of the address.
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
@@ -56,6 +56,21 @@ export function MetricsFiltersForm({ filters, areas, today }: MetricsFiltersForm
     router.push(metricsHref({ areaId: areaId || null, from, to }));
   }
 
+  // An area applies at once, with the dates loaded in the form. If they are not valid (an
+  // empty one, or "Desde" after "Hasta"), the applied ones are kept: the area never waits for
+  // dates that still have to be fixed.
+  function applyArea(value: string) {
+    setAreaId(value);
+    const datesOk = Boolean(from && to && from <= to);
+    router.push(
+      metricsHref({
+        areaId: value || null,
+        from: datesOk ? from : filters.from,
+        to: datesOk ? to : filters.to,
+      }),
+    );
+  }
+
   // A quick period applies at once, with the area chosen in the selector.
   function applyQuickPeriod(period: QuickPeriod) {
     router.push(metricsHref({ areaId: areaId || null, ...quickPeriodRange(period, today) }));
@@ -83,7 +98,7 @@ export function MetricsFiltersForm({ filters, areas, today }: MetricsFiltersForm
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
         <div className="sm:col-span-2 lg:col-span-1">
-          <AreaSelect options={areas} value={areaId} onChange={setAreaId} />
+          <AreaSelect options={areas} value={areaId} onChange={applyArea} />
         </div>
         <div className="flex flex-col gap-2">
           <label htmlFor={`${id}-from`} className={LABEL}>

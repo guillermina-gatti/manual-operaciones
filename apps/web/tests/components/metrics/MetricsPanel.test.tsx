@@ -193,13 +193,55 @@ describe('loading and filters', () => {
     expect(await optionTexts(user)).toEqual(['Todas las áreas · 2 áreas', 'Ventas', 'Operaciones']);
   });
 
-  test('applying changes the address with the chosen filters', async () => {
+  test('choosing an area applies it at once, with the loaded dates', async () => {
     const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('desde=2026-10-05&hasta=2026-10-20');
     render(<MetricsPanel />);
     await areasLoaded('2 áreas');
 
     await chooseArea(user, 'Ventas');
-    expect(areaButton()).toHaveTextContent('Ventas');
+
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledWith(
+      `/metricas?area=${VENTAS}&desde=2026-10-05&hasta=2026-10-20`,
+    );
+  });
+
+  test('choosing an area keeps the dates edited by hand, without "Aplicar"', async () => {
+    const user = userEvent.setup();
+    render(<MetricsPanel />);
+    await areasLoaded('2 áreas');
+
+    await user.clear(screen.getByLabelText('Desde'));
+    await user.type(screen.getByLabelText('Desde'), '2026-10-05');
+    expect(mocks.push).not.toHaveBeenCalled();
+    await chooseArea(user, 'Ventas');
+
+    expect(mocks.push).toHaveBeenCalledWith(
+      `/metricas?area=${VENTAS}&desde=2026-10-05&hasta=2026-10-27`,
+    );
+  });
+
+  test('with invalid dates in the form, the area applies with the applied ones', async () => {
+    const user = userEvent.setup();
+    render(<MetricsPanel />);
+    await areasLoaded('2 áreas');
+
+    await user.clear(screen.getByLabelText('Desde'));
+    await user.type(screen.getByLabelText('Desde'), '2026-10-28');
+    await chooseArea(user, 'Ventas');
+
+    expect(mocks.push).toHaveBeenCalledWith(
+      `/metricas?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`,
+    );
+  });
+
+  test('"Aplicar" applies the dates edited by hand', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    render(<MetricsPanel />);
+    await procedureCard();
+
     await user.clear(screen.getByLabelText('Desde'));
     await user.type(screen.getByLabelText('Desde'), '2026-10-05');
     await user.click(screen.getByRole('button', { name: 'Aplicar' }));

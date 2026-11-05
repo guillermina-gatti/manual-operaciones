@@ -3,7 +3,7 @@
 // Area selector of the metrics filters: a button that opens a list with a search box. With 20 or
 // more areas, a plain list or chips do not fit. Keyboard: the arrows move through the list, Enter
 // chooses, Escape closes and clears the search. The chosen option has a check and bold text, not
-// only a background. Choosing only changes the form; "Aplicar" or a quick period apply it.
+// only a background. Whoever uses it decides what choosing does (the filters apply it at once).
 import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { INPUT, LABEL, SearchIcon } from '@/components/documents/design';
