@@ -1,0 +1,198 @@
+// Traduce los errores de la API a mensajes para el usuario (F3, F9; plan 002, sección 5.1).
+// Los textos de la API nunca se muestran: están en inglés o nombran campos internos.
+import { ApiError } from './api-error';
+
+// 'areas', 'version' y 'archive': las acciones del ciclo de vida (spec 003, plan 6.2 a 6.4).
+// 'search': la búsqueda (spec 004, plan 5.3). 'review': "Marcar como revisado" (spec 005, plan 7.5).
+export type ErrorContext =
+  | 'list'
+  | 'detail'
+  | 'download'
+  | 'upload'
+  | 'areas'
+  | 'version'
+  | 'archive'
+  | 'search'
+  | 'review'
+  | 'conflict-alert'; // spec 011: listar y resolver las alertas de contradicción
+
+export type UploadField =
+  | 'file'
+  | 'title'
+  | 'areaIds'
+  | 'ownerId'
+  | 'reviewDate'
+  | 'description';
+
+export interface ErrorDescription {
+  // Aviso general, arriba del formulario o en el estado de error de la pantalla.
+  message: string;
+  // Solo en la carga: el error que se muestra junto a cada campo.
+  fieldErrors: Partial<Record<UploadField, string>>;
+  // Solo en el 409: el documento que ya tiene ese archivo, para el enlace.
+  existingDocumentId?: string;
+  // Si tiene sentido ofrecer "Reintentar".
+  canRetry: boolean;
+}
+
+export const MESSAGES = {
+  checkMarkedFields: 'Revisá los datos marcados en el formulario.',
+  checkForm: 'Revisá los datos del formulario.',
+  sessionInvalid: 'Tu sesión no es válida. Volvé a ingresar.',
+  noUploadPermission: 'No tenés permiso para cargar documentos.',
+  noPermission: 'No tenés permiso para ver esta información.',
+  documentNotFound: 'No se encontró el documento.',
+  duplicate: 'Ya existe un documento con este mismo archivo.',
+  checkFile: 'Revisá el archivo elegido.',
+  unavailable: 'El servicio no está disponible. Probá de nuevo en unos minutos.',
+  unexpected: 'Ocurrió un error inesperado. Probá de nuevo.',
+  noConnection:
+    'No pudimos conectarnos con el servidor. Revisá tu conexión y probá de nuevo.',
+  // Spec 003 (plan 6.2 a 6.4).
+  noModifyPermission: 'No tenés permiso para modificar documentos.',
+  identicalToCurrent: 'Este archivo es igual a la versión vigente.',
+  duplicateOther: 'Ya existe otro documento con este mismo archivo.',
+  archived: 'El documento fue archivado. Ya no se puede modificar.',
+  concurrentVersion:
+    'Otra persona subió una versión al mismo tiempo. Recargá el documento y volvé a intentar.',
+  // Spec 004 (plan 5.3). Solo aparecería si la validación de la web y la de la API no coincidieran.
+  invalidSearch: 'Revisá el texto de búsqueda: tiene que tener entre 3 y 100 caracteres.',
+  // Spec 005 (plan 7.5).
+  noReviewPermission: 'No tenés permiso para marcar este documento como revisado.',
+  // Spec 011.
+  invalidNote: 'Revisá la nota: puede tener hasta 500 caracteres.',
+  alertNotFound: 'La alerta ya no existe.',
+  alertAlreadyResolved: 'Otra persona ya la marcó como resuelta.',
+} as const;
+
+const LIFECYCLE_CONTEXTS: ErrorContext[] = ['areas', 'version', 'archive'];
+
+export const FIELD_MESSAGES: Record<UploadField, string> = {
+  file: 'Elegí un archivo PDF, .txt o .md de hasta 10 MB que no esté vacío.',
+  title: 'El título tiene que tener entre 1 y 200 caracteres.',
+  areaIds: 'Elegí al menos un área de la lista.',
+  ownerId:
+    'El responsable tiene que pertenecer a alguna de las áreas elegidas, o ser administrador.',
+  reviewDate: 'La fecha de revisión tiene que ser a partir de mañana.',
+  description: 'La descripción puede tener hasta 1000 caracteres.',
+};
+
+export const FILE_TOO_LARGE = 'El archivo pesa más de 10 MB.';
+export const FILE_NOT_SUPPORTED = 'El archivo no es un PDF, .txt o .md válido.';
+
+const UPLOAD_FIELDS = Object.keys(FIELD_MESSAGES) as UploadField[];
+
+export function describeApiError(
+  error: unknown,
+  context: ErrorContext,
+): ErrorDescription {
+  if (!(error instanceof ApiError)) return general(MESSAGES.unexpected, true);
+
+  switch (error.status) {
+    case 0:
+      return general(MESSAGES.noConnection, true);
+    case 400:
+      // En el detalle, la descarga y el archivo, un 400 es un id que no es UUID: para el usuario,
+      // no existe (F9).
+      if (context === 'detail' || context === 'download' || context === 'archive') {
+        return general(MESSAGES.documentNotFound, false);
+      }
+      // Los formularios: la carga, el cambio de áreas, la versión nueva y la revisión (spec 005).
+      if (
+        context === 'upload' ||
+        context === 'areas' ||
+        context === 'version' ||
+        context === 'review'
+      ) {
+        return describeUploadBadRequest(error.messages);
+      }
+      if (context === 'search') return general(MESSAGES.invalidSearch, false);
+      if (context === 'conflict-alert') return general(MESSAGES.invalidNote, false);
+      return general(MESSAGES.unexpected, true);
+    case 401:
+      return general(MESSAGES.sessionInvalid, false);
+    case 403:
+      if (context === 'upload') return general(MESSAGES.noUploadPermission, false);
+      if (context === 'review') return general(MESSAGES.noReviewPermission, false);
+      if (LIFECYCLE_CONTEXTS.includes(context)) {
+        return general(MESSAGES.noModifyPermission, false);
+      }
+      return general(MESSAGES.noPermission, false);
+    case 404:
+      if (context === 'conflict-alert') return general(MESSAGES.alertNotFound, false);
+      return general(MESSAGES.documentNotFound, false);
+    case 409:
+      if (context === 'conflict-alert') return general(MESSAGES.alertAlreadyResolved, false);
+      return describeConflict(error, context);
+    case 413:
+      return { ...general(MESSAGES.checkFile, false), fieldErrors: { file: FILE_TOO_LARGE } };
+    case 415:
+      return {
+        ...general(MESSAGES.checkFile, false),
+        fieldErrors: { file: FILE_NOT_SUPPORTED },
+      };
+    case 503:
+      return general(MESSAGES.unavailable, true);
+    default:
+      return general(MESSAGES.unexpected, true);
+  }
+}
+
+function general(message: string, canRetry: boolean): ErrorDescription {
+  return { message, fieldErrors: {}, canRetry };
+}
+
+// Cada 409 según su reason (spec 003, D7). Sin reason, o con DUPLICATE en la carga, es el 409 de la
+// spec 002: el mismo texto y el enlace al documento existente.
+function describeConflict(error: ApiError, context: ErrorContext): ErrorDescription {
+  switch (error.reason) {
+    case 'IDENTICAL_TO_CURRENT':
+      return general(MESSAGES.identicalToCurrent, false);
+    case 'ARCHIVED':
+      return general(MESSAGES.archived, false);
+    case 'CONCURRENT_VERSION':
+      return general(MESSAGES.concurrentVersion, false);
+    default:
+      return {
+        ...general(context === 'version' ? MESSAGES.duplicateOther : MESSAGES.duplicate, false),
+        existingDocumentId: error.existingDocumentId,
+      };
+  }
+}
+
+// Spec 008 (F7): los rechazos por responsable o área inactivos (R5, R7) tienen su propio texto; los
+// demás 400 de esos campos siguen con el de FIELD_MESSAGES.
+const INACTIVE_MESSAGES: ReadonlyArray<readonly [string, string]> = [
+  ['ownerId: el responsable está inactivo', 'El responsable está inactivo. Elegí otro.'],
+  [
+    'areaIds: están inactivas las áreas',
+    'Hay áreas inactivas entre las que agregaste. Sacalas para guardar.',
+  ],
+];
+
+// Cada texto de la API empieza con el nombre del campo ("title must…", "ownerId: …").
+// La excepción conocida es "Falta el archivo o está vacío", que nombra el archivo sin el campo.
+function describeUploadBadRequest(apiMessages: string[]): ErrorDescription {
+  const fieldErrors: ErrorDescription['fieldErrors'] = {};
+  for (const text of apiMessages) {
+    const field = fieldOf(text);
+    if (!field) continue;
+    const inactive = INACTIVE_MESSAGES.find(([prefix]) => text.startsWith(prefix));
+    fieldErrors[field] = inactive?.[1] ?? FIELD_MESSAGES[field];
+  }
+
+  const hasFields = Object.keys(fieldErrors).length > 0;
+  return {
+    message: hasFields ? MESSAGES.checkMarkedFields : MESSAGES.checkForm,
+    fieldErrors,
+    canRetry: false,
+  };
+}
+
+function fieldOf(text: string): UploadField | undefined {
+  const field = UPLOAD_FIELDS.find((name) =>
+    new RegExp(`^${name}\\b`).test(text),
+  );
+  if (field) return field;
+  return /archivo/i.test(text) ? 'file' : undefined;
+}
