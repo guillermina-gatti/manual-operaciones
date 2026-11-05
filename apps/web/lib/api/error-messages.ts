@@ -13,7 +13,8 @@ export type ErrorContext =
   | 'version'
   | 'archive'
   | 'search'
-  | 'review';
+  | 'review'
+  | 'conflict-alert'; // spec 011: listar y resolver las alertas de contradicción
 
 export type UploadField =
   | 'file'
@@ -58,6 +59,10 @@ export const MESSAGES = {
   invalidSearch: 'Revisá el texto de búsqueda: tiene que tener entre 3 y 100 caracteres.',
   // Spec 005 (plan 7.5).
   noReviewPermission: 'No tenés permiso para marcar este documento como revisado.',
+  // Spec 011.
+  invalidNote: 'Revisá la nota: puede tener hasta 500 caracteres.',
+  alertNotFound: 'La alerta ya no existe.',
+  alertAlreadyResolved: 'Otra persona ya la marcó como resuelta.',
 } as const;
 
 const LIFECYCLE_CONTEXTS: ErrorContext[] = ['areas', 'version', 'archive'];
@@ -102,6 +107,7 @@ export function describeApiError(
         return describeUploadBadRequest(error.messages);
       }
       if (context === 'search') return general(MESSAGES.invalidSearch, false);
+      if (context === 'conflict-alert') return general(MESSAGES.invalidNote, false);
       return general(MESSAGES.unexpected, true);
     case 401:
       return general(MESSAGES.sessionInvalid, false);
@@ -113,8 +119,10 @@ export function describeApiError(
       }
       return general(MESSAGES.noPermission, false);
     case 404:
+      if (context === 'conflict-alert') return general(MESSAGES.alertNotFound, false);
       return general(MESSAGES.documentNotFound, false);
     case 409:
+      if (context === 'conflict-alert') return general(MESSAGES.alertAlreadyResolved, false);
       return describeConflict(error, context);
     case 413:
       return { ...general(MESSAGES.checkFile, false), fieldErrors: { file: FILE_TOO_LARGE } };

@@ -20,6 +20,7 @@ import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { ConflictAlertsLink } from './ConflictAlertsLink';
 import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
 import { SearchResults } from './SearchResults';
@@ -51,6 +52,8 @@ export function DocumentList() {
             Preguntale al asistente <span aria-hidden="true">✦</span>
           </Link>
           <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
+          {/* Spec 011 (F5, D11): las alertas de contradicción, solo para el ADMIN. */}
+          {user.role === 'ADMIN' && <ConflictAlertsLink userId={user.id} />}
         </div>
       )}
       {search.kind === 'valid' && status === 'ready' && user ? (

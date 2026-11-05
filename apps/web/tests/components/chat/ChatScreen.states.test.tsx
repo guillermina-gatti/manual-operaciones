@@ -223,3 +223,30 @@ describe('ChatScreen: fuentes, citas y estados (spec 009, T13)', () => {
     expect(bodyOf(2)).toEqual({ message: 'Tercera' });
   });
 });
+
+// Spec 011 (T10, F1, F3): con conflict, la pantalla guarda las dos fuentes y anuncia el aviso.
+describe('ChatScreen: dos documentos que se contradicen (spec 011)', () => {
+  const POLITICA = { ...SOURCE_B, documentId: 'doc-gastos', documentTitle: 'Política de gastos', chunkId: 'c3' };
+
+  test('E2: el aviso, la explicación con sus citas y las dos fuentes, y el anuncio', async () => {
+    const { stream } = await ask('¿Quién aprueba una compra de $800.000?');
+    finish(stream, [
+      [
+        'done',
+        doneOf({
+          status: 'conflict',
+          answer: 'El manual dice gerente [S1]; la política, director [S3].',
+          sources: [doneOf().sources[0], POLITICA],
+        }),
+      ],
+    ]);
+    await idle();
+
+    expect(await within(conversation()).findByText('Dos documentos dicen cosas distintas')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Fuente 2: Política de gastos' })).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Las dos fuentes' })).getAllByRole('link')).toHaveLength(2);
+    expect(screen.getByTestId('chat-live')).toHaveTextContent(
+      'Dos documentos dicen cosas distintas. El manual dice gerente; la política, director.',
+    );
+  });
+});

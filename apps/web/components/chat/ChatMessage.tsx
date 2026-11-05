@@ -1,10 +1,12 @@
 // Un mensaje del chat (spec 009, F3 a F5): la pregunta a la derecha, en bosque; la respuesta a la
 // izquierda, sobre blanco. Mientras se genera, la burbuja está ocupada (aria-busy) y no se anuncia.
 // Al terminar: citas y fuentes, "No encontré" o el aviso con el enlace a la búsqueda sin IA (HU36).
+// Spec 011: o el aviso de dos documentos que se contradicen, con las dos fuentes.
 import Link from 'next/link';
 import { linkCitations } from '@/lib/chat/citations';
 import { buildSearchUrl, searchTextOf } from '@/lib/chat/search-url';
 import { ChatSources } from './ChatSources';
+import { ConflictNotice } from './ConflictNotice';
 import { BUTTON_SECONDARY, TEXT_LINK } from './design';
 import type { AssistantMessage, ChatMessageItem } from './chat-state';
 
@@ -56,8 +58,17 @@ function AssistantBody({ message, onRetry, busy }: { message: AssistantMessage }
         </>
       );
 
-    case 'no_info':
+    // Spec 011 (F2): dos documentos se contradicen. El aviso, la explicación con sus citas y las dos fuentes.
     case 'conflict':
+      return (
+        <>
+          <ConflictNotice />
+          <Answer message={message} />
+          <ChatSources sources={message.sources} title="Las dos fuentes" />
+        </>
+      );
+
+    case 'no_info':
       return (
         <p className="whitespace-pre-wrap rounded-xl border-2 border-dashed border-borde px-4 py-3 text-texto-suave">
           {message.text}

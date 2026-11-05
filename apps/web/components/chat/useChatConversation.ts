@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChatStreamError, askStream, type ChatStreamDone } from '@/lib/api';
 import { type AssistantMessage, type ChatMessageItem, withoutMarkers } from './chat-state';
+import { CONFLICT_TITLE } from './ConflictNotice';
 
 const CUT_NOTICE = 'Se cortó la respuesta.';
 const ERROR_NOTICE = 'El asistente no pudo responder.';
@@ -94,10 +95,13 @@ export function useChatConversation(context?: ChatContext) {
     update(id, {
       status: done.status,
       text: done.answer,
-      sources: done.status === 'answered' ? done.sources : [],
+      // Spec 011 (F1): con conflict, las dos fuentes de la contradicción.
+      sources: done.status === 'answered' || done.status === 'conflict' ? done.sources : [],
       searchUrl: done.searchUrl,
     });
-    setAnnouncement(withoutMarkers(done.answer));
+    // Spec 011 (F3): con conflict, el título del aviso antes de la explicación.
+    const answer = withoutMarkers(done.answer);
+    setAnnouncement(done.status === 'conflict' ? `${CONFLICT_TITLE}. ${answer}` : answer);
   }
 
   // F5: sin done, el texto parcial se descarta y queda el aviso.

@@ -11,12 +11,15 @@ interface PaginationProps {
   query?: string;
   // Spec 005: otra ruta, como /documentos/por-revisar. Por defecto, el listado.
   basePath?: string;
+  // Spec 011: otro parámetro que cada enlace conserva, ya codificado (por ejemplo, "estado=resueltas").
+  extraQuery?: string;
 }
 
 // La página 1 es la ruta sola (o con ?q=…), sin ?pagina=1: una sola dirección para la primera página.
-function pageHref(page: number, query: string | undefined, basePath: string): string {
+function pageHref(page: number, query: string | undefined, basePath: string, extraQuery?: string): string {
   const params = [
     ...(query === undefined ? [] : [`q=${encodeURIComponent(query)}`]),
+    ...(extraQuery ? [extraQuery] : []),
     ...(page === 1 ? [] : [`pagina=${page}`]),
   ];
   return params.length === 0 ? basePath : `${basePath}?${params.join('&')}`;
@@ -35,6 +38,7 @@ export function Pagination({
   pageSize,
   query,
   basePath = '/documentos',
+  extraQuery,
 }: PaginationProps) {
   const pages = pageCount(totalItems, pageSize);
   if (pages <= 1) return null;
@@ -44,7 +48,7 @@ export function Pagination({
   return (
     <nav aria-label="Páginas" className="flex flex-wrap items-center justify-center gap-2">
       {page > 1 && (
-        <Link href={pageHref(page - 1, query, basePath)} className={LINK}>
+        <Link href={pageHref(page - 1, query, basePath, extraQuery)} className={LINK}>
           <span aria-hidden="true">‹&nbsp;</span>Anterior
         </Link>
       )}
@@ -58,7 +62,7 @@ export function Pagination({
         ) : (
           <Link
             key={item}
-            href={pageHref(item, query, basePath)}
+            href={pageHref(item, query, basePath, extraQuery)}
             aria-label={`Página ${item}`}
             aria-current={item === page ? 'page' : undefined}
             className={item === page ? CURRENT : LINK}
@@ -69,7 +73,7 @@ export function Pagination({
       )}
 
       {page < pages && (
-        <Link href={pageHref(page + 1, query, basePath)} className={LINK}>
+        <Link href={pageHref(page + 1, query, basePath, extraQuery)} className={LINK}>
           Siguiente<span aria-hidden="true">&nbsp;›</span>
         </Link>
       )}

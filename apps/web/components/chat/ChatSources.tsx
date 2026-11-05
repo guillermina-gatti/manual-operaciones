@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import type { ChatSource } from '@/lib/api';
 
-export function ChatSources({ sources }: { sources: ChatSource[] }) {
+// Spec 011 (F2, PD9): con title, el texto antes de la lista y la lista con ese nombre ("Las dos
+// fuentes" de una contradicción). Sin él, como siempre.
+export function ChatSources({ sources, title }: { sources: ChatSource[]; title?: string }) {
   if (sources.length === 0) return null;
-  return (
-    <ul aria-label="Fuentes" className="flex flex-wrap gap-2">
+  const list = (
+    <ul aria-label={title ?? 'Fuentes'} className="flex flex-wrap gap-2">
       {sources.map((source, index) => (
         <li key={source.chunkId}>
           <Link
@@ -21,5 +23,12 @@ export function ChatSources({ sources }: { sources: ChatSource[] }) {
         </li>
       ))}
     </ul>
+  );
+  if (!title) return list;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold text-texto">{title}</p>
+      {list}
+    </div>
   );
 }
