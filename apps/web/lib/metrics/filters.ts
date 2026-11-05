@@ -1,6 +1,7 @@
 // Filters of the metrics panel (HU38). They live in the address (?area=…&desde=…&hasta=…), so
 // a filtered view can be shared and "back" works. Without dates, the last 30 days.
 import { COMPANY_TIME_ZONE } from '@/lib/documents/format';
+import { displayAreaName } from '@/lib/directory/areas-directory';
 import type { Area } from '@/lib/directory';
 
 export const DEFAULT_PERIOD_DAYS = 30;
@@ -82,7 +83,8 @@ export function metricsHref({ areaId, from, to }: PanelFilters): string {
 
 // ADMIN: "Todas" and every area. SUPERVISOR: "Todas mis áreas" and only theirs (filterable,
 // from the last answer of the API; unknown while it loads). The selected area always stays
-// in the list, so the selector never shows a value it does not have.
+// in the list, so the selector never shows a value it does not have. An inactive area keeps
+// its "(inactiva)" label, as everywhere else.
 export function areaOptions(
   isAdmin: boolean,
   areas: Area[],
@@ -92,7 +94,7 @@ export function areaOptions(
   const visible = isAdmin
     ? areas
     : areas.filter((area) => filterable?.includes(area.id) || area.id === selected);
-  const options = visible.map((area) => ({ value: area.id, label: area.name }));
+  const options = visible.map((area) => ({ value: area.id, label: displayAreaName(area) }));
   if (selected && !options.some((option) => option.value === selected)) {
     options.push({ value: selected, label: 'Área elegida' });
   }

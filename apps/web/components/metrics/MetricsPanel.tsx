@@ -57,7 +57,7 @@ export function MetricsPanel() {
         state={metrics}
         isAdmin={isAdmin}
       />
-      <TeamCMetrics filters={filters} />
+      <TeamCMetrics filters={filters} userId={user?.id ?? null} />
     </div>
   );
 }
