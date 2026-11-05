@@ -5,12 +5,19 @@
 // the local copy in sessionStorage, and the screen says so.
 import Link from 'next/link';
 import { useId } from 'react';
-import { Button } from '@/components/ui/Button';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { removeProcedure, useStoredProcedures } from '@/lib/procedures/session-list';
 import type { StoredProcedure } from '@/lib/procedures/session-list';
 import { useSession } from '@/lib/session';
 import { CreateProcedureForm } from './CreateProcedureForm';
+import {
+  AreaChip,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  CARD_TITLE,
+  Card,
+  Notice,
+} from './design';
 
 const NOTICE =
   'Esta lista muestra solo los procedimientos que creaste en esta sesión del navegador. Todavía no hay un listado en la API: llega con HU11.';
@@ -30,60 +37,54 @@ export function ProcedureList() {
   const baseId = useId();
 
   return (
-    <div className="flex flex-col gap-10">
-      <section aria-labelledby={`${baseId}-create`} className="flex flex-col gap-4">
-        <h2 id={`${baseId}-create`} className="text-xl font-semibold">
+    <div className="flex flex-col gap-8">
+      <Card aria-labelledby={`${baseId}-create`}>
+        <h2 id={`${baseId}-create`} className={CARD_TITLE}>
           Crear un procedimiento
         </h2>
         <CreateProcedureForm />
-      </section>
+      </Card>
 
       <section aria-labelledby={`${baseId}-list`} className="flex flex-col gap-4">
-        <h2 id={`${baseId}-list`} className="text-xl font-semibold">
+        <h2 id={`${baseId}-list`} className={CARD_TITLE}>
           Creados en esta sesión
         </h2>
-        <p
-          role="note"
-          className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100"
-        >
+        <Notice tone="info" role="note">
           {NOTICE}
-        </p>
+        </Notice>
 
         {procedures.length === 0 ? (
           <ScreenState kind="empty" message="Todavía no creaste procedimientos en esta sesión." />
         ) : (
-          <ul className="flex flex-col gap-4">
+          <ul className="flex flex-col gap-6">
             {procedures.map((procedure) => (
-              <li
-                key={procedure.id}
-                className="flex min-w-0 flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <div className="flex min-w-0 flex-col gap-1">
-                  <h3 className="break-words text-lg font-semibold">{procedure.title}</h3>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    Versión {procedure.versionNumber} · borrador
-                  </p>
-                  {procedure.description && (
-                    <p className="break-words text-zinc-700 dark:text-zinc-300">
-                      {procedure.description}
+              <li key={procedure.id} className="min-w-0">
+                <Card className="gap-4 p-5 sm:p-6">
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <h3 className="break-words text-xl font-bold">{procedure.title}</h3>
+                    <p className="text-sm text-texto-suave">
+                      Versión {procedure.versionNumber} · borrador
                     </p>
-                  )}
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">{summary(procedure)}</p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Link
-                    href={`/procedimientos/${procedure.id}`}
-                    className="inline-flex min-h-11 items-center rounded-md bg-blue-700 px-4 font-medium text-white transition-colors hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400"
-                  >
-                    Abrir
-                  </Link>
-                  <Button
-                    variant="secondary"
-                    onClick={() => user && removeProcedure(user.id, procedure.id)}
-                  >
-                    Quitar de la lista
-                  </Button>
-                </div>
+                    {procedure.description && (
+                      <p className="break-words">{procedure.description}</p>
+                    )}
+                    <p className="flex flex-wrap items-center gap-2">
+                      <AreaChip>{summary(procedure)}</AreaChip>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <Link href={`/procedimientos/${procedure.id}`} className={BUTTON_PRIMARY}>
+                      Abrir
+                    </Link>
+                    <button
+                      type="button"
+                      className={BUTTON_SECONDARY}
+                      onClick={() => user && removeProcedure(user.id, procedure.id)}
+                    >
+                      Quitar de la lista
+                    </button>
+                  </div>
+                </Card>
               </li>
             ))}
           </ul>

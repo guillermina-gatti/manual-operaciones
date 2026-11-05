@@ -14,8 +14,7 @@ export const metadata: Metadata = {
 
 export default function ProcedimientoPage() {
   return (
-    // A soft background in light mode, so the white cards stand out; in dark mode, the page's own.
-    <div className="flex-1 bg-zinc-50 dark:bg-transparent">
+    <div className="flex-1">
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12">
         <Suspense fallback={<ScreenState kind="loading" label="Cargando el procedimiento…" />}>
           <RequireRole

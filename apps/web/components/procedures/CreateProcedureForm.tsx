@@ -5,7 +5,6 @@
 import Link from 'next/link';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
 import { FieldError } from '@/components/ui/FieldError';
 import { createProcedure, describeProcedureError } from '@/lib/procedures';
 import { saveProcedure } from '@/lib/procedures/session-list';
@@ -13,9 +12,7 @@ import { fromCreated } from '@/lib/procedures/snapshot';
 import { validateProcedure } from '@/lib/procedures/validate';
 import type { FormErrors } from '@/lib/procedures/validate';
 import { useSession } from '@/lib/session';
-
-const FIELD =
-  'min-h-11 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 aria-[invalid=true]:border-red-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100';
+import { ACTION_LINK, BUTTON_PRIMARY, INPUT, LABEL, Notice } from './design';
 
 export function CreateProcedureForm() {
   const { user } = useSession();
@@ -88,15 +85,15 @@ export function CreateProcedureForm() {
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1">
-        <label htmlFor={titleId} className="font-medium">
+      <div className="flex flex-col gap-2">
+        <label htmlFor={titleId} className={LABEL}>
           Título
         </label>
         <input
           id={titleId}
           type="text"
           value={title}
-          className={FIELD}
+          className={INPUT}
           aria-invalid={errors.title ? true : undefined}
           aria-describedby={errors.title ? titleErrorId : undefined}
           onChange={(event) => {
@@ -107,15 +104,15 @@ export function CreateProcedureForm() {
         <FieldError id={titleErrorId} message={errors.title} />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={descriptionId} className="font-medium">
+      <div className="flex flex-col gap-2">
+        <label htmlFor={descriptionId} className={LABEL}>
           Descripción (opcional)
         </label>
         <textarea
           id={descriptionId}
           rows={3}
           value={description}
-          className={FIELD}
+          className={INPUT}
           aria-invalid={errors.description ? true : undefined}
           aria-describedby={errors.description ? descriptionErrorId : undefined}
           onChange={(event) => {
@@ -127,32 +124,28 @@ export function CreateProcedureForm() {
       </div>
 
       {submitError && (
-        <p
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
+        <Notice tone="error" role="alert">
           {submitError}
-        </p>
+        </Notice>
       )}
 
       {createdId && (
-        <p
-          role="status"
-          className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-900 shadow-sm dark:border-green-900 dark:bg-green-950/60 dark:text-green-100"
-        >
+        <Notice tone="success" role="status">
           Procedimiento creado.{' '}
-          <Link
-            href={`/procedimientos/${createdId}`}
-            className="font-medium text-blue-700 underline dark:text-blue-300"
-          >
+          <Link href={`/procedimientos/${createdId}`} className={ACTION_LINK}>
             Abrir el borrador
           </Link>
-        </p>
+        </Notice>
       )}
 
-      <Button type="submit" className="self-start" disabled={submitting} aria-busy={submitting}>
+      <button
+        type="submit"
+        className={`${BUTTON_PRIMARY} self-start`}
+        disabled={submitting}
+        aria-busy={submitting}
+      >
         {submitting ? 'Creando…' : 'Crear procedimiento'}
-      </Button>
+      </button>
     </form>
   );
 }
