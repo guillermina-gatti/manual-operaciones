@@ -16,6 +16,11 @@ export const ACCOUNT_IP_MAX_ATTEMPTS = 5;
 export const GLOBAL_IP_MAX_ATTEMPTS = 50;
 export const BLOCK_WINDOW_SECONDS = 900; // 15 minutos
 
+export const REGISTRATION_IP_MAX_ATTEMPTS = 10;
+export const REGISTRATION_TOKEN_MAX_ATTEMPTS = 5;
+export const INVITATION_VALIDATION_IP_MAX_ATTEMPTS = 30;
+export const REGISTRATION_BLOCK_WINDOW_SECONDS = 900; // 15 minutos
+
 /**
  * Script Lua ejecutado en Redis para incrementar contadores de fallo y gestionar TTLs:
  * - Pre-valida argumentos y tipos de claves antes de mutar estado para prevenir errores de tipo a mitad de ejecución.
@@ -114,12 +119,60 @@ end
 return { curAcc, curIp }
 `;
 
+/**
+ * Script Lua para registrar fallos en una única clave atómica con TTL.
+ */
+export const RECORD_SINGLE_FAILURE_LUA_SCRIPT = `
+local key = KEYS[1]
+local ttl = tonumber(ARGV[1])
+
+if not key or not ttl or ttl <= 0 then
+  return redis.error_reply("ERR_INVALID_ARGS")
+end
+
+local t = redis.call('TYPE', key).ok
+if t ~= 'none' and t ~= 'string' then
+  return redis.error_reply("ERR_INVALID_KEY_TYPE")
+end
+
+local exists = redis.call('EXISTS', key)
+local prevVal = exists == 1 and redis.call('GET', key) or nil
+local prevTtl = exists == 1 and redis.call('TTL', key) or -2
+
+local cur = redis.call('INCR', key)
+if cur == 1 then
+  local ok = redis.call('EXPIRE', key, ttl)
+  if ok ~= 1 then
+    redis.call('DEL', key)
+    return redis.error_reply("ERR_FAILED_EXPIRE")
+  end
+elseif prevTtl == -1 then
+  local ok = redis.call('EXPIRE', key, ttl)
+  if ok ~= 1 then
+    if exists == 0 then
+      redis.call('DEL', key)
+    else
+      redis.call('SET', key, prevVal)
+      redis.call('PERSIST', key)
+    end
+    return redis.error_reply("ERR_FAILED_EXPIRE")
+  end
+end
+
+return cur
+`;
+
 @Injectable()
 export class AuthRateLimiterService {
   private readonly logger = new Logger(AuthRateLimiterService.name);
   readonly accountIpMaxAttempts = ACCOUNT_IP_MAX_ATTEMPTS;
   readonly globalIpMaxAttempts = GLOBAL_IP_MAX_ATTEMPTS;
   readonly blockWindowSeconds = BLOCK_WINDOW_SECONDS;
+
+  readonly registrationIpMaxAttempts = REGISTRATION_IP_MAX_ATTEMPTS;
+  readonly registrationTokenMaxAttempts = REGISTRATION_TOKEN_MAX_ATTEMPTS;
+  readonly invitationValidationIpMaxAttempts = INVITATION_VALIDATION_IP_MAX_ATTEMPTS;
+  readonly registrationBlockWindowSeconds = REGISTRATION_BLOCK_WINDOW_SECONDS;
 
   private static readonly SAFE_ERROR_CODES = new Set([
     'ECONNREFUSED',
@@ -149,6 +202,26 @@ export class AuthRateLimiterService {
 
   getGlobalIpKey(ip: string): string {
     return `rl:auth:ip:${ip.trim()}`;
+  }
+
+  /**
+   * Normaliza canónicamente el token y calcula su hash SHA-256 irreversible.
+   * Evita registrar o almacenar tokens de invitación en texto plano en Redis.
+   */
+  hashToken(token: string): string {
+    return createHash('sha256').update(token.trim()).digest('hex');
+  }
+
+  getRegistrationIpKey(ip: string): string {
+    return `rl:auth:reg_ip:${ip.trim()}`;
+  }
+
+  getRegistrationTokenKey(token: string): string {
+    return `rl:auth:reg_tok:${this.hashToken(token)}`;
+  }
+
+  getInvitationValidationIpKey(ip: string): string {
+    return `rl:auth:val_ip:${ip.trim()}`;
   }
 
   /**
@@ -251,6 +324,186 @@ export class AuthRateLimiterService {
     }
   }
 
+  /**
+   * Verifica si la petición de registro público por invitación tiene permitido continuar.
+   *
+   * Reglas:
+   * 1. Si el token específico tiene >= 5 intentos fallidos, bloquea con HTTP 429 (INVITATION_TOKEN).
+   * 2. Si la IP tiene >= 10 intentos fallidos de registro, bloquea con HTTP 429 (REGISTRATION_IP).
+   * 3. Ante falla o desconexión de Redis, aplica Fail-Closed arrojando HTTP 503.
+   */
+  async assertRegistrationAllowed(ip: string, token?: string): Promise<void> {
+    this.validateIp(ip);
+    if (token !== undefined && (typeof token !== 'string' || token.trim().length === 0)) {
+      throw new BadRequestException('Token inválido para control de tasa');
+    }
+
+    const ipKey = this.getRegistrationIpKey(ip);
+    const tokenKey = token ? this.getRegistrationTokenKey(token) : null;
+
+    try {
+      if (tokenKey) {
+        const [ipCountStr, tokenCountStr] = await this.redis.mget(ipKey, tokenKey);
+        const ipCount = this.parseCounter(ipCountStr);
+        const tokenCount = this.parseCounter(tokenCountStr);
+
+        if (tokenCount >= this.registrationTokenMaxAttempts) {
+          let ttl = await this.redis.ttl(tokenKey);
+          if (ttl <= 0) ttl = this.registrationBlockWindowSeconds;
+
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.TOO_MANY_REQUESTS,
+              error: 'Too Many Requests',
+              message: `Demasiados intentos de registro para esta invitación. Intente nuevamente en ${Math.ceil(ttl / 60)} minutos.`,
+              retryAfter: ttl,
+              limitType: 'INVITATION_TOKEN',
+            },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
+        if (ipCount >= this.registrationIpMaxAttempts) {
+          let ttl = await this.redis.ttl(ipKey);
+          if (ttl <= 0) ttl = this.registrationBlockWindowSeconds;
+
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.TOO_MANY_REQUESTS,
+              error: 'Too Many Requests',
+              message: `Demasiados intentos de registro desde esta dirección IP. Intente nuevamente en ${Math.ceil(ttl / 60)} minutos.`,
+              retryAfter: ttl,
+              limitType: 'REGISTRATION_IP',
+            },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+      } else {
+        const ipCountStr = await this.redis.get(ipKey);
+        const ipCount = this.parseCounter(ipCountStr);
+
+        if (ipCount >= this.registrationIpMaxAttempts) {
+          let ttl = await this.redis.ttl(ipKey);
+          if (ttl <= 0) ttl = this.registrationBlockWindowSeconds;
+
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.TOO_MANY_REQUESTS,
+              error: 'Too Many Requests',
+              message: `Demasiados intentos de registro desde esta dirección IP. Intente nuevamente en ${Math.ceil(ttl / 60)} minutos.`,
+              retryAfter: ttl,
+              limitType: 'REGISTRATION_IP',
+            },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+      }
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.handleRedisError(error, 'assertRegistrationAllowed');
+    }
+  }
+
+  /**
+   * Registra un intento fallido de registro incrementando atómicamente el contador de la IP
+   * y del token (si fue provisto) con ventana de bloqueo independiente.
+   */
+  async recordRegistrationFailure(ip: string, token?: string): Promise<void> {
+    this.validateIp(ip);
+    if (token !== undefined && (typeof token !== 'string' || token.trim().length === 0)) {
+      throw new BadRequestException('Token inválido para control de tasa');
+    }
+
+    const ipKey = this.getRegistrationIpKey(ip);
+    const tokenKey = token ? this.getRegistrationTokenKey(token) : null;
+
+    try {
+      if (tokenKey) {
+        await this.redis.eval(
+          RECORD_FAILURE_LUA_SCRIPT,
+          2,
+          tokenKey,
+          ipKey,
+          this.registrationBlockWindowSeconds.toString(),
+        );
+      } else {
+        await this.redis.eval(
+          RECORD_SINGLE_FAILURE_LUA_SCRIPT,
+          1,
+          ipKey,
+          this.registrationBlockWindowSeconds.toString(),
+        );
+      }
+    } catch (error) {
+      this.handleRedisError(error, 'recordRegistrationFailure');
+    }
+  }
+
+  /**
+   * Verifica si la petición de pre-validación de invitación tiene permitido continuar.
+   *
+   * Reglas:
+   * 1. Si la IP tiene >= 30 consultas fallidas de validación, bloquea con HTTP 429 (INVITATION_VALIDATION_IP).
+   * 2. Ante falla o desconexión de Redis, aplica Fail-Closed arrojando HTTP 503.
+   */
+  async assertInvitationValidationAllowed(ip: string): Promise<void> {
+    this.validateIp(ip);
+    const ipKey = this.getInvitationValidationIpKey(ip);
+
+    try {
+      const countStr = await this.redis.get(ipKey);
+      const count = this.parseCounter(countStr);
+
+      if (count >= this.invitationValidationIpMaxAttempts) {
+        let ttl = await this.redis.ttl(ipKey);
+        if (ttl <= 0) ttl = this.registrationBlockWindowSeconds;
+
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.TOO_MANY_REQUESTS,
+            error: 'Too Many Requests',
+            message: `Demasiadas consultas de validación desde esta dirección IP. Intente nuevamente en ${Math.ceil(ttl / 60)} minutos.`,
+            retryAfter: ttl,
+            limitType: 'INVITATION_VALIDATION_IP',
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.handleRedisError(error, 'assertInvitationValidationAllowed');
+    }
+  }
+
+  /**
+   * Registra un intento fallido de consulta/validación de invitación por IP.
+   */
+  async recordInvitationValidationFailure(ip: string): Promise<void> {
+    this.validateIp(ip);
+    const ipKey = this.getInvitationValidationIpKey(ip);
+
+    try {
+      await this.redis.eval(
+        RECORD_SINGLE_FAILURE_LUA_SCRIPT,
+        1,
+        ipKey,
+        this.registrationBlockWindowSeconds.toString(),
+      );
+    } catch (error) {
+      this.handleRedisError(error, 'recordInvitationValidationFailure');
+    }
+  }
+
+  private validateIp(ip: string): void {
+    if (typeof ip !== 'string' || isIP(ip.trim()) === 0) {
+      throw new BadRequestException('Dirección IP inválida para control de tasa');
+    }
+  }
+
   private validateInputs(email: string, ip: string): void {
     if (
       typeof email !== 'string' ||
@@ -260,9 +513,7 @@ export class AuthRateLimiterService {
       throw new BadRequestException('Email inválido para control de tasa');
     }
 
-    if (typeof ip !== 'string' || isIP(ip.trim()) === 0) {
-      throw new BadRequestException('Dirección IP inválida para control de tasa');
-    }
+    this.validateIp(ip);
   }
 
   /**
