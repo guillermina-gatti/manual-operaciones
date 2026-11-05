@@ -88,7 +88,7 @@ describe('chat-pipeline (spec 009, T01)', () => {
             const embeddings = new FakeEmbeddings();
             const retrieval = new FakeRetrieval([chunk()]);
 
-            const prepared = await prepareChat(embeddings, retrieval, { id: 'u', areaIds: [] }, 'hola', logger);
+            const prepared = await prepareChat(embeddings, retrieval, { id: 'u', areaIds: [] }, 'algo', logger);
 
             expect(prepared).toEqual({
                 kind: 'done',
@@ -102,7 +102,7 @@ describe('chat-pipeline (spec 009, T01)', () => {
             const warn = jest.spyOn(logger, 'warn');
             const retrieval = new FakeRetrieval([chunk()]);
 
-            const prepared = await prepareChat(new FakeEmbeddings(true), retrieval, USER, 'hola', logger);
+            const prepared = await prepareChat(new FakeEmbeddings(true), retrieval, USER, 'algo', logger);
 
             expect(prepared).toEqual({ kind: 'done', outcome: unavailable() });
             expect(retrieval.calls).toHaveLength(0);

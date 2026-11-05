@@ -5,6 +5,7 @@ import type { Logger } from '@nestjs/common';
 import type { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatResult, ChatResultStatus, ChatSource } from './chat.contract';
 import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
+import { GREETING_TEXT, isGreeting } from './chat-greeting'; // NUEVO
 import type { LlmAnswer, Passage } from './ports/chat-llm';
 import type { ChatRepository } from './ports/chat-repository';
 import type { ChatRetrieval, RetrievedChunk } from './ports/chat-retrieval';
@@ -50,6 +51,12 @@ export async function prepareChat(
     logger: Logger,
     searchText: string = question,
 ): Promise<Prepared> {
+    // Saludos: respuesta fija, sin buscar ni llamar al modelo. NUEVO
+    // El estado sigue siendo answered y sin fuentes, así que el contrato no cambia.
+    if (isGreeting(question)) {
+        return { kind: 'done', outcome: { status: 'answered', answer: GREETING_TEXT, chunks: [] } };
+    }
+
     // Sin áreas asignadas no hay nada que el usuario pueda consultar.
     if (user.areaIds.length === 0) {
         return { kind: 'done', outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [] } };
