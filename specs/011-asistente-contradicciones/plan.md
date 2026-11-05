@@ -527,12 +527,14 @@ export function resolveConflictAlert(id: string, note?: string): Promise<Conflic
 - **`test/chat/chat-conflict.e2e-spec.ts`**, nueva, con el arnés de la spec 009 (`createDocumentsTestApp({ configure })`), el modelo y los embeddings simulados, y dos documentos con fragmentos sembrados:
   - **E1:** por las dos rutas, `conflict` con las dos fuentes, el mensaje como `CONFLICT` y una fila en `document_conflict_alerts` con el par en orden, la pregunta y `occurrences = 1`;
   - **E8:** la misma contradicción con los pasajes al revés → misma fila, `occurrences = 2`. Dos pedidos en paralelo (`Promise.all`) → una fila con 2;
+  - **R11 (sumado en T15):** el documento de id menor con un vector un poco más lejano, así S1 es siempre el de id mayor; la fila igual queda con A = el de id menor;
   - **E9:** con la fila resuelta → no cambia;
   - **E10:** una versión nueva de uno de los documentos (con `seedDocument` o un helper de versión) → una fila nueva;
   - **E7:** un EMPLOYEE de Ventas con un documento de Operaciones que contradice: los pasajes de Operaciones no llegan al modelo simulado (se comprueba lo que recibió);
   - **E5:** una versión `REPLACED` con fragmentos: no llega al modelo.
 - **`test/documents/conflict-alerts.e2e-spec.ts`**, nueva:
   - **E11:** lista, orden, `openTotal`, secciones y `isCurrentVersion`;
+  - **Swagger (sumado en T15):** `/api/docs-json` tiene las dos rutas con sus respuestas y la descripción de `conflict`;
   - **E12:** 401, y 403 para SUPERVISOR y EMPLOYEE;
   - **E13:** resolver con nota, y el estado y la nota en la base;
   - **E14:** 409;

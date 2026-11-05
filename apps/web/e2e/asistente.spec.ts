@@ -114,3 +114,47 @@ test('E7: con la IA caída, el enlace abre /documentos con la búsqueda hecha', 
   await expect(page.getByRole('searchbox', { name: 'Buscar documentos' })).toHaveValue('cierre de caja');
   await expect(page.getByRole('article')).toHaveCount(1);
 });
+
+// Spec 011 (T14, E2): dos documentos que se contradicen. El aviso, la explicación y las dos fuentes.
+test('E2: una respuesta conflict muestra el aviso y las dos fuentes', async ({ page }) => {
+  const source = (documentId: string, documentTitle: string, versionNumber: number, chunkId: string) => ({
+    documentId,
+    documentTitle,
+    versionNumber,
+    section: 'Aprobaciones',
+    chunkId,
+    validFrom: '2026-10-01',
+    url: '',
+  });
+  await mockApi(page, {
+    chatStream: () =>
+      sseReply([
+        ['start', { conversationId: 'conv-1' }],
+        [
+          'done',
+          {
+            conversationId: 'conv-1',
+            messageId: 'msg-1',
+            status: 'conflict',
+            answer: 'El manual dice que la aprueba el gerente [S1]; la política, que el director [S3].',
+            sources: [
+              source(DOC_ID, 'Manual de compras', 2, 'chunk-1'),
+              source('11111111-1111-4111-8111-000000000002', 'Política de gastos', 1, 'chunk-3'),
+            ],
+          },
+        ],
+      ]),
+  });
+
+  await page.goto('/asistente');
+  await ask(page, '¿Quién aprueba una compra de $800.000?');
+
+  const conversation = page.getByRole('list', { name: 'Conversación' });
+  await expect(conversation.getByText('Dos documentos dicen cosas distintas')).toBeVisible();
+  await expect(conversation.getByText(/Le avisamos al administrador/)).toBeVisible();
+  await expect(conversation.getByRole('link', { name: 'Fuente 2: Política de gastos' })).toBeVisible();
+  const sources = conversation.getByRole('list', { name: 'Las dos fuentes' });
+  await expect(sources.getByRole('link')).toHaveCount(2);
+  await expect(sources.getByRole('link', { name: /1 Manual de compras · v2/ })).toBeVisible();
+  await expect(sources.getByRole('link', { name: /2 Política de gastos · v1/ })).toBeVisible();
+});

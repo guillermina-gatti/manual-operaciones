@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (05/11/2026):** T01 a T13 hechas; T14 y T15 pendientes.
+- **Estado (05/11/2026):** todas hechas. Queda la prueba manual con Gemini real, que hace Matías.
   - T01 es la migración, **la hace Matías**.
   - T02 a T07 son el chat, T08 las alertas en documentos y T09 la integración de la API.
   - T10 a T13 son la web y T14 el Playwright.
@@ -345,7 +345,7 @@ Convenciones:
   Las demás suites de Playwright simulado pasan sin cambios.
 - **Depende de:** T10, T12, T13.
 - **Commit:** `test(web): probar el aviso de contradicción y las alertas`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). Sin un "falla primero": el código de T10 a T13 ya estaba. `mock-api.ts` responde por defecto `GET /api/conflict-alerts` (cero abiertas, sin anotar el pedido), como "Por revisar" en la spec 005: el ADMIN pide esa cantidad en `/documentos`, y sin eso las suites anteriores verían un pedido sin atender. Playwright simulado: 122 tests (116 de antes y 6 nuevos), en escritorio y celular.
 
 ## Verificación final
 
@@ -380,7 +380,28 @@ Convenciones:
   6. **Avisos:** a Guille (sección 12 de la spec) y a la pareja A (sección 13). Los manda Matías.
 - **Depende de:** T01 a T14.
 - **Commit:** `docs(specs): verificar las contradicciones del asistente`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026), sin la prueba manual con Gemini real (la hace Matías). `manual_test` se reseteó con la confirmación de Matías; `manual` no se tocó.
+- **Resultado:**
+  1. **Todo en verde:**
+     - API: lint (solo el warning de siempre, en `gemini-chat-llm.spec.ts`) y tsc sin errores; `test`: 109 suites, 1609 tests; `test:e2e` completo: 36 de 36 suites, 464 tests (después se sumaron 2 tests de integración, ver el punto 5).
+     - Web: lint y tsc sin errores; `test`: 84 archivos, 960 tests; Playwright simulado: 122 tests; build bien, con `/documentos/alertas`.
+  2. **Sin cambios en lo protegido:** contra `develop`, sin diferencias en los archivos de "Archivos que no se tocan".
+     - `gemini-chat-llm.ts`: 3 líneas agregadas, ninguna borrada.
+     - `chat.service.ts`: 9 líneas agregadas y 2 cambiadas, las de T07.
+     - `schema.prisma`: 49 líneas agregadas, ninguna borrada.
+     - La migración nueva no tiene ningún `DROP`.
+  3. **La base:** en `manual_test`, recién reseteado, están los tres `CHECK` y los tres índices de `chunks`.
+  4. **Swagger:** lo comprueba un test nuevo en `test/documents/conflict-alerts.e2e-spec.ts`. Verifica las dos rutas con sus respuestas (`GET`: 200, 400, 401, 403 y 503; `POST …/resolve`: 200, 400, 401, 403, 404, 409 y 503) y la descripción de `conflict` en la ruta de streaming.
+  5. **Mutaciones de control**, una por vez, restauradas con la copia del scratchpad y comprobadas con `git diff --exit-code`:
+     - aceptar una marca con dos pasajes del mismo documento → E6: 4 tests del chat fallan;
+     - dejar pasar la marca en el retén → E4: 4 tests del chat fallan;
+     - no ordenar el par → E8. **Al principio sobrevivió:** con el mismo vector, el orden de S1 y S2 lo decidía la base, y en tres corridas S1 fue el de id menor. Se sumó el test "R11: el par queda en orden aunque S1 sea el documento de id mayor" en `chat-conflict.e2e-spec.ts`, que lo vuelve determinístico; con él, la mutación falla;
+     - quitar el `WHERE status = 'OPEN'` → E9: falla 1 test de integración;
+     - propagar el error del recorder → E16: 2 tests del chat fallan;
+     - no registrar en `ask` → E3: falla la paridad;
+     - mostrar el acceso a cualquier rol → E12: 2 tests web fallan;
+     - quitar un `CHECK` de la migración → E18: fallan 2 tests de `indexes.e2e-spec.ts`. Después se restauró la migración y se volvió a resetear `manual_test`: 17 de 17.
+  6. **Avisos:** listos para que los mande Matías (Guille: sección 12 de la spec; pareja A: sección 13).
 
 ---
 

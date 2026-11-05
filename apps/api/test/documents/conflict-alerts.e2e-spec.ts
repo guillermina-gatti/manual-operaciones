@@ -227,4 +227,29 @@ describe('Alertas de contradicción (integración, spec 011)', () => {
       isCurrentVersion: false,
     });
   });
+
+  // T15: las dos rutas y sus respuestas en Swagger, y lo que trae conflict en la ruta de streaming.
+  it('Swagger documenta las rutas de las alertas y el estado conflict', async () => {
+    const res = await http().get('/api/docs-json').expect(200);
+    const paths = (
+      res.body as {
+        paths: Record<
+          string,
+          Record<string, { responses: Record<string, unknown> }>
+        >;
+      }
+    ).paths;
+
+    expect(
+      Object.keys(paths['/api/conflict-alerts']?.get?.responses ?? {}).sort(),
+    ).toEqual(['200', '400', '401', '403', '503']);
+    expect(
+      Object.keys(
+        paths['/api/conflict-alerts/{id}/resolve']?.post?.responses ?? {},
+      ).sort(),
+    ).toEqual(['200', '400', '401', '403', '404', '409', '503']);
+    expect(JSON.stringify(paths['/api/chat/stream']?.post)).toContain(
+      'Con status conflict (spec 011) no hay',
+    );
+  });
 });

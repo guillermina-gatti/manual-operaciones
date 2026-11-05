@@ -75,7 +75,22 @@ export interface ApiHandlers {
   // Spec 010 (T12): la ejecución, para el asistente de un paso. El handler recibe (id, stepId).
   execution?: Handler; // GET /api/executions/:id
   completeStep?: Handler; // POST /api/executions/:id/steps/:stepId/complete
+  // Spec 011 (T14): las alertas de contradicción. Sin `conflictAlerts`, ver DEFAULT_CONFLICT_ALERTS.
+  conflictAlerts?: Handler; // GET /api/conflict-alerts
+  resolveConflictAlert?: Handler; // POST /api/conflict-alerts/:id/resolve
 }
+
+// Spec 011 (T14): como "Por revisar", el listado del ADMIN pide en segundo plano la cantidad de alertas
+// abiertas (F5). Un test que no simula `conflictAlerts` no está probando eso: la API simulada responde
+// que no hay ninguna y ese pedido no se anota, así los tests de las specs anteriores no cambian.
+const CONFLICT_ALERTS_PATH = "/api/conflict-alerts";
+const DEFAULT_CONFLICT_ALERTS = {
+  data: [],
+  total: 0,
+  openTotal: 0,
+  page: 1,
+  limit: 1,
+};
 
 // Spec 005 (T23): el listado pide en segundo plano la cantidad de "Por revisar" (F2). Un test que no
 // simula `pendingReview` no está probando eso: la API simulada responde que el usuario no es revisor
@@ -114,6 +129,16 @@ const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
     path: new RegExp(`^/api/executions/${ID}/steps/${ID}/complete$`),
   },
   { name: "users", method: "GET", path: /^\/api\/users$/ },
+  {
+    name: "conflictAlerts",
+    method: "GET",
+    path: /^\/api\/conflict-alerts$/,
+  },
+  {
+    name: "resolveConflictAlert",
+    method: "POST",
+    path: new RegExp(`^/api/conflict-alerts/${ID}/resolve$`),
+  },
   { name: "list", method: "GET", path: /^\/api\/documents$/ },
   { name: "upload", method: "POST", path: /^\/api\/documents$/ },
   // Antes que el detalle: /api/documents/search también coincide con /api/documents/:id.
@@ -230,6 +255,19 @@ export async function mockApi(
         status: 200,
         contentType: "application/json",
         body: JSON.stringify(DEFAULT_PENDING_REVIEW),
+      });
+      return;
+    }
+
+    if (
+      !handlers.conflictAlerts &&
+      apiRequest.method === "GET" &&
+      url.pathname === CONFLICT_ALERTS_PATH
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(DEFAULT_CONFLICT_ALERTS),
       });
       return;
     }

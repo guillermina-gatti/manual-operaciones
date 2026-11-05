@@ -23,7 +23,7 @@ import {
   cleanDocuments,
   createDocumentsTestApp,
 } from '../documents/helpers';
-import { FixedEmbeddings, asText, parseEvents } from './helpers';
+import { FixedEmbeddings, VECTOR, asText, parseEvents } from './helpers';
 
 // Responde lo que diga el test y guarda los pasajes que recibió. stream usa la implementación por
 // defecto del puerto (una sola parte), que alcanza para el retén.
@@ -138,6 +138,32 @@ describe('Contradicciones del asistente (integración, spec 011)', () => {
         question: QUESTION,
         status: 'OPEN',
         occurrences: 2,
+      }),
+    ]);
+  });
+
+  // R11 (T15): con el mismo vector, el orden de S1 y S2 queda en manos de la base. Acá el documento de
+  // id menor queda un poco más lejos, así S1 es siempre el de id mayor y el par tiene que darse vuelta.
+  it('R11: el par queda en orden aunque S1 sea el documento de id mayor', async () => {
+    const [low, high] = pairIds();
+    const farther = VECTOR.map((value, i) => (i < 100 ? value + 0.05 : value));
+    await t.prisma.$executeRawUnsafe(
+      `UPDATE chunks SET embedding = $1::vector WHERE id = $2::uuid`,
+      `[${farther.join(',')}]`,
+      low.chunkId,
+    );
+
+    await viaPost();
+
+    const highTitle =
+      high.id === manual.id ? 'Manual de compras' : 'Política de gastos';
+    expect(llm.passages[0][0].documentTitle).toBe(highTitle);
+    expect(await readAlerts(t.prisma)).toEqual([
+      expect.objectContaining({
+        document_a_id: low.id,
+        document_b_id: high.id,
+        version_a_id: low.versionId,
+        version_b_id: high.versionId,
       }),
     ]);
   });
