@@ -10,6 +10,9 @@ export {
   isCalendarDate,
   toMetricsPeriod,
 } from '../../executions/metrics/metrics-period';
+// R2, R3: solo las áreas activas del usuario, y ninguna si el usuario está inactivo, como en
+// procedimientos y como el JwtAuthGuard.
+export { activeAreaIdsOf } from '../../executions/viewer-areas';
 
 // R2: las áreas por las que se cuenta; null = todas (ADMIN sin areaId), como SearchScope (spec 004).
 export function documentMetricsAreaIds(scope: MetricsScope): string[] | null {

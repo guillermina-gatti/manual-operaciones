@@ -11,6 +11,7 @@ import type { AuthUser } from '../../common/auth';
 import { Clock } from '../../common/clock';
 import { companyTimeZone, todayInCompany } from '../company-date';
 import { toHttpException } from '../http-errors';
+import { AreasDirectory } from '../ports/areas-directory';
 import { UsersDirectory } from '../ports/users-directory';
 import { dueSoonThrough } from '../review-status';
 import {
@@ -18,6 +19,7 @@ import {
   DocumentMetricsTotals,
 } from './document-metrics.repository';
 import {
+  activeAreaIdsOf,
   documentMetricsAreaIds,
   metricsScope,
   toMetricsPeriod,
@@ -44,6 +46,7 @@ export class DocumentMetricsService {
 
   constructor(
     private readonly users: UsersDirectory,
+    private readonly areas: AreasDirectory,
     private readonly metrics: DocumentMetricsRepository,
     private readonly clock: Clock,
   ) {}
@@ -70,9 +73,14 @@ export class DocumentMetricsService {
       );
     }
 
-    // R2: las áreas salen del directorio en cada pedido, nunca de la sesión.
-    const viewerAreaIds = (await this.users.findById(user.id))?.areaIds ?? [];
-    // R3: null es el SUPERVISOR con un área que no es suya, exista o no. Para el ADMIN un área que
+    // R2: las áreas salen de los directorios en cada pedido, nunca de la sesión. Solo las activas, y
+    // ninguna si el usuario está inactivo. El alcance del ADMIN no depende de ellas.
+    const viewerAreaIds = await activeAreaIdsOf(
+      this.users,
+      this.areas,
+      user.id,
+    );
+    // R3: null es el SUPERVISOR con un área que no es suya o está inactiva, exista o no. Para el ADMIN un área que
     // no existe no se busca: no la tiene ningún documento y los totales dan 0 (D14).
     const scope = metricsScope(user.role, viewerAreaIds, areaId);
     if (!scope) throw areaNotFound();
