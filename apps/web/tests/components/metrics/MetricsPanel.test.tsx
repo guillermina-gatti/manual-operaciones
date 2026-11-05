@@ -628,6 +628,19 @@ describe('empty and errors', () => {
 });
 
 describe('metrics of pair C', () => {
+  test('go last, in "Documentos y asistente", documents first', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(headings.at(-1)).toBe('Documentos y asistente');
+    const section = screen.getByRole('region', { name: 'Documentos y asistente' });
+    const cards = within(section)
+      .getAllByRole('heading', { level: 3 })
+      .map((heading) => heading.textContent);
+    expect(cards).toEqual(['Documentos', 'Asistente']);
+  });
+
   test('the assistant card says it is not available yet, without numbers', async () => {
     render(<MetricsPanel />);
 

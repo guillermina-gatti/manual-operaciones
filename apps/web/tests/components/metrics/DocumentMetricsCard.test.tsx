@@ -63,12 +63,12 @@ describe('DocumentMetricsCard', () => {
     expect(within(period).getByText('Cargados en el período').nextSibling).toHaveTextContent('9');
   });
 
-  test('says the totals are the current state and the dates only change "Cargados"', () => {
+  test('says the totals are the current state and the dates only change «Cargados»', () => {
     render(<DocumentMetricsCard filters={FILTERS} state={success(DOCUMENTS)} />);
 
     expect(
       within(card()).getByText(
-        'Muestra el estado actual de los documentos activos. Las fechas solo cambian “Cargados en el período”.',
+        'Muestra el estado actual de los documentos activos. Las fechas solo cambian «Cargados en el período».',
       ),
     ).toBeInTheDocument();
   });
