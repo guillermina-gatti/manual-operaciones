@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado (01/11/2026):** HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. HU10 terminada: T12, T13 y T13b hechas, con los e2e de procedimientos en verde (6 suites, 83 tests) y todos los e2e en verde (27 suites, 397 tests). Siguen T14 en adelante (visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
+- **Estado (04/11/2026):** T-WEB (pantallas de prueba de HU09 y HU10 en la web) hecha. HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. HU10 terminada: T12, T13 y T13b hechas, con los e2e de procedimientos en verde (6 suites, 83 tests) y todos los e2e en verde (27 suites, 397 tests). Siguen T14 en adelante (visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
 
 Convenciones:
 
@@ -230,3 +230,15 @@ Convenciones:
 
 - **Qué hace:** repite la verificación de T18 incluyendo los adjuntos y deja la spec en estado "implementada".
 - **Verificación:** lint, tests, build y e2e en verde; todos los criterios de aceptación (E1 a E34) con su test; sin cambios fuera de alcance; spec, plan y tareas al día con lo construido.
+
+---
+
+## Pantallas de prueba (web)
+
+### T-WEB · Pantallas de prueba de HU09 y HU10
+
+- **Qué hace:** un front simple, de prueba, para ver HU09 y HU10 en el navegador. `/procedimientos` crea un procedimiento y lista los creados. `/procedimientos/[id]` edita el título y la descripción del borrador, agrega, edita, borra y mueve pasos, descarta el borrador y asigna áreas con `GET /api/areas` (una inactiva se muestra con "(inactiva)" solo si el procedimiento ya la tenía). Solo ADMIN. **Es un front de prueba y no hay GET de procedimientos hasta HU11:** la lista y los datos de cada procedimiento salen de una copia en `sessionStorage` de esta sesión del navegador, y las pantallas lo avisan. Solo archivos nuevos; reutiliza `AreasField`, `RequireRole` y los componentes de `ui/` sin modificarlos.
+- **Cubre:** R2, R5 a R8, R10, R11; E1, E4, E6, E7, E9, E13, E17, E18, E35, E36, E37, vistos desde la web.
+- **Archivos:** `apps/web/lib/api/procedures.ts` y `procedure-errors.ts`; `apps/web/lib/procedures/*`; `apps/web/components/procedures/*`; `apps/web/app/procedimientos/page.tsx` y `[id]/page.tsx`; y sus tests en `apps/web/tests/`.
+- **Verificación:** `pnpm --filter web lint`, `pnpm --filter web test` y `pnpm --filter web build` en verde. La prueba manual contra la API real la hace Micaela. No hay enlace de navegación hacia `/procedimientos`: se entra escribiendo la URL.
+- **Estado:** hecha (04/11/2026). Lint, test (73 archivos, 911 tests) y build de la web en verde.
