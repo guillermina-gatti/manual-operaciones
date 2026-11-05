@@ -84,6 +84,9 @@ afterEach(() => {
 });
 
 const procedureCard = () => screen.findByRole('article', { name: 'Cierre de caja' });
+const areaCard = (name: string) =>
+  screen.getByRole('region', { name: new RegExp(`^${name}$`) });
+const SIN_DATOS = '0a000000-0000-4000-8000-000000000003';
 const summaryHeading = () =>
   screen.getByRole('heading', { name: 'Resumen general' }).parentElement!;
 type User = ReturnType<typeof userEvent.setup>;
@@ -382,11 +385,14 @@ describe('with data', () => {
       ),
     });
     render(<MetricsPanel />);
-    await procedureCard();
 
+    // It is shown in both area cards…
+    expect(await screen.findAllByRole('article', { name: 'Cierre de caja' })).toHaveLength(2);
+    // …but the general summary counts it once.
     const tile = (label: string) => screen.getAllByText(label, { selector: 'dt' })[0].parentElement!;
     expect(tile('Ejecuciones')).toHaveTextContent('5en el período elegido');
     expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 s');
+    expect(areaCard('Operaciones')).toHaveTextContent('2 procedimientos · 5 ejecuciones');
   });
 
   test('below the summary, the time per procedure, slowest first', async () => {
@@ -400,26 +406,147 @@ describe('with data', () => {
     expect(names).toEqual(['Cierre de caja', 'Recepción de mercadería']);
   });
 
-  test('one card per procedure, with its name, areas and steps', async () => {
+  test('one card per area with executions, with its procedures inside', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+    await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+
+    expect(screen.getByRole('heading', { name: 'Detalle por área' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Dónde se traban: paso a paso de cada procedimiento/),
+    ).toBeInTheDocument();
+    expect(areaCard('Ventas')).toHaveTextContent('1 procedimiento · 4 ejecuciones');
+    expect(
+      within(areaCard('Ventas')).getByRole('article', { name: 'Cierre de caja' }),
+    ).toBeInTheDocument();
+    expect(
+      within(areaCard('Operaciones')).getByRole('article', { name: 'Recepción de mercadería' }),
+    ).toBeInTheDocument();
+  });
+
+  test('each procedure says its executions and has its feather bar', async () => {
     render(<MetricsPanel />);
     const card = await procedureCard();
 
-    expect(screen.getByRole('article', { name: 'Recepción de mercadería' })).toBeInTheDocument();
-    expect(await within(card).findByText('Ventas')).toBeInTheDocument();
-
-    const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
-    const second = within(table).getByRole('row', { name: /Comparar con el reporte/ });
-    const cells = within(second).getAllByRole('cell').map((cell) => spaces(cell.textContent));
-    expect(cells).toEqual(['4', '2', '3 min 20 s', '1', '25,0%']);
+    expect(spaces(card.textContent)).toContain(
+      '4 ejecuciones · 2 completadas (50,0%) · 1 en curso · 1 abandonadas (25,0%)',
+    );
+    expect(within(card).getByRole('img', { name: /^Distribución/ })).toHaveAccessibleName(
+      'Distribución: 2 completadas, 1 en curso, 1 abandonadas',
+    );
   });
 
-  test('a step nobody reached shows "—" instead of a number', async () => {
+  test('the steps table: reached, finished, abandoned and time, with "Mayor tiempo"', async () => {
+    render(<MetricsPanel />);
+    const card = await procedureCard();
+
+    const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
+    const headers = within(table)
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent);
+    expect(headers).toEqual([
+      'Paso',
+      'Descripción',
+      'Llegaron',
+      'Terminaron',
+      'Abandonaron',
+      'Tiempo medio del paso',
+    ]);
+
+    const second = within(table).getByRole('row', { name: /Comparar con el reporte/ });
+    expect(within(second).getByRole('rowheader')).toHaveTextContent(
+      'Comparar con el reporteMayor tiempo',
+    );
+    const cells = within(second).getAllByRole('cell').map((cell) => spaces(cell.textContent));
+    expect(cells).toEqual(['2', '4', '2', '1 (25,0%)', '3 min 20 s53% del total']);
+
+    const first = within(table).getByRole('row', { name: /Contar el efectivo/ });
+    expect(within(first).getAllByRole('cell').map((cell) => spaces(cell.textContent))).toEqual([
+      '1',
+      '4',
+      '4',
+      '0',
+      '3 min47% del total',
+    ]);
+  });
+
+  test('a step nobody reached shows "—" instead of a time', async () => {
     render(<MetricsPanel />);
     const card = await procedureCard();
 
     const row = within(card).getByRole('row', { name: /Guardar en la caja fuerte/ });
     const cells = within(row).getAllByRole('cell').map((cell) => cell.textContent);
-    expect(cells).toEqual(['0', '0', '—', '0', '—']);
+    expect(cells).toEqual(['3', '0', '0', '0', '—']);
+  });
+
+  test('"Procedimiento completo" shows the time only with a single version', async () => {
+    render(<MetricsPanel />);
+    const card = await procedureCard();
+
+    // Cierre de caja has two versions in the period: no time per version.
+    const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
+    const complete = within(table).getByRole('row', { name: /Procedimiento completo/ });
+    expect(within(complete).getByRole('rowheader')).toHaveTextContent(
+      'Procedimiento completo · de inicio a fin',
+    );
+    expect(within(complete).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
+      '',
+      '3',
+      '1',
+      '1',
+      '—',
+    ]);
+
+    // Recepción de mercadería has one: its average time.
+    const recepcion = screen.getByRole('table', { name: 'Pasos de Recepción de mercadería' });
+    const row = within(recepcion).getByRole('row', { name: /Procedimiento completo/ });
+    expect(within(row).getAllByRole('cell').at(-1)).toHaveTextContent('5 min');
+  });
+
+  test('the leaf opens and closes the area summary', async () => {
+    const user = userEvent.setup();
+    render(<MetricsPanel />);
+    await procedureCard();
+    await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+
+    const leaf = within(areaCard('Ventas')).getByRole('button', { name: 'Ver resumen de Ventas' });
+    expect(leaf).toHaveAttribute('aria-expanded', 'false');
+    await user.click(leaf);
+
+    expect(leaf).toHaveAccessibleName('Ocultar resumen de Ventas');
+    expect(leaf).toHaveAttribute('aria-expanded', 'true');
+    const summary = document.getElementById(leaf.getAttribute('aria-controls')!)!;
+    expect(spaces(summary.textContent)).toContain('Completadas 250,0%');
+    expect(spaces(summary.textContent)).toContain('Tiempo medio 12 min');
+
+    await user.click(leaf);
+    expect(leaf).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('says how many areas have no executions, with the right plural', async () => {
+    mocks.listAreas.mockResolvedValue([
+      { id: VENTAS, name: 'Ventas', isActive: true },
+      { id: OPERACIONES, name: 'Operaciones', isActive: true },
+      { id: SIN_DATOS, name: 'Logística', isActive: true },
+    ]);
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    expect(
+      await screen.findByText('1 área no tiene ejecuciones en este período y no se muestra.'),
+    ).toBeInTheDocument();
+  });
+
+  test('a chosen area without executions shows the empty feather box', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    mocks.getProcedureMetrics.mockResolvedValue(EMPTY_METRICS);
+    render(<MetricsPanel />);
+
+    expect(await screen.findByText('Sin ejecuciones en Ventas')).toBeInTheDocument();
+    expect(
+      screen.getByText('No hay procedimientos ejecutados en este período. Probá con otras fechas.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Detalle por área' })).not.toBeInTheDocument();
   });
 
   test('older versions fold below, with their own steps', async () => {

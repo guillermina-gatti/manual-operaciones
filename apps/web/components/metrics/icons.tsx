@@ -108,3 +108,13 @@ export function FeatherIcon({ className }: { className?: string }) {
     </Icon>
   );
 }
+
+// The leaf of the area summary button.
+export function LeafIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z" />
+      <path d="M2 21c0-3 1.9-5.4 5.2-6.1 2.5-.5 4.6-1.6 5.8-3.9" />
+    </Icon>
+  );
+}

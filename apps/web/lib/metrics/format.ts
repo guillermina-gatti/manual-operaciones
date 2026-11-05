@@ -15,6 +15,12 @@ export function formatPercent(rate: number | null): string {
   return `${percentFormat.format(rate * 100)}%`;
 }
 
+// A share as a whole percentage, for the "% del total" of each step: 0.567 → "57%".
+export function formatShare(share: number | null): string {
+  if (share === null || !Number.isFinite(share)) return MISSING;
+  return `${countFormat.format(Math.round(share * 100))}%`;
+}
+
 // 1284 → "1.284".
 export function formatCount(value: number): string {
   return countFormat.format(value);

@@ -24,8 +24,9 @@ import {
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { useSession } from '@/lib/session';
 import { MetricsFiltersForm } from './MetricsFiltersForm';
+import { AreaMetricsSection } from './AreaMetricsSection';
+import { FeatherIcon } from './icons';
 import { MetricsSummary } from './MetricsSummary';
-import { ProcedureMetricsCard } from './ProcedureMetricsCard';
 import { ProcedureTimeTable } from './ProcedureTimeTable';
 import { TeamCMetrics } from './TeamCMetrics';
 
@@ -77,7 +78,7 @@ export function MetricsPanel() {
         isAdmin={isAdmin}
       />
       {metrics.status === 'success' && metrics.data.totals.started > 0 && (
-        <ProcedureDetails procedures={metrics.data.procedures} areas={areaList} />
+        <ProcedureDetails metrics={metrics.data} areas={areaList} areaId={filters.areaId} />
       )}
       <TeamCMetrics filters={filters} userId={user?.id ?? null} />
     </div>
@@ -110,7 +111,7 @@ function ProceduresSection({ filters, areas, state, isAdmin }: ProceduresSection
         </h2>
         <p className="text-texto-suave">{areaName}</p>
       </div>
-      <ProceduresContent filters={filters} state={state} />
+      <ProceduresContent filters={filters} state={state} areaName={areaName} />
     </section>
   );
 }
@@ -118,7 +119,8 @@ function ProceduresSection({ filters, areas, state, isAdmin }: ProceduresSection
 function ProceduresContent({
   filters,
   state,
-}: Pick<ProceduresSectionProps, 'filters' | 'state'>) {
+  areaName,
+}: Pick<ProceduresSectionProps, 'filters' | 'state'> & { areaName: string }) {
   if (state.status === 'idle' || state.status === 'loading') {
     return (
       <ScreenState kind="loading" label="Cargando las métricas…">
@@ -147,6 +149,19 @@ function ProceduresContent({
   }
 
   const metrics = state.data;
+  // A chosen area without executions: the design's dashed box with a big feather.
+  if (metrics.totals.started === 0 && filters.areaId) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-borde px-6 py-12 text-center">
+        <FeatherIcon className="size-12 text-barro" />
+        <p className="text-lg font-semibold text-texto">Sin ejecuciones en {areaName}</p>
+        <p className="text-texto-suave">
+          No hay procedimientos ejecutados en este período. Probá con otras fechas.
+        </p>
+      </div>
+    );
+  }
+
   if (metrics.totals.started === 0) {
     return (
       <div className={STATE_CARD}>
@@ -163,25 +178,24 @@ function ProceduresContent({
 
 // The sections below the summary, only when the period has executions.
 function ProcedureDetails({
-  procedures,
+  metrics,
   areas,
+  areaId,
 }: {
-  procedures: ProceduresMetricsResponse['procedures'];
+  metrics: ProceduresMetricsResponse;
   areas: Area[];
+  areaId: string | null;
 }) {
   const areaNames = new Map(areas.map((area) => [area.id, displayAreaName(area)]));
   return (
     <>
-      <ProcedureTimeTable procedures={procedures} areaNames={areaNames} />
-      <div className="flex flex-col gap-6">
-        {procedures.map((procedure) => (
-          <ProcedureMetricsCard
-            key={procedure.procedureId}
-            procedure={procedure}
-            areaNames={areaNames}
-          />
-        ))}
-      </div>
+      <ProcedureTimeTable procedures={metrics.procedures} areaNames={areaNames} />
+      <AreaMetricsSection
+        procedures={metrics.procedures}
+        areas={areas}
+        areaId={areaId}
+        viewerAreaIds={metrics.areaIds}
+      />
     </>
   );
 }

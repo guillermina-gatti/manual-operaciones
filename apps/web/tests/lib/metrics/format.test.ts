@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { formatCount, formatDay, formatPercent, formatPeriod } from '@/lib/metrics/format';
+import {
+  formatCount,
+  formatDay,
+  formatPercent,
+  formatPeriod,
+  formatShare,
+} from '@/lib/metrics/format';
 
 describe('formatPercent', () => {
   test.each([
@@ -48,5 +54,20 @@ describe('formatPeriod', () => {
 
   test('the same day only once', () => {
     expect(formatPeriod('2026-11-04', '2026-11-04')).toBe('4 nov 2026');
+  });
+});
+
+describe('formatShare', () => {
+  test.each([
+    [0.567, '57%'],
+    [0.5, '50%'],
+    [0, '0%'],
+    [1, '100%'],
+  ])('%d → %s, a whole percentage', (share, text) => {
+    expect(formatShare(share)).toBe(text);
+  });
+
+  test('null → "—"', () => {
+    expect(formatShare(null)).toBe('—');
   });
 });
