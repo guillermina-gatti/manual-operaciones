@@ -63,3 +63,48 @@ export function CheckIcon({ className }: { className?: string }) {
     </Icon>
   );
 }
+
+export function ChartIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+    </Icon>
+  );
+}
+
+export function CrossIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m9 9 6 6M15 9l-6 6" />
+    </Icon>
+  );
+}
+
+export function ClockIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </Icon>
+  );
+}
+
+export function TimerIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <circle cx="12" cy="14" r="7" />
+      <path d="M12 14v-3M10 2h4M12 2v5" />
+    </Icon>
+  );
+}
+
+// The hornero's feather (the bars of the panel have its shape).
+export function FeatherIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <path d="M12.7 19a2 2 0 0 0 1.4-.6l6.2-6.2a6 6 0 0 0-8.5-8.5l-6.2 6.2A2 2 0 0 0 5 11.3V18a1 1 0 0 0 1 1z" />
+      <path d="M16 8 2 22M17.5 15H9" />
+    </Icon>
+  );
+}

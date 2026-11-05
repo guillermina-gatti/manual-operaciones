@@ -84,6 +84,8 @@ afterEach(() => {
 });
 
 const procedureCard = () => screen.findByRole('article', { name: 'Cierre de caja' });
+const summaryHeading = () =>
+  screen.getByRole('heading', { name: 'Resumen general' }).parentElement!;
 type User = ReturnType<typeof userEvent.setup>;
 const areaButton = () => screen.getByRole('button', { name: /^Área/ });
 // Until the area names arrive, the selector only has "Todas las áreas".
@@ -124,7 +126,7 @@ describe('loading and filters', () => {
       { areaId: null, from: '2026-10-01', to: '2026-10-27' },
       expect.any(AbortSignal),
     );
-    expect(screen.getByText('Del 01/10/2026 al 27/10/2026, en todas las áreas.')).toBeInTheDocument();
+    expect(summaryHeading()).toHaveTextContent('Todas las áreas');
     expect(screen.getByLabelText('Desde')).toHaveValue('2026-10-01');
     expect(screen.getByLabelText('Hasta')).toHaveValue('2026-10-27');
   });
@@ -138,7 +140,7 @@ describe('loading and filters', () => {
       { areaId: VENTAS, from: '2026-10-01', to: '2026-10-15' },
       expect.any(AbortSignal),
     );
-    expect(await screen.findByText('Del 01/10/2026 al 15/10/2026, en Ventas.')).toBeInTheDocument();
+    await waitFor(() => expect(summaryHeading()).toHaveTextContent('Ventas'));
   });
 
   test('ADMIN chooses among "Todas las áreas" and every area, with their procedures', async () => {
@@ -346,11 +348,45 @@ describe('with data', () => {
     await procedureCard();
 
     const tile = (label: string) => screen.getAllByText(label, { selector: 'dt' })[0].parentElement!;
-    expect(tile('Iniciadas')).toHaveTextContent('5');
-    expect(tile('Completadas')).toHaveTextContent('3');
-    expect(tile('En curso')).toHaveTextContent('Con avance en las últimas 24 h');
-    expect(tile('Abandonadas')).toHaveTextContent('Sin avanzar hace más de 24 h');
-    expect(spaces(tile('Finalización').textContent)).toContain('60 %');
+    expect(tile('Ejecuciones')).toHaveTextContent('5en el período elegido');
+    expect(tile('Completadas')).toHaveTextContent('360,0% del total');
+    expect(tile('En curso')).toHaveTextContent('120,0% del total');
+    expect(tile('Abandonadas')).toHaveTextContent('120,0% del total');
+    // (12 min × 2 + 5 min × 1) ÷ 3 completed.
+    expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 spor ejecución completada');
+    expect(
+      screen.getByText(/^En curso: con avance en las últimas 24 h\. Abandonadas: sin avanzar/),
+    ).toBeInTheDocument();
+  });
+
+  test('the distribution bar tells the counts as text, and the legend only counts', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const distribution = screen.getByRole('region', { name: 'Distribución de ejecuciones' });
+    expect(within(distribution).getByRole('img')).toHaveAccessibleName(
+      'Distribución: 3 completadas, 1 en curso, 1 abandonadas',
+    );
+    const legend = within(distribution).getAllByRole('listitem').map((item) => item.textContent);
+    expect(legend).toEqual(['Completadas: 3', 'En curso: 1', 'Abandonadas: 1']);
+  });
+
+  test('a procedure with two areas counts once in the general summary', async () => {
+    const metrics = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...metrics,
+      procedures: metrics.procedures.map((procedure) =>
+        procedure.procedureId === CIERRE_DE_CAJA
+          ? { ...procedure, areaIds: [VENTAS, OPERACIONES] }
+          : procedure,
+      ),
+    });
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const tile = (label: string) => screen.getAllByText(label, { selector: 'dt' })[0].parentElement!;
+    expect(tile('Ejecuciones')).toHaveTextContent('5en el período elegido');
+    expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 s');
   });
 
   test('one card per procedure, with its name, areas and steps', async () => {
@@ -363,7 +399,7 @@ describe('with data', () => {
     const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
     const second = within(table).getByRole('row', { name: /Comparar con el reporte/ });
     const cells = within(second).getAllByRole('cell').map((cell) => spaces(cell.textContent));
-    expect(cells).toEqual(['4', '2', '3 min 20 s', '1', '25 %']);
+    expect(cells).toEqual(['4', '2', '3 min 20 s', '1', '25,0%']);
   });
 
   test('a step nobody reached shows "—" instead of a number', async () => {

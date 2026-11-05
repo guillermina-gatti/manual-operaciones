@@ -2,12 +2,17 @@
 const MISSING = '—';
 
 const countFormat = new Intl.NumberFormat('es-AR');
+const percentFormat = new Intl.NumberFormat('es-AR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 
-// 0.25 → "25 %", 1/3 → "33 %". null (nothing to divide) → "—". Built by hand: Intl's percent
-// style puts the space before "%" in some runtimes and not in others. The space does not break.
+// 0.793 → "79,3%", 1/3 → "33,3%", 0.25 → "25,0%": always one decimal, as the design asks, so
+// the numbers line up. null (nothing to divide) → "—". Built by hand: Intl's percent style puts
+// a space before "%" in some runtimes and not in others.
 export function formatPercent(rate: number | null): string {
   if (rate === null || !Number.isFinite(rate)) return MISSING;
-  return `${countFormat.format(Math.round(rate * 100))} %`;
+  return `${percentFormat.format(rate * 100)}%`;
 }
 
 // 1284 → "1.284".

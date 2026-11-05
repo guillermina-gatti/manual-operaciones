@@ -12,7 +12,7 @@ import { describeMetricsError, getProcedureMetrics, metricsQuery, useApiResource
 import type { ApiResource, ProceduresMetricsResponse } from '@/lib/api';
 import { areasDirectory } from '@/lib/directory';
 import type { Area } from '@/lib/directory';
-import { formatReviewDate as formatDay } from '@/lib/documents/format';
+import { displayAreaName } from '@/lib/directory/areas-directory';
 import {
   areaOptions,
   metricsHref,
@@ -89,21 +89,22 @@ interface ProceduresSectionProps {
 
 function ProceduresSection({ filters, areas, state, isAdmin }: ProceduresSectionProps) {
   const headingId = useId();
+  const chosen = areas.find((area) => area.id === filters.areaId);
   const areaName = filters.areaId
-    ? (areas.find((area) => area.id === filters.areaId)?.name ?? 'el área elegida')
+    ? chosen
+      ? displayAreaName(chosen)
+      : 'Área elegida'
     : isAdmin
-      ? 'todas las áreas'
-      : 'tus áreas';
+      ? 'Todas las áreas'
+      : 'Todas mis áreas';
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 id={headingId} className="text-2xl font-bold text-texto">
-          Ejecuciones de procedimientos
+          Resumen general
         </h2>
-        <p className="text-texto-suave">
-          Del {formatDay(filters.from)} al {formatDay(filters.to)}, en {areaName}.
-        </p>
+        <p className="text-texto-suave">{areaName}</p>
       </div>
       <ProceduresContent filters={filters} areas={areas} state={state} />
     </section>
