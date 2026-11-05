@@ -55,6 +55,10 @@ model Document {
   areas    DocumentArea[]
   versions DocumentVersion[]
 
+  // Alertas de contradicción (spec 011): el documento puede ser el A o el B del par.
+  conflictAlertsAsA DocumentConflictAlert[] @relation("ConflictAlertDocumentA")
+  conflictAlertsAsB DocumentConflictAlert[] @relation("ConflictAlertDocumentB")
+
   @@index([status])
   @@index([reviewDate])
   @@index([createdAt]) // orden del listado (R13)
@@ -92,6 +96,10 @@ model DocumentVersion {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   chunks   Chunk[]
 
+  // Alertas de contradicción (spec 011): la versión puede ser la del A o la del B del par.
+  conflictAlertsAsA DocumentConflictAlert[] @relation("ConflictAlertVersionA")
+  conflictAlertsAsB DocumentConflictAlert[] @relation("ConflictAlertVersionB")
+
   @@unique([documentId, versionNumber])
   // Como máximo una versión CURRENT por documento (spec 003, R8; M4 del plan 001). Declarado acá
   // y no a mano en el SQL, para que Prisma no lo borre en la próxima migración (plan 003, D1 y D2).
@@ -99,6 +107,47 @@ model DocumentVersion {
   @@index([processingStatus])
   @@index([checksum]) // duplicados (R8b)
   @@map("document_versions")
+}
+
+// HU39 — dueño: Matías (spec 011, sección 7.1; plan 011, 1.1)
+// Alertas de documentos que se contradicen. Una por par de versiones (R13, D8).
+// A es el documento de id menor (R11): lo hace cumplir un CHECK escrito a mano en la migración
+// (plan 011, 1.3), igual que la coherencia de la resolución y occurrences >= 1.
+// Los fragmentos y el mensaje van solo por ID: chunks y messages son de Guille (D16).
+enum ConflictAlertStatus {
+  OPEN
+  RESOLVED
+}
+
+model DocumentConflictAlert {
+  id              String              @id @default(uuid()) @db.Uuid
+  documentAId     String              @map("document_a_id") @db.Uuid
+  documentBId     String              @map("document_b_id") @db.Uuid
+  versionAId      String              @map("version_a_id") @db.Uuid
+  versionBId      String              @map("version_b_id") @db.Uuid
+  chunkAId        String              @map("chunk_a_id") @db.Uuid // chunks de Guille, solo por ID
+  chunkBId        String              @map("chunk_b_id") @db.Uuid
+  messageId       String              @map("message_id") @db.Uuid // messages de Guille, solo por ID
+  question        String              @db.VarChar(2000)
+  status          ConflictAlertStatus @default(OPEN)
+  occurrences     Int                 @default(1)
+  firstDetectedAt DateTime            @default(now()) @map("first_detected_at") @db.Timestamptz(3)
+  lastDetectedAt  DateTime            @default(now()) @map("last_detected_at") @db.Timestamptz(3)
+  resolvedAt      DateTime?           @map("resolved_at") @db.Timestamptz(3)
+  resolvedById    String?             @map("resolved_by_id") @db.Uuid // users de A, solo por ID
+  resolutionNote  String?             @map("resolution_note") @db.VarChar(500)
+
+  documentA Document        @relation("ConflictAlertDocumentA", fields: [documentAId], references: [id], onDelete: Cascade)
+  documentB Document        @relation("ConflictAlertDocumentB", fields: [documentBId], references: [id], onDelete: Cascade)
+  versionA  DocumentVersion @relation("ConflictAlertVersionA", fields: [versionAId], references: [id], onDelete: Cascade)
+  versionB  DocumentVersion @relation("ConflictAlertVersionB", fields: [versionBId], references: [id], onDelete: Cascade)
+
+  @@unique([versionAId, versionBId]) // R13: destino del ON CONFLICT del registro
+  @@index([status, lastDetectedAt]) // abiertas y openTotal
+  @@index([status, resolvedAt]) // resueltas
+  @@index([documentAId])
+  @@index([documentBId])
+  @@map("document_conflict_alerts")
 }
 
 // HU14 · HU17 — dueña: Guille (columnas acordadas con Matías)
