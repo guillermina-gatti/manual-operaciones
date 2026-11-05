@@ -14,21 +14,17 @@ import {
   listDocuments,
   useApiResource,
 } from '@/lib/api';
-import { areasDirectory, usersDirectory } from '@/lib/directory';
-import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
 import { parseSearchParam } from '@/lib/documents/search-rules';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { ConflictAlertsLink } from './ConflictAlertsLink';
 import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
 import { SearchResults } from './SearchResults';
-
-// Enlace con forma de botón principal (mismo estilo que Button, 44 px de alto: F10).
-const LINK_BUTTON =
-  'inline-flex min-h-11 items-center justify-center rounded-md bg-blue-700 px-4 font-medium text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, TEXT_LINK } from './design';
 
 const LOADING = (
   <ScreenState kind="loading" label="Cargando documentos…">
@@ -51,14 +47,20 @@ export function DocumentList() {
           responsable de nada no muestra nada. */}
       {status === 'ready' && user && (
         <div className="flex flex-wrap justify-end gap-3 empty:hidden">
+          {/* Spec 009 (F1, D11): el acceso al asistente, hasta que el menú (pareja A) tenga el enlace. */}
+          <Link href="/asistente" className={BUTTON_SECONDARY}>
+            Preguntale al asistente <span aria-hidden="true">✦</span>
+          </Link>
           <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
+          {/* Spec 011 (F5, D11): las alertas de contradicción, solo para el ADMIN. */}
+          {user.role === 'ADMIN' && <ConflictAlertsLink userId={user.id} />}
         </div>
       )}
       {search.kind === 'valid' && status === 'ready' && user ? (
         <>
           {user.role === 'ADMIN' && (
             <div className="flex justify-end">
-              <Link href="/documentos/nuevo" className={LINK_BUTTON}>
+              <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
                 Cargar documento
               </Link>
             </div>
@@ -88,16 +90,6 @@ function DocumentListing() {
     listDocuments(page, signal),
   );
 
-  // Nombres de áreas y responsables: una vez por página, no por tarjeta (la API manda solo IDs, Q1).
-  const areas = useApiResource(user ? 'areas' : null, () => areasDirectory.listAreas());
-  const ownerIds =
-    documents.status === 'success'
-      ? [...new Set(documents.data.data.map((document) => document.ownerId))]
-      : [];
-  const owners = useApiResource(ownerIds.length > 0 ? `owners:${ownerIds.join(',')}` : null, () =>
-    usersDirectory.getNames(ownerIds),
-  );
-
 if (status === 'loading') return LOADING;
 
 if (status === 'disabled') {
@@ -117,7 +109,7 @@ if (!user) {
       action={
         <Link
           href="/login"
-          className="text-blue-700 underline dark:text-blue-400"
+          className={TEXT_LINK}
         >
           Ir a iniciar sesión
         </Link>
@@ -149,7 +141,7 @@ if (!user) {
         kind="empty"
         message="Todavía no hay documentos"
         action={
-          <Link href="/documentos/nuevo" className={LINK_BUTTON}>
+          <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
             Cargar el primer documento
           </Link>
         }
@@ -166,7 +158,7 @@ if (!user) {
         kind="empty"
         message="Esta página no existe"
         action={
-          <Link href="/documentos" className="text-blue-700 underline dark:text-blue-400">
+          <Link href="/documentos" className={TEXT_LINK}>
             Ir a la primera página
           </Link>
         }
@@ -174,30 +166,21 @@ if (!user) {
     );
   }
 
-  // Se espera a los nombres para no mostrar "—" un instante; si fallan, las tarjetas igual se muestran.
-  if (areas.status === 'loading' || owners.status === 'loading') return LOADING;
-  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
-  const ownerNames = owners.status === 'success' ? owners.data : {};
-
+  // Spec 008 (F1): los nombres del responsable y de las áreas vienen en cada documento.
   return (
     <div className="flex flex-col gap-6">
       {isAdmin && (
         <div className="flex justify-end">
-          <Link href="/documentos/nuevo" className={LINK_BUTTON}>
+          <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
             Cargar documento
           </Link>
         </div>
       )}
 
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((document) => (
           <li key={document.id} className="min-w-0">
-            <DocumentCard
-              document={document}
-              areaNames={areaNames}
-              ownerName={ownerNames[document.ownerId]}
-              isAdmin={isAdmin}
-            />
+            <DocumentCard document={document} isAdmin={isAdmin} />
           </li>
         ))}
       </ul>

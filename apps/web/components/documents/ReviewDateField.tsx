@@ -6,6 +6,7 @@ import { useId, useState } from 'react';
 import { FieldError } from '@/components/ui/FieldError';
 import { COMPANY_TIME_ZONE, formatReviewDate } from '@/lib/documents/format';
 import { tomorrowIn } from '@/lib/documents/review-date';
+import { HINT, INPUT as BASE_INPUT, LABEL } from './design';
 
 interface ReviewDateFieldProps {
   // YYYY-MM-DD, o '' si no se eligió.
@@ -19,8 +20,7 @@ interface ReviewDateFieldProps {
   label?: string;
 }
 
-const INPUT =
-  'min-h-11 w-full rounded-md border border-zinc-300 bg-white px-3 aria-[invalid=true]:border-red-600 sm:max-w-xs dark:border-zinc-600 dark:bg-zinc-900';
+const INPUT = `${BASE_INPUT} sm:max-w-xs`;
 
 export function ReviewDateField({
   value,
@@ -38,7 +38,7 @@ export function ReviewDateField({
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={`${id}-input`} className="font-medium">
+      <label htmlFor={`${id}-input`} className={LABEL}>
         {label ?? (optional ? 'Nueva fecha de revisión (opcional)' : 'Fecha de revisión')}
       </label>
       <input
@@ -52,7 +52,7 @@ export function ReviewDateField({
         aria-describedby={describedBy || undefined}
       />
       {hint && (
-        <p id={`${id}-hint`} className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p id={`${id}-hint`} className={HINT}>
           {hint}
         </p>
       )}

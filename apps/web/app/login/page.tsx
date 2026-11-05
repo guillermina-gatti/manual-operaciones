@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { LoginForm } from '@/components/session/LoginForm';
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function LoginPage() {
             Ingresá con tu cuenta del Manual de operaciones.
           </p>
         </div>
-        <LoginForm />
+        <Suspense fallback={<p role="status">Preparando sesión…</p>}>
+          <LoginForm />
+        </Suspense>
       </section>
     </main>
   );

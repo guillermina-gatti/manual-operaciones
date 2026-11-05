@@ -13,7 +13,8 @@ export const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 // Las operaciones que mapean errores: carga y consulta (spec 001), las del ciclo de vida (spec 003),
-// la búsqueda (spec 004), "Marcar como revisado" (spec 005) y las métricas de documentos (spec 007).
+// la búsqueda (spec 004), "Marcar como revisado" (spec 005), las métricas de documentos (spec 007)
+// y las alertas de contradicción (spec 011).
 export type HttpOperation =
   | 'carga'
   | 'consulta'
@@ -22,7 +23,9 @@ export type HttpOperation =
   | 'archivo'
   | 'búsqueda'
   | 'revisión'
-  | 'métricas';
+  | 'métricas'
+  | 'alertas'
+  | 'resolución de alerta';
 
 // Cómo se nombra cada una en los mensajes, con su artículo ("la carga", "el cambio de áreas").
 // "archivo" se nombra "el archivado del documento" para no confundirlo con el archivo subido.
@@ -35,6 +38,8 @@ const PHRASES: Record<HttpOperation, string> = {
   búsqueda: 'la búsqueda',
   revisión: 'el registro de la revisión',
   métricas: 'la consulta de las métricas', // el mismo texto que las métricas de procedimientos (spec 007, D15)
+  alertas: 'la consulta de las alertas',
+  'resolución de alerta': 'la resolución de la alerta',
 };
 
 const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1);

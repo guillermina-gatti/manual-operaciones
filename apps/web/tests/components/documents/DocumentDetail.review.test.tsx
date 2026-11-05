@@ -9,6 +9,7 @@ import { createFakeAreasDirectory } from '@/lib/directory/fake-areas-directory';
 import { createFakeUsersDirectory } from '@/lib/directory/fake-users-directory';
 import { AREA_IDS, FIXTURE_USERS } from '@/lib/directory/fixtures';
 import type { SessionState } from '@/lib/session';
+import { personRef, referencesOf, reviewOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
@@ -58,11 +59,12 @@ const OVERDUE: DocumentResponse = {
   status: 'ACTIVE',
   areaIds: [AREA_IDS.ventas],
   ownerId: FIXTURE_USERS.empleadoVentas.id,
+  ...referencesOf(FIXTURE_USERS.empleadoVentas.id, [AREA_IDS.ventas]),
   reviewDate: '2026-11-04',
   createdById: FIXTURE_USERS.admin.id,
   createdAt: '2026-10-20T15:00:00.000Z',
   archivedAt: null,
-  review: { status: 'OVERDUE', lastReviewedAt: null, lastReviewedById: null },
+  review: { status: 'OVERDUE', lastReviewedAt: null, lastReviewedById: null, lastReviewedBy: null },
   currentVersion: {
     id: '22222222-2222-4222-8222-222222222222',
     versionNumber: 1,
@@ -78,11 +80,11 @@ const OVERDUE: DocumentResponse = {
 const REVIEWED: DocumentResponse = {
   ...OVERDUE,
   reviewDate: '2027-05-09',
-  review: {
+  review: reviewOf({
     status: 'UP_TO_DATE',
     lastReviewedAt: '2026-10-31T01:30:00.000Z',
     lastReviewedById: FIXTURE_USERS.empleadoVentas.id,
-  },
+  }),
 };
 // Lo que recibe quien no es ADMIN ni responsable: sin review (R4).
 const WITHOUT_REVIEW: DocumentResponse = { ...OVERDUE };
@@ -147,19 +149,54 @@ describe('etiqueta y última revisión (T17; F1, R11)', () => {
     expect(screen.queryByText('Última revisión')).not.toBeInTheDocument();
   });
 
-  test('pide el nombre del responsable y el del revisor en un solo pedido', async () => {
+  test('spec 008, E9: el revisor sale de la respuesta, sin pedir nombres', async () => {
     mocks.getDocument.mockResolvedValue({
       ...REVIEWED,
-      review: { ...REVIEWED.review!, lastReviewedById: FIXTURE_USERS.admin.id },
+      review: reviewOf({ ...REVIEWED.review!, lastReviewedById: FIXTURE_USERS.admin.id }),
     });
     render(<DocumentDetail />);
     await heading();
 
-    expect(mocks.getNames).toHaveBeenCalledWith([
-      FIXTURE_USERS.empleadoVentas.id,
-      FIXTURE_USERS.admin.id,
-    ]);
+    expect(mocks.getNames).not.toHaveBeenCalled();
+    expect(mocks.listAreas).not.toHaveBeenCalled();
     expect(valueOf('Última revisión')).toHaveTextContent('por Ana Administradora');
+  });
+
+  test('spec 008, E5: quien revisó, inactivo, con "(inactivo)"', async () => {
+    mocks.getDocument.mockResolvedValue({
+      ...REVIEWED,
+      review: {
+        ...REVIEWED.review!,
+        lastReviewedById: FIXTURE_USERS.admin.id,
+        lastReviewedBy: personRef(FIXTURE_USERS.admin.id, false),
+      },
+    });
+    render(<DocumentDetail />);
+    await heading();
+
+    expect(valueOf('Última revisión')).toHaveTextContent('por Ana Administradora (inactivo)');
+  });
+
+  test('spec 008, E3: el responsable inactivo, con "(inactivo)"', async () => {
+    mocks.getDocument.mockResolvedValue({
+      ...OVERDUE,
+      owner: personRef(FIXTURE_USERS.empleadoVentas.id, false),
+    });
+    render(<DocumentDetail />);
+    await heading();
+
+    expect(valueOf('Responsable')).toHaveTextContent('Elena Empleada de Ventas (inactivo)');
+  });
+
+  test('spec 008, E10: un responsable que la API no encontró se muestra "—"', async () => {
+    mocks.getDocument.mockResolvedValue({
+      ...OVERDUE,
+      owner: { id: OVERDUE.ownerId, name: null, isActive: false },
+    });
+    render(<DocumentDetail />);
+    await heading();
+
+    expect(valueOf('Responsable')).toHaveTextContent(/^—$/);
   });
 });
 

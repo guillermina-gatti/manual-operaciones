@@ -623,6 +623,12 @@ describe('Ciclo de vida de documentos (integración)', () => {
         sizeBytes: expect.any(Number) as number,
         processingStatus: 'PENDING',
         uploadedById: FIXTURE_USERS.admin.id,
+        // Spec 008 (P3): quién la subió, con nombre y estado.
+        uploadedBy: {
+          id: FIXTURE_USERS.admin.id,
+          name: expect.any(String) as string,
+          isActive: true,
+        },
         createdAt: expect.any(String) as string,
       });
       expect(JSON.stringify(body)).not.toMatch(/storageKey|checksum/);

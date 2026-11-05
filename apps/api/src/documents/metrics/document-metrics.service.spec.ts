@@ -9,8 +9,10 @@ import {
 import type { AuthUser } from '../../common/auth';
 import { Clock } from '../../common/clock';
 import { AREA_IDS, FIXTURE_USERS } from '../adapters/fixtures';
+import { InMemoryAreasDirectory } from '../adapters/in-memory-areas-directory';
 import { InMemoryUsersDirectory } from '../adapters/in-memory-users-directory';
 import { RepositoryUnavailableError } from '../documents.repository';
+import { AreasDirectory } from '../ports/areas-directory';
 import { UsersDirectory } from '../ports/users-directory';
 import {
   DocumentMetricsQuery,
@@ -52,6 +54,7 @@ const TOTALS: DocumentMetricsTotals = {
   uploaded: 3,
 };
 const UNKNOWN_AREA = '0a000000-0000-4000-8000-000000000099';
+const INACTIVE_AREA = '0a000000-0000-4000-8000-000000000003';
 
 // Como lo deja el guard en request.user. Las áreas de la sesión son a propósito distintas de las del
 // directorio: el servicio tiene que usar las del directorio (R2).
@@ -72,12 +75,18 @@ const SUPERVISOR_VENTAS = as(FIXTURE_USERS.supervisorVentas, [
 
 describe('DocumentMetricsService', () => {
   let users: UsersDirectory;
+  let areas: AreasDirectory;
   let repository: FakeMetricsRepository;
   const build = () =>
-    new DocumentMetricsService(users, repository, new FixedClock());
+    new DocumentMetricsService(users, areas, repository, new FixedClock());
 
   beforeEach(() => {
     users = new InMemoryUsersDirectory();
+    areas = new InMemoryAreasDirectory([
+      { id: AREA_IDS.ventas, name: 'Ventas', isActive: true },
+      { id: AREA_IDS.operaciones, name: 'Operaciones', isActive: true },
+      { id: INACTIVE_AREA, name: 'Inactiva', isActive: false },
+    ]);
     repository = new FakeMetricsRepository(TOTALS);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
   });
@@ -158,6 +167,52 @@ describe('DocumentMetricsService', () => {
 
       expect(repository.queries[0].areaIds).toEqual([]);
     });
+
+    describe('áreas y usuarios inactivos', () => {
+      // El SUPERVISOR de Ventas, que además conserva el vínculo con un área desactivada.
+      const withInactiveArea = (isActive = true) => {
+        users = new InMemoryUsersDirectory([
+          {
+            ...FIXTURE_USERS.supervisorVentas,
+            areaIds: [AREA_IDS.ventas, INACTIVE_AREA],
+            isActive,
+          },
+        ]);
+      };
+
+      it('el SUPERVISOR sin área cuenta solo sus áreas activas', async () => {
+        withInactiveArea();
+
+        await build().documents(SUPERVISOR_VENTAS, {});
+
+        expect(repository.queries[0].areaIds).toEqual([AREA_IDS.ventas]);
+      });
+
+      it('el SUPERVISOR con un área suya inactiva recibe 404, sin contar nada', async () => {
+        withInactiveArea();
+
+        await expect(
+          build().documents(SUPERVISOR_VENTAS, { areaId: INACTIVE_AREA }),
+        ).rejects.toThrow(new NotFoundException('No se encontró el área'));
+        expect(repository.queries).toEqual([]);
+      });
+
+      it('un SUPERVISOR inactivo no tiene áreas: totales de ninguna', async () => {
+        withInactiveArea(false);
+
+        await build().documents(SUPERVISOR_VENTAS, {});
+
+        expect(repository.queries[0].areaIds).toEqual([]);
+      });
+
+      it('un SUPERVISOR inactivo con una de sus áreas recibe 404', async () => {
+        withInactiveArea(false);
+
+        await expect(
+          build().documents(SUPERVISOR_VENTAS, { areaId: AREA_IDS.ventas }),
+        ).rejects.toThrow(new NotFoundException('No se encontró el área'));
+      });
+    });
   });
 
   describe('período (R6, R7)', () => {
@@ -218,6 +273,19 @@ describe('DocumentMetricsService', () => {
       };
 
       await expect(build().documents(ADMIN, {})).rejects.toThrow(
+        new ServiceUnavailableException(UNAVAILABLE),
+      );
+      expect(repository.queries).toEqual([]);
+    });
+
+    it('el directorio de áreas caído es 503, sin contar nada', async () => {
+      areas = {
+        findExistingIds: () => Promise.resolve([]),
+        findByIds: () =>
+          Promise.reject(new RepositoryUnavailableError('directorio caído')),
+      };
+
+      await expect(build().documents(SUPERVISOR_VENTAS, {})).rejects.toThrow(
         new ServiceUnavailableException(UNAVAILABLE),
       );
       expect(repository.queries).toEqual([]);

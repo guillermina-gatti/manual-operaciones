@@ -27,13 +27,25 @@ export interface DocumentVersionSummary {
   processingStatus: ProcessingStatus;
 }
 
+// Spec 008 (R1): una persona o un área referenciada por un documento, con su nombre y su estado
+// actuales. name es null si la API no la encontró (R12); la web muestra "—".
+export interface DocumentReference {
+  id: string;
+  name: string | null;
+  isActive: boolean;
+}
+
 interface DocumentFields {
   id: string;
   title: string;
   description: string | null;
   status: DocumentStatus;
   areaIds: string[];
+  // Spec 008: las mismas áreas, en el mismo orden, con nombre y estado.
+  areas: DocumentReference[];
   ownerId: string;
+  // Spec 008: el responsable, con nombre y estado.
+  owner: DocumentReference;
   // YYYY-MM-DD, sin hora: no pasar por new Date (se correría un día en Argentina).
   reviewDate: string;
   createdById: string;
@@ -55,6 +67,8 @@ export interface DocumentReview {
   // null si nunca se revisó.
   lastReviewedAt: string | null;
   lastReviewedById: string | null;
+  // Spec 008: quien hizo la última revisión, con nombre y estado; null si nunca se revisó.
+  lastReviewedBy: DocumentReference | null;
 }
 
 // Detalle y respuesta 201 de la carga.
@@ -97,6 +111,8 @@ export interface UploadDocumentValues {
 // Spec 003: una fila del historial (plan 003, 1.4), de la más nueva a la más vieja.
 export interface VersionHistoryItem extends DocumentVersionResponse {
   uploadedById: string;
+  // Spec 008 (P3): quien subió la versión, con nombre y estado.
+  uploadedBy: DocumentReference;
 }
 
 export interface VersionHistoryResponse {

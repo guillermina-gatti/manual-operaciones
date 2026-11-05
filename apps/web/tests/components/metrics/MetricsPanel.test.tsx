@@ -14,6 +14,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   getProcedureMetrics: vi.fn(),
+  getDocuments: vi.fn(),
   useSession: vi.fn(),
   listAreas: vi.fn(),
   push: vi.fn(),
@@ -23,6 +24,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProcedureMetrics: mocks.getProcedureMetrics,
+}));
+
+vi.mock('@/lib/metrics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/metrics')>()),
+  teamCMetrics: {
+    getAssistant: () => Promise.resolve(null),
+    getDocuments: mocks.getDocuments,
+  },
 }));
 
 vi.mock('@/lib/session', async (importOriginal) => ({
@@ -60,6 +69,10 @@ beforeEach(() => {
   mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(ANA);
   mocks.getProcedureMetrics.mockResolvedValue(metricsResponse());
+  mocks.getDocuments.mockResolvedValue({
+    filters: { areaId: null, from: '2026-09-28', to: '2026-10-27' },
+    totals: { active: 12, upToDate: 8, dueSoon: 3, overdue: 1, processingFailed: 0, uploaded: 4 },
+  });
   mocks.listAreas.mockResolvedValue([
     { id: VENTAS, name: 'Ventas' },
     { id: OPERACIONES, name: 'Operaciones' },
@@ -221,6 +234,7 @@ describe('with data', () => {
     render(<MetricsPanel />);
 
     expect(mocks.getProcedureMetrics).not.toHaveBeenCalled();
+    expect(mocks.getDocuments).not.toHaveBeenCalled();
   });
 });
 
@@ -279,16 +293,26 @@ describe('empty and errors', () => {
 });
 
 describe('metrics of pair C', () => {
-  test('both cards say they are not available yet, without numbers', async () => {
+  test('the assistant card says it is not available yet, without numbers', async () => {
     render(<MetricsPanel />);
 
-    const assistant = await screen.findByRole('heading', { name: 'Asistente' });
-    const documents = screen.getByRole('heading', { name: 'Documentos' });
-    for (const heading of [assistant, documents]) {
-      const card = heading.closest('article')!;
-      expect(await within(card).findByText('Todavía no disponible.')).toBeInTheDocument();
-      expect(card.textContent).not.toMatch(/\d/);
-    }
+    const card = (await screen.findByRole('heading', { name: 'Asistente' })).closest('article')!;
+    expect(await within(card).findByText('Todavía no disponible.')).toBeInTheDocument();
+    expect(card.textContent).not.toMatch(/\d/);
+  });
+
+  test('the documents card asks with the panel filters and shows the totals', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
+    render(<MetricsPanel />);
+
+    const card = await screen.findByRole('article', { name: 'Documentos' });
+    const active = await within(card).findByText('Activos', { selector: 'dt' });
+    expect(active.nextSibling).toHaveTextContent('12');
+    expect(within(card).getByText('Del 01/10/2026 al 15/10/2026')).toBeInTheDocument();
+    expect(mocks.getDocuments).toHaveBeenCalledWith(
+      { areaId: VENTAS, from: '2026-10-01', to: '2026-10-15' },
+      expect.any(AbortSignal),
+    );
   });
 });
 

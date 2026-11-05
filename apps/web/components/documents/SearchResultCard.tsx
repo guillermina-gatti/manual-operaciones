@@ -6,14 +6,12 @@ import { MatchFragment } from './MatchFragment';
 
 interface SearchResultCardProps {
   result: DocumentSearchResult;
-  areaNames: Record<string, string>;
-  ownerName?: string;
   isAdmin: boolean;
 }
 
-export function SearchResultCard({ result, areaNames, ownerName, isAdmin }: SearchResultCardProps) {
+export function SearchResultCard({ result, isAdmin }: SearchResultCardProps) {
   return (
-    <DocumentCard document={result} areaNames={areaNames} ownerName={ownerName} isAdmin={isAdmin}>
+    <DocumentCard document={result} isAdmin={isAdmin}>
       {result.fragment && <MatchFragment fragment={result.fragment} />}
     </DocumentCard>
   );

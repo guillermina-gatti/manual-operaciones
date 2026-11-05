@@ -9,9 +9,23 @@ import {
   getAuthHeaders,
   restoreSession,
   useSession,
-} from '@/lib/session';
+} from '@/lib/session/simulated-session';
 import { fakeAuthApi } from '../../support/session';
 import type { FakeAuthApi } from '../../support/session';
+
+const sessionMock = vi.hoisted(() => ({
+  realAuth: false,
+}));
+
+vi.mock('@/lib/session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session')>();
+  return {
+    ...actual,
+    get REAL_AUTH_ENABLED() {
+      return sessionMock.realAuth;
+    },
+  };
+});
 
 // Muestra quién es el usuario de la sesión, para comprobar que el selector la cambia.
 function CurrentUser() {
@@ -33,6 +47,7 @@ const combobox = () => screen.getByRole('combobox', { name: 'Usuario de prueba' 
 let api: FakeAuthApi;
 
 beforeEach(async () => {
+  sessionMock.realAuth = false;
   localStorage.clear();
   api = fakeAuthApi();
   vi.stubGlobal('fetch', api.fetch);
@@ -44,9 +59,24 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('en producción', () => {
-  test('no se renderiza nada, aunque haya un usuario de prueba guardado', () => {
+describe('en producción o con sesión real activa', () => {
+  test('no se renderiza nada en producción, aunque haya un usuario de prueba guardado', () => {
     vi.stubEnv('NODE_ENV', 'production');
+    localStorage.setItem(SIM_SESSION_KEY, FIXTURE_USERS.admin.id);
+
+    const { container } = render(
+      <SessionProvider>
+        <DevSessionSwitcher />
+      </SessionProvider>,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Elegí un usuario de prueba')).not.toBeInTheDocument();
+  });
+
+  test('no se renderiza nada si REAL_AUTH_ENABLED está activo (por defecto)', () => {
+    sessionMock.realAuth = true;
     localStorage.setItem(SIM_SESSION_KEY, FIXTURE_USERS.admin.id);
 
     const { container } = render(
@@ -61,7 +91,7 @@ describe('en producción', () => {
   });
 });
 
-describe('en desarrollo', () => {
+describe('en desarrollo con sesión simulada', () => {
   test('lista "Sin sesión" y los usuarios de los fixtures con su rol', () => {
     renderSwitcher();
 

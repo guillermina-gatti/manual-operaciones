@@ -25,7 +25,7 @@ describe('createUnavailableTeamCMetrics', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  test('is the adapter the panel uses for now', async () => {
+  test('is still what the panel uses for the assistant', async () => {
     await expect(teamCMetrics.getAssistant({})).resolves.toBeNull();
   });
 });

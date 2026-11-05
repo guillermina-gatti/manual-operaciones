@@ -5,6 +5,7 @@ import { DocumentDetail } from '@/components/documents/DocumentDetail';
 import type { DocumentResponse, ProcessingStatus } from '@/lib/api';
 import { ApiError } from '@/lib/api';
 import type { SessionState } from '@/lib/session';
+import { referencesOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
@@ -56,6 +57,7 @@ function documentWith(changes: Partial<DocumentResponse> = {}, processingStatus:
     status: 'ACTIVE',
     areaIds: [VENTAS],
     ownerId: SERGIO,
+    ...referencesOf(SERGIO, [VENTAS]),
     reviewDate: '2027-03-01',
     createdById: ADMIN.user!.id,
     createdAt: '2026-10-23T15:00:00.000Z',

@@ -108,6 +108,20 @@ describe('areaOptions', () => {
     ]);
   });
 
+  test('an inactive area is labeled "(inactiva)"', () => {
+    const areas = [AREAS[0], { ...AREAS[1], isActive: false }];
+
+    expect(areaOptions(true, areas, null, null)).toEqual([
+      { value: '', label: 'Todas' },
+      { value: VENTAS, label: 'Ventas' },
+      { value: OPERACIONES, label: 'Operaciones (inactiva)' },
+    ]);
+    expect(areaOptions(false, areas, [VENTAS], OPERACIONES).at(-1)).toEqual({
+      value: OPERACIONES,
+      label: 'Operaciones (inactiva)',
+    });
+  });
+
   test('a selected area without a known name stays in the list', () => {
     const unknown = '0a000000-0000-4000-8000-000000000099';
 

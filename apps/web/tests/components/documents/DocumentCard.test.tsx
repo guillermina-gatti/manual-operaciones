@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { DocumentCard } from '@/components/documents/DocumentCard';
 import type { DocumentSummary, ReviewStatus } from '@/lib/api';
+import { areaRef, personRef, referencesOf } from '../../support/documents';
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
 const OPERACIONES = '0a000000-0000-4000-8000-000000000002';
@@ -13,6 +14,7 @@ const DOCUMENT: DocumentSummary = {
   status: 'ACTIVE',
   areaIds: [VENTAS, OPERACIONES],
   ownerId: '0b000000-0000-4000-8000-000000000002',
+  ...referencesOf('0b000000-0000-4000-8000-000000000002', [VENTAS, OPERACIONES]),
   reviewDate: '2027-03-01',
   createdById: '0b000000-0000-4000-8000-000000000001',
   createdAt: '2026-10-23T15:00:00.000Z',
@@ -25,18 +27,8 @@ const DOCUMENT: DocumentSummary = {
   },
 };
 
-const AREA_NAMES = { [VENTAS]: 'Ventas', [OPERACIONES]: 'Operaciones' };
-
 function renderCard(props: Partial<Parameters<typeof DocumentCard>[0]> = {}) {
-  return render(
-    <DocumentCard
-      document={DOCUMENT}
-      areaNames={AREA_NAMES}
-      ownerName="Sergio Supervisor de Ventas"
-      isAdmin={false}
-      {...props}
-    />,
-  );
+  return render(<DocumentCard document={DOCUMENT} isAdmin={false} {...props} />);
 }
 
 // El valor (dd) que acompaña a una etiqueta (dt) de la tarjeta.
@@ -70,16 +62,36 @@ describe('datos de la tarjeta (F7)', () => {
     expect(screen.getByText('manual-de-caja.pdf')).toBeInTheDocument();
   });
 
-  test('sin el nombre del responsable muestra "—"', () => {
-    renderCard({ ownerName: undefined });
+  test('spec 008, E10: un responsable que la API no encontró se muestra "—"', () => {
+    renderCard({
+      document: { ...DOCUMENT, owner: { id: DOCUMENT.ownerId, name: null, isActive: false } },
+    });
 
-    expect(valueOf('Responsable')).toHaveTextContent('—');
+    expect(valueOf('Responsable')).toHaveTextContent(/^—$/);
   });
 
   test('un área sin nombre se muestra como "—"', () => {
-    renderCard({ areaNames: { [VENTAS]: 'Ventas' } });
+    renderCard({
+      document: {
+        ...DOCUMENT,
+        areas: [areaRef(VENTAS), { id: OPERACIONES, name: null, isActive: false }],
+      },
+    });
 
     expect(valueOf('Áreas')).toHaveTextContent('Ventas, —');
+  });
+
+  test('spec 008, E3 y E4: responsable inactivo y área inactiva, con la palabra (F2)', () => {
+    renderCard({
+      document: {
+        ...DOCUMENT,
+        owner: personRef(DOCUMENT.ownerId, false),
+        areas: [areaRef(VENTAS), areaRef(OPERACIONES, false)],
+      },
+    });
+
+    expect(valueOf('Responsable')).toHaveTextContent('Sergio Supervisor de Ventas (inactivo)');
+    expect(valueOf('Áreas')).toHaveTextContent('Ventas, Operaciones (inactiva)');
   });
 });
 
@@ -137,7 +149,7 @@ describe('etiqueta "Archivado"', () => {
 describe('etiqueta del estado de revisión (F1)', () => {
   const withReview = (status: ReviewStatus | null): DocumentSummary => ({
     ...DOCUMENT,
-    review: { status, lastReviewedAt: null, lastReviewedById: null },
+    review: { status, lastReviewedAt: null, lastReviewedById: null, lastReviewedBy: null },
   });
 
   test('E1: por vencer → "Vence pronto", en la cabecera junto al título', () => {

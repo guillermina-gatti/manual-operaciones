@@ -10,10 +10,29 @@ import type {
   DocumentVersionRecord,
   VersionHistoryRecord,
 } from '../documents.repository';
+import type { ReferenceLookup } from '../document-references';
 import type {
   DocumentReviewInfo as ReviewInfo,
   ReviewStatus,
 } from '../review-status';
+
+// Spec 008 (R1, R3, R12): una persona o un área, con su nombre y su estado actuales. Solo estos tres
+// campos: nada más del directorio (rol, áreas) llega a la respuesta.
+export class DocumentReferenceResponse {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'Ana Pérez',
+    description: 'null si el directorio no la encontró (R12)',
+  })
+  name: string | null;
+
+  @ApiProperty({ example: true })
+  isActive: boolean;
+}
 
 // Forma de la respuesta del plan 3.1. storageKey y checksum son internos y no forman parte de ella.
 export class DocumentVersionResponse {
@@ -64,6 +83,10 @@ export class DocumentVersionSummary {
 export class VersionHistoryItem extends DocumentVersionResponse {
   @ApiProperty({ format: 'uuid' })
   uploadedById: string;
+
+  // Spec 008 (P3): quién la subió, con nombre y estado. uploadedById sigue (P1).
+  @ApiProperty({ type: DocumentReferenceResponse })
+  uploadedBy: DocumentReferenceResponse;
 }
 
 // Spec 005 (plan 2.1): el estado de revisión y la última revisión. Solo lo recibe el ADMIN o el
@@ -86,6 +109,10 @@ export class DocumentReviewInfo implements ReviewInfo {
 
   @ApiProperty({ type: String, format: 'uuid', nullable: true })
   lastReviewedById: string | null;
+
+  // Spec 008 (P2): quien hizo la última revisión, con nombre y estado; null si nunca se revisó.
+  @ApiProperty({ type: DocumentReferenceResponse, nullable: true })
+  lastReviewedBy: DocumentReferenceResponse | null;
 }
 
 class DocumentFields {
@@ -104,8 +131,16 @@ class DocumentFields {
   @ApiProperty({ type: [String], format: 'uuid' })
   areaIds: string[];
 
+  // Spec 008 (R1, P1): las mismas áreas, en el orden de areaIds, con nombre y estado.
+  @ApiProperty({ type: [DocumentReferenceResponse] })
+  areas: DocumentReferenceResponse[];
+
   @ApiProperty({ format: 'uuid' })
   ownerId: string;
+
+  // Spec 008 (R1, P1): el responsable, con nombre y estado.
+  @ApiProperty({ type: DocumentReferenceResponse })
+  owner: DocumentReferenceResponse;
 
   @ApiProperty({ format: 'date', example: '2027-03-01' })
   reviewDate: string;
@@ -171,9 +206,11 @@ const toDateOnly = (date: Date) => date.toISOString().slice(0, 10);
 
 // Campo por campo, nunca `...record`: un campo interno nuevo del repositorio no llega a la respuesta.
 // La última revisión del registro solo sale dentro de `review`, y `review` solo si viene (spec 005, D6).
+// Spec 008 (PD2): refs es obligatorio, así ninguna respuesta sale sin nombres por olvido.
 function toDocumentFields(
   record: DocumentRecord,
-  review?: DocumentReviewInfo,
+  refs: ReferenceLookup,
+  review?: ReviewInfo,
 ): Omit<DocumentResponse, 'currentVersion'> {
   return {
     id: record.id,
@@ -181,7 +218,9 @@ function toDocumentFields(
     description: record.description ?? null,
     status: record.status,
     areaIds: [...record.areaIds],
+    areas: record.areaIds.map((id) => refs.area(id)),
     ownerId: record.ownerId,
+    owner: refs.user(record.ownerId),
     reviewDate: toDateOnly(record.reviewDate),
     createdById: record.createdById,
     createdAt: record.createdAt.toISOString(),
@@ -191,6 +230,9 @@ function toDocumentFields(
         status: review.status,
         lastReviewedAt: review.lastReviewedAt,
         lastReviewedById: review.lastReviewedById,
+        lastReviewedBy: review.lastReviewedById
+          ? refs.user(review.lastReviewedById)
+          : null,
       },
     }),
   };
@@ -225,16 +267,18 @@ function toVersionSummary(
 
 export function toDocumentResponse(
   record: DocumentRecord,
-  review?: DocumentReviewInfo,
+  refs: ReferenceLookup,
+  review?: ReviewInfo,
 ): DocumentResponse {
   return {
-    ...toDocumentFields(record, review),
+    ...toDocumentFields(record, refs, review),
     currentVersion: toVersionResponse(record.currentVersion),
   };
 }
 
 export function toVersionHistoryItem(
   version: VersionHistoryRecord,
+  refs: ReferenceLookup,
 ): VersionHistoryItem {
   return {
     id: version.id,
@@ -245,16 +289,18 @@ export function toVersionHistoryItem(
     sizeBytes: version.sizeBytes,
     processingStatus: version.processingStatus,
     uploadedById: version.uploadedById,
+    uploadedBy: refs.user(version.uploadedById),
     createdAt: version.createdAt.toISOString(),
   };
 }
 
 export function toDocumentSummary(
   record: DocumentRecord,
-  review?: DocumentReviewInfo,
+  refs: ReferenceLookup,
+  review?: ReviewInfo,
 ): DocumentSummary {
   return {
-    ...toDocumentFields(record, review),
+    ...toDocumentFields(record, refs, review),
     currentVersion: toVersionSummary(record.currentVersion),
   };
 }
@@ -263,10 +309,11 @@ export function toDocumentSummary(
 export function toDocumentSearchResult(
   record: DocumentRecord,
   fragment: SearchFragment | null,
-  review?: DocumentReviewInfo,
+  refs: ReferenceLookup,
+  review?: ReviewInfo,
 ): DocumentSearchResult {
   return {
-    ...toDocumentFields(record, review),
+    ...toDocumentFields(record, refs, review),
     currentVersion: toVersionSummary(record.currentVersion),
     fragment,
   };

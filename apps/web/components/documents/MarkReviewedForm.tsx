@@ -4,7 +4,7 @@
 // mañana en Buenos Aires (R7), y el botón. Ante un error no se pierde la fecha elegida.
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
+import { BUTTON_PRIMARY } from './design';
 import { describeApiError, markReviewed } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
 import { validateReviewDate } from '@/lib/documents/validate-upload';
@@ -68,9 +68,9 @@ export function MarkReviewedForm({ documentId, onDone }: MarkReviewedFormProps) 
             if (attempted) setError(validate(next));
           }}
         />
-        <Button type="submit" disabled={submitting} aria-busy={submitting}>
+        <button type="submit" className={BUTTON_PRIMARY} disabled={submitting} aria-busy={submitting}>
           {submitting ? 'Guardando…' : 'Marcar como revisado'}
-        </Button>
+        </button>
       </div>
 
       {submitError && <FormErrorBanner message={submitError} />}

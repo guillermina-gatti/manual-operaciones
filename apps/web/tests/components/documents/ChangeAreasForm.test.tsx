@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ChangeAreasForm } from '@/components/documents/ChangeAreasForm';
@@ -7,6 +7,7 @@ import type { DocumentResponse } from '@/lib/api';
 import { createFakeAreasDirectory } from '@/lib/directory/fake-areas-directory';
 import { createFakeUsersDirectory } from '@/lib/directory/fake-users-directory';
 import { AREA_IDS, FIXTURE_USERS } from '@/lib/directory/fixtures';
+import { areaRef, personRef, referencesOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   changeAreas: vi.fn(),
@@ -34,6 +35,7 @@ const DOCUMENT: DocumentResponse = {
   status: 'ACTIVE',
   areaIds: [AREA_IDS.ventas],
   ownerId: FIXTURE_USERS.supervisorVentas.id,
+  ...referencesOf(FIXTURE_USERS.supervisorVentas.id, [AREA_IDS.ventas]),
   reviewDate: '2027-03-01',
   createdById: FIXTURE_USERS.admin.id,
   createdAt: '2026-10-23T15:00:00.000Z',
@@ -93,7 +95,9 @@ describe('ChangeAreasForm (spec 003, R3 a R5; plan 003, 6.2)', () => {
     const onDone = await renderForm();
 
     await moveToOperaciones(user);
-    await waitFor(() => expect(ownerSelect().value).toBe(''));
+    await waitFor(() =>
+      expect(within(ownerSelect()).getByRole('option', { name: /Emilio/ })).toBeInTheDocument(),
+    );
     await user.selectOptions(ownerSelect(), FIXTURE_USERS.supervisorOperaciones.id);
     await user.click(saveButton());
 
@@ -107,26 +111,112 @@ describe('ChangeAreasForm (spec 003, R3 a R5; plan 003, 6.2)', () => {
     );
   });
 
-  test('E6: el responsable de Ventas se borra con el aviso y no se puede enviar sin elegir otro', async () => {
+  // Spec 008 (P5, F4): antes el formulario borraba al responsable actual (E6 de la spec 003). Ahora
+  // lo conserva y es la API la que rechaza si perdió el acceso (R6); el error queda en el campo.
+  test('E6 y spec 008, E16: el responsable actual no se borra; el 400 de la API queda en el campo', async () => {
+    mocks.changeAreas.mockRejectedValue(
+      new ApiError(400, ['ownerId: el responsable no comparte ningún área con el documento']),
+    );
     const user = userEvent.setup();
     await renderForm();
 
     await moveToOperaciones(user);
-
+    await waitFor(() =>
+      expect(within(ownerSelect()).getByRole('option', { name: /Emilio/ })).toBeInTheDocument(),
+    );
+    expect(ownerSelect().value).toBe(FIXTURE_USERS.supervisorVentas.id);
     expect(
-      await screen.findByText('El responsable elegido no tiene acceso a las áreas nuevas. Elegí otro'),
-    ).toBeInTheDocument();
-    expect(ownerSelect().value).toBe('');
+      screen.queryByText('El responsable elegido no tiene acceso a las áreas nuevas. Elegí otro'),
+    ).not.toBeInTheDocument();
 
     await user.click(saveButton());
 
-    expect(await screen.findByText('Elegí un responsable.')).toBeInTheDocument();
-    expect(mocks.changeAreas).not.toHaveBeenCalled();
+    expect(mocks.changeAreas).toHaveBeenCalledWith(ID, { areaIds: [AREA_IDS.operaciones] });
+    expect(
+      await screen.findByText(
+        'El responsable tiene que pertenecer a alguna de las áreas elegidas, o ser administrador.',
+      ),
+    ).toBeInTheDocument();
+    expect(ownerSelect()).toHaveAttribute('aria-invalid', 'true');
+    expect(ownerSelect().value).toBe(FIXTURE_USERS.supervisorVentas.id);
+  });
+
+  describe('spec 008: responsable inactivo y áreas inactivas', () => {
+    const COMPRAS = '0a000000-0000-4000-8000-000000000003';
+    const ANA = '0b000000-0000-4000-8000-000000000098';
+    // Un documento de Ventas y Compras (inactiva), con una responsable inactiva.
+    const WITH_INACTIVE: DocumentResponse = {
+      ...DOCUMENT,
+      areaIds: [AREA_IDS.ventas, COMPRAS],
+      areas: [areaRef(AREA_IDS.ventas), { id: COMPRAS, name: 'Compras', isActive: false }],
+      ownerId: ANA,
+      owner: { id: ANA, name: 'Ana Pérez', isActive: false },
+    };
+
+    beforeEach(async () => {
+      const catalog = await areas.listAreas();
+      mocks.listAreas.mockResolvedValue([...catalog, { id: COMPRAS, name: 'Compras', isActive: false }]);
+    });
+
+    test('E19: la responsable inactiva aparece elegida y, sin cambiarla, no se manda ownerId', async () => {
+      const user = userEvent.setup();
+      await renderForm(WITH_INACTIVE);
+
+      expect(ownerSelect().value).toBe(ANA);
+      expect(within(ownerSelect()).getByRole('option', { name: 'Ana Pérez (inactivo)' })).toBeInTheDocument();
+
+      await user.click(checkbox('Operaciones'));
+      await waitFor(() =>
+        expect(within(ownerSelect()).getByRole('option', { name: /Emilio/ })).toBeInTheDocument(),
+      );
+      expect(ownerSelect().value).toBe(ANA);
+      await user.click(saveButton());
+
+      await waitFor(() => expect(mocks.changeAreas).toHaveBeenCalledTimes(1));
+      expect(mocks.changeAreas).toHaveBeenCalledWith(ID, {
+        areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones, COMPRAS],
+      });
+    });
+
+    test('E20: elegir un candidato activo manda el ownerId nuevo', async () => {
+      const user = userEvent.setup();
+      await renderForm(WITH_INACTIVE);
+
+      await user.selectOptions(ownerSelect(), FIXTURE_USERS.supervisorVentas.id);
+      await user.click(saveButton());
+
+      await waitFor(() => expect(mocks.changeAreas).toHaveBeenCalledTimes(1));
+      expect(mocks.changeAreas).toHaveBeenCalledWith(ID, {
+        areaIds: [AREA_IDS.ventas, COMPRAS],
+        ownerId: FIXTURE_USERS.supervisorVentas.id,
+      });
+    });
+
+    test('E21: los candidatos se piden solo con las áreas activas', async () => {
+      await renderForm(WITH_INACTIVE);
+
+      expect(mocks.listOwnerCandidates).toHaveBeenCalledWith([AREA_IDS.ventas]);
+      expect(mocks.listOwnerCandidates).not.toHaveBeenCalledWith(expect.arrayContaining([COMPRAS]));
+    });
+
+    test('E21: sin áreas activas no pide candidatos, conserva a la responsable y lo explica', async () => {
+      const user = userEvent.setup();
+      await renderForm(WITH_INACTIVE);
+      mocks.listOwnerCandidates.mockClear();
+
+      await user.click(checkbox('Ventas'));
+
+      expect(
+        await screen.findByText('Para elegir otro responsable, marcá al menos un área activa'),
+      ).toBeInTheDocument();
+      expect(ownerSelect().value).toBe(ANA);
+      expect(mocks.listOwnerCandidates).not.toHaveBeenCalled();
+    });
   });
 
   test('con el mismo responsable válido, no manda ownerId', async () => {
     const user = userEvent.setup();
-    await renderForm({ ...DOCUMENT, ownerId: FIXTURE_USERS.admin.id });
+    await renderForm({ ...DOCUMENT, ownerId: FIXTURE_USERS.admin.id, owner: personRef(FIXTURE_USERS.admin.id) });
 
     await moveToOperaciones(user);
     await user.click(saveButton());
@@ -150,7 +240,7 @@ describe('ChangeAreasForm (spec 003, R3 a R5; plan 003, 6.2)', () => {
     async function submitOperacionesWithError(error: ApiError) {
       mocks.changeAreas.mockRejectedValue(error);
       const user = userEvent.setup();
-      const onDone = await renderForm({ ...DOCUMENT, ownerId: FIXTURE_USERS.admin.id });
+      const onDone = await renderForm({ ...DOCUMENT, ownerId: FIXTURE_USERS.admin.id, owner: personRef(FIXTURE_USERS.admin.id) });
       await moveToOperaciones(user);
       await user.click(saveButton());
       return onDone;
@@ -197,7 +287,7 @@ describe('ChangeAreasForm (spec 003, R3 a R5; plan 003, 6.2)', () => {
     let resolve: (value: DocumentResponse) => void = () => {};
     mocks.changeAreas.mockReturnValue(new Promise((done) => (resolve = done)));
     const user = userEvent.setup();
-    await renderForm({ ...DOCUMENT, ownerId: FIXTURE_USERS.admin.id });
+    await renderForm({ ...DOCUMENT, ownerId: FIXTURE_USERS.admin.id, owner: personRef(FIXTURE_USERS.admin.id) });
 
     await moveToOperaciones(user);
     await user.dblClick(saveButton());

@@ -15,6 +15,21 @@ const REQUIRED_INDEXES = [
   'document_versions_one_current_idx',
 ];
 
+// Spec 011 (plan 011, 1.1 y 1.4): los índices de la tabla de alertas los genera Prisma; los CHECK no,
+// van escritos a mano al final de add_document_conflict_alerts (plan 011, 1.3).
+const CONFLICT_ALERT_INDEXES = [
+  'document_conflict_alerts_version_a_id_version_b_id_key',
+  'document_conflict_alerts_status_last_detected_at_idx',
+  'document_conflict_alerts_status_resolved_at_idx',
+  'document_conflict_alerts_document_a_id_idx',
+  'document_conflict_alerts_document_b_id_idx',
+];
+const CONFLICT_ALERT_CHECKS = [
+  'document_conflict_alerts_occurrences_check',
+  'document_conflict_alerts_pair_order_check',
+  'document_conflict_alerts_resolution_check',
+];
+
 describe('Índices de la base (integración)', () => {
   let prisma: PrismaService;
 
@@ -122,5 +137,160 @@ describe('Índices de la base (integración)', () => {
       where: { status: 'CURRENT' },
     });
     expect(current).toBe(2);
+  });
+
+  // Spec 011 (sección 7.1, E18; plan 011, 1.4). cleanDocuments vacía también esta tabla, por sus FK
+  // a documents y document_versions con ON DELETE CASCADE.
+  describe('Alertas de contradicciones (spec 011)', () => {
+    interface AlertRow {
+      documentAId: string;
+      documentBId: string;
+      versionAId: string;
+      versionBId: string;
+      status: 'OPEN' | 'RESOLVED';
+      occurrences: number;
+      resolvedAt: Date | null;
+      resolvedById: string | null;
+      resolutionNote: string | null;
+    }
+
+    // Dos documentos sembrados, con A el de id menor (R11): uuid < uuid ordena como el texto en minúsculas.
+    async function seedPair(): Promise<AlertRow> {
+      const [a, b] = [
+        await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] }),
+        await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] }),
+      ].sort((x, y) => (x.id < y.id ? -1 : 1));
+      return {
+        documentAId: a.id,
+        documentBId: b.id,
+        versionAId: a.versionId,
+        versionBId: b.versionId,
+        status: 'OPEN',
+        occurrences: 1,
+        resolvedAt: null,
+        resolvedById: null,
+        resolutionNote: null,
+      };
+    }
+
+    // Inserta con SQL, sin pasar por el código: así se prueban las restricciones de la base.
+    function insertAlert(row: AlertRow) {
+      return prisma.$executeRaw`
+        INSERT INTO document_conflict_alerts
+          (id, document_a_id, document_b_id, version_a_id, version_b_id, chunk_a_id, chunk_b_id,
+           message_id, question, status, occurrences, resolved_at, resolved_by_id, resolution_note)
+        VALUES
+          (${randomUUID()}::uuid, ${row.documentAId}::uuid, ${row.documentBId}::uuid,
+           ${row.versionAId}::uuid, ${row.versionBId}::uuid, ${randomUUID()}::uuid,
+           ${randomUUID()}::uuid, ${randomUUID()}::uuid, '¿Quién aprueba una compra?',
+           ${row.status}::"ConflictAlertStatus", ${row.occurrences}, ${row.resolvedAt},
+           ${row.resolvedById}::uuid, ${row.resolutionNote})
+      `;
+    }
+
+    async function countAlerts(): Promise<number> {
+      const [row] = await prisma.$queryRaw<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM document_conflict_alerts
+      `;
+      return row.count;
+    }
+
+    it('existen los índices de la tabla', async () => {
+      const rows = await prisma.$queryRaw<{ indexname: string }[]>`
+        SELECT indexname FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND indexname::text = ANY(${CONFLICT_ALERT_INDEXES}::text[])
+      `;
+
+      expect(rows.map((row) => row.indexname).sort()).toEqual(
+        [...CONFLICT_ALERT_INDEXES].sort(),
+      );
+    });
+
+    it('existen los tres CHECK escritos a mano, y ningún otro', async () => {
+      const rows = await prisma.$queryRaw<{ conname: string }[]>`
+        SELECT conname::text FROM pg_constraint
+        WHERE conrelid = 'document_conflict_alerts'::regclass AND contype = 'c'
+        ORDER BY conname
+      `;
+
+      expect(rows.map((row) => row.conname)).toEqual(CONFLICT_ALERT_CHECKS);
+    });
+
+    it('acepta una alerta abierta y una resuelta, con el par en orden', async () => {
+      const open = await seedPair();
+      const resolved = await seedPair();
+
+      await insertAlert(open);
+      await insertAlert({
+        ...resolved,
+        status: 'RESOLVED',
+        resolvedAt: new Date('2026-11-05T15:00:00.000Z'),
+        resolvedById: FIXTURE_USERS.admin.id,
+        resolutionNote: 'Corregida la política en la v2',
+      });
+
+      expect(await countAlerts()).toBe(2);
+    });
+
+    it('R11: rechaza el par al revés', async () => {
+      const row = await seedPair();
+
+      await expect(
+        insertAlert({
+          ...row,
+          documentAId: row.documentBId,
+          documentBId: row.documentAId,
+          versionAId: row.versionBId,
+          versionBId: row.versionAId,
+        }),
+      ).rejects.toThrow(/document_conflict_alerts_pair_order_check/);
+    });
+
+    it('R2: rechaza el mismo documento en A y en B', async () => {
+      const row = await seedPair();
+
+      await expect(
+        insertAlert({ ...row, documentBId: row.documentAId }),
+      ).rejects.toThrow(/document_conflict_alerts_pair_order_check/);
+    });
+
+    it('R15: rechaza una resuelta sin fecha', async () => {
+      const row = await seedPair();
+
+      await expect(
+        insertAlert({
+          ...row,
+          status: 'RESOLVED',
+          resolvedById: FIXTURE_USERS.admin.id,
+        }),
+      ).rejects.toThrow(/document_conflict_alerts_resolution_check/);
+    });
+
+    it('R15: rechaza una abierta con quién la resolvió', async () => {
+      const row = await seedPair();
+
+      await expect(
+        insertAlert({ ...row, resolvedById: FIXTURE_USERS.admin.id }),
+      ).rejects.toThrow(/document_conflict_alerts_resolution_check/);
+    });
+
+    it('R13: rechaza occurrences en 0', async () => {
+      const row = await seedPair();
+
+      await expect(insertAlert({ ...row, occurrences: 0 })).rejects.toThrow(
+        /document_conflict_alerts_occurrences_check/,
+      );
+    });
+
+    it('R13: rechaza una segunda alerta con el mismo par de versiones', async () => {
+      const row = await seedPair();
+      await insertAlert(row);
+
+      await expect(insertAlert(row)).rejects.toThrow(
+        /document_conflict_alerts_version_a_id_version_b_id_key/,
+      );
+      expect(await countAlerts()).toBe(1);
+    });
   });
 });

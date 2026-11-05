@@ -48,8 +48,13 @@ const optionNames = () =>
   within(select())
     .getAllByRole('option')
     .map((option) => option.textContent);
+// Habilitado y con opciones: con currentOwner (spec 008), el responsable actual ya es una opción
+// antes de que lleguen los candidatos, así que contar opciones solo no alcanza.
 const waitForCandidates = () =>
-  waitFor(() => expect(within(select()).getAllByRole('option').length).toBeGreaterThan(1));
+  waitFor(() => {
+    expect(select()).toBeEnabled();
+    expect(within(select()).getAllByRole('option').length).toBeGreaterThan(1);
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -217,5 +222,120 @@ describe('error del directorio', () => {
 
     await waitForCandidates();
     expect(mocks.listOwnerCandidates).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Spec 008 (T11; F4, F6; PD9): al cambiar las áreas, el responsable actual se conserva aunque esté
+// inactivo o no sea candidato. Las áreas que recibe OwnerField son solo las activas (PD10).
+describe('responsable actual (spec 008)', () => {
+  const ANA_INACTIVA = {
+    id: '0b000000-0000-4000-8000-000000000098',
+    name: 'Ana Pérez',
+    isActive: false,
+  };
+  const INACTIVE_HINT = 'Para elegir otro responsable, marcá al menos un área activa';
+
+  function EditHarness({
+    currentOwner = ANA_INACTIVA,
+    initialAreas = [AREA_IDS.ventas] as string[],
+  }) {
+    const [areaIds, setAreaIds] = useState<string[]>(initialAreas);
+    const [onlyInactive, setOnlyInactive] = useState(false);
+    const [owner, setOwner] = useState(currentOwner.id);
+    const [error, setError] = useState<string | undefined>();
+    return (
+      <>
+        <OwnerField
+          areaIds={areaIds}
+          value={owner}
+          error={error}
+          currentOwner={currentOwner}
+          onlyInactiveAreas={onlyInactive}
+          onChange={(id, message) => {
+            setOwner(id);
+            setError(message);
+          }}
+        />
+        <p data-testid="responsable">{owner || 'ninguno'}</p>
+        <button type="button" onClick={() => setAreaIds([AREA_IDS.operaciones])}>
+          Solo Operaciones
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAreaIds([]);
+            setOnlyInactive(true);
+          }}
+        >
+          Solo inactivas
+        </button>
+      </>
+    );
+  }
+
+  test('E19: el responsable inactivo aparece elegido, con "(inactivo)"', async () => {
+    render(<EditHarness />);
+    await waitForCandidates();
+
+    expect(select()).toHaveValue(ANA_INACTIVA.id);
+    expect(optionNames()).toContain('Ana Pérez (inactivo)');
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  test('E19: al cambiar las áreas y llegar los candidatos, no se borra', async () => {
+    const user = userEvent.setup();
+    render(<EditHarness />);
+    await waitForCandidates();
+
+    await user.click(screen.getByRole('button', { name: 'Solo Operaciones' }));
+    await waitFor(() => expect(optionNames()).toContain('Emilio Empleado de Operaciones (Empleado)'));
+
+    expect(screen.getByTestId('responsable')).toHaveTextContent(ANA_INACTIVA.id);
+    expect(select()).toHaveValue(ANA_INACTIVA.id);
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  test('P5: el responsable actual activo que deja de ser candidato tampoco se borra', async () => {
+    const user = userEvent.setup();
+    const sergio = { id: FIXTURE_USERS.supervisorVentas.id, name: 'Sergio Supervisor de Ventas', isActive: true };
+    render(<EditHarness currentOwner={sergio} />);
+    await waitForCandidates();
+
+    await user.click(screen.getByRole('button', { name: 'Solo Operaciones' }));
+    await waitFor(() => expect(optionNames()).toContain('Emilio Empleado de Operaciones (Empleado)'));
+
+    expect(select()).toHaveValue(sergio.id);
+    expect(optionNames()).toContain('Sergio Supervisor de Ventas');
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  test('E20: se puede elegir otro, y un candidato elegido que deja de serlo sí se borra (PD9)', async () => {
+    const user = userEvent.setup();
+    render(<EditHarness />);
+    await waitForCandidates();
+
+    await user.selectOptions(select(), 'Sergio Supervisor de Ventas (Supervisor)');
+    expect(screen.getByTestId('responsable')).toHaveTextContent(FIXTURE_USERS.supervisorVentas.id);
+
+    await user.click(screen.getByRole('button', { name: 'Solo Operaciones' }));
+
+    await waitFor(() => expect(screen.getByTestId('responsable')).toHaveTextContent('ninguno'));
+    expect(select()).toHaveAccessibleDescription(NOTICE);
+    // El responsable actual sigue entre las opciones, para volver a elegirlo.
+    expect(optionNames()).toContain('Ana Pérez (inactivo)');
+  });
+
+  test('E21: sin áreas activas, no pide candidatos, conserva al actual y lo explica', async () => {
+    const user = userEvent.setup();
+    render(<EditHarness />);
+    await waitForCandidates();
+    mocks.listOwnerCandidates.mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Solo inactivas' }));
+
+    expect(screen.getByText(INACTIVE_HINT)).toBeInTheDocument();
+    expect(screen.queryByText('Elegí primero las áreas')).not.toBeInTheDocument();
+    expect(select()).toHaveValue(ANA_INACTIVA.id);
+    expect(mocks.listOwnerCandidates).not.toHaveBeenCalled();
   });
 });

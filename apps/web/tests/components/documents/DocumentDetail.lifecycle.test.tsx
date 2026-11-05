@@ -9,6 +9,7 @@ import { createFakeAreasDirectory } from '@/lib/directory/fake-areas-directory';
 import { createFakeUsersDirectory } from '@/lib/directory/fake-users-directory';
 import { AREA_IDS, FIXTURE_USERS } from '@/lib/directory/fixtures';
 import type { SessionState } from '@/lib/session';
+import { referencesOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
@@ -63,6 +64,7 @@ const ACTIVE: DocumentResponse = {
   status: 'ACTIVE',
   areaIds: [AREA_IDS.ventas],
   ownerId: FIXTURE_USERS.admin.id,
+  ...referencesOf(FIXTURE_USERS.admin.id, [AREA_IDS.ventas]),
   reviewDate: '2027-03-01',
   createdById: FIXTURE_USERS.admin.id,
   createdAt: '2026-10-20T15:00:00.000Z',

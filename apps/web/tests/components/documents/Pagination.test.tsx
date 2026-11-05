@@ -128,4 +128,26 @@ describe('con otra ruta base', () => {
       '/documentos/por-revisar?pagina=3',
     );
   });
+
+  // Spec 011: las alertas resueltas conservan su filtro en cada página.
+  test('con extraQuery, cada enlace conserva el filtro, también la página 1', () => {
+    render(
+      <Pagination
+        currentPage={2}
+        totalItems={45}
+        pageSize={20}
+        basePath="/documentos/alertas"
+        extraQuery="estado=resueltas"
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'Anterior' })).toHaveAttribute(
+      'href',
+      '/documentos/alertas?estado=resueltas',
+    );
+    expect(screen.getByRole('link', { name: 'Siguiente' })).toHaveAttribute(
+      'href',
+      '/documentos/alertas?estado=resueltas&pagina=3',
+    );
+  });
 });

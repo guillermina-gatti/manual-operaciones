@@ -14,16 +14,18 @@ import {
 } from './support/mock-api';
 import type { ApiHandlers, Reply } from './support/mock-api';
 import { loginAs } from './support/session';
+import { reviewOf } from '../tests/support/documents';
 import type { TestUser } from './support/session';
 
 // Una fecha válida en cualquier día que corra el test.
 const FAR = '2099-05-09';
 
-const review = (status: ReviewStatus | null, lastReviewedById: string | null = null) => ({
-  status,
-  lastReviewedAt: lastReviewedById ? '2026-11-10T02:30:00.000Z' : null,
-  lastReviewedById,
-});
+const review = (status: ReviewStatus | null, lastReviewedById: string | null = null) =>
+  reviewOf({
+    status,
+    lastReviewedAt: lastReviewedById ? '2026-11-10T02:30:00.000Z' : null,
+    lastReviewedById,
+  });
 
 // Un documento de Ventas cuya responsable es la EMPLOYEE de Ventas.
 const owned = (title: string, reviewDate: string, status: ReviewStatus): DocumentResponse =>

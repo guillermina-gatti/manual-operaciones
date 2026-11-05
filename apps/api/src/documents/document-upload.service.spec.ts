@@ -85,7 +85,7 @@ const recordFrom = (data: NewDocument): DocumentRecord => ({
 
 describe('DocumentUploadService', () => {
   let events: string[];
-  let areas: { findExistingIds: jest.Mock };
+  let areas: { findByIds: jest.Mock };
   let users: { findById: jest.Mock };
   let repository: {
     findActiveByChecksum: jest.Mock;
@@ -108,9 +108,11 @@ describe('DocumentUploadService', () => {
     events = [];
 
     areas = {
-      findExistingIds: jest.fn((ids: string[]) =>
+      findByIds: jest.fn((ids: string[]) =>
         Promise.resolve(
-          ids.filter((id) => Object.values<string>(AREA_IDS).includes(id)),
+          ids
+            .filter((id) => Object.values<string>(AREA_IDS).includes(id))
+            .map((id) => ({ id, name: id, isActive: true })),
         ),
       ),
     };
@@ -211,7 +213,7 @@ describe('DocumentUploadService', () => {
         await expect(service.upload(fake, dto(), admin)).rejects.toThrow(
           UnsupportedMediaTypeException,
         );
-        expect(areas.findExistingIds).not.toHaveBeenCalled();
+        expect(areas.findByIds).not.toHaveBeenCalled();
         expect(repository.findActiveByChecksum).not.toHaveBeenCalled();
         expectNothingWritten();
       });
@@ -274,6 +276,51 @@ describe('DocumentUploadService', () => {
 
         await expect(upload).rejects.toThrow(BadRequestException);
         await expect(upload).rejects.toThrow(UNKNOWN_AREA);
+        expectNothingWritten();
+      });
+
+      it('spec 008, E11: responsable inactivo: 400 y no se guarda nada', async () => {
+        const inactive = {
+          ...FIXTURE_USERS.empleadoVentas,
+          id: '0b000000-0000-4000-8000-000000000098',
+          isActive: false,
+        };
+        users.findById.mockImplementation((id: string) =>
+          Promise.resolve(id === inactive.id ? inactive : null),
+        );
+
+        const upload = service.upload(
+          pdf(),
+          dto({ ownerId: inactive.id }),
+          admin,
+        );
+
+        await expect(upload).rejects.toThrow(
+          'ownerId: el responsable está inactivo',
+        );
+        expectNothingWritten();
+      });
+
+      it('spec 008, E12: área inactiva: 400 que la nombra y no se guarda nada', async () => {
+        areas.findByIds.mockImplementation((ids: string[]) =>
+          Promise.resolve(
+            ids.map((id) => ({
+              id,
+              name: id,
+              isActive: id !== AREA_IDS.operaciones,
+            })),
+          ),
+        );
+
+        const upload = service.upload(
+          pdf(),
+          dto({ areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones] }),
+          admin,
+        );
+
+        await expect(upload).rejects.toThrow(
+          `areaIds: están inactivas las áreas ${AREA_IDS.operaciones}`,
+        );
         expectNothingWritten();
       });
 
@@ -576,5 +623,105 @@ describe('DocumentUploadService', () => {
         longName.slice(0, 255),
       );
     });
+  });
+});
+
+// Spec 008 (T06; plan 1.4, PD5): la respuesta de la carga lleva owner y areas, buscados antes de escribir.
+describe('DocumentUploadService: referencias con nombre (spec 008)', () => {
+  let events: string[];
+  let areas: { findByIds: jest.Mock; findExistingIds: jest.Mock };
+  let users: { findById: jest.Mock };
+  let repository: {
+    findActiveByChecksum: jest.Mock;
+    runInTransaction: jest.Mock;
+    createWithFirstVersion: jest.Mock;
+  };
+  let service: DocumentUploadService;
+
+  const ventas = { id: AREA_IDS.ventas, name: 'Ventas', isActive: true };
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(NOON_IN_BUENOS_AIRES);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    events = [];
+    areas = {
+      findByIds: jest.fn(() => {
+        events.push('areas');
+        return Promise.resolve([ventas]);
+      }),
+      findExistingIds: jest.fn(),
+    };
+    users = {
+      findById: jest.fn((id: string) => {
+        events.push('users');
+        return Promise.resolve(
+          Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        );
+      }),
+    };
+    repository = {
+      findActiveByChecksum: jest.fn().mockResolvedValue(null),
+      runInTransaction: jest.fn(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          events.push('begin');
+          return fn(TX);
+        },
+      ),
+      createWithFirstVersion: jest.fn((_tx: unknown, data: NewDocument) =>
+        Promise.resolve(recordFrom(data)),
+      ),
+    };
+    service = new DocumentUploadService(
+      areas as unknown as AreasDirectory,
+      users as unknown as UsersDirectory,
+      repository as unknown as DocumentsRepository,
+      {
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+      } as unknown as FileStorage,
+      { enqueue: jest.fn().mockResolvedValue(undefined) } as ProcessingQueue,
+      { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditLog,
+    );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('E8: responde owner y areas con nombre, sin review', async () => {
+    const response = await service.upload(pdf(), dto(), admin);
+
+    expect(response.owner).toStrictEqual({
+      id: FIXTURE_USERS.supervisorVentas.id,
+      name: FIXTURE_USERS.supervisorVentas.name,
+      isActive: true,
+    });
+    expect(response.areas).toStrictEqual([ventas]);
+    expect(response).not.toHaveProperty('review');
+  });
+
+  it('PD5: los nombres se piden antes de escribir', async () => {
+    await service.upload(pdf(), dto(), admin);
+
+    expect(events.indexOf('begin')).toBeGreaterThan(
+      events.lastIndexOf('areas'),
+    );
+    expect(events.indexOf('begin')).toBeGreaterThan(
+      events.lastIndexOf('users'),
+    );
+  });
+
+  it('R13: el directorio caído al buscar los nombres es 503 y no se escribió nada', async () => {
+    // La primera llamada valida las áreas; la segunda, la de los nombres, falla.
+    areas.findByIds
+      .mockResolvedValueOnce([ventas])
+      .mockRejectedValueOnce(new RepositoryUnavailableError('caído'));
+
+    await expect(service.upload(pdf(), dto(), admin)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(repository.runInTransaction).not.toHaveBeenCalled();
+    expect(repository.createWithFirstVersion).not.toHaveBeenCalled();
   });
 });

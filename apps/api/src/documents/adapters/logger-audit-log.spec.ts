@@ -161,4 +161,32 @@ describe('LoggerAuditLog', () => {
       );
     });
   });
+
+  // Spec 011 (R16): "Marcar como resuelta" una alerta, con la alerta y sus dos documentos.
+  describe('alertas de contradicción (spec 011)', () => {
+    const ALERT_ID = '0c000000-0000-4000-8000-0000000000aa';
+    const OTHER_ID = '0c000000-0000-4000-8000-0000000000bb';
+
+    it('registra la alerta y los dos documentos', async () => {
+      await new LoggerAuditLog().record({
+        action: 'CONFLICT_ALERT_RESOLVE',
+        actorId: ADMIN_ID,
+        conflictAlertId: ALERT_ID,
+        documentId: DOCUMENT_ID,
+        relatedDocumentId: OTHER_ID,
+        result: 'SUCCESS',
+        at: AT,
+      });
+
+      expect(log).toHaveBeenCalledWith({
+        action: 'CONFLICT_ALERT_RESOLVE',
+        actorId: ADMIN_ID,
+        documentId: DOCUMENT_ID,
+        result: 'SUCCESS',
+        conflictAlertId: ALERT_ID,
+        relatedDocumentId: OTHER_ID,
+        at: '2026-10-22T12:00:00.000Z',
+      });
+    });
+  });
 });

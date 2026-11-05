@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { DocumentListSkeleton } from '@/components/documents/DocumentListSkeleton';
 import { PendingReviewList } from '@/components/documents/PendingReviewList';
+import { BACK_LINK, PageHeader } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 
 export const metadata: Metadata = {
@@ -15,14 +16,14 @@ export const metadata: Metadata = {
 
 export default function PorRevisarPage() {
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
-      <Link
-        href="/documentos"
-        className="inline-flex min-h-11 items-center self-start text-blue-700 hover:underline dark:text-blue-400"
-      >
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
+      <Link href="/documentos" className={BACK_LINK}>
         <span aria-hidden="true">←&nbsp;</span>Volver a Documentos
       </Link>
-      <h1 className="text-2xl font-semibold">Por revisar</h1>
+      <PageHeader
+        title="Por revisar"
+        subtitle="Los documentos que vencen pronto o ya vencieron."
+      />
       <Suspense
         fallback={
           <ScreenState kind="loading" label="Cargando los documentos por revisar…">

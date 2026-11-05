@@ -46,7 +46,7 @@ export class DocumentMetricsController {
   })
   @ApiResponse({
     status: 404,
-    description: 'Un SUPERVISOR pidió un área que no es suya',
+    description: 'Un SUPERVISOR pidió un área que no es suya o está inactiva',
   })
   @ApiResponse({
     status: 503,

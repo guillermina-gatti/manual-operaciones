@@ -32,7 +32,7 @@ describe('ReviewStatusBadge (F1)', () => {
 
     const overdue = screen.getByText('Vencido');
     const dueSoon = screen.getByText('Vence pronto');
-    expect(overdue.className).toMatch(/red/);
-    expect(dueSoon.className).toMatch(/amber/);
+    expect(overdue.className).toMatch(/rosa-alerta/);
+    expect(dueSoon.className).toMatch(/durazno/);
   });
 });

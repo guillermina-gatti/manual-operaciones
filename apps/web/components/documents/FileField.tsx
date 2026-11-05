@@ -8,6 +8,7 @@ import { FieldError } from '@/components/ui/FieldError';
 import { formatSize } from '@/lib/documents/format';
 import { FILE_ACCEPT } from '@/lib/documents/upload-rules';
 import { validateFile } from '@/lib/documents/validate-upload';
+import { FileBadge, HINT, LABEL } from './design';
 
 interface FileFieldProps {
   file: File | null;
@@ -29,7 +30,7 @@ export function FileField({ file, error, onChange }: FileFieldProps) {
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <label htmlFor={id} className="font-medium">
+      <label htmlFor={id} className={LABEL}>
         Archivo
       </label>
       {/* Sin value ni key: React no lo recrea al volver a dibujar, y conserva el archivo elegido (F4). */}
@@ -40,17 +41,18 @@ export function FileField({ file, error, onChange }: FileFieldProps) {
         onChange={choose}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${hintId} ${errorId}` : hintId}
-        className="min-h-11 w-full text-sm file:mr-3 file:min-h-11 file:rounded-md file:border file:border-zinc-300 file:bg-white file:px-4 file:text-zinc-900 dark:file:border-zinc-600 dark:file:bg-zinc-900 dark:file:text-zinc-100"
+        className="min-h-12 w-full rounded-xl border border-dashed border-borde bg-blanco p-2 text-sm text-texto-suave file:mr-3 file:min-h-11 file:rounded-xl file:border file:border-bosque file:bg-blanco file:px-4 file:font-semibold file:text-bosque hover:file:bg-salvia aria-[invalid=true]:border-peligro"
       />
-      <p id={hintId} className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p id={hintId} className={HINT}>
         PDF, .txt o .md, hasta 10 MB.
       </p>
       {file && (
-        <p className="flex min-w-0 gap-2 text-sm">
+        <p className="flex min-w-0 items-center gap-2 text-sm">
+          <FileBadge fileName={file.name} />
           <span title={file.name} className="truncate">
             {file.name}
           </span>
-          <span className="shrink-0 text-zinc-600 dark:text-zinc-400">{formatSize(file.size)}</span>
+          <span className="shrink-0 text-texto-suave">{formatSize(file.size)}</span>
         </p>
       )}
       <FieldError id={errorId} message={error} />

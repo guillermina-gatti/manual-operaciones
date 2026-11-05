@@ -12,6 +12,13 @@ export interface ApiClient {
   request<T>(path: string, init?: RequestInit): Promise<T>;
 }
 
+// Spec 009 (D10): el cliente con stream, para leer transmisiones (eventos SSE) con la misma sesión.
+// Es aparte de ApiClient, así quien arma un ApiClient a mano (por ejemplo, en tests) no cambia.
+export interface StreamingApiClient extends ApiClient {
+  // La respuesta sin leer si es correcta; si no, el mismo ApiError que request.
+  stream(path: string, init?: RequestInit): Promise<Response>;
+}
+
 // Prefijo obligatorio: Solo se permiten URLs relativas que pasen por el proxy de Next.js
 const API_PREFIX = '/api/';
 
@@ -19,7 +26,7 @@ const API_PREFIX = '/api/';
 export function createApiClient(
   getAuthHeaders: GetAuthHeaders,
   refreshAuth?: RefreshAuth,
-): ApiClient {
+): StreamingApiClient {
   // Hace la petición con los encabezados de autenticación del momento. Dice si llevaba alguno.
   async function send(path: string, init: RequestInit) {
     // Preparamos los encabezados HTTP
@@ -68,6 +75,28 @@ export function createApiClient(
       if (!response.ok) throw toApiError(response.status, body);
 
       return body as T;
+    },
+
+    // Spec 009 (F9): como request (prefijo, sesión, renovación tras un 401 y errores), pero una
+    // respuesta correcta se devuelve sin leer, para recorrer su cuerpo de a partes.
+    async stream(path: string, init: RequestInit = {}): Promise<Response> {
+      if (!path.startsWith(API_PREFIX)) {
+        throw new Error(`Solo se puede pedir a ${API_PREFIX}…, no a "${path}"`);
+      }
+
+      const first = await send(path, init);
+      let response = first.response;
+
+      if (response.status === 401 && first.authenticated && refreshAuth) {
+        const refreshed = await refreshAuth().catch(() => false);
+        if (refreshed) response = (await send(path, init)).response;
+      }
+
+      if (response.ok) return response;
+
+      const body = await readJson(response);
+      if (body === NOT_JSON) throw new ApiError(0);
+      throw toApiError(response.status, body);
     },
   };
 }

@@ -7,6 +7,7 @@ import type { DocumentResponse } from '@/lib/api';
 import { AREA_IDS, FIXTURE_USERS } from '@/lib/directory/fixtures';
 import { COMPANY_TIME_ZONE } from '@/lib/documents/format';
 import { tomorrowIn } from '@/lib/documents/review-date';
+import { referencesOf, reviewOf } from '../../support/documents';
 
 const mocks = vi.hoisted(() => ({ markReviewed: vi.fn() }));
 
@@ -26,15 +27,16 @@ const REVIEWED: DocumentResponse = {
   status: 'ACTIVE',
   areaIds: [AREA_IDS.ventas],
   ownerId: FIXTURE_USERS.empleadoVentas.id,
+  ...referencesOf(FIXTURE_USERS.empleadoVentas.id, [AREA_IDS.ventas]),
   reviewDate: FAR,
   createdById: FIXTURE_USERS.admin.id,
   createdAt: '2026-10-20T15:00:00.000Z',
   archivedAt: null,
-  review: {
+  review: reviewOf({
     status: 'UP_TO_DATE',
     lastReviewedAt: '2026-11-10T02:30:00.000Z',
     lastReviewedById: FIXTURE_USERS.empleadoVentas.id,
-  },
+  }),
   currentVersion: {
     id: '22222222-2222-4222-8222-222222222222',
     versionNumber: 1,

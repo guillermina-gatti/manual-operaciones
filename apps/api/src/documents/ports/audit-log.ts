@@ -4,7 +4,8 @@ export type AuditAction =
   | 'DOCUMENT_AREAS_CHANGE'
   | 'DOCUMENT_VERSION_UPLOAD'
   | 'DOCUMENT_ARCHIVE'
-  | 'DOCUMENT_REVIEW'; // "Marcar como revisado" (spec 005, R12)
+  | 'DOCUMENT_REVIEW' // "Marcar como revisado" (spec 005, R12)
+  | 'CONFLICT_ALERT_RESOLVE'; // "Marcar como resuelta" una alerta de contradicción (spec 011, R16)
 export type AuditResult = 'SUCCESS' | 'FAILURE';
 
 // Quién, qué documento, cuándo y con qué resultado (R14). Solo ids: nunca el contenido del archivo,
@@ -19,6 +20,9 @@ export interface AuditEntry {
   // "Marcar como revisado" (spec 005, R12): la fecha que tenía y la elegida, como YYYY-MM-DD.
   previousReviewDate?: string;
   newReviewDate?: string;
+  // Spec 011 (R16): la alerta resuelta y sus dos documentos (documentId es el A; este, el B).
+  conflictAlertId?: string;
+  relatedDocumentId?: string;
   at: Date;
 }
 

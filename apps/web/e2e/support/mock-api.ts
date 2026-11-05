@@ -15,6 +15,7 @@ import type {
 } from "../../lib/api";
 import { AREAS, AREA_IDS, FIXTURE_USERS } from "../../lib/directory/fixtures";
 import { filterOwnerCandidates } from "../../lib/documents/owner-candidates";
+import { personRef, referencesOf, reviewOf } from "../../tests/support/documents";
 import {
   DEV_FIXTURE_PASSWORD,
   devEmail,
@@ -27,6 +28,10 @@ export interface Reply {
   body?: unknown;
   // Para simular una respuesta lenta (por ejemplo, para ver "Cargando…").
   delayMs?: number;
+  // Spec 009 (PD12): una respuesta que no es JSON, por ejemplo eventos SSE. El cuerpo va entero:
+  // la transmisión de a partes se prueba en Vitest.
+  contentType?: string;
+  rawBody?: string;
 }
 
 // Lo que el test necesita del pedido para decidir y para comprobar.
@@ -65,7 +70,27 @@ export interface ApiHandlers {
   // Spec 005 (T23): los avisos de vencimiento. Sin `pendingReview`, ver DEFAULT_PENDING_REVIEW.
   pendingReview?: Handler; // GET /api/documents/pending-review
   markReviewed?: Handler; // POST /api/documents/:id/review
+  // Spec 009 (T14): el asistente.
+  chatStream?: Handler; // POST /api/chat/stream
+  // Spec 010 (T12): la ejecución, para el asistente de un paso. El handler recibe (id, stepId).
+  execution?: Handler; // GET /api/executions/:id
+  completeStep?: Handler; // POST /api/executions/:id/steps/:stepId/complete
+  // Spec 011 (T14): las alertas de contradicción. Sin `conflictAlerts`, ver DEFAULT_CONFLICT_ALERTS.
+  conflictAlerts?: Handler; // GET /api/conflict-alerts
+  resolveConflictAlert?: Handler; // POST /api/conflict-alerts/:id/resolve
 }
+
+// Spec 011 (T14): como "Por revisar", el listado del ADMIN pide en segundo plano la cantidad de alertas
+// abiertas (F5). Un test que no simula `conflictAlerts` no está probando eso: la API simulada responde
+// que no hay ninguna y ese pedido no se anota, así los tests de las specs anteriores no cambian.
+const CONFLICT_ALERTS_PATH = "/api/conflict-alerts";
+const DEFAULT_CONFLICT_ALERTS = {
+  data: [],
+  total: 0,
+  openTotal: 0,
+  page: 1,
+  limit: 1,
+};
 
 // Spec 005 (T23): el listado pide en segundo plano la cantidad de "Por revisar" (F2). Un test que no
 // simula `pendingReview` no está probando eso: la API simulada responde que el usuario no es revisor
@@ -92,7 +117,28 @@ export interface MockedApi {
 const ID = "([^/]+)";
 const ROUTES: { name: keyof ApiHandlers; method: string; path: RegExp }[] = [
   { name: "areas", method: "GET", path: /^\/api\/areas$/ },
+  { name: "chatStream", method: "POST", path: /^\/api\/chat\/stream$/ },
+  {
+    name: "execution",
+    method: "GET",
+    path: new RegExp(`^/api/executions/${ID}$`),
+  },
+  {
+    name: "completeStep",
+    method: "POST",
+    path: new RegExp(`^/api/executions/${ID}/steps/${ID}/complete$`),
+  },
   { name: "users", method: "GET", path: /^\/api\/users$/ },
+  {
+    name: "conflictAlerts",
+    method: "GET",
+    path: /^\/api\/conflict-alerts$/,
+  },
+  {
+    name: "resolveConflictAlert",
+    method: "POST",
+    path: new RegExp(`^/api/conflict-alerts/${ID}/resolve$`),
+  },
   { name: "list", method: "GET", path: /^\/api\/documents$/ },
   { name: "upload", method: "POST", path: /^\/api\/documents$/ },
   // Antes que el detalle: /api/documents/search también coincide con /api/documents/:id.
@@ -213,6 +259,19 @@ export async function mockApi(
       return;
     }
 
+    if (
+      !handlers.conflictAlerts &&
+      apiRequest.method === "GET" &&
+      url.pathname === CONFLICT_ALERTS_PATH
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(DEFAULT_CONFLICT_ALERTS),
+      });
+      return;
+    }
+
     // Los E2E de Documentos existentes no prueban el directorio: devolvemos el catálogo de
     // fixtures sin contar este pedido. Un test de T28 puede pasar handlers.areas para controlarlo.
     if (
@@ -282,8 +341,10 @@ export async function mockApi(
         await new Promise((resolve) => setTimeout(resolve, reply.delayMs));
       await route.fulfill({
         status: reply.status,
-        contentType: "application/json",
-        body: reply.body === undefined ? "" : JSON.stringify(reply.body),
+        contentType: reply.contentType ?? "application/json",
+        body:
+          reply.rawBody ??
+          (reply.body === undefined ? "" : JSON.stringify(reply.body)),
       });
       return;
     }
@@ -315,17 +376,31 @@ export function documentDetail(
   overrides: Partial<DocumentResponse> = {},
 ): DocumentResponse {
   const id = overrides.id ?? nextId();
+  const ownerId = overrides.ownerId ?? FIXTURE_USERS.supervisorVentas.id;
+  const areaIds = overrides.areaIds ?? [AREA_IDS.ventas];
   return {
     id,
     title: "Manual de caja",
     description: null,
     status: "ACTIVE",
-    areaIds: [AREA_IDS.ventas],
-    ownerId: FIXTURE_USERS.supervisorVentas.id,
     reviewDate: "2027-03-01",
     createdById: FIXTURE_USERS.admin.id,
     createdAt: "2026-10-23T15:00:00.000Z",
     ...overrides,
+    // Spec 008: owner y areas salen de ownerId y areaIds, con los nombres de los fixtures, salvo
+    // que el escenario los pase (por ejemplo, inactivos).
+    ownerId,
+    areaIds,
+    owner: overrides.owner ?? referencesOf(ownerId, areaIds).owner,
+    areas: overrides.areas ?? referencesOf(ownerId, areaIds).areas,
+    ...(overrides.review && {
+      review: {
+        ...overrides.review,
+        lastReviewedBy:
+          overrides.review.lastReviewedBy ??
+          reviewOf(overrides.review).lastReviewedBy,
+      },
+    }),
     currentVersion: {
       id: `22222222-2222-4222-8222-${id.slice(-12)}`,
       versionNumber: 1,
@@ -386,6 +461,7 @@ export function versionHistory(
         : `manual-v${number}.pdf`,
       processingStatus: isCurrent ? current.processingStatus : "READY",
       uploadedById: FIXTURE_USERS.admin.id,
+      uploadedBy: personRef(FIXTURE_USERS.admin.id),
       createdAt: `2026-10-${String(10 + number).padStart(2, "0")}T15:00:00.000Z`,
     });
   }
@@ -458,5 +534,16 @@ export function apiError(
   return {
     status,
     body: { statusCode: status, message, error: "Error", ...extra },
+  };
+}
+
+// Spec 009 (PD12): una respuesta 200 de POST /api/chat/stream con estos eventos SSE.
+export function sseReply(events: Array<[string, unknown]>): Reply {
+  return {
+    status: 200,
+    contentType: "text/event-stream",
+    rawBody: events
+      .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      .join(""),
   };
 }

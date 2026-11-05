@@ -9,9 +9,12 @@ import type { AuthUser } from '../common/auth';
 import { StorageUnavailableError } from '../storage/file-storage';
 import type { FileStorage } from '../storage/file-storage';
 import { AREA_IDS, FIXTURE_USERS } from './adapters/fixtures';
+import { InMemoryAreasDirectory } from './adapters/in-memory-areas-directory';
+import { InMemoryUsersDirectory } from './adapters/in-memory-users-directory';
 import { Clock } from '../common/clock';
 import { listWhere, pendingReviewWhere } from './document-access.policy';
 import { DocumentQueryService } from './document-query.service';
+import { DocumentReferences } from './document-references';
 import { RepositoryUnavailableError } from './documents.repository';
 import type {
   DocumentRecord,
@@ -79,6 +82,7 @@ describe('DocumentQueryService.list', () => {
     };
     service = new DocumentQueryService(
       users as unknown as UsersDirectory,
+      new InMemoryAreasDirectory(),
       repository as unknown as DocumentsRepository,
       { getDownloadUrl: jest.fn() } as unknown as FileStorage,
     );
@@ -219,6 +223,7 @@ describe('DocumentQueryService: detalle y descarga', () => {
     storage = { getDownloadUrl: jest.fn().mockResolvedValue(LINK) };
     service = new DocumentQueryService(
       users as unknown as UsersDirectory,
+      new InMemoryAreasDirectory(),
       repository as unknown as DocumentsRepository,
       storage as unknown as FileStorage,
     );
@@ -372,6 +377,7 @@ describe('DocumentQueryService: dependencias no disponibles (D13)', () => {
     };
     service = new DocumentQueryService(
       users as unknown as UsersDirectory,
+      new InMemoryAreasDirectory(),
       repository as unknown as DocumentsRepository,
       storage as unknown as FileStorage,
     );
@@ -532,7 +538,8 @@ describe('DocumentQueryService: historial y descarga de una versión (spec 003, 
     };
     storage = { getDownloadUrl: jest.fn().mockResolvedValue(DOWNLOAD) };
     service = new DocumentQueryService(
-      { findById: jest.fn() } as unknown as UsersDirectory,
+      new InMemoryUsersDirectory(),
+      new InMemoryAreasDirectory(),
       repository as unknown as DocumentsRepository,
       storage as unknown as FileStorage,
     );
@@ -554,6 +561,12 @@ describe('DocumentQueryService: historial y descarga de una versión (spec 003, 
             sizeBytes: 2097152,
             processingStatus: 'PENDING',
             uploadedById: FIXTURE_USERS.admin.id,
+            // Spec 008 (P3, E7): quién la subió, con nombre y estado.
+            uploadedBy: {
+              id: FIXTURE_USERS.admin.id,
+              name: FIXTURE_USERS.admin.name,
+              isActive: true,
+            },
             createdAt: '2026-10-22T12:00:00.000Z',
           },
           expect.objectContaining({ id: v1.id, status: 'REPLACED' }),
@@ -653,6 +666,7 @@ describe('DocumentQueryService.search', () => {
     };
     service = new DocumentQueryService(
       users as unknown as UsersDirectory,
+      new InMemoryAreasDirectory(),
       repository as unknown as DocumentsRepository,
       { getDownloadUrl: jest.fn() } as unknown as FileStorage,
     );
@@ -735,13 +749,19 @@ describe('DocumentQueryService.search', () => {
       total: 1,
     });
 
-    const response = await service.search(admin, { q: 'caja', page: 1, limit: 20 });
+    const response = await service.search(admin, {
+      q: 'caja',
+      page: 1,
+      limit: 20,
+    });
 
     expect(response.data[0].fragment).toBeNull();
   });
 
   it('si el directorio de usuarios falla: 503 y nunca busca sin filtro', async () => {
-    users.findById.mockRejectedValue(new RepositoryUnavailableError('directorio caído'));
+    users.findById.mockRejectedValue(
+      new RepositoryUnavailableError('directorio caído'),
+    );
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
 
     await expect(
@@ -751,12 +771,16 @@ describe('DocumentQueryService.search', () => {
   });
 
   it('R12: si la base no responde, 503 con el mensaje de la búsqueda', async () => {
-    repository.search.mockRejectedValue(new RepositoryUnavailableError('base caída'));
+    repository.search.mockRejectedValue(
+      new RepositoryUnavailableError('base caída'),
+    );
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
 
     await expect(
       service.search(admin, { q: 'caja', page: 1, limit: 20 }),
-    ).rejects.toThrow('No se pudo completar la búsqueda. Intentá de nuevo más tarde.');
+    ).rejects.toThrow(
+      'No se pudo completar la búsqueda. Intentá de nuevo más tarde.',
+    );
   });
 
   it('un error inesperado es 500 con mensaje genérico', async () => {
@@ -800,7 +824,12 @@ describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
     id: '0c000000-0000-4000-8000-000000000002',
     reviewDate: new Date('2026-11-19T00:00:00.000Z'),
   };
-  const never = { lastReviewedAt: null, lastReviewedById: null };
+  // Spec 008 (P2): nunca revisado, sin revisor.
+  const never = {
+    lastReviewedAt: null,
+    lastReviewedById: null,
+    lastReviewedBy: null,
+  };
   const searchQuery = { q: 'caja', page: 1, limit: 20 };
 
   let users: { findById: jest.Mock };
@@ -835,6 +864,7 @@ describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
     };
     service = new DocumentQueryService(
       users as unknown as UsersDirectory,
+      new InMemoryAreasDirectory(),
       repository as unknown as DocumentsRepository,
       { getDownloadUrl: jest.fn() } as unknown as FileStorage,
       new FixedClock(),
@@ -906,7 +936,10 @@ describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
     });
 
     it('E6: devuelve en el orden del repositorio, con review en cada uno, sin consultar count', async () => {
-      const response = await service.pendingReview(empleadoVentas, defaultQuery);
+      const response = await service.pendingReview(
+        empleadoVentas,
+        defaultQuery,
+      );
 
       expect(response).toEqual({
         data: [
@@ -931,7 +964,10 @@ describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
       repository.listForReview.mockResolvedValue({ data: [], total: 0 });
       repository.count.mockResolvedValue(2);
 
-      const response = await service.pendingReview(empleadoVentas, defaultQuery);
+      const response = await service.pendingReview(
+        empleadoVentas,
+        defaultQuery,
+      );
 
       expect(response).toEqual({
         data: [],
@@ -991,5 +1027,169 @@ describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
         service.pendingReview(empleadoVentas, defaultQuery),
       ).rejects.toThrow(ServiceUnavailableException);
     });
+  });
+});
+
+// Spec 008 (T06; plan 1.3): los nombres del responsable, las áreas y el revisor, en un solo lookup.
+describe('DocumentQueryService: referencias con nombre (spec 008)', () => {
+  const REVIEWER = FIXTURE_USERS.admin.id;
+  const reviewed: DocumentRecord = {
+    ...record,
+    lastReviewedAt: new Date('2026-10-20T12:00:00.000Z'),
+    lastReviewedById: REVIEWER,
+  };
+  const other: DocumentRecord = {
+    ...record,
+    id: '0c000000-0000-4000-8000-000000000002',
+    ownerId: FIXTURE_USERS.empleadoVentas.id,
+    areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones],
+  };
+
+  let users: InMemoryUsersDirectory;
+  let areas: InMemoryAreasDirectory;
+  let repository: {
+    list: jest.Mock;
+    findByIdWithAreas: jest.Mock;
+    search: jest.Mock;
+    listForReview: jest.Mock;
+    count: jest.Mock;
+  };
+  let service: DocumentQueryService;
+  let lookup: jest.SpyInstance;
+
+  beforeEach(() => {
+    users = new InMemoryUsersDirectory();
+    areas = new InMemoryAreasDirectory();
+    repository = {
+      list: jest.fn().mockResolvedValue({ data: [reviewed, other], total: 2 }),
+      findByIdWithAreas: jest.fn().mockResolvedValue(reviewed),
+      search: jest.fn().mockResolvedValue({
+        data: [
+          { record: reviewed, fragment: null },
+          { record: other, fragment: null },
+        ],
+        total: 2,
+      }),
+      listForReview: jest
+        .fn()
+        .mockResolvedValue({ data: [reviewed, other], total: 2 }),
+      count: jest.fn().mockResolvedValue(0),
+    };
+    service = new DocumentQueryService(
+      users,
+      areas,
+      repository as unknown as DocumentsRepository,
+      { getDownloadUrl: jest.fn() } as unknown as FileStorage,
+    );
+    lookup = jest.spyOn(DocumentReferences.prototype, 'lookup');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const idsOf = (call: unknown[]) => {
+    const ids = call[0] as { userIds: string[]; areaIds: string[] };
+    return {
+      userIds: [...ids.userIds].sort(),
+      areaIds: [...ids.areaIds].sort(),
+    };
+  };
+
+  it('E1: el listado pide un solo lookup para toda la página y responde owner y areas', async () => {
+    const response = await service.list(admin, defaultQuery);
+
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(idsOf(lookup.mock.calls[0])).toEqual({
+      userIds: [
+        FIXTURE_USERS.admin.id,
+        FIXTURE_USERS.supervisorVentas.id,
+        FIXTURE_USERS.empleadoVentas.id,
+      ].sort(),
+      areaIds: [AREA_IDS.ventas, AREA_IDS.operaciones].sort(),
+    });
+    expect(response.data[1].owner).toStrictEqual({
+      id: FIXTURE_USERS.empleadoVentas.id,
+      name: FIXTURE_USERS.empleadoVentas.name,
+      isActive: true,
+    });
+    expect(response.data[1].areas.map((area) => area.name)).toEqual([
+      'Ventas',
+      'Operaciones',
+    ]);
+    expect(response.data[0].review?.lastReviewedBy).toStrictEqual({
+      id: REVIEWER,
+      name: FIXTURE_USERS.admin.name,
+      isActive: true,
+    });
+  });
+
+  it('E5: el revisor de un documento sin review no se pide (PD3)', async () => {
+    // empleadoVentas no es el responsable de `reviewed` (lo es supervisorVentas): no recibe review.
+    const response = await service.findOne(empleadoVentas, reviewed.id);
+
+    expect(response).not.toHaveProperty('review');
+    expect(idsOf(lookup.mock.calls[0]).userIds).not.toContain(REVIEWER);
+  });
+
+  it('E2, E6: la búsqueda y "Por revisar" también, con un solo lookup cada una', async () => {
+    const search = await service.search(admin, {
+      q: 'caja',
+      page: 1,
+      limit: 20,
+    });
+    const pending = await service.pendingReview(admin, defaultQuery);
+
+    expect(lookup).toHaveBeenCalledTimes(2);
+    expect(search.data[0].owner.name).toBe(FIXTURE_USERS.supervisorVentas.name);
+    expect(pending.data[1].owner.name).toBe(FIXTURE_USERS.empleadoVentas.name);
+  });
+
+  it('una página vacía no consulta los directorios', async () => {
+    repository.list.mockResolvedValue({ data: [], total: 0 });
+    const findAreas = jest.spyOn(areas, 'findByIds');
+
+    await service.list(admin, defaultQuery);
+
+    expect(lookup).not.toHaveBeenCalled();
+    expect(findAreas).not.toHaveBeenCalled();
+  });
+
+  it('E10: un responsable que no existe sale con name null (R12)', async () => {
+    repository.findByIdWithAreas.mockResolvedValue({
+      ...record,
+      ownerId: '0b000000-0000-4000-8000-000000000099',
+    });
+
+    const response = await service.findOne(admin, record.id);
+
+    expect(response.owner).toStrictEqual({
+      id: '0b000000-0000-4000-8000-000000000099',
+      name: null,
+      isActive: false,
+    });
+  });
+
+  it('R13: el directorio de áreas caído es 503', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest
+      .spyOn(areas, 'findByIds')
+      .mockRejectedValue(new RepositoryUnavailableError('caído'));
+
+    await expect(service.list(admin, defaultQuery)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('R13: el directorio de usuarios caído al buscar los nombres es 503', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    // El ADMIN no necesita el directorio para ver: falla solo al pedir los nombres.
+    jest
+      .spyOn(users, 'findById')
+      .mockRejectedValue(new RepositoryUnavailableError('caído'));
+
+    await expect(service.findOne(admin, record.id)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 });

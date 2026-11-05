@@ -15,6 +15,12 @@ import { toDbDate, todayInCompany } from './company-date';
 import { findVisibleDocument } from './document-access';
 import { canReview } from './document-access.policy';
 import {
+  DocumentReferences,
+  ReferenceIds,
+  ReferenceLookup,
+  referenceIdsOf,
+} from './document-references';
+import {
   DocumentWriteSteps,
   duplicateDocumentConflict,
   truncateFileName,
@@ -77,6 +83,12 @@ const cannotReview = () =>
 // Una columna @db.Date llega como medianoche UTC: la fecha YYYY-MM-DD, en UTC.
 const toDateOnly = (date: Date) => date.toISOString().slice(0, 10);
 
+// Lo que deja una escritura: el registro y los nombres que se buscaron antes de escribir (spec 008, PD5).
+interface WriteResult {
+  record: DocumentRecord;
+  refs: ReferenceLookup;
+}
+
 // Comprueba si las áreas nuevas son exactamente iguales a las actuales
 const sameAreas = (current: string[], next: string[]) =>
   current.length === next.length && next.every((id) => current.includes(id));
@@ -85,6 +97,7 @@ const sameAreas = (current: string[], next: string[]) =>
 export class DocumentLifecycleService {
   private readonly logger = new Logger(DocumentLifecycleService.name);
   private readonly steps: DocumentWriteSteps;
+  private readonly references: DocumentReferences;
 
   constructor(
     areas: AreasDirectory,
@@ -103,6 +116,7 @@ export class DocumentLifecycleService {
       audit,
       clock,
     );
+    this.references = new DocumentReferences(users, areas);
   }
 
   // Cambia las áreas o el responsable de un documento existente
@@ -120,19 +134,32 @@ export class DocumentLifecycleService {
         const current = await this.findWritable(id);
 
         const ownerId = dto.ownerId ?? current.ownerId;
-        // Si no hubo cambios reales, devuelve el documento actual sin escribir nada
+        // Si no hubo cambios reales, devuelve el documento actual sin escribir nada (R11), con sus
+        // nombres (spec 008, plan 1.4)
         if (
           sameAreas(current.areaIds, dto.areaIds) &&
           ownerId === current.ownerId
         ) {
-          return current;
+          return {
+            record: current,
+            refs: await this.references.lookup(this.idsFor(actor, current)),
+          };
         }
 
-        await this.steps.assertAreasExist(dto.areaIds);
-        await this.steps.assertOwnerCanSeeDocument(ownerId, dto.areaIds);
+        // Spec 008 (R7, R8): las agregadas tienen que estar activas; las que ya tenía se conservan
+        await this.steps.assertAreasCanBeAssigned(dto.areaIds, current.areaIds);
+        // Spec 008 (R6, P5): el actual no se rechaza por inactivo, pero tiene que seguir teniendo acceso
+        await this.steps.assertOwnerCanSeeDocument(ownerId, dto.areaIds, {
+          isNew: ownerId !== current.ownerId,
+        });
+
+        // Spec 008 (PD5): los nombres de cómo va a quedar, antes de escribir (después de validar)
+        const refs = await this.references.lookup(
+          this.idsFor(actor, { ...current, areaIds: dto.areaIds, ownerId }),
+        );
 
         // Aplica el cambio bajo transacción y bloqueo
-        return this.documents.runInTransaction(async (tx) => {
+        const record = await this.documents.runInTransaction(async (tx) => {
           await this.lockWritable(tx, id);
           const updated = await this.documents.replaceAreas(
             tx,
@@ -152,6 +179,7 @@ export class DocumentLifecycleService {
           );
           return updated;
         });
+        return { record, refs };
       },
     );
   }
@@ -173,7 +201,7 @@ export class DocumentLifecycleService {
         if (dto.reviewDate) {
           this.steps.assertReviewDateIsAfterToday(dto.reviewDate);
         }
-        await this.findWritable(id); // Valida que exista y no esté archivado
+        const current = await this.findWritable(id); // Valida que exista y no esté archivado
 
         const duplicate = await this.documents.findActiveByChecksum(
           inspected.checksum,
@@ -181,12 +209,18 @@ export class DocumentLifecycleService {
         if (duplicate?.documentId === id) throw identicalToCurrent();
         if (duplicate) throw duplicateDocumentConflict(duplicate.documentId);
 
+        // Spec 008 (PD5): los nombres antes de escribir. Con fecha nueva, el actor queda como revisor
+        // (R10 de la spec 005).
+        const refs = await this.references.lookup(
+          this.idsFor(actor, current, dto.reviewDate ? [actor.id] : []),
+        );
+
         const uploaded = file as UploadedFileInput;
         const versionId = randomUUID();
         const key = `documents/${id}/${versionId}.${inspected.extension}`;
 
         // Almacena el archivo y confirma la transacción de la nueva versión
-        return this.steps.storeThenCommit(
+        const record = await this.steps.storeThenCommit(
           {
             key,
             documentId: id,
@@ -233,6 +267,7 @@ export class DocumentLifecycleService {
               return updated;
             }),
         );
+        return { record, refs };
       },
     );
   }
@@ -240,8 +275,10 @@ export class DocumentLifecycleService {
   // Archiva un documento existente (lo desactiva)
   archive(id: string, actor: AuthUser): Promise<DocumentResponse> {
     return this.run('DOCUMENT_ARCHIVE', 'archivo', id, actor, async () => {
-      await this.findWritable(id);
-      return this.documents.runInTransaction(async (tx) => {
+      const current = await this.findWritable(id);
+      // Spec 008 (PD5): los nombres antes de escribir
+      const refs = await this.references.lookup(this.idsFor(actor, current));
+      const record = await this.documents.runInTransaction(async (tx) => {
         await this.lockWritable(tx, id);
         const archived = await this.documents.archive(tx, id, new Date());
         await this.audit.record(
@@ -256,6 +293,7 @@ export class DocumentLifecycleService {
         );
         return archived;
       });
+      return { record, refs };
     });
   }
 
@@ -288,7 +326,12 @@ export class DocumentLifecycleService {
         if (!canReview(actor, visible)) throw cannotReview();
         if (visible.status === 'ARCHIVED') throw documentArchived();
 
-        return this.documents.runInTransaction(async (tx) => {
+        // Spec 008 (PD5, E8): los nombres antes de escribir; el actor va a ser el revisor
+        const refs = await this.references.lookup(
+          this.idsFor(actor, visible, [actor.id]),
+        );
+
+        const record = await this.documents.runInTransaction(async (tx) => {
           const locked = await this.lockWritable(tx, id);
           // La fecha que de verdad se reemplaza es la leída bajo el bloqueo: con dos revisiones a
           // la vez, la segunda registra la que dejó la primera.
@@ -315,6 +358,7 @@ export class DocumentLifecycleService {
           );
           return reviewed;
         });
+        return { record, refs };
       },
       dates,
     );
@@ -338,14 +382,20 @@ export class DocumentLifecycleService {
     operation: HttpOperation,
     id: string,
     actor: AuthUser,
-    operate: () => Promise<DocumentRecord>,
+    operate: () => Promise<WriteResult>,
     auditDates?: ReviewAuditDates,
   ): Promise<DocumentResponse> {
     try {
-      const record = await operate();
+      const { record, refs } = await operate();
       // Spec 005 (R4): la respuesta lleva el estado de revisión si el actor puede verlo.
       const today = todayInCompany(this.clock.now());
-      return toDocumentResponse(record, reviewFor(actor, record, today));
+      const review = reviewFor(actor, record, today);
+      // Spec 008 (PD5): lo que trae el registro y no se buscó antes se pide ahora, sin fallar.
+      const complete = await this.references.complete(
+        refs,
+        referenceIdsOf([{ record, withReview: review !== undefined }]),
+      );
+      return toDocumentResponse(record, complete, review);
     } catch (error) {
       const failure = toHttpException(error, this.logger, operation);
       await this.steps.auditFailure(
@@ -357,6 +407,20 @@ export class DocumentLifecycleService {
       );
       throw failure;
     }
+  }
+
+  // Spec 008 (plan 1.4): los IDs que necesita la respuesta de ese documento, más los usuarios que la
+  // escritura va a agregar (el revisor). El revisor actual, solo si la respuesta lleva review (PD3).
+  private idsFor(
+    actor: AuthUser,
+    record: DocumentRecord,
+    extraUserIds: string[] = [],
+  ): ReferenceIds {
+    const today = todayInCompany(this.clock.now());
+    const ids = referenceIdsOf([
+      { record, withReview: reviewFor(actor, record, today) !== undefined },
+    ]);
+    return { ...ids, userIds: [...ids.userIds, ...extraUserIds] };
   }
 
   // Verifica que el documento exista y no esté archivado (lectura previa)

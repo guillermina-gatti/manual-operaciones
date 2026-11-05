@@ -13,13 +13,12 @@ import {
   listPendingReview,
   useApiResource,
 } from '@/lib/api';
-import { areasDirectory, usersDirectory } from '@/lib/directory';
-import { toAreaNameMap } from '@/lib/directory/areas-directory';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
 import { useSession } from '@/lib/session';
 import { DocumentCard } from './DocumentCard';
 import { DocumentListSkeleton } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { TEXT_LINK } from './design';
 
 const BASE_PATH = '/documentos/por-revisar';
 
@@ -38,16 +37,6 @@ export function PendingReviewList() {
   const pending = useApiResource(
     user ? `pending-review?page=${page}&user=${user.id}` : null,
     (signal) => listPendingReview(page, PAGE_SIZE, signal),
-  );
-
-  // Nombres de áreas y responsables: una vez por página, como el listado.
-  const areas = useApiResource(user ? 'areas' : null, () => areasDirectory.listAreas());
-  const ownerIds =
-    pending.status === 'success'
-      ? [...new Set(pending.data.data.map((document) => document.ownerId))]
-      : [];
-  const owners = useApiResource(ownerIds.length > 0 ? `owners:${ownerIds.join(',')}` : null, () =>
-    usersDirectory.getNames(ownerIds),
   );
 
   if (status === 'loading') return LOADING;
@@ -78,7 +67,7 @@ export function PendingReviewList() {
         kind="empty"
         message="Esta página no existe"
         action={
-          <Link href={BASE_PATH} className="text-blue-700 underline dark:text-blue-400">
+          <Link href={BASE_PATH} className={TEXT_LINK}>
             Ir a la primera página
           </Link>
         }
@@ -86,22 +75,13 @@ export function PendingReviewList() {
     );
   }
 
-  // Se espera a los nombres para no mostrar "—" un instante; si fallan, las tarjetas igual se muestran.
-  if (areas.status === 'loading' || owners.status === 'loading') return LOADING;
-  const areaNames = toAreaNameMap(areas.status === 'success' ? areas.data : []);
-  const ownerNames = owners.status === 'success' ? owners.data : {};
-
+  // Spec 008 (F1): los nombres vienen en cada documento, como en el listado.
   return (
     <div className="flex flex-col gap-6">
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((document) => (
           <li key={document.id} className="min-w-0">
-            <DocumentCard
-              document={document}
-              areaNames={areaNames}
-              ownerName={ownerNames[document.ownerId]}
-              isAdmin={isAdmin}
-            />
+            <DocumentCard document={document} isAdmin={isAdmin} />
           </li>
         ))}
       </ul>

@@ -71,25 +71,48 @@ export class DocumentWriteSteps {
     }
   }
 
-  // Valida que las áreas indicadas existan en el sistema
-  async assertAreasExist(areaIds: string[]): Promise<void> {
-    const existing = new Set(await this.areas.findExistingIds(areaIds));
-    const missing = areaIds.filter((id) => !existing.has(id));
+  // Valida que las áreas existan (R5 de la spec 001) y que las agregadas estén activas (R7 de la
+  // spec 008). Agregadas son las que no están en currentAreaIds: en la carga, todas. Las inactivas
+  // que el documento ya tiene se conservan (R8). Una sola consulta al directorio (plan 008, PD6).
+  async assertAreasCanBeAssigned(
+    areaIds: string[],
+    currentAreaIds: string[] = [],
+  ): Promise<void> {
+    const found = new Map(
+      (await this.areas.findByIds(areaIds)).map((area) => [area.id, area]),
+    );
+
+    const missing = areaIds.filter((id) => !found.has(id));
     if (missing.length > 0) {
       throw new BadRequestException(
         `areaIds: no existen las áreas ${missing.join(', ')}`,
       );
     }
+
+    const current = new Set(currentAreaIds);
+    const inactive = areaIds.filter(
+      (id) => !current.has(id) && found.get(id)?.isActive === false,
+    );
+    if (inactive.length > 0) {
+      throw new BadRequestException(
+        `areaIds: están inactivas las áreas ${inactive.join(', ')}`,
+      );
+    }
   }
 
-  // Valida que el responsable exista y tenga acceso a las áreas del documento
+  // Valida que el responsable exista y tenga acceso a las áreas del documento. Si es un responsable
+  // nuevo, además tiene que estar activo (spec 008, R5); el actual se conserva aunque no lo esté (R6).
   async assertOwnerCanSeeDocument(
     ownerId: string,
     areaIds: string[],
+    { isNew }: { isNew: boolean },
   ): Promise<void> {
     const owner = await this.users.findById(ownerId);
     if (!owner) {
       throw new BadRequestException('ownerId: el responsable no existe');
+    }
+    if (isNew && !owner.isActive) {
+      throw new BadRequestException('ownerId: el responsable está inactivo');
     }
     if (!canBeOwner(owner, areaIds)) {
       throw new BadRequestException(

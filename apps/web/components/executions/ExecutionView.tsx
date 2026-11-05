@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { ExecutionChatPanel } from '@/components/chat/ExecutionChatPanel';
 import { ScreenState } from '@/components/ui/ScreenState';
 import {
   ApiError,
@@ -209,10 +210,12 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
         )}
       </article>
 
-      {/* Reserved for the assistant of pair C: <ChatPanel procedureId={…} stepId={…} />.
-          Hidden while empty, so screen readers do not announce an empty region. On a phone it
-          goes below the steps; from lg on, in the right column. */}
-      <aside data-slot="chat-panel" aria-label="Asistente" hidden className="min-w-0" />
+      {/* The assistant of pair C for the current step (spec 010). Hidden once the execution is
+          completed, so screen readers do not announce an empty region. On a phone it goes below
+          the steps; from lg on, in the right column. */}
+      <aside data-slot="chat-panel" aria-label="Asistente" hidden={completed} className="min-w-0">
+        <ExecutionChatPanel execution={execution} />
+      </aside>
     </div>
   );
 }

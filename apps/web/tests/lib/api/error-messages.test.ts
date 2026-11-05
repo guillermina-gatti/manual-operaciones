@@ -227,6 +227,46 @@ describe('ciclo de vida (spec 003)', () => {
     expect(result.message).toBe('Revisá los datos marcados en el formulario.');
   });
 
+  // Spec 008 (T12, F7): los rechazos por responsable o área inactivos llevan su propio texto.
+  describe.each(['upload', 'areas'] as const)('spec 008 en "%s"', (context) => {
+    test('E11 y E17: responsable inactivo → su texto en el campo del responsable', () => {
+      const result = describeApiError(
+        new ApiError(400, ['ownerId: el responsable está inactivo']),
+        context,
+      );
+
+      expect(result.fieldErrors).toEqual({ ownerId: 'El responsable está inactivo. Elegí otro.' });
+      expect(result.message).toBe('Revisá los datos marcados en el formulario.');
+    });
+
+    test('E12 y E14: área inactiva agregada → su texto en el campo de las áreas', () => {
+      const result = describeApiError(
+        new ApiError(400, ['areaIds: están inactivas las áreas 0a000000-0000-4000-8000-000000000003']),
+        context,
+      );
+
+      expect(result.fieldErrors).toEqual({
+        areaIds: 'Hay áreas inactivas entre las que agregaste. Sacalas para guardar.',
+      });
+    });
+
+    test('los demás 400 de esos campos siguen con su texto de siempre', () => {
+      const result = describeApiError(
+        new ApiError(400, [
+          'areaIds: no existen las áreas 0a000000-0000-4000-8000-000000000009',
+          'ownerId: el responsable no comparte ningún área con el documento',
+        ]),
+        context,
+      );
+
+      expect(result.fieldErrors).toEqual({
+        areaIds: 'Elegí al menos un área de la lista.',
+        ownerId:
+          'El responsable tiene que pertenecer a alguna de las áreas elegidas, o ser administrador.',
+      });
+    });
+  });
+
   test('400 en la versión nueva: archivo y fecha van a su campo', () => {
     const result = describeApiError(
       new ApiError(400, ['reviewDate tiene que ser posterior a hoy (2026-10-23)']),
@@ -363,5 +403,20 @@ describe('revisión (spec 005)', () => {
     expect(describeApiError(error, 'review').message).toBe(
       'El documento fue archivado. Ya no se puede modificar.',
     );
+  });
+});
+
+// Spec 011 (T11): los errores de las alertas de contradicción, sin el texto de la API.
+describe('las alertas de contradicción (spec 011)', () => {
+  test.each([
+    [400, 'Revisá la nota: puede tener hasta 500 caracteres.', false],
+    [403, 'No tenés permiso para ver esta información.', false],
+    [404, 'La alerta ya no existe.', false],
+    [409, 'Otra persona ya la marcó como resuelta.', false],
+    [503, 'El servicio no está disponible. Probá de nuevo en unos minutos.', true],
+  ])('%i: %s', (status, message, canRetry) => {
+    const error = new ApiError(status, ['La alerta ya está resuelta']);
+
+    expect(describeApiError(error, 'conflict-alert')).toMatchObject({ message, canRetry });
   });
 });
