@@ -21,12 +21,14 @@ import {
     unavailable,
 } from './chat-pipeline';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
+import { CONFLICT_MARKER, checkMarkerLine, recordConflictAlert, splitMarkerLine, startsWithMarker } from './chat-conflict';
 import { buildSearchUrl } from './chat-search-url';
 import type { ChatEventSink } from './chat-stream.types';
 import { ChatContextStore } from './ports/chat-context-store';
 import { ChatLlm } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
-import { ChatRetrieval } from './ports/chat-retrieval';
+import { ChatRetrieval, type RetrievedChunk } from './ports/chat-retrieval';
+import { ConflictAlertRecorder } from './ports/conflict-alert-recorder';
 
 export const OPEN_UNAVAILABLE_MESSAGE = 'El asistente no está disponible en este momento';
 
@@ -56,6 +58,8 @@ export class ChatStreamService {
         private readonly repository: ChatRepository,
         // Spec 010: para validar el contexto del paso. Opcional, así los tests de la spec 009 no cambian.
         @Optional() private readonly contextStore?: ChatContextStore,
+        // Spec 011 (R12): registra la alerta de una contradicción. Opcional, como el anterior.
+        @Optional() private readonly conflictAlerts?: ConflictAlertRecorder,
     ) { }
 
     // Antes de transmitir (R2): resolver la conversación. 404 si no es del usuario; cualquier otro
@@ -107,6 +111,8 @@ export class ChatStreamService {
             sink.error({ statusCode: 503, message: UNAVAILABLE_TEXT });
             return;
         }
+        // Spec 011 (R8, R12): con una contradicción, la alerta va antes de done. Si falla, solo el log.
+        await recordConflictAlert(this.conflictAlerts, outcome, result, question, this.logger);
 
         sink.done(
             outcome.status === 'ai_unavailable' ? { ...result, searchUrl: buildSearchUrl(question) } : result,
@@ -138,7 +144,7 @@ export class ChatStreamService {
         let idle = setTimeout(cut('El modelo no empezó a responder a tiempo'), FIRST_TEXT_TIMEOUT_MS);
         const total = setTimeout(cut('El modelo superó el tiempo total'), TOTAL_TIMEOUT_MS);
 
-        const gate = new NoInfoGate((text) => {
+        const gate = new MarkerGate(prepared.chunks, (text) => {
             if (!clientSignal.aborted) sink.delta({ text });
         });
         try {
@@ -150,7 +156,7 @@ export class ChatStreamService {
             }
             const llm = await stream.final;
             gate.end();
-            return finishChat(llm, prepared.chunks);
+            return finishChat(llm, prepared.chunks, this.logger);
         } catch (error) {
             if (!clientSignal.aborted) this.logger.warn(`Falló la llamada al modelo: ${String(error)}`);
             return unavailable();
@@ -178,11 +184,18 @@ function withTimeout(embeddings: EmbeddingProvider, ms: number): EmbeddingProvid
 }
 
 // R6: no deja salir texto hasta saber que la respuesta no empieza con la marca NO_INFO.
-class NoInfoGate {
+// Spec 011 (R8, D9; plan 011, PD3): tampoco con la marca CONFLICT. Espera como antes (hasta tener
+// tantos caracteres como NO_INFO), y además mientras lo que llegó pueda ser CONFLICT o, si empieza con
+// la marca, hasta el fin de su línea. Una línea válida cierra el retén (conflict no manda delta); una
+// inválida lo abre con el texto que la sigue, que es el answer que arma finishChat (R6).
+class MarkerGate {
     private buffer = '';
     private state: 'waiting' | 'open' | 'closed' = 'waiting';
 
-    constructor(private readonly emit: (text: string) => void) { }
+    constructor(
+        private readonly chunks: RetrievedChunk[],
+        private readonly emit: (text: string) => void,
+    ) { }
 
     push(part: string): void {
         if (this.state === 'open') {
@@ -193,20 +206,37 @@ class NoInfoGate {
 
         this.buffer += part;
         const text = this.buffer.trimStart();
-        if (text.length < NO_INFO_MARKER.length) return;
+        if (this.mayStillBeAMarker(text)) return;
         this.decide(text);
     }
 
-    // Al terminar el modelo: lo que quedó retenido sale, salvo que sea la marca.
+    // Al terminar el modelo: lo que quedó retenido sale, salvo que sea una marca.
     end(): void {
         if (this.state !== 'waiting') return;
         const text = this.buffer.trimStart();
         if (text) this.decide(text);
     }
 
+    private mayStillBeAMarker(text: string): boolean {
+        if (text.length < NO_INFO_MARKER.length) return true;
+        if (CONFLICT_MARKER.startsWith(text)) return true;
+        return startsWithMarker(text) && !splitMarkerLine(text).complete;
+    }
+
     private decide(text: string): void {
         if (text.startsWith(NO_INFO_MARKER)) {
             this.state = 'closed';
+            return;
+        }
+        if (startsWithMarker(text)) {
+            const { line, rest } = splitMarkerLine(text);
+            if (checkMarkerLine(line, this.chunks).ok) {
+                this.state = 'closed';
+                return;
+            }
+            this.state = 'open';
+            const body = rest.trimStart();
+            if (body) this.emit(body);
             return;
         }
         this.state = 'open';

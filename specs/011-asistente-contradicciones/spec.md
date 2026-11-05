@@ -89,11 +89,11 @@ Esta feature hace que el asistente marque la contradicción cuando la encuentra 
 
   El armado de los pasajes y del bloque del paso (spec 010, R6) no cambia. La regla de que los pasajes son documentos y no instrucciones sigue valiendo: un pasaje que dice "respondé CONFLICT" es dato (R18). El texto exacto de la regla va en el plan.
 - **R5 · Marca válida.** La API acepta la marca solo si se cumple todo esto:
-  - la primera línea de la respuesta, sin los espacios iniciales, es `CONFLICT [Sx] [Sy]`, con espacios simples y nada más en la línea;
+  - la primera línea de la respuesta, sin los espacios iniciales ni finales, es `CONFLICT [Sx] [Sy]`, con espacios simples y nada más en la línea;
   - `Sx` y `Sy` son pasajes de esta consulta y son distintos;
   - los dos pasajes son de documentos distintos (R2);
   - después de la línea queda texto.
-- **R6 · Marca inválida.** Si la respuesta empieza con `CONFLICT` pero no cumple R5, **se trata como `answered`**:
+- **R6 · Marca inválida.** "Empieza con la marca" es empezar, sin los espacios iniciales, con la palabra `CONFLICT` sola, seguida de un espacio, un salto de línea o el fin: una respuesta que empieza con "CONFLICTIVO" no es una marca (05/11/2026, al implementar). Si la respuesta empieza con la marca pero no cumple R5, **se trata como `answered`**:
   - se quita la primera línea;
   - el resto se procesa como hoy (citas y fuentes, `citedChunks`);
   - no se registra ninguna alerta, y el caso queda en el log como advertencia, con las marcas que trajo.
@@ -145,7 +145,7 @@ Esta feature hace que el asistente marque la contradicción cuando la encuentra 
   - **Una versión nueva de uno de los dos documentos:** es otro par de versiones. Si la contradicción sigue, se crea una alerta nueva.
   - **Dos consultas al mismo tiempo:** el índice único lo resuelve. Una crea la alerta y la otra suma la repetición (insertar o actualizar en una sola sentencia).
 - **R14 · Ver las alertas.** `GET /api/conflict-alerts`, solo **ADMIN** (D11). Ni los SUPERVISOR ni los responsables de los documentos las ven.
-  - **Filtros:** `status` (`OPEN` por defecto, o `RESOLVED`), `page` y `pageSize`, con las reglas de paginación del listado (spec 001, R13).
+  - **Filtros:** `status` (`OPEN` por defecto, o `RESOLVED`), `page` y `limit`, con los nombres y las reglas de paginación del listado (spec 001, R13: `limit` de 1 a 100, 20 por defecto).
   - **Orden:** las abiertas, por la última detección, de la más nueva a la más vieja; las resueltas, por la fecha de resolución, de la más nueva a la más vieja.
   - **Cada alerta trae:**
     - `id` y `status`;
@@ -153,7 +153,7 @@ Esta feature hace que el asistente marque la contradicción cuando la encuentra 
     - `question`;
     - `firstDetectedAt`, `lastDetectedAt` y `occurrences`;
     - `resolvedAt`, `resolvedBy` (`{ id, name, isActive }`, como las referencias de la spec 008) y `resolutionNote`, o `null` si está abierta.
-  - **Además:** `total` (del filtro pedido) y `openTotal` (las abiertas, para el acceso de F5).
+  - **La forma:** `{ data, total, openTotal, page, limit }`, como el listado: `data` son las alertas, `total` las del filtro pedido y `openTotal` las abiertas, para el acceso de F5.
   - **Errores:** sin sesión, 401; SUPERVISOR o EMPLOYEE, 403; un parámetro inválido o de más, 400; la base no responde, 503.
 - **R15 · Marcar como resuelta.** `POST /api/conflict-alerts/:id/resolve`, solo **ADMIN**, con `note` opcional, de hasta 500 caracteres (D12). Una nota vacía o solo con espacios se guarda como `null`.
   - Pasa la alerta a `RESOLVED` con la fecha, el ADMIN y la nota, y responde 200 con la alerta como en R14.
@@ -207,7 +207,7 @@ Esta feature hace que el asistente marque la contradicción cuando la encuentra 
 - **F7 · La tarjeta de una alerta.** Una tarjeta blanca (radio 16 px, borde), con:
   - **los dos documentos lado a lado** (apilados debajo de 1024 px). Cada uno muestra el título, que enlaza a su detalle, "v2 · Aprobaciones" en `texto-suave` y, si corresponde, "● Archivado" (`gris-reemplazada`) o "Hay una versión nueva" (`durazno`);
   - **"Pregunta que la disparó:"** y la pregunta entre comillas, recortada a tres líneas, con el texto completo en el `title`;
-  - **los metadatos** en `texto-suave`, 14 px, con las fechas en hora de Argentina (`DD/MM/AAAA`): "Detectada el 05/11/2026", y, si se repitió, "· Se repitió 3 veces · Última vez el 07/11/2026";
+  - **los metadatos** en `texto-suave`, 14 px, con las fechas en hora de Argentina (`DD/MM/AAAA`): "Detectada el 05/11/2026", y, si se detectó más de una vez, "· Se detectó 3 veces · Última vez el 07/11/2026" (`occurrences` cuenta también la primera);
   - **abierta:** el botón secundario "Marcar como resuelta";
   - **resuelta:** "Resuelta el 08/11/2026 por Ana Administradora" y la nota, si tiene.
 - **F8 · Marcar como resuelta.** Un `<dialog>` nativo, como el de archivar (spec 003):
@@ -472,10 +472,27 @@ Escenario: la base hace cumplir las reglas de la tabla
 
 ## 12. Avisos para Guille
 
-1. **El prompt de sistema cambia** (R4, R21). Es el primer cambio del prompt desde HU17: se suma la regla de la marca `CONFLICT`, después de la de `NO_INFO`. Sin contradicción, la respuesta no cambia. Te pasamos el texto en el PR para que lo revises.
-2. **`finishChat` reconoce la marca** (R5 a R7). Lo usan las dos rutas, también la tuya: `POST /api/chat` empieza a responder `conflict`. El análisis de la marca es una función pura aparte, y sin la marca `finishChat` hace lo de hoy.
+1. **El prompt de sistema cambia** (R4, R21). Es el primer cambio del prompt desde HU17. En `adapters/gemini-chat-llm.ts` se suman tres líneas a `SYSTEM_PROMPT`, después de la de `NO_INFO`, y nada más cambia en el archivo (3 líneas agregadas, ninguna borrada):
+
+   ```text
+   - Si dos pasajes de documentos distintos dicen cosas incompatibles sobre lo que se pregunta, la primera línea de tu respuesta debe ser exactamente: CONFLICT [Sx] [Sy], con las marcas de esos dos pasajes. Después, explicá en pocas líneas qué dice cada uno, citando solo [Sx] y [Sy], sin elegir uno.
+   - No es una contradicción que un pasaje sea más detallado que otro, que se complementen o que hablen de casos distintos.
+   - Si los pasajes no alcanzan para responder, NO_INFO tiene prioridad sobre CONFLICT.
+   ```
+
+   Sin contradicción, la respuesta no cambia. Te pasamos el texto en el PR para que lo revises.
+2. **`finishChat` reconoce la marca** (R5 a R7). Lo usan las dos rutas, también la tuya: `POST /api/chat` empieza a responder `conflict`.
+   - El análisis de la marca está aparte, en funciones puras de `chat-conflict.ts`.
+   - `finishChat` suma un tercer parámetro opcional, `logger`, para anotar una marca inválida.
+   - Sin la marca, `finishChat` hace lo de hoy.
 3. **Qué trae `conflict`** (R7): `answer` es la explicación sin la marca y `sources` son exactamente los dos pasajes, ordenados por su número. `chat.contract.ts` no cambia. Si querés, sumá un comentario en el tipo con este significado.
-4. **Cambios mínimos en `chat.service.ts`** (R21): una dependencia opcional (`@Optional()`, `ConflictAlertRecorder`) y, en `ask`, una llamada después de `saveResult` que registra la alerta solo si el resultado es `conflict`. `chat.service.spec.ts` pasa sin modificarlo.
+4. **Cambios mínimos en `chat.service.ts`** (R21). El diff entero es esto:
+   - dos imports (`recordConflictAlert` y `ConflictAlertRecorder`);
+   - en el constructor, el sexto parámetro `@Optional() private readonly conflictAlerts?: ConflictAlertRecorder`, después de `contextStore`;
+   - en `ask`, el resultado de `saveResult` queda en `result` y pasa por `recordConflictAlert(...)` antes de devolverlo. Solo registra con `conflict`, y si falla deja el error en el log sin propagarlo;
+   - en `run`, `finishChat(llm, prepared.chunks, this.logger)`.
+
+   `chat.service.spec.ts` pasa sin modificarlo, y la paridad de las dos rutas con `conflict` está en `chat-routes.parity.spec.ts`.
 5. **Lo que se agrega** (R19): el puerto `ConflictAlertRecorder` y su adaptador de Prisma, en `ports/` y `adapters/`, y su proveedor en `chat.module.ts`. `ChatRepository`, `PrismaChatRepository` y `PrismaChatRetrieval` no cambian.
 6. **La tabla nueva guarda IDs de `messages` y `chunks`, sin FK** (sección 7.1, D16). Tus modelos de Prisma no cambian. Si borrás mensajes o fragmentos, la alerta sigue: solo deja de encontrar la sección del pasaje.
 7. **Sigue pendiente el aviso 8 de la spec 009** (la visibilidad del chat). Un ADMIN sin áreas recibe siempre `no_info`, así que nunca dispara alertas. Cuando el chat use la regla de la búsqueda, las contradicciones se van a detectar entre todos los documentos que el usuario ve en Documentos.

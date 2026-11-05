@@ -6,6 +6,7 @@ import { ChatStreamService } from './chat-stream.service';
 import {
     CONTEXT_STEP,
     CONTEXT_VERSION,
+    FakeConflictAlertRecorder,
     FakeContextStore,
     FakeEmbeddings,
     FakeLlm,
@@ -309,5 +310,174 @@ describe('ChatStreamService con el contexto del paso (spec 010)', () => {
         expect(embeddings.texts).toEqual([['¿Plazo?']]);
         expect(llm.contexts).toEqual([undefined]);
         expect(store.saved).toEqual([]);
+    });
+});
+
+// Spec 011 (T05, R8, D9): el retén deja afuera también la marca CONFLICT. Con una marca válida no
+// sale ningún delta y done llega con conflict; con una inválida, sale el texto que sigue a la línea.
+describe('ChatStreamService: la marca de contradicción (spec 011)', () => {
+    const ROWS = [
+        chunk({ chunkId: 'c1', documentId: 'doc-compras', versionId: 'v-compras' }),
+        chunk({ chunkId: 'c2', documentId: 'doc-compras', versionId: 'v-compras' }),
+        chunk({ chunkId: 'c3', documentId: 'doc-gastos', versionId: 'v-gastos', documentTitle: 'Política de gastos' }),
+    ];
+
+    beforeEach(() => {
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it.each([
+        [['CONFLICT [S1] [S3]\nEl manual dice gerente [S1]; ', 'la política, director [S3].']],
+        [['CON', 'FLICT [S', '1] [S3]', '\n', 'El manual dice gerente [S1]; la política, director [S3].']],
+        [['  \n', 'CONFLICT [S3] [S1]\n', 'El manual dice gerente [S1]; la política, director [S3].']],
+    ])('E4: la marca (%j) no sale como delta, y done llega con conflict', async (steps) => {
+        const { service, repo } = build({ rows: ROWS, steps });
+
+        const sink = await ask(service);
+
+        expect(sink.names).toEqual(['start', 'done']);
+        expect(sink.final).toMatchObject({
+            status: 'conflict',
+            answer: 'El manual dice gerente [S1]; la política, director [S3].',
+            sources: [{ chunkId: 'c1' }, { chunkId: 'c3' }],
+        });
+        expect(repo.saved[0]).toMatchObject({ status: 'conflict', usedChunkIds: ['c1', 'c3'] });
+    });
+
+    it('E6: con una marca inválida sale el texto que sigue a la línea, y done llega con answered', async () => {
+        const { service } = build({
+            rows: ROWS,
+            steps: ['CONFLICT [S1] ', '[S2]\nLo aprueba ', 'el gerente [S2].'],
+        });
+
+        const sink = await ask(service);
+
+        expect(sink.deltas.join('')).toBe('Lo aprueba el gerente [S2].');
+        expect(sink.final).toMatchObject({
+            status: 'answered',
+            answer: 'Lo aprueba el gerente [S2].',
+            sources: [{ chunkId: 'c2' }],
+        });
+    });
+
+    it('una marca válida sin explicación es no_info, sin delta', async () => {
+        const { service } = build({ rows: ROWS, steps: ['CONFLICT [S1] [S3]'] });
+
+        const sink = await ask(service);
+
+        expect(sink.names).toEqual(['start', 'done']);
+        expect(sink.final).toMatchObject({ status: 'no_info', answer: NO_INFO_TEXT, sources: [] });
+    });
+
+    it('"Consultá…" sale entero: no es la marca', async () => {
+        const { service } = build({ rows: ROWS, steps: ['Con', 'sultá con tu ', 'supervisor [S1].'] });
+
+        const sink = await ask(service);
+
+        expect(sink.deltas.join('')).toBe('Consultá con tu supervisor [S1].');
+        expect(sink.final?.status).toBe('answered');
+    });
+
+    it('"CONFLIC" de siete letras sigue esperando, y sale si no era la marca', async () => {
+        const { service } = build({ rows: ROWS, steps: ['CONFLIC', 'TIVO es el caso [S1].'] });
+
+        const sink = await ask(service);
+
+        expect(sink.final).toMatchObject({ status: 'answered', answer: 'CONFLICTIVO es el caso [S1].' });
+    });
+});
+
+// Spec 011 (T07, R8, R12): la ruta de streaming registra la alerta después de guardar y antes de done.
+describe('ChatStreamService: la alerta de contradicción (spec 011)', () => {
+    const ROWS = [
+        chunk({ chunkId: 'c1', documentId: 'doc-compras', versionId: 'v-compras' }),
+        chunk({ chunkId: 'c3', documentId: 'doc-gastos', versionId: 'v-gastos' }),
+    ];
+    const STEPS = ['CONFLICT [S1] [S2]\n', 'Gerente [S1]; director [S2].'];
+
+    function buildWithAlerts(steps: LlmStep[] = STEPS) {
+        const repo = new FakeRepository();
+        const alerts = new FakeConflictAlertRecorder();
+        const service = new ChatStreamService(
+            new FakeEmbeddings(),
+            new FakeRetrieval(ROWS),
+            new FakeLlm(steps),
+            repo,
+            undefined,
+            alerts,
+        );
+        return { service, repo, alerts };
+    }
+
+    beforeEach(() => {
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('E1: registra la alerta después de guardar la consulta y antes de done', async () => {
+        const { service, repo, alerts } = buildWithAlerts();
+        const order: string[] = [];
+        const save = repo.saveMessage.bind(repo);
+        jest.spyOn(repo, 'saveMessage').mockImplementation(async (input) => {
+            order.push('save');
+            return save(input);
+        });
+        jest.spyOn(alerts, 'record').mockImplementation(async () => {
+            order.push('record');
+        });
+        const sink = new RecordingSink();
+        const done = sink.done.bind(sink);
+        jest.spyOn(sink, 'done').mockImplementation((data) => {
+            order.push('done');
+            done(data);
+        });
+
+        const opened = await service.open(USER, { message: '¿Quién aprueba?' });
+        await service.run(USER, opened, sink, new AbortController().signal);
+
+        expect(order).toEqual(['save', 'record', 'done']);
+    });
+
+    it('E16: si el registro falla, done llega igual con conflict y el error queda en el log', async () => {
+        const { service, alerts } = buildWithAlerts();
+        alerts.failure = new Error('db down');
+        const logError = jest.spyOn(Logger.prototype, 'error');
+
+        const sink = await ask(service);
+
+        expect(sink.names).toEqual(['start', 'done']);
+        expect(sink.final?.status).toBe('conflict');
+        expect(logError).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    });
+
+    it('si el cliente corta, no guarda ni registra', async () => {
+        const { service, repo, alerts } = buildWithAlerts(['CONFLICT [S1] [S2]\n', { wait: 50 }, 'Gerente.']);
+        const client = new AbortController();
+        const sink = new RecordingSink();
+
+        const opened = await service.open(USER, { message: '¿Quién aprueba?' });
+        const running = service.run(USER, opened, sink, client.signal);
+        setTimeout(() => client.abort(), 10);
+        await running;
+
+        expect(repo.saved).toEqual([]);
+        expect(alerts.recorded).toEqual([]);
+    });
+
+    it('E17: sin contradicción no registra nada', async () => {
+        const { service, alerts } = buildWithAlerts(['Lo aprueba el gerente [S1].']);
+
+        await ask(service);
+
+        expect(alerts.recorded).toEqual([]);
     });
 });

@@ -21,6 +21,8 @@ const EVENTS_DESCRIPTION = [
     '- `start` `{ conversationId }`: uno solo, primero.',
     '- `delta` `{ text }`: cero o más partes del texto, solo con status answered.',
     '- `done`: la respuesta de POST /api/chat (ChatResult), más `searchUrl` con status ai_unavailable.',
+    '  Con status conflict (spec 011) no hay `delta`: `answer` explica lo que dice cada documento y',
+    '  `sources` son exactamente los dos pasajes que se contradicen, uno de cada documento.',
     '- `error` `{ statusCode, message }`: si falla después de abrir la transmisión.',
     'Siempre hay un solo evento final (done o error). Las líneas que empiezan con ":" son comentarios.',
 ].join('\n');

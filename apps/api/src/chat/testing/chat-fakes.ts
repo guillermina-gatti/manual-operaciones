@@ -7,6 +7,7 @@ import { ChatContextStore, type ConversationStep } from '../ports/chat-context-s
 import { ChatLlm, type LlmAnswer, type LlmStream, type Passage } from '../ports/chat-llm';
 import { ChatRepository, type SaveMessageInput } from '../ports/chat-repository';
 import { ChatRetrieval, type RetrievedChunk } from '../ports/chat-retrieval';
+import { ConflictAlertRecorder, type ConflictAlertInput } from '../ports/conflict-alert-recorder';
 
 export const USER = { id: 'user-1', areaIds: ['area-1'] };
 
@@ -222,5 +223,17 @@ export class FakeContextStore extends ChatContextStore {
     }
     async setConversationStep(conversationId: string, step: ConversationStep): Promise<void> {
         this.saved.push({ conversationId, step });
+    }
+}
+
+// --- Spec 011: las alertas de contradicción ----------------------------------------------------------
+
+// Guarda lo que recibe; con failure, rechaza (R12).
+export class FakeConflictAlertRecorder extends ConflictAlertRecorder {
+    recorded: ConflictAlertInput[] = [];
+    failure: Error | null = null;
+    async record(input: ConflictAlertInput): Promise<void> {
+        if (this.failure) throw this.failure;
+        this.recorded.push(input);
     }
 }

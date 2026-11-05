@@ -292,3 +292,71 @@ describe('prepareChat: el texto del embedding (spec 010)', () => {
         expect(embeddings.texts).toEqual([['¿qué hago acá?']]);
     });
 });
+
+// Spec 011 (T03, R5 a R7): finishChat reconoce la marca de contradicción, después de NO_INFO.
+describe('finishChat: la marca de contradicción (spec 011)', () => {
+    const chunks = [
+        chunk({ chunkId: 'c1', documentId: 'doc-compras', versionId: 'v-compras' }),
+        chunk({ chunkId: 'c2', documentId: 'doc-compras', versionId: 'v-compras' }),
+        chunk({ chunkId: 'c3', documentId: 'doc-gastos', versionId: 'v-gastos', documentTitle: 'Política de gastos' }),
+    ];
+    const warnings = () => {
+        const warn = jest.fn();
+        return { warn, logger: { warn } };
+    };
+
+    it('E1: una marca válida da conflict, sin la línea, con los dos fragmentos en orden', () => {
+        const llm = answer('CONFLICT [S3] [S1]\nEl manual dice gerente [S1]; la política, director [S3].');
+
+        expect(finishChat(llm, chunks)).toEqual({
+            status: 'conflict',
+            answer: 'El manual dice gerente [S1]; la política, director [S3].',
+            chunks: [chunks[0], chunks[2]],
+            conflict: { first: chunks[0], second: chunks[2] },
+            llm,
+        });
+    });
+
+    it('R7: quita de la explicación las marcas de otros pasajes', () => {
+        const llm = answer('CONFLICT [S1] [S3]\nGerente [S1], director [S3], como dice también [S2].');
+
+        expect(finishChat(llm, chunks).answer).toBe('Gerente [S1], director [S3], como dice también.');
+    });
+
+    it('E6: una marca inválida es answered sin la línea, y queda en el log', () => {
+        const { warn, logger } = warnings();
+        const llm = answer('CONFLICT [S1] [S2]\nLo aprueba el gerente [S2].');
+
+        expect(finishChat(llm, chunks, logger)).toEqual({
+            status: 'answered',
+            answer: 'Lo aprueba el gerente [S2].',
+            chunks: [chunks[1]],
+            llm,
+        });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('mismo documento'));
+    });
+
+    it('una marca inválida sin explicación es no_info', () => {
+        const llm = answer('CONFLICT [S1] [S3]');
+
+        expect(finishChat(llm, chunks)).toEqual({ status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm });
+    });
+
+    it('NO_INFO sigue primero', () => {
+        expect(finishChat(answer('NO_INFO'), chunks).status).toBe('no_info');
+    });
+
+    it('E17: sin la marca, lo de siempre y sin el campo conflict', () => {
+        const { warn, logger } = warnings();
+        const outcome = finishChat(answer('Lo aprueba el gerente [S1].'), chunks, logger);
+
+        expect(outcome).toEqual({
+            status: 'answered',
+            answer: 'Lo aprueba el gerente [S1].',
+            chunks: [chunks[0]],
+            llm: answer('Lo aprueba el gerente [S1].'),
+        });
+        expect(outcome).not.toHaveProperty('conflict');
+        expect(warn).not.toHaveBeenCalled();
+    });
+});

@@ -5,6 +5,7 @@ import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
 import type { Role } from '../common/auth';
 import { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatRequest, ChatResult } from './chat.contract';
+import { recordConflictAlert } from './chat-conflict';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
 import {
     type ChatUser,
@@ -18,6 +19,7 @@ import { ChatContextStore } from './ports/chat-context-store';
 import { ChatLlm, type LlmAnswer } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval } from './ports/chat-retrieval';
+import { ConflictAlertRecorder } from './ports/conflict-alert-recorder';
 
 // Se siguen exportando desde acá, como antes de la extracción.
 export {
@@ -40,6 +42,8 @@ export class ChatService {
         private readonly repository: ChatRepository,
         // Spec 010: para validar el contexto del paso. Opcional: sin él, todo sigue como antes.
         @Optional() private readonly contextStore?: ChatContextStore,
+        // Spec 011: para registrar la alerta de una contradicción. Opcional: sin él, todo sigue como antes.
+        @Optional() private readonly conflictAlerts?: ConflictAlertRecorder,
     ) { }
 
     async ask(user: ChatUser & { role?: Role }, request: ChatRequest): Promise<ChatResult> {
@@ -55,7 +59,10 @@ export class ChatService {
         await rememberConversationStep(this.contextStore, request, conversationId, stepContext);
 
         const outcome = await this.run(user, question, stepContext);
-        return saveResult(this.repository, conversationId, question, outcome, started);
+        const result = await saveResult(this.repository, conversationId, question, outcome, started);
+        // Spec 011: con una contradicción, la alerta al ADMIN. Sin ella, no hace nada.
+        await recordConflictAlert(this.conflictAlerts, outcome, result, question, this.logger);
+        return result;
     }
 
     private async run(user: ChatUser, question: string, stepContext?: StepContext): Promise<Outcome> {
@@ -73,6 +80,6 @@ export class ChatService {
             return unavailable();
         }
 
-        return finishChat(llm, prepared.chunks);
+        return finishChat(llm, prepared.chunks, this.logger);
     }
 }

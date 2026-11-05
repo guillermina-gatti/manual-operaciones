@@ -3,7 +3,7 @@
 - **Spec:** [spec.md](./spec.md) (HU39)
 - **Planes de referencia:** [plan 009](../009-asistente-streaming/plan.md) (ruta de streaming, retén de `NO_INFO`, pantalla del chat), [plan 010](../010-asistente-contexto-paso/plan.md) (cambios mínimos en el chat de Guille, dependencias opcionales) y [spec 005](../005-avisos-vencimiento/spec.md) ("Por revisar").
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado:** escrito el 05/11/2026, para revisar. Sin código. Las decisiones están en la sección 8.1; no quedan preguntas abiertas.
+- **Estado:** escrito el 05/11/2026; T01 a T13 implementadas el mismo día (tasks.md). Lo que cambió al implementar quedó en este plan: la paginación con `limit` (2.7), la regla del retén (2.3) y el `extraQuery` de `Pagination` (3.4). Las decisiones están en la sección 8.1; no quedan preguntas abiertas.
 
 En este plan, R1 a R21 y F1 a F10 son reglas de la spec; D1 a D16, sus decisiones (spec, sección 10); E1 a E18, sus escenarios (sección 11, en el orden en que aparecen); y PD1 a PD12, las decisiones de este plan (sección 8.1).
 
@@ -40,7 +40,7 @@ En este plan, R1 a R21 y F1 a F10 son reglas de la spec; D1 a D16, sus decisione
 - `documents/metrics/` (spec 007) es el modelo de una subcarpeta con su controlador, su servicio, su repositorio y sus DTO, registrada en `documents.module.ts`.
 - `AuditLog` (`ports/audit-log.ts`) registra acciones con `action`, `actorId`, `documentId`, `result`, `detail` y `at`.
 - `findUsersByIds` (spec 008) resuelve los nombres históricos de los usuarios.
-- `ListDocumentsQuery` valida `page` y `pageSize` (de 1 a 100, 20 por defecto).
+- `ListDocumentsQuery` valida `page` y `limit` (de 1 a 100, 20 por defecto), y el listado responde `{ data, total, page, limit }`.
 - `toHttpException` (`documents/http-errors.ts`) traduce `RepositoryUnavailableError` a 503.
 
 **La base:**
@@ -291,7 +291,7 @@ class MarkerGate {
    - con la línea completa, `readConflictMarker(text, chunks)`:
      - `conflict` → `closed`, sin `delta` (D9);
      - `invalid` → `open`, y emite `body` si no está vacío.
-3. **`text` es el principio de alguna de las dos marcas** (`'NO_INFO'.startsWith(text)` o `'CONFLICT'.startsWith(text)`) → sigue esperando.
+3. **Sigue esperando** mientras `text` tenga menos caracteres que `NO_INFO` (la regla de la spec 009, para que sus `delta` no cambien) o sea el principio de `CONFLICT` (`'CONFLICT'.startsWith(text)`, por ejemplo "CONFLIC"). "Empieza con la marca" es la palabra `CONFLICT` sola, seguida de un espacio, un salto de línea o el fin (`startsWithMarker`): "CONFLICTIVO…" sale como texto (R6).
 4. **Si no** → `open` y emite `text`, como hoy.
 
 `end()` decide con lo que haya, con las mismas reglas.
@@ -393,7 +393,7 @@ export async function recordConflictAlert(
 | `prisma-conflict-alerts.repository.ts` | El adaptador |
 | `conflict-alerts.service.ts` | `list` y `resolve`, con la auditoría y los nombres |
 | `conflict-alerts.controller.ts` | `GET /conflict-alerts` y `POST /conflict-alerts/:id/resolve` |
-| `dto/list-conflict-alerts.query.ts` | `status` (`OPEN` por defecto, o `RESOLVED`), `page`, `pageSize`, como `ListDocumentsQuery` |
+| `dto/list-conflict-alerts.query.ts` | `status` (`OPEN` por defecto, o `RESOLVED`), `page` y `limit`, como `ListDocumentsQuery` |
 | `dto/resolve-conflict-alert.dto.ts` | `note?` (`@IsOptional() @IsString() @MaxLength(500)`); en el servicio, `trim()` y vacío → `null` |
 | `dto/conflict-alert.response.ts` | La forma de R14, con `@ApiProperty`, mapeada campo por campo |
 
@@ -401,7 +401,7 @@ export async function recordConflictAlert(
 
 ```ts
 export abstract class ConflictAlertsRepository {
-  abstract list(q: { status: 'OPEN' | 'RESOLVED'; page: number; pageSize: number }): Promise<ConflictAlertPage>; // items, total, openTotal
+  abstract list(q: { status: 'OPEN' | 'RESOLVED'; page: number; limit: number }): Promise<ConflictAlertPage>; // items, total, openTotal
   abstract findById(id: string): Promise<ConflictAlertRecord | null>;
   // R15: solo si está OPEN. false si no se actualizó (no existe o ya estaba resuelta).
   abstract resolve(id: string, by: string, note: string | null, at: Date): Promise<boolean>;
@@ -466,9 +466,9 @@ export interface ConflictAlert {
   question: string; firstDetectedAt: string; lastDetectedAt: string; occurrences: number;
   resolvedAt: string | null; resolvedBy: DocumentReference | null; resolutionNote: string | null; // spec 008: { id, name, isActive }
 }
-export interface ConflictAlertPage { items: ConflictAlert[]; total: number; openTotal: number; page: number; pageSize: number }
+export interface ConflictAlertPage { data: ConflictAlert[]; total: number; openTotal: number; page: number; limit: number }
 
-export function listConflictAlerts(status: ConflictAlertStatus, page: number, pageSize: number, signal?: AbortSignal): Promise<ConflictAlertPage>;
+export function listConflictAlerts(status: ConflictAlertStatus, page: number, limit: number, signal?: AbortSignal): Promise<ConflictAlertPage>;
 export function resolveConflictAlert(id: string, note?: string): Promise<ConflictAlert>;
 ```
 
@@ -495,13 +495,13 @@ export function resolveConflictAlert(id: string, note?: string): Promise<Conflic
 - **`components/documents/ConflictAlertList.tsx`:**
   - lee `estado` y `pagina` de la URL;
   - las dos píldoras "Abiertas (n)" (con `openTotal`) y "Resueltas", con `aria-current` en la activa;
-  - las tarjetas, `Pagination` (la del listado) y los estados vacíos y de carga de F9.
+  - las tarjetas, `Pagination` (la del listado) y los estados vacíos y de carga de F9. `Pagination` suma un parámetro opcional, `extraQuery`, para que cada enlace conserve `estado=resueltas`; sin él, sus enlaces no cambian.
 - **`components/documents/ConflictAlertCard.tsx`:** la tarjeta de F7.
   - Las fechas pasan por `formatDay` (`lib/documents/format.ts`: `DD/MM/AAAA`, el día en Buenos Aires), y quien resolvió, por `formatPerson` ("(inactivo)" si está desactivado).
   - "● Archivado" con `gris-reemplazada` y "Hay una versión nueva" con `durazno`, siempre con texto.
 - **`components/documents/ResolveAlertDialog.tsx`:** el `<dialog>` de F8, como `ArchiveDialog`, con el campo de nota y su contador.
-  - Al confirmar, vuelve a pedir la página y el número del acceso: misma clave de `useApiResource`, invalidada.
-  - Ante un 409, muestra el mensaje y vuelve a pedir la página.
+  - Al confirmar, vuelve a pedir la página (`reload` de `useApiResource`), y con ella el número de "Abiertas (n)". El acceso de `/documentos` no comparte caché: lo vuelve a pedir al volver a esa pantalla.
+  - Ante un 409, el diálogo se cierra, la lista muestra el mensaje en un `role="status"` y vuelve a pedir la página.
 
 ## 4. Estrategia de pruebas
 
@@ -517,7 +517,7 @@ export function resolveConflictAlert(id: string, note?: string): Promise<Conflic
 | `chat.service.spec.ts` (de Guille) | **Sin cambios** |
 | `chat-routes.parity.spec.ts` (se suman casos) | Con el modelo respondiendo la marca: las dos rutas dan el mismo `status`, `answer` y `sources`, guardan lo mismo y registran lo mismo (E3); marca inválida, igual |
 | `conflict-pair.spec.ts` | El orden no depende del orden de entrada (E8); mayúsculas y minúsculas; el mismo documento lanza |
-| `dto/*.spec.ts` | `status` inválido, `pageSize` 101, parámetro de más → error; `note` de 501 → error |
+| `dto/*.spec.ts` | `status` inválido, `limit` 101, parámetro de más → error; `note` de 501 → error |
 | `conflict-alerts.service.spec.ts` | `list` con nombres de quien resolvió; `resolve`: éxito con auditoría (E13), ya resuelta → 409 (E14), no existe → 404, nota de espacios → `null`, repositorio caído → 503; auditoría del fallo |
 | `conflict-alerts.controller.spec.ts` | Los metadatos: `@Roles('ADMIN')` y los guards (E12) |
 

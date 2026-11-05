@@ -4,6 +4,7 @@
 import type { Logger } from '@nestjs/common';
 import type { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatResult, ChatResultStatus, ChatSource } from './chat.contract';
+import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
 import type { LlmAnswer, Passage } from './ports/chat-llm';
 import type { ChatRepository } from './ports/chat-repository';
 import type { ChatRetrieval, RetrievedChunk } from './ports/chat-retrieval';
@@ -28,6 +29,9 @@ export interface Outcome {
     answer: string;
     chunks: RetrievedChunk[];
     llm?: LlmAnswer;
+    // Spec 011 (R7): solo con status conflict, los dos fragmentos de la contradicción (first, el de
+    // número de pasaje menor). Son también los de chunks.
+    conflict?: { first: RetrievedChunk; second: RetrievedChunk };
 }
 
 // Lo que queda después de preparar: un resultado final (sin llamar al modelo) o los fragmentos
@@ -77,15 +81,35 @@ export async function prepareChat(
 }
 
 // Después del modelo: la marca NO_INFO o la respuesta con los fragmentos citados.
-export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[]): Outcome {
+// Spec 011 (R5 a R7): después de NO_INFO, la marca CONFLICT. Sin ella, exactamente lo de antes. El
+// logger es opcional (plan 011, PD2): anota una marca inválida, que se trata como answered.
+export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pick<Logger, 'warn'>): Outcome {
     if (llm.text.startsWith(NO_INFO_MARKER)) {
         return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm };
     }
 
+    let text = llm.text;
+    const marker = readConflictMarker(text, chunks);
+    if (marker.kind === 'conflict') {
+        const { first, second, body } = marker;
+        return {
+            status: 'conflict',
+            answer: keepOnlyRefs(body, refsOf(marker, chunks)),
+            chunks: [first, second],
+            conflict: { first, second },
+            llm,
+        };
+    }
+    if (marker.kind === 'invalid') {
+        logger?.warn(`Marca de contradicción inválida, se responde sin ella: ${marker.reason}`);
+        if (!marker.body) return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm };
+        text = marker.body;
+    }
+
     return {
         status: 'answered',
-        answer: llm.text,
-        chunks: citedChunks(llm.text, chunks),
+        answer: text,
+        chunks: citedChunks(text, chunks),
         llm,
     };
 }

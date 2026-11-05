@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (05/11/2026):** todas pendientes.
+- **Estado (05/11/2026):** T01 a T13 hechas; T14 y T15 pendientes.
   - T01 es la migración, **la hace Matías**.
   - T02 a T07 son el chat, T08 las alertas en documentos y T09 la integración de la API.
   - T10 a T13 son la web y T14 el Playwright.
@@ -66,7 +66,7 @@ Convenciones:
   - `git diff` del `schema.prisma`: solo la sección de la pareja C y los cuatro campos de relación.
 - **Depende de:** —
 - **Commit:** `feat(api): agregar la tabla de alertas de documentos contradictorios`
-- **Estado:** pendiente.
+- **Estado:** hecha y commiteada por Matías (05/11/2026).
 
 ## API · Chat
 
@@ -87,7 +87,7 @@ Convenciones:
   Falla porque el archivo no existe.
 - **Depende de:** —
 - **Commit:** `feat(api): leer la marca de contradicción del asistente`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). La marca es la palabra `CONFLICT` sola, seguida de un espacio, un salto de línea o el fin: "CONFLICTIVO…" no es una marca (R6). Suma `checkMarkerLine`, `splitMarkerLine` y `startsWithMarker`, que usa el retén de T05.
 
 ### T03 · `finishChat` reconoce la contradicción
 
@@ -104,7 +104,7 @@ Convenciones:
   Falla porque `finishChat` no conoce la marca. Después, `chat.service.spec.ts` y los tests de paridad pasan sin cambios.
 - **Depende de:** T02.
 - **Commit:** `feat(api): responder conflict cuando el asistente marca una contradicción`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026).
 
 ### T04 · La regla de la marca en el prompt
 
@@ -118,7 +118,7 @@ Convenciones:
   Falla porque las líneas no están. El diff de `gemini-chat-llm.ts` es solo esas tres líneas.
 - **Depende de:** —
 - **Commit:** `feat(api): pedirle al asistente que marque las contradicciones`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). El diff de `gemini-chat-llm.ts` son las 3 líneas, sin borrar ninguna.
 
 ### T05 · El retén de las dos marcas
 
@@ -134,7 +134,7 @@ Convenciones:
   Falla porque el retén deja pasar la marca. Los tests de las specs 009 y 010 pasan sin cambios.
 - **Depende de:** T03.
 - **Commit:** `feat(api): no transmitir la marca de contradicción`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). El retén espera como antes (hasta tener 7 caracteres, para que los `delta` de la spec 009 no cambien), y además mientras lo recibido sea el principio de `CONFLICT` o, con la marca, hasta el fin de su línea. Los tests de las specs 009 y 010 pasan sin cambios.
 
 ### T06 · El puerto que registra la alerta
 
@@ -161,7 +161,7 @@ Convenciones:
   Falla porque nada existe. El adaptador se prueba contra la base en T09.
 - **Depende de:** T01, T03.
 - **Commit:** `feat(api): registrar las alertas de contradicción`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026).
 
 ### T07 · El registro en las dos rutas y la paridad
 
@@ -185,7 +185,7 @@ Convenciones:
   - el diff de `chat.service.ts` es solo el parámetro opcional, la llamada y el `logger`.
 - **Depende de:** T05, T06.
 - **Commit:** `feat(api): alertar al admin cuando el asistente encuentra una contradicción`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). `chat.service.spec.ts` sin cambios.
 
 ## API · Documentos
 
@@ -199,7 +199,7 @@ Convenciones:
   - `src/documents/ports/audit-log.ts` y `src/documents/documents.module.ts`.
 - **Verificación:** test primero:
   - **DTO:**
-    - `status` inválido, `pageSize` 101 o un parámetro de más → error;
+    - `status` inválido, `limit` 101 o un parámetro de más → error;
     - sin `status` → `OPEN`;
     - `note` de 501 → error.
   - **Servicio, con un repositorio simulado:**
@@ -216,7 +216,7 @@ Convenciones:
   Falla porque nada existe. El adaptador se prueba en T09.
 - **Depende de:** T01, T06 (`conflict-pair.ts`).
 - **Commit:** `feat(api): listar y resolver las alertas de contradicción`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). La paginación usa `page` y `limit`, y la respuesta es `{ data, total, openTotal, page, limit }`, como el listado de documentos (no `pageSize` ni `items`). `http-errors.ts` suma las operaciones `alertas` y `resolución de alerta`, y `LoggerAuditLog` escribe los dos campos nuevos.
 
 ### T09 · Integración de las contradicciones
 
@@ -245,7 +245,7 @@ Convenciones:
   Las suites de chat y de documentos pasan sin cambios. **Pedir la confirmación del usuario** antes de resetear `manual_test`.
 - **Depende de:** T07, T08.
 - **Commit:** `test(api): probar las contradicciones de punta a punta`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026), con `manual_test` reseteado (confirmado por Matías). Los helpers quedaron en `test/documents/conflict-helpers.ts`. Las dos suites pasaron al primer intento: el código de T02 a T08 ya estaba, así que no hubo un "falla primero".
 
 ## Web
 
@@ -270,7 +270,7 @@ Convenciones:
   - sin colores en hexadecimal.
 - **Depende de:** —
 - **Commit:** `feat(web): mostrar cuando dos documentos se contradicen`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026).
 
 ### T11 · El cliente de las alertas
 
@@ -278,14 +278,14 @@ Convenciones:
 - **Cubre:** R14, R15 en la web.
 - **Archivos:** `lib/api/conflict-alerts.ts`, `lib/api/index.ts`, `lib/api/error-messages.ts`, `tests/lib/api/conflict-alerts.test.ts` y `tests/lib/api/error-messages.test.ts`.
 - **Verificación:** test primero:
-  - `listConflictAlerts('RESOLVED', 2, 20)` pide `/api/conflict-alerts?status=RESOLVED&page=2&pageSize=20`;
+  - `listConflictAlerts('RESOLVED', 2, 20)` pide `/api/conflict-alerts?status=RESOLVED&page=2&limit=20`;
   - `resolveConflictAlert(id, 'nota')` hace el POST con `{ note }`, y sin nota, con `{}`;
   - el 409 da "Otra persona ya la marcó como resuelta".
 
   Falla porque nada existe.
 - **Depende de:** —
 - **Commit:** `feat(web): agregar el cliente de las alertas de contradicción`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026).
 
 ### T12 · El acceso "Alertas (n)"
 
@@ -301,7 +301,7 @@ Convenciones:
   Falla porque el componente no existe. `PendingReviewLink.test.tsx` y `DocumentList.review.test.tsx` pasan sin cambios.
 - **Depende de:** T11.
 - **Commit:** `feat(web): agregar el acceso a las alertas en Documentos`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). El test de `DocumentList` quedó en un archivo aparte, `DocumentList.alerts.test.tsx`, para no cambiar los mocks de los otros.
 
 ### T13 · La sección "Alertas"
 
@@ -316,7 +316,7 @@ Convenciones:
 - **Verificación:** test primero:
   - **`ConflictAlertList`:**
     - las píldoras y el filtro en la URL (`?estado=resueltas`);
-    - la tarjeta abierta, con los dos documentos enlazados, la versión y la sección, la pregunta y "Detectada el 05/11/2026 · Se repitió 3 veces · Última vez el 07/11/2026" (E11);
+    - la tarjeta abierta, con los dos documentos enlazados, la versión y la sección, la pregunta y "Detectada el 05/11/2026 · Se detectó 3 veces · Última vez el 07/11/2026" (E11);
     - ningún dato de quién preguntó;
     - "● Archivado" y "Hay una versión nueva" (E15);
     - la resuelta, con "Resuelta el … por …" y la nota;
@@ -329,7 +329,7 @@ Convenciones:
   Falla porque nada existe. Después, sin colores en hexadecimal y `pnpm --filter web build` (con `API_URL`) bien.
 - **Depende de:** T11.
 - **Commit:** `feat(web): agregar la sección de alertas de documentos contradictorios`
-- **Estado:** pendiente.
+- **Estado:** hecha (05/11/2026). `Pagination` suma `extraQuery` (con su test), para conservar `estado=resueltas`. La tarjeta dice "Se detectó n veces", porque `occurrences` cuenta también la primera.
 
 ### T14 · Playwright: el aviso y las alertas
 
