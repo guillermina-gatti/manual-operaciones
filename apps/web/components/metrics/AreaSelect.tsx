@@ -17,7 +17,7 @@ interface AreaSelectProps {
   onChange: (value: string) => void;
 }
 
-export const AREA_SELECT_MESSAGES = {
+const AREA_SELECT_MESSAGES = {
   search: 'Buscar área…',
   noMatches: 'No hay áreas con ese nombre.',
 } as const;

@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import {
-  addDays,
   addMonths,
   areaOptions,
   defaultPeriod,
@@ -31,12 +30,7 @@ describe('todayInCompany', () => {
   });
 });
 
-describe('addDays and defaultPeriod', () => {
-  test('cross months and years', () => {
-    expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
-    expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
-  });
-
+describe('defaultPeriod', () => {
   test('the default period is this month, today included', () => {
     expect(defaultPeriod('2026-10-27')).toEqual({ from: '2026-10-01', to: '2026-10-27' });
     expect(defaultPeriod('2026-11-01')).toEqual({ from: '2026-11-01', to: '2026-11-01' });

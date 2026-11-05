@@ -19,7 +19,7 @@ interface FeatherBarProps {
   className?: string;
 }
 
-export function distributionLabel({ completed, inProgress, abandoned }: ExecutionCounts): string {
+function distributionLabel({ completed, inProgress, abandoned }: ExecutionCounts): string {
   return `Distribución: ${completed} completadas, ${inProgress} en curso, ${abandoned} abandonadas`;
 }
 

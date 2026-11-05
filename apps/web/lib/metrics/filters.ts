@@ -26,7 +26,6 @@ interface SearchParamsLike {
 
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // en-CA formats dates as YYYY-MM-DD.
 const dayFormat = new Intl.DateTimeFormat('en-CA', {
@@ -50,11 +49,6 @@ export function isCalendarDate(text: string): boolean {
 // Today in the company, not in the browser's time zone.
 export function todayInCompany(now: Date = new Date()): string {
   return dayFormat.format(now);
-}
-
-export function addDays(day: string, days: number): string {
-  const [year, month, date] = day.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, date) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
 export interface Period {
