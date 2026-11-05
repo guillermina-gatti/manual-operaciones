@@ -6,6 +6,7 @@ import { ChatRepository, type SaveMessageInput } from './ports/chat-repository';
 import { ChatRetrieval, type RetrievedChunk } from './ports/chat-retrieval';
 
 const USER = { id: 'user-1', areaIds: ['area-1'] };
+const QUERY = '¿Cuál es el plazo?';
 
 function chunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
     return {
@@ -93,7 +94,7 @@ describe('ChatService (HU17)', () => {
         ];
         const { service, repo } = build({ rows, llmReply: 'El plazo es de 5 días [S2].' });
 
-        const result = await service.ask(USER, { message: '¿Cuál es el plazo?' });
+        const result = await service.ask(USER, { message: QUERY });
 
         expect(result.status).toBe('answered');
         expect(result.answer).toBe('El plazo es de 5 días [S2].');
@@ -104,8 +105,17 @@ describe('ChatService (HU17)', () => {
 
     it('usa solo las áreas del usuario al recuperar', async () => {
         const { service, retrieval } = build({});
-        await service.ask(USER, { message: 'hola' });
+        await service.ask(USER, { message: QUERY });
         expect(retrieval.lastAreas).toEqual(['area-1']);
+    });
+
+    it('el saludo con áreas no recupera fragmentos ni llama al modelo', async () => {
+        const { service, retrieval, llm } = build({});
+        const result = await service.ask(USER, { message: 'hola' });
+
+        expect(retrieval.calls).toBe(0);
+        expect(llm.lastPassages).toEqual([]);
+        expect(result.sources).toEqual([]);
     });
 
     it('devuelve no_info sin llamar al modelo si el usuario no tiene áreas', async () => {
@@ -136,7 +146,7 @@ describe('ChatService (HU17)', () => {
 
     it('devuelve ai_unavailable si falla el embedding, sin consultar la base', async () => {
         const { service, retrieval } = build({ embeddingsFail: true });
-        const result = await service.ask(USER, { message: 'hola' });
+        const result = await service.ask(USER, { message: QUERY });
 
         expect(result.status).toBe('ai_unavailable');
         expect(result.answer).toBe(UNAVAILABLE_TEXT);
@@ -145,7 +155,7 @@ describe('ChatService (HU17)', () => {
 
     it('devuelve ai_unavailable si falla el modelo', async () => {
         const { service, repo } = build({ llmReply: null });
-        const result = await service.ask(USER, { message: 'hola' });
+        const result = await service.ask(USER, { message: QUERY });
 
         expect(result.status).toBe('ai_unavailable');
         expect(repo.saved[0].status).toBe('ai_unavailable');
