@@ -11,10 +11,8 @@ import { removeProcedure, saveProcedure, useStoredProcedures } from '@/lib/proce
 import { useSession } from '@/lib/session';
 import { DraftForm } from './DraftForm';
 import { ProcedureAreasForm } from './ProcedureAreasForm';
-import { StepsEditor } from './StepsEditor';
-
-const BACK_LINK =
-  'inline-flex min-h-11 items-center self-start rounded-md font-medium text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-blue-400';
+import { BACK_LINK, CARD_TITLE, Card, Notice, PageHeader } from './design';
+import { MAX_STEPS, StepsEditor } from './StepsEditor';
 
 export function ProcedureEditor() {
   const { user } = useSession();
@@ -51,25 +49,18 @@ export function ProcedureEditor() {
         <span aria-hidden="true">←&nbsp;</span>Volver a procedimientos
       </Link>
 
-      <header className="flex min-w-0 flex-col gap-2">
-        <h1 className="break-words text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          {procedure.title}
-        </h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Versión {procedure.versionNumber} · borrador
-        </p>
-        <p
-          role="note"
-          className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100"
-        >
-          Estos datos son la copia de esta sesión del navegador: la API todavía no tiene un GET
-          (llega con HU11). Si el procedimiento se cambia desde otro lugar, la copia puede quedar
-          desactualizada.
-        </p>
-      </header>
+      <PageHeader
+        title={procedure.title}
+        subtitle={`Versión ${procedure.versionNumber} · borrador`}
+      />
+      <Notice tone="info" role="note">
+        Estos datos son la copia de esta sesión del navegador: la API todavía no tiene un GET
+        (llega con HU11). Si el procedimiento se cambia desde otro lugar, la copia puede quedar
+        desactualizada.
+      </Notice>
 
-      <section aria-labelledby={`${baseId}-draft`} className="flex flex-col gap-4">
-        <h2 id={`${baseId}-draft`} className="text-xl font-semibold">
+      <Card aria-labelledby={`${baseId}-draft`}>
+        <h2 id={`${baseId}-draft`} className={CARD_TITLE}>
           Borrador
         </h2>
         <DraftForm
@@ -77,25 +68,26 @@ export function ProcedureEditor() {
           onChange={(next) => saveProcedure(user.id, next)}
           onGone={leave}
         />
-      </section>
+      </Card>
 
-      <section aria-labelledby={`${baseId}-steps`} className="flex flex-col gap-4">
-        <h2 id={`${baseId}-steps`} className="text-xl font-semibold">
-          Pasos
+      <Card aria-labelledby={`${baseId}-steps`}>
+        <h2 id={`${baseId}-steps`} className={CARD_TITLE}>
+          Pasos · {procedure.steps.length} de {MAX_STEPS}
         </h2>
+        <p className="-mt-3 text-sm text-texto-suave">La numeración se acomoda sola.</p>
         <StepsEditor
           procedure={procedure}
           onChange={(next) => saveProcedure(user.id, next)}
           onGone={leave}
         />
-      </section>
+      </Card>
 
-      <section aria-labelledby={`${baseId}-areas`} className="flex flex-col gap-4">
-        <h2 id={`${baseId}-areas`} className="text-xl font-semibold">
+      <Card aria-labelledby={`${baseId}-areas`}>
+        <h2 id={`${baseId}-areas`} className={CARD_TITLE}>
           Áreas
         </h2>
         <ProcedureAreasForm procedure={procedure} onChange={(next) => saveProcedure(user.id, next)} />
-      </section>
+      </Card>
     </div>
   );
 }

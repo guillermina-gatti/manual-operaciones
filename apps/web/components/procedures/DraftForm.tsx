@@ -4,7 +4,6 @@
 // changed is sent. Every answer of the API updates the local copy through onChange.
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
 import { FieldError } from '@/components/ui/FieldError';
 import { describeProcedureError, discardDraft, updateVersion } from '@/lib/procedures';
 import type { UpdateVersionValues } from '@/lib/procedures';
@@ -12,6 +11,14 @@ import type { StoredProcedure } from '@/lib/procedures/session-list';
 import { withDraft } from '@/lib/procedures/snapshot';
 import { validateProcedure } from '@/lib/procedures/validate';
 import type { FormErrors } from '@/lib/procedures/validate';
+import {
+  BUTTON_DANGER,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  INPUT,
+  LABEL,
+  Notice,
+} from './design';
 
 interface DraftFormProps {
   procedure: StoredProcedure;
@@ -25,9 +32,6 @@ interface Failure {
   message: string;
   notFound: boolean;
 }
-
-const FIELD =
-  'min-h-11 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 aria-[invalid=true]:border-red-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100';
 
 export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
   const baseId = useId();
@@ -129,14 +133,14 @@ export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
     <div className="flex flex-col gap-6">
       <form onSubmit={save} noValidate className="flex flex-col gap-5">
         <div className="flex flex-col gap-1">
-          <label htmlFor={titleId} className="font-medium">
+          <label htmlFor={titleId} className={LABEL}>
             Título
           </label>
           <input
             id={titleId}
             type="text"
             value={title}
-            className={FIELD}
+            className={INPUT}
             aria-invalid={errors.title ? true : undefined}
             aria-describedby={errors.title ? `${titleId}-error` : undefined}
             onChange={(event) => {
@@ -148,14 +152,14 @@ export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={descriptionId} className="font-medium">
+          <label htmlFor={descriptionId} className={LABEL}>
             Descripción (opcional)
           </label>
           <textarea
             id={descriptionId}
             rows={3}
             value={description}
-            className={FIELD}
+            className={INPUT}
             aria-invalid={errors.description ? true : undefined}
             aria-describedby={errors.description ? `${descriptionId}-error` : undefined}
             onChange={(event) => {
@@ -166,53 +170,64 @@ export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
           <FieldError id={`${descriptionId}-error`} message={errors.description} />
         </div>
 
-        <Button type="submit" className="self-start" disabled={busy !== null} aria-busy={busy === 'save'}>
+        <button
+          type="submit"
+          className={`${BUTTON_PRIMARY} self-start`}
+          disabled={busy !== null}
+          aria-busy={busy === 'save'}
+        >
           {busy === 'save' ? 'Guardando…' : 'Guardar cambios'}
-        </Button>
+        </button>
       </form>
 
       {notice && (
-        <p
-          role="status"
-          className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-900 shadow-sm dark:border-green-900 dark:bg-green-950/60 dark:text-green-100"
-        >
+        <Notice tone="success" role="status">
           {notice}
-        </p>
+        </Notice>
       )}
 
       {failure && (
-        <div
-          role="alert"
-          className="flex flex-col items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
+        <Notice tone="error" role="alert" className="flex flex-col items-start gap-3">
           <p>{failure.message}</p>
           {failure.notFound && (
-            <Button variant="secondary" onClick={onGone}>
+            <button type="button" className={BUTTON_SECONDARY} onClick={onGone}>
               Quitar de la lista
-            </Button>
+            </button>
           )}
-        </div>
+        </Notice>
       )}
 
-      <div className="border-t border-zinc-200 pt-5 dark:border-zinc-700">
+      <div className="border-t border-borde pt-5">
         {confirming ? (
           <div role="group" aria-label="Confirmar" className="flex flex-col gap-3">
-            <p>
+            <p className="font-semibold">
               ¿Descartar el borrador? Se borra el borrador con sus pasos; si es la única versión,
               se borra el procedimiento con sus áreas.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button onClick={discard} disabled={busy !== null} aria-busy={busy === 'discard'}>
+              <button
+                type="button"
+                className={BUTTON_DANGER}
+                onClick={discard}
+                disabled={busy !== null}
+                aria-busy={busy === 'discard'}
+              >
                 {busy === 'discard' ? 'Descartando…' : 'Sí, descartar'}
-              </Button>
-              <Button variant="secondary" onClick={() => setConfirming(false)} disabled={busy !== null}>
+              </button>
+              <button
+                type="button"
+                className={BUTTON_SECONDARY}
+                onClick={() => setConfirming(false)}
+                disabled={busy !== null}
+              >
                 Cancelar
-              </Button>
+              </button>
             </div>
           </div>
         ) : (
-          <Button
-            variant="secondary"
+          <button
+            type="button"
+            className={BUTTON_DANGER}
             disabled={busy !== null}
             onClick={() => {
               setNotice(null);
@@ -221,7 +236,7 @@ export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
             }}
           >
             Descartar borrador
-          </Button>
+          </button>
         )}
       </div>
     </div>

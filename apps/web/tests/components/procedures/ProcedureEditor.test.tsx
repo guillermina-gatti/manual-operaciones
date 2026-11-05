@@ -41,7 +41,7 @@ describe('the procedure', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Cierre de caja' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Borrador' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Pasos' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /^Pasos · \d+ de 50$/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Áreas' })).toBeInTheDocument();
     await screen.findByRole('group', { name: 'Áreas' });
   });

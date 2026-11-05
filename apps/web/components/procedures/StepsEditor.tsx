@@ -4,7 +4,6 @@
 // (each move asks the API for the whole list in the new order). One change at a time; every answer
 // of the API updates the local copy through onChange.
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/Button';
 import {
   addStep,
   deleteStep,
@@ -23,10 +22,22 @@ import {
 import { moveStep } from '@/lib/procedures/steps';
 import type { Direction } from '@/lib/procedures/steps';
 import type { FormValues } from '@/lib/procedures/validate';
+import {
+  ADD_BOX,
+  BUTTON_ICON,
+  BUTTON_ICON_DANGER,
+  BUTTON_SECONDARY,
+  IconDown,
+  IconTrash,
+  IconUp,
+  Notice,
+  STEP_ROW,
+  StepNumber,
+} from './design';
 import { StepForm } from './StepForm';
 
 // R6: a draft admits up to 50 steps.
-const MAX_STEPS = 50;
+export const MAX_STEPS = 50;
 
 interface StepsEditorProps {
   procedure: StoredProcedure;
@@ -145,28 +156,22 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
   return (
     <div className="flex flex-col gap-5">
       {failure && (
-        <div
-          role="alert"
-          className="flex flex-col items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
+        <Notice tone="error" role="alert" className="flex flex-col items-start gap-3">
           <p>{failure.message}</p>
           {failure.notFound && (
-            <Button variant="secondary" onClick={onGone}>
+            <button type="button" className={BUTTON_SECONDARY} onClick={onGone}>
               Quitar de la lista
-            </Button>
+            </button>
           )}
-        </div>
+        </Notice>
       )}
 
       {steps.length === 0 ? (
-        <p className="text-zinc-700 dark:text-zinc-300">Todavía no tiene pasos.</p>
+        <p className="text-texto-suave">Todavía no tiene pasos.</p>
       ) : (
         <ol aria-label="Pasos" className="flex flex-col gap-4">
           {steps.map((step, index) => (
-            <li
-              key={step.id}
-              className="flex min-w-0 flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
+            <li key={step.id} className={STEP_ROW}>
               {editingId === step.id ? (
                 <StepForm
                   legend="Editar el paso"
@@ -181,43 +186,41 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
               ) : (
                 <>
                   <div className="flex min-w-0 items-start gap-4">
-                    <span
-                      aria-hidden="true"
-                      className="flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-base font-bold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200"
-                    >
-                      {step.order}
-                    </span>
+                    <StepNumber>{step.order}</StepNumber>
                     <div className="flex min-w-0 flex-col gap-1 pt-1.5">
-                      <h3 className="break-words text-lg font-semibold leading-snug">
+                      <h3 className="break-words text-lg font-semibold leading-snug text-texto">
                         <span className="sr-only">Paso {step.order}: </span>
                         {step.title}
                       </h3>
                       {step.description && (
-                        <p className="whitespace-pre-line break-words text-zinc-700 dark:text-zinc-300">
+                        <p className="whitespace-pre-line break-words text-texto-suave">
                           {step.description}
                         </p>
                       )}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 sm:ml-14">
-                    <Button
-                      variant="secondary"
+                    <button
+                      type="button"
+                      className={BUTTON_ICON}
                       aria-label={`Subir paso: ${step.title}`}
                       disabled={busy !== null || index === 0}
                       onClick={() => move(step, 'up')}
                     >
-                      Subir
-                    </Button>
-                    <Button
-                      variant="secondary"
+                      <IconUp />
+                    </button>
+                    <button
+                      type="button"
+                      className={BUTTON_ICON}
                       aria-label={`Bajar paso: ${step.title}`}
                       disabled={busy !== null || index === steps.length - 1}
                       onClick={() => move(step, 'down')}
                     >
-                      Bajar
-                    </Button>
-                    <Button
-                      variant="secondary"
+                      <IconDown />
+                    </button>
+                    <button
+                      type="button"
+                      className={BUTTON_SECONDARY}
                       aria-label={`Editar paso: ${step.title}`}
                       disabled={busy !== null}
                       onClick={() => {
@@ -226,15 +229,16 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
                       }}
                     >
                       Editar
-                    </Button>
-                    <Button
-                      variant="secondary"
+                    </button>
+                    <button
+                      type="button"
+                      className={BUTTON_ICON_DANGER}
                       aria-label={`Borrar paso: ${step.title}`}
                       disabled={busy !== null}
                       onClick={() => void remove(step)}
                     >
-                      Borrar
-                    </Button>
+                      <IconTrash />
+                    </button>
                   </div>
                 </>
               )}
@@ -244,19 +248,21 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
       )}
 
       {steps.length >= MAX_STEPS ? (
-        <p className="text-zinc-700 dark:text-zinc-300">
+        <p className="text-texto-suave">
           El borrador ya tiene {MAX_STEPS} pasos: es el máximo.
         </p>
       ) : (
+        <div className={ADD_BOX}>
         <StepForm
-          legend="Agregar un paso"
-          submitLabel="Agregar paso"
-          busyLabel="Agregando…"
-          disabled={busy !== null}
-          working={busy === 'add'}
-          resetOnSuccess
-          onSubmit={add}
-        />
+            legend="Agregar un paso"
+            submitLabel="Agregar paso"
+            busyLabel="Agregando…"
+            disabled={busy !== null}
+            working={busy === 'add'}
+            resetOnSuccess
+            onSubmit={add}
+          />
+      </div>
       )}
     </div>
   );

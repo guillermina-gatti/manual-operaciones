@@ -6,7 +6,6 @@
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { AreasField } from '@/components/documents/AreasField';
-import { Button } from '@/components/ui/Button';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { useApiResource } from '@/lib/api';
 import { areasDirectory } from '@/lib/directory';
@@ -14,6 +13,7 @@ import type { Area } from '@/lib/directory';
 import { describeProcedureError, setAreas } from '@/lib/procedures';
 import type { StoredProcedure } from '@/lib/procedures/session-list';
 import { withAreas } from '@/lib/procedures/snapshot';
+import { BUTTON_PRIMARY, HINT, Notice } from './design';
 
 interface ProcedureAreasFormProps {
   procedure: StoredProcedure;
@@ -64,30 +64,29 @@ function AreasForm({ procedure, onChange, areas }: ProcedureAreasFormProps & { a
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-5">
       <AreasField areas={areas} selected={areaIds} onChange={setAreaIds} />
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className={HINT}>
         Un procedimiento puede quedar sin áreas, pero no se podrá publicar sin al menos una (HU32).
       </p>
 
       {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
+        <Notice tone="error" role="alert">
           {error}
-        </p>
+        </Notice>
       )}
       {saved && (
-        <p
-          role="status"
-          className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-900 shadow-sm dark:border-green-900 dark:bg-green-950/60 dark:text-green-100"
-        >
+        <Notice tone="success" role="status">
           Áreas guardadas.
-        </p>
+        </Notice>
       )}
 
-      <Button type="submit" className="self-start" disabled={saving} aria-busy={saving}>
+      <button
+        type="submit"
+        className={`${BUTTON_PRIMARY} self-start`}
+        disabled={saving}
+        aria-busy={saving}
+      >
         {saving ? 'Guardando…' : 'Guardar áreas'}
-      </Button>
+      </button>
     </form>
   );
 }

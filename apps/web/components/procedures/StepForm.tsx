@@ -4,10 +4,10 @@
 // It checks the data and gives them, trimmed, to onSubmit; the screen that owns the form talks to the API.
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
 import { FieldError } from '@/components/ui/FieldError';
 import { validateStep } from '@/lib/procedures/validate';
 import type { FormErrors, FormValues } from '@/lib/procedures/validate';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, INPUT, LABEL } from './design';
 
 interface StepFormProps {
   // The name of the form, also for screen readers.
@@ -25,9 +25,6 @@ interface StepFormProps {
   resetOnSuccess?: boolean;
   onCancel?: () => void;
 }
-
-const FIELD =
-  'min-h-11 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 aria-[invalid=true]:border-red-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100';
 
 export function StepForm({
   legend,
@@ -69,17 +66,17 @@ export function StepForm({
       noValidate
       className="flex min-w-0 flex-col gap-4"
     >
-      <p className="font-medium">{legend}</p>
+      <p className="text-lg font-bold">{legend}</p>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={titleId} className="text-sm font-medium">
+      <div className="flex flex-col gap-2">
+        <label htmlFor={titleId} className={LABEL}>
           Título del paso
         </label>
         <input
           id={titleId}
           type="text"
           value={title}
-          className={FIELD}
+          className={INPUT}
           aria-invalid={errors.title ? true : undefined}
           aria-describedby={errors.title ? `${titleId}-error` : undefined}
           onChange={(event) => {
@@ -90,15 +87,15 @@ export function StepForm({
         <FieldError id={`${titleId}-error`} message={errors.title} />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={descriptionId} className="text-sm font-medium">
+      <div className="flex flex-col gap-2">
+        <label htmlFor={descriptionId} className={LABEL}>
           Descripción del paso (opcional)
         </label>
         <textarea
           id={descriptionId}
           rows={2}
           value={description}
-          className={FIELD}
+          className={INPUT}
           aria-invalid={errors.description ? true : undefined}
           aria-describedby={errors.description ? `${descriptionId}-error` : undefined}
           onChange={(event) => {
@@ -110,13 +107,14 @@ export function StepForm({
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={disabled} aria-busy={working}>
+        <button type="submit" className={BUTTON_PRIMARY} disabled={disabled} aria-busy={working}>
+          {resetOnSuccess && !working && <span aria-hidden="true">+</span>}
           {working ? busyLabel : submitLabel}
-        </Button>
+        </button>
         {onCancel && (
-          <Button variant="secondary" onClick={onCancel} disabled={disabled}>
+          <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={disabled}>
             Cancelar
-          </Button>
+          </button>
         )}
       </div>
     </form>
