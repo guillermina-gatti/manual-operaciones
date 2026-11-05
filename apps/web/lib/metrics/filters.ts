@@ -1,10 +1,9 @@
 // Filters of the metrics panel (HU38). They live in the address (?area=…&desde=…&hasta=…), so
-// a filtered view can be shared and "back" works. Without dates, the last 30 days.
+// a filtered view can be shared and "back" works. Without dates, this month up to today.
 import { COMPANY_TIME_ZONE } from '@/lib/documents/format';
 import { displayAreaName } from '@/lib/directory/areas-directory';
 import type { Area } from '@/lib/directory';
 
-export const DEFAULT_PERIOD_DAYS = 30;
 export const METRICS_PATH = '/metricas';
 
 export interface PanelFilters {
@@ -55,9 +54,53 @@ export function addDays(day: string, days: number): string {
   return new Date(Date.UTC(year, month - 1, date) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
-// The last 30 days, today included.
-export function defaultPeriod(today: string): { from: string; to: string } {
-  return { from: addDays(today, -(DEFAULT_PERIOD_DAYS - 1)), to: today };
+export interface Period {
+  from: string;
+  to: string;
+}
+
+// The same day n months before or after; a day the month does not have becomes its last one
+// (31/05 minus 3 months is 28/02).
+export function addMonths(day: string, months: number): string {
+  const [year, month, date] = day.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  target.setUTCDate(Math.min(date, lastDay));
+  return target.toISOString().slice(0, 10);
+}
+
+// The quick periods of the panel, always up to today.
+export type QuickPeriod = 'today' | 'month' | 'quarter';
+
+export const QUICK_PERIODS: readonly { id: QuickPeriod; label: string }[] = [
+  { id: 'today', label: 'Hoy' },
+  { id: 'month', label: 'Este mes' },
+  { id: 'quarter', label: 'Últimos 3 meses' },
+];
+
+export function quickPeriodRange(period: QuickPeriod, today: string): Period {
+  if (period === 'today') return { from: today, to: today };
+  if (period === 'month') return { from: `${today.slice(0, 8)}01`, to: today };
+  return { from: addMonths(today, -3), to: today };
+}
+
+// The quick period that gives exactly these dates, or null if they were changed by hand. On
+// the 1st of the month "Este mes" and "Hoy" are the same range: "Este mes" wins, as the default.
+export function matchingQuickPeriod(from: string, to: string, today: string): QuickPeriod | null {
+  const order: QuickPeriod[] = ['month', 'today', 'quarter'];
+  return (
+    order.find((period) => {
+      const range = quickPeriodRange(period, today);
+      return range.from === from && range.to === to;
+    }) ?? null
+  );
+}
+
+// Without dates in the address: this month, today included.
+export function defaultPeriod(today: string): Period {
+  return quickPeriodRange('month', today);
 }
 
 // A value written by hand that is not valid is ignored: the default takes its place.

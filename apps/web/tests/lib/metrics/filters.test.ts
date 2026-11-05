@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import {
   addDays,
+  addMonths,
   areaOptions,
   defaultPeriod,
   isCalendarDate,
+  matchingQuickPeriod,
   metricsHref,
   parseMetricsFilters,
+  quickPeriodRange,
   todayInCompany,
 } from '@/lib/metrics/filters';
 
@@ -31,8 +34,46 @@ describe('addDays and defaultPeriod', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
   });
 
-  test('the default period is the last 30 days, today included', () => {
-    expect(defaultPeriod('2026-10-27')).toEqual({ from: '2026-09-28', to: '2026-10-27' });
+  test('the default period is this month, today included', () => {
+    expect(defaultPeriod('2026-10-27')).toEqual({ from: '2026-10-01', to: '2026-10-27' });
+    expect(defaultPeriod('2026-11-01')).toEqual({ from: '2026-11-01', to: '2026-11-01' });
+  });
+});
+
+describe('addMonths', () => {
+  test('goes to the same day of another month, across years', () => {
+    expect(addMonths('2026-11-04', -3)).toBe('2026-08-04');
+    expect(addMonths('2026-02-15', -3)).toBe('2025-11-15');
+  });
+
+  test('a day the month does not have becomes its last one', () => {
+    expect(addMonths('2026-05-31', -3)).toBe('2026-02-28');
+    expect(addMonths('2024-05-31', -3)).toBe('2024-02-29');
+  });
+});
+
+describe('quick periods', () => {
+  test.each([
+    ['today', { from: '2026-11-04', to: '2026-11-04' }],
+    ['month', { from: '2026-11-01', to: '2026-11-04' }],
+    ['quarter', { from: '2026-08-04', to: '2026-11-04' }],
+  ] as const)('%s ends today', (period, range) => {
+    expect(quickPeriodRange(period, '2026-11-04')).toEqual(range);
+  });
+
+  test('the dates of a quick period mark it', () => {
+    expect(matchingQuickPeriod('2026-11-04', '2026-11-04', '2026-11-04')).toBe('today');
+    expect(matchingQuickPeriod('2026-11-01', '2026-11-04', '2026-11-04')).toBe('month');
+    expect(matchingQuickPeriod('2026-08-04', '2026-11-04', '2026-11-04')).toBe('quarter');
+  });
+
+  test('dates changed by hand mark none', () => {
+    expect(matchingQuickPeriod('2026-11-02', '2026-11-04', '2026-11-04')).toBeNull();
+    expect(matchingQuickPeriod('2026-11-01', '2026-11-03', '2026-11-04')).toBeNull();
+  });
+
+  test('on the 1st, "Este mes" wins over "Hoy"', () => {
+    expect(matchingQuickPeriod('2026-11-01', '2026-11-01', '2026-11-01')).toBe('month');
   });
 });
 
@@ -47,10 +88,10 @@ describe('isCalendarDate', () => {
 });
 
 describe('parseMetricsFilters', () => {
-  test('without parameters: no area and the last 30 days', () => {
+  test('without parameters: no area and this month', () => {
     expect(parseMetricsFilters(params(''), '2026-10-27')).toEqual({
       areaId: null,
-      from: '2026-09-28',
+      from: '2026-10-01',
       to: '2026-10-27',
     });
   });
@@ -64,7 +105,7 @@ describe('parseMetricsFilters', () => {
   test('ignores values written by hand that are not valid', () => {
     expect(
       parseMetricsFilters(params('area=ventas&desde=2026-02-30&hasta=ayer'), '2026-10-27'),
-    ).toEqual({ areaId: null, from: '2026-09-28', to: '2026-10-27' });
+    ).toEqual({ areaId: null, from: '2026-10-01', to: '2026-10-27' });
   });
 });
 

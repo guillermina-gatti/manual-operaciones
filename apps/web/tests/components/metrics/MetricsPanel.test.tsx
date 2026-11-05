@@ -90,6 +90,10 @@ const optionLabels = () =>
     .getAllByRole('option')
     .map((option) => option.textContent);
 const spaces = (text: string | null) => text?.replace(/\s/g, ' ');
+const quickPeriod = (label: string) =>
+  within(screen.getByRole('group', { name: 'Período rápido' })).getByRole('button', {
+    name: label,
+  });
 
 describe('loading and filters', () => {
   test('shows the loading state while the metrics arrive', () => {
@@ -99,16 +103,16 @@ describe('loading and filters', () => {
     expect(screen.getByText('Cargando las métricas…')).toBeInTheDocument();
   });
 
-  test('without filters in the address asks for the last 30 days of every area', async () => {
+  test('without filters in the address asks for this month of every area', async () => {
     render(<MetricsPanel />);
 
     await procedureCard();
     expect(mocks.getProcedureMetrics).toHaveBeenCalledWith(
-      { areaId: null, from: '2026-09-28', to: '2026-10-27' },
+      { areaId: null, from: '2026-10-01', to: '2026-10-27' },
       expect.any(AbortSignal),
     );
-    expect(screen.getByText('Del 28/09/2026 al 27/10/2026, en todas las áreas.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Desde')).toHaveValue('2026-09-28');
+    expect(screen.getByText('Del 01/10/2026 al 27/10/2026, en todas las áreas.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Desde')).toHaveValue('2026-10-01');
     expect(screen.getByLabelText('Hasta')).toHaveValue('2026-10-27');
   });
 
@@ -149,11 +153,11 @@ describe('loading and filters', () => {
 
     await user.selectOptions(areaSelect(), 'Ventas');
     await user.clear(screen.getByLabelText('Desde'));
-    await user.type(screen.getByLabelText('Desde'), '2026-10-01');
+    await user.type(screen.getByLabelText('Desde'), '2026-10-05');
     await user.click(screen.getByRole('button', { name: 'Aplicar' }));
 
     expect(mocks.push).toHaveBeenCalledWith(
-      `/metricas?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`,
+      `/metricas?area=${VENTAS}&desde=2026-10-05&hasta=2026-10-27`,
     );
   });
 
@@ -173,14 +177,74 @@ describe('loading and filters', () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
-  test('"Últimos 30 días" goes back to the default filters', async () => {
+  test('"Limpiar filtros" goes back to every area and this month', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+
+    expect(mocks.push).toHaveBeenCalledWith('/metricas');
+  });
+
+  test('"Este mes" is marked by default', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    expect(quickPeriod('Este mes')).toHaveAttribute('aria-pressed', 'true');
+    expect(quickPeriod('Hoy')).toHaveAttribute('aria-pressed', 'false');
+    expect(quickPeriod('Últimos 3 meses')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test.each([
+    ['Hoy', '2026-10-27'],
+    ['Este mes', '2026-10-01'],
+    ['Últimos 3 meses', '2026-07-27'],
+  ])('"%s" applies at once, up to today, with the chosen area', async (label, from) => {
+    const user = userEvent.setup();
+    render(<MetricsPanel />);
+    await screen.findByRole('option', { name: 'Ventas' });
+
+    await user.selectOptions(areaSelect(), 'Ventas');
+    await user.click(quickPeriod(label));
+
+    expect(mocks.push).toHaveBeenCalledWith(
+      `/metricas?area=${VENTAS}&desde=${from}&hasta=2026-10-27`,
+    );
+  });
+
+  test('changing a date by hand leaves no quick period marked', async () => {
     const user = userEvent.setup();
     render(<MetricsPanel />);
     await procedureCard();
 
-    await user.click(screen.getByRole('button', { name: 'Últimos 30 días' }));
+    await user.clear(screen.getByLabelText('Desde'));
+    await user.type(screen.getByLabelText('Desde'), '2026-10-05');
 
-    expect(mocks.push).toHaveBeenCalledWith('/metricas');
+    for (const label of ['Hoy', 'Este mes', 'Últimos 3 meses']) {
+      expect(quickPeriod(label)).toHaveAttribute('aria-pressed', 'false');
+    }
+  });
+
+  test('the footer says what is being shown', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
+    render(<MetricsPanel />);
+    await procedureCard();
+    await screen.findByRole('option', { name: 'Ventas' });
+
+    const footer = screen.getByText(/^Mostrando/);
+    expect(footer).toHaveTextContent('Mostrando Ventas · 1 oct 2026 – 15 oct 2026');
+    expect(footer).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test('a single day is shown once in the footer', async () => {
+    mocks.searchParams = new URLSearchParams('desde=2026-10-27&hasta=2026-10-27');
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    expect(screen.getByText(/^Mostrando/)).toHaveTextContent('Mostrando Todas · 27 oct 2026');
+    expect(quickPeriod('Hoy')).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -272,7 +336,7 @@ describe('empty and errors', () => {
     expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver todas mis áreas' })).toHaveAttribute(
       'href',
-      '/metricas?desde=2026-09-28&hasta=2026-10-27',
+      '/metricas?desde=2026-10-01&hasta=2026-10-27',
     );
   });
 

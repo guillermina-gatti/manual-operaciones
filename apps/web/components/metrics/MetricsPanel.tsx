@@ -31,7 +31,8 @@ const STATE_CARD = `${CARD} px-6 sm:px-8`;
 
 export function MetricsPanel() {
   const { user } = useSession();
-  const filters = parseMetricsFilters(useSearchParams(), todayInCompany());
+  const today = todayInCompany();
+  const filters = parseMetricsFilters(useSearchParams(), today);
   const query = metricsQuery(filters);
 
   // The key includes the user: switching test users asks again.
@@ -51,7 +52,12 @@ export function MetricsPanel() {
 
   return (
     <div className="flex min-w-0 flex-col gap-10">
-      <MetricsFiltersForm key={metricsHref(filters)} filters={filters} areas={options} />
+      <MetricsFiltersForm
+        key={metricsHref(filters)}
+        filters={filters}
+        areas={options}
+        today={today}
+      />
       <ProceduresSection
         filters={filters}
         areas={areaList}
