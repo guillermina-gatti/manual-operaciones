@@ -12,6 +12,12 @@ import {
   metricsResponse,
 } from '../../support/metrics';
 
+// Each test mounts the whole panel (summary, time table, area cards and their steps tables) and
+// looks things up by role and accessible name, which is slow in jsdom. Alone a test takes under
+// a second, but with the whole suite running in parallel the first full mount went over the
+// default 5 s once. Only this file gets more time; the global vitest config is not changed.
+vi.setConfig({ testTimeout: 15_000 });
+
 const mocks = vi.hoisted(() => ({
   getProcedureMetrics: vi.fn(),
   getDocuments: vi.fn(),
