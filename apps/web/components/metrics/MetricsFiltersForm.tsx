@@ -23,6 +23,7 @@ import {
 } from '@/lib/metrics/filters';
 import type { AreaOption, PanelFilters, QuickPeriod } from '@/lib/metrics/filters';
 import { formatPeriod } from '@/lib/metrics/format';
+import { AreaSelect } from './AreaSelect';
 import { FilterIcon, WarningIcon } from './icons';
 
 interface MetricsFiltersFormProps {
@@ -81,22 +82,8 @@ export function MetricsFiltersForm({ filters, areas, today }: MetricsFiltersForm
       </h2>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
-        <div className="flex flex-col gap-2 sm:col-span-2 lg:col-span-1">
-          <label htmlFor={`${id}-area`} className={LABEL}>
-            Área
-          </label>
-          <select
-            id={`${id}-area`}
-            value={areaId}
-            onChange={(event) => setAreaId(event.target.value)}
-            className={INPUT}
-          >
-            {areas.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        <div className="sm:col-span-2 lg:col-span-1">
+          <AreaSelect options={areas} value={areaId} onChange={setAreaId} />
         </div>
         <div className="flex flex-col gap-2">
           <label htmlFor={`${id}-from`} className={LABEL}>

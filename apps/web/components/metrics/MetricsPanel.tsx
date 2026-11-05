@@ -17,7 +17,9 @@ import {
   areaOptions,
   metricsHref,
   parseMetricsFilters,
+  proceduresPerArea,
   todayInCompany,
+  withAreaHints,
 } from '@/lib/metrics/filters';
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { useSession } from '@/lib/session';
@@ -43,11 +45,20 @@ export function MetricsPanel() {
   // Without the area names the panel still works: the selector offers only "Todas".
   const areaList = areas.status === 'success' ? areas.data : [];
   const isAdmin = user?.role === 'ADMIN';
-  const options = areaOptions(
-    isAdmin,
-    areaList,
-    metrics.status === 'success' ? metrics.data.areaIds : undefined,
-    filters.areaId,
+  // The procedures per area are only known from an answer for every area: with one area
+  // chosen, the others are not in it, and the selector shows no counts.
+  const counts =
+    metrics.status === 'success' && filters.areaId === null
+      ? proceduresPerArea(metrics.data.procedures)
+      : null;
+  const options = withAreaHints(
+    areaOptions(
+      isAdmin,
+      areaList,
+      metrics.status === 'success' ? metrics.data.areaIds : undefined,
+      filters.areaId,
+    ),
+    counts,
   );
 
   return (

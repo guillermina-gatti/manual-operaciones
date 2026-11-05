@@ -37,3 +37,29 @@ export function WarningIcon({ className }: { className?: string }) {
     </Icon>
   );
 }
+
+export function BuildingIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01" />
+      <path d="M10 21v-3h4v3" />
+    </Icon>
+  );
+}
+
+export function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
+export function CheckIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <path d="M5 12.5 10 17 19 7" />
+    </Icon>
+  );
+}

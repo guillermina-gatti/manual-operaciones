@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MetricsPanel } from '@/components/metrics/MetricsPanel';
@@ -84,11 +84,24 @@ afterEach(() => {
 });
 
 const procedureCard = () => screen.findByRole('article', { name: 'Cierre de caja' });
-const areaSelect = () => screen.getByRole('combobox', { name: 'Área' });
-const optionLabels = () =>
-  within(areaSelect())
+type User = ReturnType<typeof userEvent.setup>;
+const areaButton = () => screen.getByRole('button', { name: /^Área/ });
+// Until the area names arrive, the selector only has "Todas las áreas".
+const areasLoaded = (hint: string) =>
+  waitFor(() => expect(areaButton()).toHaveTextContent(hint));
+// Each option as "label · hint", as the selector shows it.
+const optionTexts = async (user: User) => {
+  await user.click(areaButton());
+  return within(screen.getByRole('listbox', { name: 'Área' }))
     .getAllByRole('option')
-    .map((option) => option.textContent);
+    .map((option) =>
+      [...option.querySelectorAll('span')].map((span) => span.textContent).join(' · '),
+    );
+};
+const chooseArea = async (user: User, name: string) => {
+  await user.click(areaButton());
+  await user.click(screen.getByRole('option', { name: new RegExp(`^${name}`) }));
+};
 const spaces = (text: string | null) => text?.replace(/\s/g, ' ');
 const quickPeriod = (label: string) =>
   within(screen.getByRole('group', { name: 'Período rápido' })).getByRole('button', {
@@ -128,30 +141,65 @@ describe('loading and filters', () => {
     expect(await screen.findByText('Del 01/10/2026 al 15/10/2026, en Ventas.')).toBeInTheDocument();
   });
 
-  test('ADMIN chooses among "Todas" and every area', async () => {
+  test('ADMIN chooses among "Todas las áreas" and every area, with their procedures', async () => {
+    const user = userEvent.setup();
     render(<MetricsPanel />);
 
     await procedureCard();
-    await screen.findByRole('option', { name: 'Operaciones' });
-    expect(optionLabels()).toEqual(['Todas', 'Ventas', 'Operaciones']);
+    await areasLoaded('2 áreas');
+    expect(areaButton()).toHaveTextContent('Todas las áreas');
+    expect(await optionTexts(user)).toEqual([
+      'Todas las áreas · 2 áreas',
+      'Ventas · 1 procedimiento',
+      'Operaciones · 1 procedimiento',
+    ]);
   });
 
   test('SUPERVISOR chooses only among their areas', async () => {
+    const user = userEvent.setup();
     mocks.useSession.mockReturnValue(SERGIO);
     mocks.getProcedureMetrics.mockResolvedValue(metricsResponse({ areaIds: [VENTAS] }));
     render(<MetricsPanel />);
 
     await procedureCard();
-    await screen.findByRole('option', { name: 'Ventas' });
-    expect(optionLabels()).toEqual(['Todas mis áreas', 'Ventas']);
+    await areasLoaded('1 área');
+    expect(await optionTexts(user)).toEqual([
+      'Todas mis áreas · 1 área',
+      'Ventas · 1 procedimiento',
+    ]);
+  });
+
+  test('an area without executions in the period says "Sin datos"', async () => {
+    const user = userEvent.setup();
+    const metrics = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...metrics,
+      procedures: metrics.procedures.filter((procedure) => procedure.areaIds.includes(VENTAS)),
+    });
+    render(<MetricsPanel />);
+
+    await procedureCard();
+    await areasLoaded('2 áreas');
+    expect(await optionTexts(user)).toContain('Operaciones · Sin datos');
+  });
+
+  test('with an area chosen, the other areas show no counts', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    render(<MetricsPanel />);
+
+    await procedureCard();
+    await waitFor(() => expect(areaButton()).toHaveTextContent('Ventas'));
+    expect(await optionTexts(user)).toEqual(['Todas las áreas · 2 áreas', 'Ventas', 'Operaciones']);
   });
 
   test('applying changes the address with the chosen filters', async () => {
     const user = userEvent.setup();
     render(<MetricsPanel />);
-    await screen.findByRole('option', { name: 'Ventas' });
+    await areasLoaded('2 áreas');
 
-    await user.selectOptions(areaSelect(), 'Ventas');
+    await chooseArea(user, 'Ventas');
+    expect(areaButton()).toHaveTextContent('Ventas');
     await user.clear(screen.getByLabelText('Desde'));
     await user.type(screen.getByLabelText('Desde'), '2026-10-05');
     await user.click(screen.getByRole('button', { name: 'Aplicar' }));
@@ -204,9 +252,9 @@ describe('loading and filters', () => {
   ])('"%s" applies at once, up to today, with the chosen area', async (label, from) => {
     const user = userEvent.setup();
     render(<MetricsPanel />);
-    await screen.findByRole('option', { name: 'Ventas' });
+    await areasLoaded('2 áreas');
 
-    await user.selectOptions(areaSelect(), 'Ventas');
+    await chooseArea(user, 'Ventas');
     await user.click(quickPeriod(label));
 
     expect(mocks.push).toHaveBeenCalledWith(
@@ -231,7 +279,7 @@ describe('loading and filters', () => {
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
     render(<MetricsPanel />);
     await procedureCard();
-    await screen.findByRole('option', { name: 'Ventas' });
+    await waitFor(() => expect(areaButton()).toHaveTextContent('Ventas'));
 
     const footer = screen.getByText(/^Mostrando/);
     expect(footer).toHaveTextContent('Mostrando Ventas · 1 oct 2026 – 15 oct 2026');
@@ -243,7 +291,9 @@ describe('loading and filters', () => {
     render(<MetricsPanel />);
     await procedureCard();
 
-    expect(screen.getByText(/^Mostrando/)).toHaveTextContent('Mostrando Todas · 27 oct 2026');
+    expect(screen.getByText(/^Mostrando/)).toHaveTextContent(
+      'Mostrando Todas las áreas · 27 oct 2026',
+    );
     expect(quickPeriod('Hoy')).toHaveAttribute('aria-pressed', 'true');
   });
 });
@@ -347,12 +397,14 @@ describe('empty and errors', () => {
     expect(await screen.findByText('Revisá las fechas y el área elegidas.')).toBeInTheDocument();
   });
 
-  test('without the area names the selector still offers "Todas"', async () => {
+  test('without the area names the selector still offers "Todas las áreas"', async () => {
+    const user = userEvent.setup();
     mocks.listAreas.mockRejectedValue(new Error('down'));
     render(<MetricsPanel />);
 
     await procedureCard();
-    expect(optionLabels()).toEqual(['Todas']);
+    await waitFor(() => expect(mocks.listAreas).toHaveBeenCalled());
+    expect(await optionTexts(user)).toEqual(['Todas las áreas']);
   });
 });
 

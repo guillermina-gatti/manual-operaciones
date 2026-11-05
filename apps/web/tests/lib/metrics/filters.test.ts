@@ -5,11 +5,14 @@ import {
   areaOptions,
   defaultPeriod,
   isCalendarDate,
+  matchesAreaSearch,
   matchingQuickPeriod,
   metricsHref,
   parseMetricsFilters,
+  proceduresPerArea,
   quickPeriodRange,
   todayInCompany,
+  withAreaHints,
 } from '@/lib/metrics/filters';
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
@@ -124,9 +127,9 @@ describe('metricsHref', () => {
 });
 
 describe('areaOptions', () => {
-  test('ADMIN: "Todas" and every area', () => {
+  test('ADMIN: "Todas las áreas" and every area', () => {
     expect(areaOptions(true, AREAS, null, null)).toEqual([
-      { value: '', label: 'Todas' },
+      { value: '', label: 'Todas las áreas' },
       { value: VENTAS, label: 'Ventas' },
       { value: OPERACIONES, label: 'Operaciones' },
     ]);
@@ -153,7 +156,7 @@ describe('areaOptions', () => {
     const areas = [AREAS[0], { ...AREAS[1], isActive: false }];
 
     expect(areaOptions(true, areas, null, null)).toEqual([
-      { value: '', label: 'Todas' },
+      { value: '', label: 'Todas las áreas' },
       { value: VENTAS, label: 'Ventas' },
       { value: OPERACIONES, label: 'Operaciones (inactiva)' },
     ]);
@@ -170,5 +173,63 @@ describe('areaOptions', () => {
       value: unknown,
       label: 'Área elegida',
     });
+  });
+});
+
+describe('proceduresPerArea', () => {
+  test('counts each procedure once per area, also when it has two', () => {
+    const counts = proceduresPerArea([
+      { areaIds: [VENTAS] },
+      { areaIds: [VENTAS, OPERACIONES] },
+      { areaIds: [VENTAS, VENTAS] },
+    ]);
+
+    expect(counts.get(VENTAS)).toBe(3);
+    expect(counts.get(OPERACIONES)).toBe(1);
+  });
+});
+
+describe('withAreaHints', () => {
+  const OPTIONS = areaOptions(true, AREAS, null, null);
+
+  test('the first option says how many areas there are', () => {
+    expect(withAreaHints(OPTIONS, null)[0]).toEqual({
+      value: '',
+      label: 'Todas las áreas',
+      hint: '2 áreas',
+    });
+    expect(withAreaHints(OPTIONS.slice(0, 2), null)[0].hint).toBe('1 área');
+  });
+
+  test('without any known area, the first option has no hint', () => {
+    expect(withAreaHints(OPTIONS.slice(0, 1), null)).toEqual([
+      { value: '', label: 'Todas las áreas' },
+    ]);
+  });
+
+  test('each area says how many procedures it has, or "Sin datos"', () => {
+    const hints = withAreaHints(OPTIONS, new Map([[VENTAS, 1]])).map((option) => option.hint);
+    expect(hints).toEqual(['2 áreas', '1 procedimiento', 'Sin datos']);
+
+    expect(withAreaHints(OPTIONS, new Map([[VENTAS, 3]]))[1].hint).toBe('3 procedimientos');
+  });
+
+  test('without counts, the areas have no hint', () => {
+    expect(withAreaHints(OPTIONS, null)[1]).toEqual({ value: VENTAS, label: 'Ventas' });
+  });
+});
+
+describe('matchesAreaSearch', () => {
+  test.each(['oper', 'OPERACIONES', 'operación', 'ciones', '  ope '])('"%s" finds Operaciones', (search) => {
+    expect(matchesAreaSearch('Operaciones', search)).toBe(true);
+  });
+
+  test('accents in the name do not matter either', () => {
+    expect(matchesAreaSearch('Logística', 'logistica')).toBe(true);
+  });
+
+  test('an empty search finds everything; another name, nothing', () => {
+    expect(matchesAreaSearch('Ventas', '')).toBe(true);
+    expect(matchesAreaSearch('Ventas', 'oper')).toBe(false);
   });
 });

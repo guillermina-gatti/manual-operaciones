@@ -15,6 +15,9 @@ export interface PanelFilters {
 export interface AreaOption {
   value: string; // '' means no area filter
   label: string;
+  // Gray text on the right: "12 áreas" for the first option, "3 procedimientos" or "Sin datos"
+  // for an area. Missing when it is not known.
+  hint?: string;
 }
 
 interface SearchParamsLike {
@@ -124,7 +127,7 @@ export function metricsHref({ areaId, from, to }: PanelFilters): string {
   return `${METRICS_PATH}?${params.toString()}`;
 }
 
-// ADMIN: "Todas" and every area. SUPERVISOR: "Todas mis áreas" and only theirs (filterable,
+// ADMIN: "Todas las áreas" and every area. SUPERVISOR: "Todas mis áreas" and only theirs (filterable,
 // from the last answer of the API; unknown while it loads). The selected area always stays
 // in the list, so the selector never shows a value it does not have. An inactive area keeps
 // its "(inactiva)" label, as everywhere else.
@@ -141,5 +144,53 @@ export function areaOptions(
   if (selected && !options.some((option) => option.value === selected)) {
     options.push({ value: selected, label: 'Área elegida' });
   }
-  return [{ value: '', label: isAdmin ? 'Todas' : 'Todas mis áreas' }, ...options];
+  return [{ value: '', label: isAdmin ? 'Todas las áreas' : 'Todas mis áreas' }, ...options];
+}
+
+// How many procedures with executions each area has. Only meaningful for an answer without an
+// area filter: with one, the other areas are not in it. A procedure with two areas counts in each
+// of them, as it is shown in both.
+export function proceduresPerArea(procedures: { areaIds: string[] }[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const procedure of procedures) {
+    for (const areaId of new Set(procedure.areaIds)) {
+      counts.set(areaId, (counts.get(areaId) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+const plural = (count: number, one: string, many: string) =>
+  count === 1 ? `1 ${one}` : `${count} ${many}`;
+
+// The gray hints of the selector. The first option says how many areas there are (nothing if
+// none is known yet); each area, how many procedures it has in the period, or nothing while that
+// is not known (counts null).
+export function withAreaHints(
+  options: AreaOption[],
+  counts: ReadonlyMap<string, number> | null,
+): AreaOption[] {
+  const areaCount = options.filter((option) => option.value !== '').length;
+  return options.map((option) => {
+    if (option.value === '') {
+      return areaCount === 0 ? option : { ...option, hint: plural(areaCount, 'área', 'áreas') };
+    }
+    if (!counts) return option;
+    const count = counts.get(option.value) ?? 0;
+    return {
+      ...option,
+      hint: count === 0 ? 'Sin datos' : plural(count, 'procedimiento', 'procedimientos'),
+    };
+  });
+}
+
+// Without case or accents, by any part of the name: "operac" and "OPERACIÓN" find "Operaciones".
+const fold = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+export function matchesAreaSearch(label: string, search: string): boolean {
+  return fold(label).includes(fold(search.trim()));
 }
