@@ -17,10 +17,7 @@ const config: Config = {
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
-  moduleNameMapper: {
-    ...pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
-    '^(\\.{1,2}/.*)\\.js$': '$1',
-  },
+  moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
   collectCoverageFrom: [
     'src/**/*.(t|j)s',
     'libs/**/*.(t|j)s',
