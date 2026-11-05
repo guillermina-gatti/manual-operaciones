@@ -1,26 +1,34 @@
 'use client';
 
-// The metrics of pair C (assistant and documents), behind the teamCMetrics port. While the
-// adapter is the empty one, each card says "Todavía no disponible." and what it will show:
-// never a made-up number.
+// The metrics of pair C (assistant and documents), behind the teamCMetrics port. Documents come
+// from the API; the assistant, while its adapter is the empty one, says "Todavía no disponible."
+// and what it will show: never a made-up number.
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { metricsQuery, useApiResource } from '@/lib/api';
-import type { MetricsFilters } from '@/lib/api';
 import { formatDuration } from '@/lib/executions/format';
 import { teamCMetrics } from '@/lib/metrics';
+import type { PanelFilters } from '@/lib/metrics/filters';
 import { formatCount } from '@/lib/metrics/format';
+import { DocumentMetricsCard } from './DocumentMetricsCard';
 
 const usdFormat = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD' });
 
-export function TeamCMetrics({ filters }: { filters: MetricsFilters }) {
+interface TeamCMetricsProps {
+  filters: PanelFilters;
+  // Without a session the documents are not asked for. Part of the key: switching users asks again.
+  userId: string | null;
+}
+
+export function TeamCMetrics({ filters, userId }: TeamCMetricsProps) {
   const headingId = useId();
   const query = metricsQuery(filters);
   const assistant = useApiResource(`team-c-assistant${query}`, (signal) =>
     teamCMetrics.getAssistant(filters, signal),
   );
-  const documents = useApiResource(`team-c-documents${query}`, (signal) =>
-    teamCMetrics.getDocuments(filters, signal),
+  const documents = useApiResource(
+    userId ? `team-c-documents:${userId}${query}` : null,
+    (signal) => teamCMetrics.getDocuments(filters, signal),
   );
 
   return (
@@ -47,16 +55,7 @@ export function TeamCMetrics({ filters }: { filters: MetricsFilters }) {
             ['Costo', usdFormat.format(data.costUsd)],
           ]}
         />
-        <TeamCCard
-          title="Documentos"
-          upcoming="Documentos activos, consultados y con error de procesamiento."
-          resource={documents}
-          render={(data) => [
-            ['Activos', formatCount(data.active)],
-            ['Consultados', formatCount(data.consulted)],
-            ['Con error de procesamiento', formatCount(data.processingFailed)],
-          ]}
-        />
+        <DocumentMetricsCard filters={filters} state={documents} />
       </div>
     </section>
   );
