@@ -26,6 +26,7 @@ import { useSession } from '@/lib/session';
 import { MetricsFiltersForm } from './MetricsFiltersForm';
 import { MetricsSummary } from './MetricsSummary';
 import { ProcedureMetricsCard } from './ProcedureMetricsCard';
+import { ProcedureTimeTable } from './ProcedureTimeTable';
 import { TeamCMetrics } from './TeamCMetrics';
 
 // A white card for the states of the section (error, empty), with the design's padding.
@@ -75,6 +76,9 @@ export function MetricsPanel() {
         state={metrics}
         isAdmin={isAdmin}
       />
+      {metrics.status === 'success' && metrics.data.totals.started > 0 && (
+        <ProcedureDetails procedures={metrics.data.procedures} areas={areaList} />
+      )}
       <TeamCMetrics filters={filters} userId={user?.id ?? null} />
     </div>
   );
@@ -106,12 +110,15 @@ function ProceduresSection({ filters, areas, state, isAdmin }: ProceduresSection
         </h2>
         <p className="text-texto-suave">{areaName}</p>
       </div>
-      <ProceduresContent filters={filters} areas={areas} state={state} />
+      <ProceduresContent filters={filters} state={state} />
     </section>
   );
 }
 
-function ProceduresContent({ filters, areas, state }: Omit<ProceduresSectionProps, 'isAdmin'>) {
+function ProceduresContent({
+  filters,
+  state,
+}: Pick<ProceduresSectionProps, 'filters' | 'state'>) {
   if (state.status === 'idle' || state.status === 'loading') {
     return (
       <ScreenState kind="loading" label="Cargando las métricas…">
@@ -151,12 +158,23 @@ function ProceduresContent({ filters, areas, state }: Omit<ProceduresSectionProp
     );
   }
 
-  const areaNames = new Map(areas.map((area) => [area.id, area.name]));
+  return <MetricsSummary metrics={metrics} />;
+}
+
+// The sections below the summary, only when the period has executions.
+function ProcedureDetails({
+  procedures,
+  areas,
+}: {
+  procedures: ProceduresMetricsResponse['procedures'];
+  areas: Area[];
+}) {
+  const areaNames = new Map(areas.map((area) => [area.id, displayAreaName(area)]));
   return (
     <>
-      <MetricsSummary metrics={metrics} />
+      <ProcedureTimeTable procedures={procedures} areaNames={areaNames} />
       <div className="flex flex-col gap-6">
-        {metrics.procedures.map((procedure) => (
+        {procedures.map((procedure) => (
           <ProcedureMetricsCard
             key={procedure.procedureId}
             procedure={procedure}

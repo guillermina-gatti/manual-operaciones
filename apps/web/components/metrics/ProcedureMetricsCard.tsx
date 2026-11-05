@@ -3,8 +3,8 @@
 import { useId } from 'react';
 import type { ProcedureMetricsResponse, VersionMetricsResponse } from '@/lib/api';
 import { formatDuration } from '@/lib/executions/format';
-import { procedureName } from '@/lib/executions/sample-procedures';
 import { formatCount, formatPercent } from '@/lib/metrics/format';
+import { metricsProcedureName } from '@/lib/metrics/procedure-name';
 import { StepMetricsTable } from './StepMetricsTable';
 
 interface ProcedureMetricsCardProps {
@@ -15,7 +15,7 @@ interface ProcedureMetricsCardProps {
 
 export function ProcedureMetricsCard({ procedure, areaNames }: ProcedureMetricsCardProps) {
   const headingId = useId();
-  const name = procedureName(procedure.procedureId);
+  const name = metricsProcedureName(procedure.procedureId);
   const [latest, ...older] = procedure.versions;
   const areas = procedure.areaIds.flatMap((id) => areaNames.get(id) ?? []);
 

@@ -389,6 +389,17 @@ describe('with data', () => {
     expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 s');
   });
 
+  test('below the summary, the time per procedure, slowest first', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const table = screen.getByRole('table', { name: 'Tiempo por procedimiento' });
+    const names = within(table)
+      .getAllByRole('rowheader')
+      .map((header) => header.querySelector('span')?.textContent);
+    expect(names).toEqual(['Cierre de caja', 'Recepción de mercadería']);
+  });
+
   test('one card per procedure, with its name, areas and steps', async () => {
     render(<MetricsPanel />);
     const card = await procedureCard();
@@ -438,6 +449,9 @@ describe('empty and errors', () => {
     expect(await screen.findByText('No hay ejecuciones en este período.')).toBeInTheDocument();
     expect(screen.getByText('Probá con otras fechas u otra área.')).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: 'Cierre de caja' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Tiempo por procedimiento' }),
+    ).not.toBeInTheDocument();
   });
 
   test('a service that is down offers to retry, and retrying asks again', async () => {

@@ -78,3 +78,23 @@ export function FeatherLegend({ counts }: { counts: ExecutionCounts }) {
     </ul>
   );
 }
+
+// A single green feather for a time, over a gray track: ratio is this time over the longest one
+// of its list (0 to 1). Decorative: the duration is always written next to it.
+export function TimeBar({ ratio, className = '' }: { ratio: number; className?: string }) {
+  const percent = Math.min(Math.max(ratio, 0), 1) * 100;
+  return (
+    <span
+      aria-hidden="true"
+      className={`${styles.palette} flex h-2.5 w-24 shrink-0 overflow-hidden rounded-full bg-borde ${className}`}
+    >
+      {percent > 0 && (
+        <span
+          className={`${styles.segment} ${styles.completadas}`}
+          // At least a sliver, so a short time never looks like zero.
+          style={{ width: `max(6px, ${percent}%)` }}
+        />
+      )}
+    </span>
+  );
+}
