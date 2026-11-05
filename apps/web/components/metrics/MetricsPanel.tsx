@@ -6,6 +6,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useId } from 'react';
+import { CARD, TEXT_LINK } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { describeMetricsError, getProcedureMetrics, metricsQuery, useApiResource } from '@/lib/api';
 import type { ApiResource, ProceduresMetricsResponse } from '@/lib/api';
@@ -25,8 +26,8 @@ import { MetricsSummary } from './MetricsSummary';
 import { ProcedureMetricsCard } from './ProcedureMetricsCard';
 import { TeamCMetrics } from './TeamCMetrics';
 
-const CARD =
-  'rounded-xl border border-zinc-200 bg-white px-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900';
+// A white card for the states of the section (error, empty), with the design's padding.
+const STATE_CARD = `${CARD} px-6 sm:px-8`;
 
 export function MetricsPanel() {
   const { user } = useSession();
@@ -80,10 +81,10 @@ function ProceduresSection({ filters, areas, state, isAdmin }: ProceduresSection
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <h2 id={headingId} className="text-2xl font-bold text-texto">
           Ejecuciones de procedimientos
         </h2>
-        <p className="text-zinc-600 dark:text-zinc-300">
+        <p className="text-texto-suave">
           Del {formatDay(filters.from)} al {formatDay(filters.to)}, en {areaName}.
         </p>
       </div>
@@ -104,13 +105,13 @@ function ProceduresContent({ filters, areas, state }: Omit<ProceduresSectionProp
   if (state.status === 'error') {
     const { message, canRetry, areaNotFound } = describeMetricsError(state.error);
     return (
-      <div className={CARD}>
+      <div className={STATE_CARD}>
         <ScreenState kind="error" message={message} onRetry={canRetry ? state.reload : undefined} />
         {areaNotFound && (
           <p className="-mt-6 pb-10 text-center">
             <Link
               href={metricsHref({ ...filters, areaId: null })}
-              className="font-medium text-blue-700 underline dark:text-blue-300"
+              className={TEXT_LINK}
             >
               Ver todas mis áreas
             </Link>
@@ -123,12 +124,10 @@ function ProceduresContent({ filters, areas, state }: Omit<ProceduresSectionProp
   const metrics = state.data;
   if (metrics.totals.started === 0) {
     return (
-      <div className={CARD}>
+      <div className={STATE_CARD}>
         <div className="flex flex-col items-center gap-2 py-12 text-center">
-          <p className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
-            No hay ejecuciones en este período.
-          </p>
-          <p className="text-zinc-600 dark:text-zinc-300">Probá con otras fechas u otra área.</p>
+          <p className="text-lg font-semibold text-texto">No hay ejecuciones en este período.</p>
+          <p className="text-texto-suave">Probá con otras fechas u otra área.</p>
         </div>
       </div>
     );
@@ -156,11 +155,11 @@ export function MetricsSkeleton() {
     <div aria-hidden="true" className="flex animate-pulse flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {[1, 2, 3, 4, 5].map((n) => (
-          <div key={n} className="h-28 rounded-xl bg-zinc-200 last:col-span-2 sm:last:col-span-1 dark:bg-zinc-800" />
+          <div key={n} className="h-36 rounded-2xl bg-borde last:col-span-2 sm:last:col-span-1" />
         ))}
       </div>
-      <div className="h-72 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-56 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-72 rounded-2xl bg-borde" />
+      <div className="h-56 rounded-2xl bg-borde" />
     </div>
   );
 }

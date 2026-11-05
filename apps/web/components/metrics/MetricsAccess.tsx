@@ -5,6 +5,7 @@
 // mount the panel, and the API answers 403 anyway.
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { TEXT_LINK } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { ApiError, METRICS_MESSAGES, describeMetricsError } from '@/lib/api';
 import { useSession } from '@/lib/session';
@@ -28,7 +29,7 @@ export function MetricsAccess({ children }: { children: ReactNode }) {
         kind="empty"
         message={METRICS_MESSAGES.noPermission}
         action={
-          <Link href="/ejecuciones" className="text-blue-700 underline dark:text-blue-400">
+          <Link href="/ejecuciones" className={TEXT_LINK}>
             Ir a ejecutar procedimientos
           </Link>
         }
