@@ -352,3 +352,14 @@ test('keeps a place for the assistant next to the steps', async () => {
   await heading();
   expect(document.querySelector('[data-slot="chat-panel"]')).not.toBeNull();
 });
+
+test('the side column has the summary above the assistant', async () => {
+  render(<ExecutionView />);
+  await heading();
+
+  const summary = screen.getByRole('region', { name: 'Resumen' });
+  const assistant = screen.getByRole('complementary', { name: 'Asistente' });
+  expect(summary.parentElement).toBe(assistant.parentElement);
+  expect(summary.compareDocumentPosition(assistant) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(summary).toHaveTextContent('Pasos terminados0 de 4');
+});

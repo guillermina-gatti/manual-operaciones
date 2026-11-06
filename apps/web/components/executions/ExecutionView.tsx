@@ -22,6 +22,7 @@ import { SAMPLE_PROCEDURES, procedureName } from '@/lib/executions/sample-proced
 import { summarizeExecution } from '@/lib/executions/summary';
 import { useSession } from '@/lib/session';
 import { ExecutionProgress } from './ExecutionProgress';
+import { ExecutionSummaryCard } from './ExecutionSummaryCard';
 import { StepList } from './StepList';
 
 // The same format the API accepts (ParseUUIDPipe). Any other id cannot exist.
@@ -218,12 +219,16 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
         )}
       </article>
 
-      {/* The assistant of pair C for the current step (spec 010). Hidden once the execution is
-          completed, so screen readers do not announce an empty region. On a phone it goes below
-          the steps; from lg on, in the right column. */}
-      <aside data-slot="chat-panel" aria-label="Asistente" hidden={completed} className="min-w-0">
-        <ExecutionChatPanel execution={execution} />
-      </aside>
+      {/* The side column: our summary and, below it, the assistant of pair C for the current step
+          (spec 010), untouched. The assistant is hidden once the execution is completed, so screen
+          readers do not announce an empty region. On a phone the column goes below the steps;
+          from lg on, it is on the right. */}
+      <div className="flex min-w-0 flex-col gap-6">
+        <ExecutionSummaryCard execution={execution} summary={summary} />
+        <aside data-slot="chat-panel" aria-label="Asistente" hidden={completed} className="min-w-0">
+          <ExecutionChatPanel execution={execution} />
+        </aside>
+      </div>
     </div>
   );
 }
