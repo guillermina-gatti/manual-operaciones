@@ -111,6 +111,16 @@ describe('errors when loading', () => {
 });
 
 describe('an execution in progress', () => {
+  test('the header says the procedure, what the screen is for and its area', async () => {
+    render(<ExecutionView />);
+
+    await heading();
+    expect(
+      screen.getByText('Seguí los pasos en orden y marcá cada uno cuando lo termines.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Ventas')).toBeInTheDocument();
+  });
+
   test('shows the progress and every step in order', async () => {
     render(<ExecutionView />);
 
@@ -139,7 +149,7 @@ describe('an execution in progress', () => {
     render(<ExecutionView />);
 
     await heading();
-    expect(screen.getByText('Retomaste donde quedaste.')).toBeInTheDocument();
+    expect(screen.getByText('Retomaste donde quedaste')).toBeInTheDocument();
     expect(screen.getByText('Paso 3 de 4')).toBeInTheDocument();
     expect(stepItem(1)).toHaveTextContent('Terminado');
     expect(stepItem(1)).toHaveTextContent('3 min');
@@ -151,7 +161,7 @@ describe('an execution in progress', () => {
     render(<ExecutionView />);
 
     await heading();
-    expect(screen.queryByText('Retomaste donde quedaste.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Retomaste donde quedaste')).not.toBeInTheDocument();
   });
 });
 
@@ -258,7 +268,7 @@ describe('a completed execution', () => {
     );
     STEPS.forEach((_, i) => expect(stepItem(i + 1)).toHaveTextContent('3 min'));
     expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Retomaste donde quedaste.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Retomaste donde quedaste')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Elegir otro procedimiento' })).toHaveAttribute(
       'href',
       '/ejecuciones',

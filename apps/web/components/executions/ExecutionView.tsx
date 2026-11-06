@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ExecutionChatPanel } from '@/components/chat/ExecutionChatPanel';
+import { CHIP, ERROR_BOX, PageHeader } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import {
   ApiError,
@@ -17,7 +18,7 @@ import {
 } from '@/lib/api';
 import type { ExecutionResponse } from '@/lib/api';
 import { formatDuration } from '@/lib/executions/format';
-import { procedureName } from '@/lib/executions/sample-procedures';
+import { SAMPLE_PROCEDURES, procedureName } from '@/lib/executions/sample-procedures';
 import { summarizeExecution } from '@/lib/executions/summary';
 import { useSession } from '@/lib/session';
 import { ExecutionProgress } from './ExecutionProgress';
@@ -108,6 +109,9 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
   const summary = summarizeExecution(execution);
   const completed = execution.status === 'COMPLETED';
+  // The execution only brings the procedure id; its area comes from the sample procedures.
+  const areaName = SAMPLE_PROCEDURES.find((p) => p.id === execution.procedureId)?.areaName;
+  const resumed = summary.resumed && !completedHere;
 
   async function complete(stepId: string) {
     if (completingRef.current) return;
@@ -153,16 +157,23 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
   return (
     <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
-        <header className="flex min-w-0 flex-col gap-3">
-          <h1 className="break-words text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl dark:text-zinc-50">
-            {procedureName(execution.procedureId)}
-          </h1>
-          {summary.resumed && !completedHere && (
-            <p className="self-start rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-800 ring-1 ring-inset ring-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800">
-              Retomaste donde quedaste.
-            </p>
+        <div className="flex min-w-0 flex-col gap-3">
+          <PageHeader
+            title={procedureName(execution.procedureId)}
+            subtitle="Seguí los pasos en orden y marcá cada uno cuando lo termines."
+          />
+          {(areaName || resumed) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {areaName && (
+                <span className={`${CHIP} bg-chip-area text-chip-area-texto`}>{areaName}</span>
+              )}
+              {/* Salvia, not celeste: in the design, celeste is only for the assistant. */}
+              {resumed && (
+                <p className={`${CHIP} bg-salvia text-texto`}>Retomaste donde quedaste</p>
+              )}
+            </div>
           )}
-        </header>
+        </div>
 
         {completed && (
           <div
@@ -185,10 +196,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
         <ExecutionProgress summary={summary} />
 
         {notice && (
-          <p
-            role="alert"
-            className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-          >
+          <p role="alert" className={ERROR_BOX}>
             {notice}
           </p>
         )}
@@ -223,11 +231,11 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 export function ExecutionSkeleton() {
   return (
     <div aria-hidden="true" className="flex animate-pulse flex-col gap-6">
-      <div className="h-10 w-2/3 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-28 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-12 w-2/3 rounded-xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
+      <div className="h-32 w-full rounded-2xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
     </div>
   );
 }
