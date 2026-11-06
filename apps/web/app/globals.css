@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Fuente del diseño: la carga layout.tsx desde @fontsource. Este valor es el fallback si falla. */
+:root {
+  --font-jakarta: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
 /*
  * Tokens del diseño del equipo.
  * Uso: bg-bosque, text-texto-suave, border-borde, etc.
