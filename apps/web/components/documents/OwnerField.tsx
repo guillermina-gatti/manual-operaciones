@@ -39,6 +39,9 @@ interface OwnerFieldProps {
   currentOwner?: DocumentReference;
   // Spec 008 (F6): hay áreas elegidas, pero ninguna activa.
   onlyInactiveAreas?: boolean;
+  // Opcional: el nombre del responsable elegido (null si no hay), cuando cambia la elección o llegan
+  // los candidatos. Lo usa la vista previa de la carga; onChange sigue avisando solo el id.
+  onOwnerName?: (name: string | null) => void;
 }
 
 export function OwnerField({
@@ -48,6 +51,7 @@ export function OwnerField({
   onChange,
   currentOwner,
   onlyInactiveAreas = false,
+  onOwnerName,
 }: OwnerFieldProps) {
   const id = useId();
   const hintId = `${id}-ayuda`;
@@ -82,6 +86,16 @@ export function OwnerField({
   // "(inactivo)" si corresponde (F2).
   const showCurrentOwner =
     currentOwner !== undefined && !options.some((user) => user.id === currentOwner.id);
+
+  // El nombre del elegido, para quien lo pida (onOwnerName). Sin elección, o mientras no llegan los
+  // candidatos, null.
+  const selectedName =
+    options.find((user) => user.id === value)?.name ??
+    (currentOwner && currentOwner.id === value ? formatPerson(currentOwner) : null);
+  const notifyOwnerName = useEffectEvent((name: string | null) => onOwnerName?.(name));
+  useEffect(() => {
+    notifyOwnerName(selectedName);
+  }, [selectedName]);
   const describedBy = [hint && hintId, error && errorId].filter(Boolean).join(' ') || undefined;
 
   return (

@@ -15,6 +15,20 @@ export const LIST_BUTTON_PRIMARY = `${BUTTON_PRIMARY} ${RESPONSIVE_BUTTON}`;
 export const LIST_BUTTON_SECONDARY = `${BUTTON_SECONDARY} ${RESPONSIVE_BUTTON}`;
 export const LIST_BUTTON_DANGER = `${BUTTON_DANGER} ${RESPONSIVE_BUTTON}`;
 
+// Un botón secundario chico (44 px de alto, para tocar en el celular), por ejemplo "Quitar".
+export const LIST_BUTTON_SMALL = `inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-bosque bg-blanco px-3 text-sm font-semibold text-bosque hover:bg-salvia ${RESPONSIVE_BUTTON}`;
+
+// --- Carga ---------------------------------------------------------------------------------------
+
+// La zona para soltar el archivo: borde punteado; se resalta al pasar, al arrastrar encima
+// (data-dragging) y con el foco del input que tiene adentro; en rojo si hay error (data-invalid).
+export const DROP_ZONE = [
+  'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-borde bg-fondo px-6 py-8 text-center',
+  'transition-colors hover:border-bosque/40 hover:bg-salvia motion-reduce:transition-none',
+  'data-[dragging]:border-bosque data-[dragging]:bg-salvia data-[invalid]:border-peligro',
+  'has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-naranja',
+].join(' ');
+
 // --- Tarjetas --------------------------------------------------------------------------------------
 
 // La tarjeta del listado: toda la superficie lleva al detalle (el enlace del título se estira con
@@ -75,6 +89,15 @@ export const VIEW_OPTION = [
   'active:translate-y-px motion-reduce:transition-none motion-reduce:active:translate-y-0',
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja',
   'aria-pressed:bg-bosque aria-pressed:text-blanco aria-pressed:hover:bg-bosque aria-pressed:hover:text-blanco',
+].join(' ');
+
+// Un atajo suelto (por ejemplo, "6 meses"): se ve como una opción del selector de vista, con borde.
+export const SHORTCUT_OPTION = [
+  'inline-flex min-h-11 items-center gap-2 rounded-lg border border-borde bg-blanco px-3 text-sm font-semibold text-texto-suave',
+  'transition-[background-color,color,transform] hover:bg-salvia hover:text-bosque',
+  'active:translate-y-px motion-reduce:transition-none motion-reduce:active:translate-y-0',
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja',
+  'aria-pressed:border-bosque aria-pressed:bg-bosque aria-pressed:text-blanco aria-pressed:hover:bg-bosque aria-pressed:hover:text-blanco',
 ].join(' ');
 
 // --- Ícono del tipo de archivo ---------------------------------------------------------------------
