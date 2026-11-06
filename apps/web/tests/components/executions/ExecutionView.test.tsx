@@ -47,7 +47,9 @@ beforeEach(() => {
 
 const heading = () => screen.findByRole('heading', { level: 1, name: 'Cierre de caja' });
 const stepItem = (n: number) =>
-  within(screen.getByRole('list', { name: 'Pasos' })).getAllByRole('listitem')[n - 1];
+  within(screen.getByRole('list', { name: 'Pasos del procedimiento' })).getAllByRole('listitem')[
+    n - 1
+  ];
 const finishButton = () => screen.getByRole('button', { name: 'Terminé este paso' });
 
 describe('loading and session', () => {
@@ -157,6 +159,32 @@ describe('an execution in progress', () => {
     expect(within(stepItem(3)).getByRole('button', { name: 'Terminé este paso' })).toBeInTheDocument();
   });
 
+  test('each step says its state and its times, the current one marked as the step', async () => {
+    mocks.getExecution.mockResolvedValue(execution(2));
+    render(<ExecutionView />);
+    await heading();
+
+    expect(stepItem(1)).toHaveTextContent('TerminadoTerminó a las 10:03 · duró 3 min');
+    expect(stepItem(3)).toHaveTextContent('En cursoEmpezó a las 10:06');
+    expect(stepItem(3)).toHaveAttribute('aria-current', 'step');
+    expect(stepItem(4)).toHaveTextContent('Pendiente');
+    expect(stepItem(4)).not.toHaveAttribute('aria-current');
+    expect(within(stepItem(4)).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Paso 4: Guardar el efectivo en la caja fuerte',
+    );
+  });
+
+  test('the last step says so on its button', async () => {
+    mocks.getExecution.mockResolvedValue(execution(3));
+    render(<ExecutionView />);
+    await heading();
+
+    expect(
+      within(stepItem(4)).getByRole('button', { name: 'Terminé el último paso' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
+  });
+
   test('a new execution does not say it was resumed', async () => {
     render(<ExecutionView />);
 
@@ -222,7 +250,7 @@ describe('completing a step', () => {
     await userEvent.click(finishButton());
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se encontró la ejecución.');
-    expect(screen.queryByRole('list', { name: 'Pasos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Pasos del procedimiento' })).not.toBeInTheDocument();
   });
 
   test('503 → a notice above the steps, and the button can be pressed again', async () => {
@@ -250,7 +278,7 @@ describe('a completed execution', () => {
     render(<ExecutionView />);
     await heading();
 
-    await userEvent.click(finishButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Terminé el último paso' }));
 
     expect(await screen.findByText('Completaste el procedimiento')).toBeInTheDocument();
   });
