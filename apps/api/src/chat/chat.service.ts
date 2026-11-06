@@ -3,9 +3,11 @@
 // Spec 009 (T01): los pasos viven en chat-pipeline.ts, compartidos con POST /api/chat/stream.
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Role } from '../common/auth';
+import { FileStorage } from '../storage/file-storage';
 import { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatRequest, ChatResult } from './chat.contract';
 import { resolveSuggestion } from './chat-contact';
+import { withSignedLinks } from './chat-links';
 import { recordConflictAlert } from './chat-conflict';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
 import {
@@ -48,6 +50,8 @@ export class ChatService {
         @Optional() private readonly conflictAlerts?: ConflictAlertRecorder,
         // HU19: a quién consultar cuando no hay información. Opcional: sin él, no se sugiere a nadie.
         @Optional() private readonly contacts?: ContactDirectory,
+        // HU18: para firmar el enlace de cada fuente citada. Opcional: sin él, las fuentes quedan sin enlace.
+        @Optional() private readonly storage?: FileStorage,
     ) { }
 
     async ask(user: ChatUser & { role?: Role }, request: ChatRequest): Promise<ChatResult> {
@@ -62,10 +66,9 @@ export class ChatService {
         }
         await rememberConversationStep(this.contextStore, request, conversationId, stepContext);
 
-        const outcome = await resolveSuggestion(
-            this.contacts,
-            await this.run(user, question, stepContext),
-            stepContext,
+        const outcome = await withSignedLinks(
+            this.storage,
+            await resolveSuggestion(this.contacts, await this.run(user, question, stepContext), stepContext, this.logger),
             this.logger,
         );
         const result = await saveResult(this.repository, conversationId, question, outcome, started);

@@ -15,6 +15,8 @@ interface ChunkRow {
   content: string;
   validFrom: Date;
   distance: number;
+  storageKey: string;
+  fileName: string;
 }
 
 @Injectable()
@@ -36,6 +38,8 @@ export class PrismaChatRetrieval extends ChatRetrieval {
              c.section,
              c.content,
              d.review_date AS "validFrom",
+             v.storage_key AS "storageKey",
+             v.original_file_name AS "fileName",
              c.embedding <=> ${vector}::vector AS distance
       FROM chunks c
       JOIN document_versions v ON v.id = c.document_version_id

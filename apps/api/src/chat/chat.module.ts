@@ -2,6 +2,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProcessingModule } from '../processing/processing.module';
+import { StorageModule } from '../storage/storage.module';
 import { createChatLlm } from './adapters/gemini-chat-llm';
 import { PrismaChatContextStore } from './adapters/prisma-chat-context-store';
 import { PrismaChatFeedbackRepository } from './adapters/prisma-chat-feedback-repository';
@@ -24,7 +25,7 @@ import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval } from './ports/chat-retrieval';
 
 @Module({
-    imports: [ProcessingModule],
+    imports: [ProcessingModule, StorageModule], // StorageModule: FileStorage para los enlaces de HU18
     controllers: [ChatController, ChatStreamController, ChatFeedbackController], // spec 009 y HU25
     providers: [
         ChatService,
