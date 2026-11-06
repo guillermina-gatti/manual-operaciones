@@ -17,6 +17,12 @@ export interface ChatSource {
   url: string;
 }
 
+// HU19: un documento cercano a la consulta cuando no hay información suficiente. No es una fuente.
+export interface NearestDocument {
+  documentId: string;
+  documentTitle: string;
+}
+
 export interface ChatResult {
   conversationId: string;
   messageId: string;
@@ -24,6 +30,7 @@ export interface ChatResult {
   answer: string;
   sources: ChatSource[];
   suggestedContact?: { name: string; email: string };
+  nearestDocuments?: NearestDocument[]; // solo con no_info (HU19)
 }
 
 // La respuesta final de la ruta nueva: searchUrl con ai_unavailable (R8).
@@ -98,7 +105,7 @@ export function createChatApi(client: StreamingApiClient) {
     if (!reader) throw new ChatStreamError('cut', 0, 'La respuesta no trae contenido');
     const decoder = new TextDecoder();
     try {
-      for (;;) {
+      for (; ;) {
         const { value, done: finished } = await reader.read();
         if (finished) break;
         parser.push(decoder.decode(value, { stream: true }));

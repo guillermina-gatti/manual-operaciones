@@ -100,6 +100,8 @@ export function useChatConversation(context?: ChatContext) {
       searchUrl: done.searchUrl,
       // HU25: el mensaje que se va a valorar.
       messageId: done.messageId,
+      // HU19: con no_info, los documentos cercanos.
+      nearestDocuments: done.nearestDocuments,
     });
     // Spec 011 (F3): con conflict, el título del aviso antes de la explicación.
     const answer = withoutMarkers(done.answer);
