@@ -116,6 +116,17 @@ describe('botón "Cargar documento" (F1)', () => {
       '/documentos/nuevo',
     );
   });
+
+  test('desde la vista Tarjetas, lleva la vista a la carga (plan 002, D9)', async () => {
+    mocks.useSession.mockReturnValue(ADMIN);
+    mocks.searchParams = new URLSearchParams('vista=tarjetas');
+    render(<DocumentList />);
+
+    expect(await screen.findByRole('link', { name: 'Cargar documento' })).toHaveAttribute(
+      'href',
+      '/documentos/nuevo?vista=tarjetas',
+    );
+  });
 });
 
 // Spec 009 (F1, D11): el acceso al asistente, mientras el menú no tenga el enlace.

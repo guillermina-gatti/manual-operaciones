@@ -125,7 +125,9 @@ Usá las versiones de `list-design.tsx`:
 | **Peligro** | `LIST_BUTTON_DANGER` (borde y texto `peligro`) | Acciones que no se deshacen ("Archivar"). Separado de los demás (`sm:ml-auto`), nunca pegado al principal |
 | **Chico** | `LIST_BUTTON_SMALL` | Acciones dentro de una fila o ficha ("Quitar") |
 | **Enlace de texto** | `TEXT_LINK` | "Ir a la primera página", "Ver todas" |
-| **Volver** | `BackLink` / `BackToDocuments` | "← Volver a…", arriba de todo |
+| **Ruta** | `DocumentsBreadcrumb` / `Breadcrumb` | "Documentos › título", arriba de todo, en el detalle y la carga. `nav` con `aria-label="Ruta"`, `aria-current="page"` en el último; "Documentos" conserva `?vista=` |
+| **Volver** | Enlace con `BACK_LINK` | "← Volver a Documentos", arriba de todo, en Alertas y Por revisar |
+| **Ícono** | `LIST_BUTTON_SMALL` + `size-11 px-0` | Una acción repetida en cada fila ("Descargar la versión 2"): el SVG `aria-hidden` y el nombre en `aria-label` y `title` |
 
 Mientras se envía: el botón queda deshabilitado, con `aria-busy` y un texto que lo dice ("Cargando…",
 "Guardando…").
@@ -207,7 +209,7 @@ Poco y con sentido: responde a lo que hace la persona, nunca anima por su cuenta
 | Tarjeta con enlace, al pasar | Sube 2 px, crece la sombra y se oscurece el borde | `hover:-translate-y-0.5 hover:shadow-md hover:border-bosque/30` |
 | Fila, botón secundario u opción, al pasar | Fondo `salvia` | `hover:bg-salvia` |
 | Botón, al apretar | Se hunde 1 px | `active:translate-y-px` |
-| Flecha de "Volver" | Se corre a la izquierda | `group-hover:-translate-x-0.5` |
+| Enlace de la ruta, al pasar | Se subraya | `hover:underline` |
 | Desplegable | La flecha gira | `rotate-90` |
 
 **Siempre con `motion-reduce`**: todo lo que se mueve tiene su versión quieta

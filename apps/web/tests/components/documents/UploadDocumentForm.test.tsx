@@ -27,6 +27,7 @@ vi.mock('@/lib/directory', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: mocks.push }),
 }));
 

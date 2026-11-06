@@ -1,5 +1,6 @@
 // Disposición del detalle: encabezado con la hoja del tipo, versión, "Actualizado" y áreas; el archivo
-// como adjunto; la fecha de revisión en el panel "Revisión" (o en los datos si no hay panel).
+// como adjunto; la fecha de revisión en el panel "Revisión" (o en los datos si no hay panel); la ruta
+// "Documentos › título" (plan 002, D9) y "Versiones" en la columna principal (plan 003, D11).
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { DocumentDetail } from '@/components/documents/DocumentDetail';
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
   useSession: vi.fn(),
   params: { id: '' } as { id: string },
+  searchParams: new URLSearchParams(),
 }));
 
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -25,6 +27,7 @@ vi.mock('@/lib/session', async (importOriginal) => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  useSearchParams: () => mocks.searchParams,
   useParams: () => mocks.params,
 }));
 
@@ -73,6 +76,7 @@ const WITH_REVIEW: DocumentResponse = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.params = { id: ID };
+  mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(ADMIN);
   mocks.getDocument.mockResolvedValue(DOC);
 });
@@ -151,5 +155,66 @@ describe('procesamiento', () => {
     render(<DocumentDetail />);
     await heading();
     expect(screen.queryByText('Listo para el asistente')).not.toBeInTheDocument();
+  });
+});
+
+describe('ruta (plan 002, D9)', () => {
+  test('"Documentos › título": "Documentos" es el enlace y el título es la página actual', async () => {
+    render(<DocumentDetail />);
+    await heading();
+
+    const nav = screen.getByRole('navigation', { name: 'Ruta' });
+    expect(within(nav).getByRole('link', { name: 'Documentos' })).toHaveAttribute('href', '/documentos');
+    const current = within(nav).getByText('Manual de caja');
+    expect(current).toHaveAttribute('aria-current', 'page');
+    // Un título largo se recorta; completo en title.
+    expect(current).toHaveClass('truncate');
+    expect(current).toHaveAttribute('title', 'Manual de caja');
+    expect(screen.queryByRole('link', { name: /Volver a Documentos/ })).not.toBeInTheDocument();
+  });
+
+  test.each([
+    ['vista=tarjetas', '/documentos?vista=tarjetas'],
+    ['vista=lista', '/documentos'],
+    ['vista=xyz', '/documentos'],
+  ])('?%s → "Documentos" lleva a %s', async (query, href) => {
+    mocks.searchParams = new URLSearchParams(query);
+    render(<DocumentDetail />);
+    await heading();
+
+    const nav = screen.getByRole('navigation', { name: 'Ruta' });
+    expect(within(nav).getByRole('link', { name: 'Documentos' })).toHaveAttribute('href', href);
+  });
+
+  test('si el detalle falla, la ruta queda con "Documentos" solo, para poder volver', async () => {
+    mocks.getDocument.mockRejectedValue(new Error('sin red'));
+    render(<DocumentDetail />);
+
+    const nav = await screen.findByRole('navigation', { name: 'Ruta' });
+    expect(within(nav).getByRole('link', { name: 'Documentos' })).toBeInTheDocument();
+    expect(nav.querySelector('[aria-current]')).toBeNull();
+  });
+});
+
+describe('columnas (plan 003, D11)', () => {
+  test('"Versiones" va en la columna principal; la lateral tiene solo "Revisión"', async () => {
+    mocks.getDocument.mockResolvedValue(WITH_REVIEW);
+    render(<DocumentDetail />);
+    await heading();
+
+    const versions = screen.getByRole('region', { name: 'Versiones' });
+    const review = screen.getByRole('region', { name: 'Revisión' });
+    expect(versions.closest('article')).not.toBeNull();
+    expect(review.closest('article')).toBeNull();
+    expect(review.parentElement!.children).toHaveLength(1);
+  });
+
+  test('sin "Revisión", el documento ocupa todo el ancho (no hay columna lateral)', async () => {
+    render(<DocumentDetail />);
+    await heading();
+
+    expect(screen.getByRole('region', { name: 'Versiones' }).closest('article')).not.toBeNull();
+    expect(screen.queryByRole('region', { name: 'Revisión' })).not.toBeInTheDocument();
+    expect(screen.getByRole('article').parentElement!.className).not.toContain('lg:grid-cols');
   });
 });

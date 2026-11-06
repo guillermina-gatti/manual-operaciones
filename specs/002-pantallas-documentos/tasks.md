@@ -11,7 +11,7 @@
 Convenciones:
 
 - Una tarea = un commit. Las rutas son relativas a `apps/web/`, salvo que digan otra cosa.
-- F1 a F14 son reglas de la spec; E1 a E12, sus escenarios (tabla al principio del plan); D1 a D7, las decisiones del plan; Q1, Q2 y Q6, las preguntas que siguen abiertas con la pareja A (plan, sección 9).
+- F1 a F14 son reglas de la spec; E1 a E12, sus escenarios (tabla al principio del plan); D1 a D9, las decisiones del plan; Q1, Q2 y Q6, las preguntas que siguen abiertas con la pareja A (plan, sección 9).
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - Tests de componentes: `pnpm --filter web test <patrón>`. Tests de Playwright: `pnpm --filter web test:e2e <patrón>`.
 - Antes de escribir código que use una API de Next, leer la guía correspondiente en `node_modules/next/dist/docs/` (`AGENTS.md`).

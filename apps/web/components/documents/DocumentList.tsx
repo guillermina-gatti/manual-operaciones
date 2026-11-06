@@ -51,11 +51,12 @@ export function DocumentList() {
   return (
     <>
       {/* F1: "Cargar documento" solo para el ADMIN, con y sin búsqueda. Va en el encabezado: es la
-          acción principal de la pantalla. */}
+          acción principal de la pantalla. Lleva la vista, así la ruta de la carga vuelve a ella
+          (plan 002, D9). */}
       <DocumentsHeader
         action={
           isAdmin && (
-            <Link href="/documentos/nuevo" className={LIST_BUTTON_PRIMARY}>
+            <Link href={withView('/documentos/nuevo', view)} className={LIST_BUTTON_PRIMARY}>
               Cargar documento
             </Link>
           )
@@ -160,7 +161,7 @@ if (!user) {
         kind="empty"
         message="Todavía no hay documentos"
         action={
-          <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
+          <Link href={withView('/documentos/nuevo', view)} className={BUTTON_PRIMARY}>
             Cargar el primer documento
           </Link>
         }

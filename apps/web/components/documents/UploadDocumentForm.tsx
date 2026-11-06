@@ -3,10 +3,11 @@
 // Formulario de carga de un documento (F2, F4, F5, F13, F14; plan 002, secciones 1 y 5).
 // Estado controlado y onSubmit, no <form action>: React 19 vacía los campos después de una acción
 // y se perdería el archivo elegido (F4).
-// En tres secciones (Archivo, Datos, Quién lo cuida), con la vista previa de la tarjeta al lado (debajo
-// en el celular). El título se sugiere desde el nombre del archivo, sin pisar lo que se escribió.
+// Un solo bloque con tres pasos numerados (1 Archivo, 2 Datos, 3 Quién lo cuida) separados por líneas
+// finas, con la vista previa de la tarjeta al lado (debajo en el celular; plan 002, D9). El título se
+// sugiere desde el nombre del archivo, sin pisar lo que se escribió.
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { FieldError } from '@/components/ui/FieldError';
@@ -17,6 +18,7 @@ import { areasDirectory } from '@/lib/directory';
 import type { Area } from '@/lib/directory';
 import { suggestTitle } from '@/lib/documents/suggest-title';
 import { DESCRIPTION_MAX } from '@/lib/documents/upload-rules';
+import { VIEW_PARAM, parseViewParam, withView } from '@/lib/documents/view';
 import { validateUpload } from '@/lib/documents/validate-upload';
 import type { UploadErrors, UploadFormValues } from '@/lib/documents/validate-upload';
 import { AreasField } from './AreasField';
@@ -75,19 +77,31 @@ function withError(errors: UploadErrors, field: UploadField, message: string | u
   return next;
 }
 
-// Una de las tres secciones: una tarjeta con su título. Sin aria-labelledby a propósito: "Archivo"
-// es también la etiqueta del input, y no tiene que nombrar dos cosas.
-function FormSection({ title, children }: { title: string; children: ReactNode }) {
+// Uno de los tres pasos, dentro del mismo bloque: el número en un círculo y el título al lado; los
+// campos debajo, alineados con el título desde sm (en el celular, a todo el ancho). El número es
+// decorativo (el orden lo dice la lista). Sin aria-labelledby a propósito: "Archivo" es también la
+// etiqueta del input, y no tiene que nombrar dos cosas.
+function FormStep({ step, title, children }: { step: number; title: string; children: ReactNode }) {
   return (
-    <section className={`${LIST_PANEL} flex min-w-0 flex-col gap-6`}>
-      <h2 className="text-xl font-bold">{title}</h2>
-      {children}
-    </section>
+    <li className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-6 py-6 first:pt-0 last:pb-0">
+      <span
+        aria-hidden="true"
+        className="flex size-8 items-center justify-center rounded-full bg-salvia font-bold text-bosque tabular-nums"
+      >
+        {step}
+      </span>
+      <h2 className="flex min-h-8 items-center text-xl font-bold">{title}</h2>
+      <div className="col-span-2 flex min-w-0 flex-col gap-6 sm:col-span-1 sm:col-start-2">
+        {children}
+      </div>
+    </li>
   );
 }
 
 function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: string) => void }) {
   const id = useId();
+  // "Cancelar" vuelve a la vista con la que se entró, como la ruta.
+  const backHref = withView('/documentos', parseViewParam(useSearchParams().get(VIEW_PARAM)));
   const formRef = useRef<HTMLFormElement>(null);
   const [values, setValues] = useState<UploadFormValues>(EMPTY);
   const [errors, setErrors] = useState<UploadErrors>({});
@@ -180,84 +194,86 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
   return (
     <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
       <form ref={formRef} onSubmit={submit} noValidate className="flex min-w-0 flex-col gap-6">
-        <FormSection title="Archivo">
-          <FileDropField file={values.file} error={errors.file} onChange={chooseFile} />
-        </FormSection>
+        <ol className={`${LIST_PANEL} flex min-w-0 flex-col divide-y divide-borde`}>
+          <FormStep step={1} title="Archivo">
+            <FileDropField file={values.file} error={errors.file} onChange={chooseFile} />
+          </FormStep>
 
-        <FormSection title="Datos">
-          <div className="flex flex-col gap-2">
-            <label htmlFor={field('title')} className={LABEL}>
-              Título
-            </label>
-            <input
-              id={field('title')}
-              className={INPUT}
-              value={values.title}
-              onChange={(event) => update('title', event.target.value)}
-              aria-invalid={errors.title ? true : undefined}
-              aria-describedby={titleDescribedBy}
-            />
-            {titleSuggested && (
-              <p id={field('title-suggested')} className={HINT}>
-                Sugerido a partir del nombre del archivo. Podés cambiarlo.
+          <FormStep step={2} title="Datos">
+            <div className="flex flex-col gap-2">
+              <label htmlFor={field('title')} className={LABEL}>
+                Título
+              </label>
+              <input
+                id={field('title')}
+                className={INPUT}
+                value={values.title}
+                onChange={(event) => update('title', event.target.value)}
+                aria-invalid={errors.title ? true : undefined}
+                aria-describedby={titleDescribedBy}
+              />
+              {titleSuggested && (
+                <p id={field('title-suggested')} className={HINT}>
+                  Sugerido a partir del nombre del archivo. Podés cambiarlo.
+                </p>
+              )}
+              <FieldError id={field('title-error')} message={errors.title} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor={field('description')} className={LABEL}>
+                Descripción (opcional)
+              </label>
+              <textarea
+                id={field('description')}
+                rows={3}
+                className={`${INPUT} py-2`}
+                value={values.description}
+                onChange={(event) => update('description', event.target.value)}
+                aria-invalid={errors.description ? true : undefined}
+                aria-describedby={[
+                  field('description-count'),
+                  errors.description && field('description-error'),
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              />
+              <p id={field('description-count')} className={HINT}>
+                {values.description.length}/{DESCRIPTION_MAX}
               </p>
-            )}
-            <FieldError id={field('title-error')} message={errors.title} />
-          </div>
+              <FieldError id={field('description-error')} message={errors.description} />
+            </div>
+          </FormStep>
 
-          <div className="flex flex-col gap-2">
-            <label htmlFor={field('description')} className={LABEL}>
-              Descripción (opcional)
-            </label>
-            <textarea
-              id={field('description')}
-              rows={3}
-              className={`${INPUT} py-2`}
-              value={values.description}
-              onChange={(event) => update('description', event.target.value)}
-              aria-invalid={errors.description ? true : undefined}
-              aria-describedby={[
-                field('description-count'),
-                errors.description && field('description-error'),
-              ]
-                .filter(Boolean)
-                .join(' ')}
+          <FormStep step={3} title="Quién lo cuida">
+            <AreasField
+              areas={areas}
+              selected={values.areaIds}
+              error={errors.areaIds}
+              onChange={(areaIds) => update('areaIds', areaIds)}
             />
-            <p id={field('description-count')} className={HINT}>
-              {values.description.length}/{DESCRIPTION_MAX}
-            </p>
-            <FieldError id={field('description-error')} message={errors.description} />
-          </div>
-        </FormSection>
 
-        <FormSection title="Quién lo cuida">
-          <AreasField
-            areas={areas}
-            selected={values.areaIds}
-            error={errors.areaIds}
-            onChange={(areaIds) => update('areaIds', areaIds)}
-          />
+            <OwnerField
+              areaIds={values.areaIds}
+              value={values.ownerId}
+              error={errors.ownerId}
+              onChange={(ownerId, notice) => {
+                const next = { ...values, ownerId };
+                setValues(next);
+                // El aviso de E4 tiene prioridad; si no hay, el error de validación (después del primer intento).
+                const message = notice ?? (attempted ? validateUpload(next).ownerId : undefined);
+                setErrors((prev) => withError(prev, 'ownerId', message));
+              }}
+              onOwnerName={setOwnerName}
+            />
 
-          <OwnerField
-            areaIds={values.areaIds}
-            value={values.ownerId}
-            error={errors.ownerId}
-            onChange={(ownerId, notice) => {
-              const next = { ...values, ownerId };
-              setValues(next);
-              // El aviso de E4 tiene prioridad; si no hay, el error de validación (después del primer intento).
-              const message = notice ?? (attempted ? validateUpload(next).ownerId : undefined);
-              setErrors((prev) => withError(prev, 'ownerId', message));
-            }}
-            onOwnerName={setOwnerName}
-          />
-
-          <ReviewDateShortcuts
-            value={values.reviewDate}
-            error={errors.reviewDate}
-            onChange={(reviewDate) => update('reviewDate', reviewDate)}
-          />
-        </FormSection>
+            <ReviewDateShortcuts
+              value={values.reviewDate}
+              error={errors.reviewDate}
+              onChange={(reviewDate) => update('reviewDate', reviewDate)}
+            />
+          </FormStep>
+        </ol>
 
         {submitError && (
           <FormErrorBanner
@@ -276,7 +292,7 @@ function UploadForm({ areas, onUploaded }: { areas: Area[]; onUploaded: (id: str
             {submitting ? 'Cargando…' : 'Cargar documento'}
           </button>
           {/* F14: salir no pide confirmación. */}
-          <Link href="/documentos" className={LIST_BUTTON_SECONDARY}>
+          <Link href={backHref} className={LIST_BUTTON_SECONDARY}>
             Cancelar
           </Link>
         </div>

@@ -7,7 +7,7 @@
 Convenciones:
 
 - Una tarea = un commit. Las rutas de backend son relativas a `apps/api/` y las de frontend a `apps/web/`, salvo que digan otra cosa.
-- R1 a R14 (con R6b y R7b) son reglas de la spec; E1 a E13, sus escenarios (tabla al principio del plan); D1 a D10, las decisiones del plan (sección 9.1); Q1, la pregunta abierta con Guille (sección 9.2). Las reglas y decisiones de otros planes se citan con su plan ("R8b de la spec 001", "T19 del plan 002").
+- R1 a R14 (con R6b y R7b) son reglas de la spec; E1 a E13, sus escenarios (tabla al principio del plan); D1 a D11, las decisiones del plan (sección 9.1); Q1, la pregunta abierta con Guille (sección 9.2). Las reglas y decisiones de otros planes se citan con su plan ("R8b de la spec 001", "T19 del plan 002").
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - **"Avisar al equipo antes de mergear"** marca solo las tareas que tocan archivos que usan otras parejas: `schema.prisma`, `prisma/migrations`, `main.ts`, `layout.tsx`, `ci.yml`, el README y los `.env.example`. Los archivos de las specs 001 y 002 son del mismo responsable y no llevan la nota.
 - **Comandos de Prisma:** `prisma migrate dev`, `prisma migrate deploy` y `prisma generate` los corre el usuario, no el agente. Cuando una tarea cambia `schema.prisma`, el agente hace el cambio, escribe el test y se detiene; el usuario crea la migración con `migrate dev --create-only`, se revisa el SQL juntos, y el usuario la aplica con `migrate deploy` (T01).
@@ -425,6 +425,7 @@ Convenciones:
   - error con "Reintentar".
 - **Depende de:** T17
 - **Commit:** `feat(documents): mostrar el historial de versiones`
+- **Actualizada el 06/11/2026 (D11 del plan):** la sección se llama "Versiones" y tiene una línea que explica qué es. La lista se sigue abriendo con el botón "Historial de versiones" y se pide recién al abrirla. Cada versión es una fila compacta, la misma en el celular, con la descarga como botón de ícono (`DownloadButton` suma `icon`). Con la prop `upload`, la sección muestra "Subir versión nueva" y su formulario adentro.
 
 ### T24 · Acciones en el detalle
 
@@ -445,6 +446,7 @@ Convenciones:
   - los tests del plan 002 siguen pasando.
 - **Depende de:** T20, T21, T22, T23
 - **Commit:** `feat(documents): agregar las acciones del ciclo de vida al detalle`
+- **Actualizada el 06/11/2026 (D11 del plan):** al pie de los datos quedan "Cambiar áreas" y "Archivar". "Subir versión nueva" está en la sección "Versiones", en la columna principal, y sigue cerrando "Cambiar áreas" al abrirse (y al revés). La columna lateral queda solo para "Revisión".
 
 ## Tests en el navegador (Playwright)
 
