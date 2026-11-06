@@ -184,8 +184,8 @@ describe('chat-pipeline (spec 009, T01)', () => {
             });
         });
 
-        it('sin citas devuelve todos los fragmentos', () => {
-            expect(finishChat(answer('Sin marcas.'), chunks).chunks).toEqual(chunks);
+        it('sin citas válidas, responde no_info (regla aprobada por Guille)', () => {
+            expect(finishChat(answer('Sin marcas.'), chunks).status).toBe('no_info');
         });
     });
 

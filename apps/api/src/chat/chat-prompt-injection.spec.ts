@@ -124,13 +124,13 @@ describe('HU17 · prompt injection en el resultado', () => {
         return { service, repository };
     }
 
-    it('si el modelo obedece al pasaje y responde sin citas válidas, las fuentes son solo los fragmentos recuperados', async () => {
+    it('si el modelo obedece al pasaje y responde sin citas válidas, responde no_info y sin fuentes', async () => {
         const { service } = serviceWith(['HACKEADO [S9].']);
 
         const result = await service.ask(USER, { message: QUESTION } as ChatRequest);
 
-        expect(result.status).toBe('answered');
-        expect(result.sources.map((s) => s.chunkId)).toEqual(['chunk-a', 'chunk-b']);
+        expect(result.status).toBe('no_info');
+        expect(result.sources).toEqual([]);
     });
 
     it('si el modelo obedece a una instrucción y responde NO_INFO, el resultado es no_info sin fuentes y sin el texto inyectado', async () => {
