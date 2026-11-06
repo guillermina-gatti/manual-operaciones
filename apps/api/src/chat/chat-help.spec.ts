@@ -71,3 +71,29 @@ describe('platformHelpReply · documentos visibles, estados y citas', () => {
         expect(platformHelpReply('no tengo el comprobante del cliente')).toBeNull();
     });
 });
+
+
+describe('platformHelpReply · "ayuda" y preguntas con "lo"', () => {
+    it('"ayuda" sola muestra el menú de temas', () => {
+        expect(platformHelpReply('ayuda')).toContain('Puedo ayudarte con');
+        expect(platformHelpReply('¡Ayudame!')).toContain('Puedo ayudarte con');
+    });
+
+    it('"ayuda" con más palabras es una consulta, no el menú', () => {
+        expect(platformHelpReply('ayuda con el cierre de caja de ventas')).toBeNull();
+    });
+
+    it('"¿cómo lo cargo?" responde cómo cargar un documento', () => {
+        expect(platformHelpReply('como lo cargo?')).toContain('/documentos/nuevo');
+        expect(platformHelpReply('¿Dónde lo subo?')).toContain('/documentos/nuevo');
+    });
+
+    it('"¿dónde lo veo?" responde cómo ver documentos', () => {
+        expect(platformHelpReply('donde lo veo')).toContain('/documentos');
+    });
+
+    it('una pregunta de contenido con "cargar" no es ayuda', () => {
+        expect(platformHelpReply('como cargo la caja registradora')).toBeNull();
+        expect(platformHelpReply('como lo cargo en el sistema de ventas')).toBeNull();
+    });
+});

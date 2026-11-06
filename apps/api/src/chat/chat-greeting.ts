@@ -31,7 +31,6 @@ const ABOUT_KEYWORDS = [
     ['que', 'podes', 'hacer'],
     ['para', 'que', 'sirves'],
     ['como', 'funcionas'],
-    ['ayuda'],
 ];
 
 const FAREWELL_WORDS = new Set(['chau', 'adios', 'bye', 'vemos', 'luego', 'pronto']);
