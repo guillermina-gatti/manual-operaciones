@@ -2,7 +2,6 @@
 
 // Step-by-step execution of a procedure (HU12, spec 005). The API decides who can see it: for
 // another employee, a missing execution or a lost area it answers the same 404.
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ExecutionChatPanel } from '@/components/chat/ExecutionChatPanel';
@@ -17,10 +16,10 @@ import {
   useApiResource,
 } from '@/lib/api';
 import type { ExecutionResponse } from '@/lib/api';
-import { formatDuration } from '@/lib/executions/format';
 import { SAMPLE_PROCEDURES, procedureName } from '@/lib/executions/sample-procedures';
 import { summarizeExecution } from '@/lib/executions/summary';
 import { useSession } from '@/lib/session';
+import { CompletedPanel } from './CompletedPanel';
 import { ExecutionProgress } from './ExecutionProgress';
 import { ExecutionSummaryCard } from './ExecutionSummaryCard';
 import { StepList } from './StepList';
@@ -176,25 +175,14 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
           )}
         </div>
 
-        {completed && (
-          <div
-            role="status"
-            className="flex items-start gap-4 rounded-xl border border-green-200 border-l-4 border-l-green-600 bg-green-50 p-5 text-green-900 shadow-sm dark:border-green-900 dark:border-l-green-500 dark:bg-green-950/60 dark:text-green-100"
-          >
-            <span
-              aria-hidden="true"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-700 text-lg font-bold text-white dark:bg-green-500 dark:text-zinc-950"
-            >
-              ✓
-            </span>
-            <div className="flex flex-col gap-1 pt-1">
-              <p className="text-lg font-semibold">Completaste el procedimiento</p>
-              <p>Tiempo total: {formatDuration(summary.totalDurationMs)}</p>
-            </div>
-          </div>
-        )}
-
         <ExecutionProgress summary={summary} />
+
+        {completed && (
+          <CompletedPanel
+            procedureName={procedureName(execution.procedureId)}
+            totalDurationMs={summary.totalDurationMs}
+          />
+        )}
 
         {notice && (
           <p role="alert" className={ERROR_BOX}>
@@ -208,15 +196,6 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
           onComplete={complete}
           focusCurrent={completedHere}
         />
-
-        {completed && (
-          <Link
-            href="/ejecuciones"
-            className="inline-flex min-h-12 items-center self-start rounded-lg border border-blue-200 bg-white px-6 font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300 dark:hover:bg-blue-950"
-          >
-            Elegir otro procedimiento
-          </Link>
-        )}
       </article>
 
       {/* The side column: our summary and, below it, the assistant of pair C for the current step

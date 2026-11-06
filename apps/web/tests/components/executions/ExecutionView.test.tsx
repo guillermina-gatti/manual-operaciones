@@ -280,16 +280,19 @@ describe('a completed execution', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Terminé el último paso' }));
 
-    expect(await screen.findByText('Completaste el procedimiento')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '¡Procedimiento completado!' })).toBeInTheDocument();
   });
 
-  test('shows the total time, every duration, no button, and a link to choose another', async () => {
+  test('shows the completed panel, every duration and no button', async () => {
     mocks.getExecution.mockResolvedValue(execution(4));
     render(<ExecutionView />);
     await heading();
 
-    expect(screen.getByText('Completaste el procedimiento')).toBeInTheDocument();
-    expect(screen.getByText('Tiempo total: 12 min')).toBeInTheDocument();
+    const panel = screen.getByRole('status');
+    expect(within(panel).getByRole('heading', { level: 2 })).toHaveTextContent(
+      '¡Procedimiento completado!',
+    );
+    expect(panel).toHaveTextContent('Terminaste Cierre de caja en 12 min. Quedó registrado.');
     expect(screen.getByRole('progressbar', { name: 'Pasos terminados' })).toHaveAttribute(
       'aria-valuenow',
       '4',
@@ -297,10 +300,33 @@ describe('a completed execution', () => {
     STEPS.forEach((_, i) => expect(stepItem(i + 1)).toHaveTextContent('3 min'));
     expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
     expect(screen.queryByText('Retomaste donde quedaste')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Elegir otro procedimiento' })).toHaveAttribute(
+    expect(within(panel).getByRole('link', { name: 'Ver otro procedimiento' })).toHaveAttribute(
       'href',
       '/ejecuciones',
     );
+    expect(within(panel).getByRole('link', { name: 'Volver al inicio' })).toHaveAttribute(
+      'href',
+      '/',
+    );
+  });
+
+  test('the completed panel goes between the progress and the steps', async () => {
+    mocks.getExecution.mockResolvedValue(execution(4));
+    render(<ExecutionView />);
+    await heading();
+
+    const progress = screen.getByRole('progressbar', { name: 'Pasos terminados' });
+    const panel = screen.getByRole('status');
+    const steps = screen.getByRole('list', { name: 'Pasos del procedimiento' });
+    expect(progress.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('an execution in progress has no completed panel', async () => {
+    render(<ExecutionView />);
+    await heading();
+
+    expect(screen.queryByRole('heading', { name: '¡Procedimiento completado!' })).not.toBeInTheDocument();
   });
 });
 
