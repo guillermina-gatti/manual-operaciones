@@ -323,10 +323,11 @@ describe("GeminiChatLlm: razonamiento 'low' en las dos rutas", () => {
 
     // Con el proveedor real de Google y un fetch simulado: lo que viaja en el pedido a Gemini.
     function googleCapturing(bodies: Record<string, unknown>[]) {
-        const fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
             bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
             const part = { candidates: [{ content: { role: 'model', parts: [{ text: 'Hola [S1].' }] }, finishReason: 'STOP' }] };
-            const streaming = String(_url).includes('streamGenerateContent');
+            const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+            const streaming = url.includes('streamGenerateContent');
             return streaming
                 ? new Response(`data: ${JSON.stringify(part)}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
                 : new Response(JSON.stringify(part), { headers: { 'Content-Type': 'application/json' } });
@@ -336,7 +337,7 @@ describe("GeminiChatLlm: razonamiento 'low' en las dos rutas", () => {
 
     it.each([
         ['gemini-2.5-flash', { thinkingBudget: 6554 }],
-        ['gemini-3.8-flash', { thinkingLevel: 'low' }],
+        ['gemini-3.1-flash-lite', { thinkingLevel: 'low' }],
     ])('con %s, el SDK lo traduce al thinkingConfig de su familia, en answer y en stream', async (modelId, expected) => {
         const bodies: Record<string, unknown>[] = [];
         const google = googleCapturing(bodies);
