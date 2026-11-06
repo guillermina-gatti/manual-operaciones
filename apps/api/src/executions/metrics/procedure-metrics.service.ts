@@ -11,18 +11,10 @@ import { AreasDirectory } from '../../documents/ports/areas-directory';
 import { UsersDirectory } from '../../documents/ports/users-directory';
 import { toHttpException } from '../http-errors';
 import { Clock } from '../ports/clock';
-import {
-  CatalogProcedureVersion,
-  ProceduresCatalog,
-} from '../ports/procedures-catalog';
+import { ProceduresCatalog } from '../ports/procedures-catalog';
 import { activeAreaIdsOf } from '../viewer-areas';
 import { ExecutionMetricsRepository } from './execution-metrics.repository';
-import {
-  filterableAreaIds,
-  inScope,
-  metricsScope,
-  MetricsScope,
-} from './metrics-access.policy';
+import { filterableAreaIds, metricsScope } from './metrics-access.policy';
 import {
   DEFAULT_TIME_ZONE,
   STALE_AFTER_HOURS,
@@ -35,6 +27,7 @@ import {
   ProcedureMetrics,
   totalsOf,
 } from './procedure-metrics';
+import { findVisibleVersions } from './visible-versions';
 
 // Already validated by the DTO: from and to are "YYYY-MM-DD" days that exist.
 export interface ProcedureMetricsQuery {
@@ -104,7 +97,9 @@ export class ProcedureMetricsService {
       ...toMetricsPeriod(from, to, this.timeZone),
       staleBefore: staleBefore(this.clock.now()),
     });
-    const versions = await this.visibleVersions(
+    const versions = await findVisibleVersions(
+      this.catalog,
+      this.logger,
       aggregates.executions.map((e) => e.procedureVersionId),
       scope,
     );
@@ -121,33 +116,5 @@ export class ProcedureMetricsService {
       totals: totalsOf(procedures),
       procedures,
     };
-  }
-
-  // The versions with executions whose procedure is currently in the scope. A version
-  // the catalog does not know is left out and logged: without it there are no steps
-  // nor areas to check.
-  private async visibleVersions(
-    versionIds: string[],
-    scope: MetricsScope,
-  ): Promise<Map<string, CatalogProcedureVersion>> {
-    const found = await Promise.all(
-      [...new Set(versionIds)].map(async (versionId) => {
-        const version = await this.catalog.findVersion(versionId);
-        if (!version) {
-          this.logger.warn({
-            message:
-              'Versión de procedimiento con ejecuciones que el catálogo no conoce',
-            procedureVersionId: versionId,
-          });
-        }
-        return version;
-      }),
-    );
-    return new Map(
-      found
-        .filter((v): v is CatalogProcedureVersion => v !== null)
-        .filter((v) => inScope(scope, v.areaIds))
-        .map((v) => [v.versionId, v]),
-    );
   }
 }
