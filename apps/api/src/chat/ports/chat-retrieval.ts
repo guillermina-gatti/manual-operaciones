@@ -17,5 +17,6 @@ export interface RetrievedChunk {
 }
 
 export abstract class ChatRetrieval {
-    abstract search(queryVector: number[], areaIds: string[], limit: number): Promise<RetrievedChunk[]>;
+    // areaIds null = sin filtro por área (solo ADMIN). Un array vacío no devuelve nada.
+    abstract search(queryVector: number[], areaIds: string[] | null, limit: number): Promise<RetrievedChunk[]>;
 }

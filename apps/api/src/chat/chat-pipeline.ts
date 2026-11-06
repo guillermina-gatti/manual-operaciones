@@ -27,6 +27,8 @@ export const UNAVAILABLE_TEXT =
 export interface ChatUser {
     id: string;
     areaIds: string[];
+    // Rol del usuario. El ADMIN busca en todos los documentos vigentes, no solo en sus áreas (pedido de Mati).
+    role?: string;
 }
 
 export interface Outcome {
@@ -74,8 +76,10 @@ export async function prepareChat(
     logger: Logger,
     searchText: string = question,
 ): Promise<Prepared> {
+    // Alcance de la búsqueda: null = todos los documentos vigentes (solo ADMIN); si no, sus áreas.
+    const scope: string[] | null = user.role === 'ADMIN' ? null : user.areaIds;
     // Sin áreas asignadas no hay nada que el usuario pueda consultar, ni siquiera un saludo.
-    if (user.areaIds.length === 0) {
+    if (scope !== null && scope.length === 0) {
         return { kind: 'done', outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [] } };
     }
 
@@ -100,7 +104,7 @@ export async function prepareChat(
         return { kind: 'done', outcome: unavailable() };
     }
 
-    const retrieved = await retrieval.search(queryVector, user.areaIds, TOP_K);
+    const retrieved = await retrieval.search(queryVector, scope, TOP_K);
     const chunks = retrieved.filter((c) => c.distance <= MAX_COSINE_DISTANCE);
     if (chunks.length === 0) {
         // HU19: los más cercanos, aunque estén fuera del umbral, para mostrar dónde buscar.
@@ -128,8 +132,7 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
         return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
     }
 
-    let text = llm.text;
-    const marker = readConflictMarker(text, chunks);
+    const marker = readConflictMarker(llm.text, chunks);
     if (marker.kind === 'conflict') {
         const { first, second, body } = marker;
         return {
@@ -140,18 +143,40 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
             llm,
         };
     }
+    let text = llm.text;
     if (marker.kind === 'invalid') {
         logger?.warn(`Marca de contradicción inválida, se responde sin ella: ${marker.reason}`);
         if (!marker.body) return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
         text = marker.body;
     }
 
+    // Sin ninguna cita válida, no hay respuesta que mostrar: no_info (pedido de Mati).
+    const cleaned = cleanCitations(text, chunks.length);
+    if (cleaned.refs.size === 0) {
+        return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
+    }
+
     return {
         status: 'answered',
-        answer: text,
-        chunks: citedChunks(text, chunks),
+        answer: cleaned.text,
+        chunks: citedChunks(cleaned.text, chunks),
         llm,
     };
+}
+
+// Quita las citas que no corresponden a un fragmento recuperado (por ejemplo [S7] con 3 fragmentos),
+// para que el done traiga la respuesta limpia. Devuelve las citas válidas que quedan.
+export function cleanCitations(text: string, count: number): { text: string; refs: Set<number> } {
+    const refs = new Set<number>();
+    const cleaned = text.replace(/\s*\[S(\d+)\]/g, (match, n: string) => {
+        const index = Number(n);
+        if (index >= 1 && index <= count) {
+            refs.add(index);
+            return match;
+        }
+        return '';
+    });
+    return { text: cleaned.trim(), refs };
 }
 
 // Guarda la consulta y arma la respuesta del Contrato 4. La latencia va desde startedAt hasta acá.
