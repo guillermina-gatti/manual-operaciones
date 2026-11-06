@@ -14,7 +14,9 @@ export const metadata: Metadata = {
 
 export default function NuevoDocumentoPage() {
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
+    // pb-28: espacio al pie para que "Cargar documento" pueda quedar por encima de lo que flota abajo
+    // (en desarrollo, la insignia de Next y el selector de sesión).
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pt-8 pb-28">
       <BackLink href="/documentos" />
       <PageHeader
         title="Cargar documento"

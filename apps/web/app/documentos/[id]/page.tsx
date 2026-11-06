@@ -15,7 +15,9 @@ export const metadata: Metadata = {
 
 export default function DocumentoPage() {
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
+    // pb-28: espacio al pie para que lo último (el historial) pueda quedar por encima de lo que flota
+    // abajo (en desarrollo, el selector de sesión y la insignia de Next).
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pt-8 pb-28">
       <Suspense fallback={<BackLink href="/documentos" />}>
         <BackToDocuments />
       </Suspense>
