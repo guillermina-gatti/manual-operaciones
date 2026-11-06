@@ -5,6 +5,7 @@ import type { Logger } from '@nestjs/common';
 import type { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatResult, ChatResultStatus, ChatSource, NearestDocument } from './chat.contract';
 import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
+import { platformHelpReply } from './chat-help';
 import { smallTalkReply } from './chat-greeting';
 import type { ContactPerson } from './ports/contact-directory';
 import type { LlmAnswer, Passage } from './ports/chat-llm';
@@ -83,6 +84,12 @@ export async function prepareChat(
     const reply = smallTalkReply(question);
     if (reply !== null) {
         return { kind: 'done', outcome: { status: 'answered', answer: reply, chunks: [] } };
+    }
+
+    // Ayuda de la plataforma ("¿cómo veo un documento?"): texto fijo, sin buscar ni llamar al modelo.
+    const help = platformHelpReply(question);
+    if (help !== null) {
+        return { kind: 'done', outcome: { status: 'answered', answer: help, chunks: [] } };
     }
 
     let queryVector: number[];
