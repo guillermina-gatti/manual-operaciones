@@ -285,8 +285,7 @@ El flujo que venimos usando:
 
 Decisiones del equipo. Nada de esto se cambió todavía.
 
-- **Qué skill de diseño usa el equipo**: la que votamos o design-taste-frontend (la que se usó en el
-  rediseño de Documentos). Si se adopta una, que reemplace a la otra, no que se sumen.
+- **Skill de diseño: el equipo usa design-taste-frontend, que está en .claude/skills/design-taste-frontend (se actualiza a mano si sale una versión nueva). Reemplaza a la skill que se había votado: no instalen las dos, porque se contradicen.
 - **Mover las piezas generales a un lugar común.** Los botones con respuesta (`LIST_BUTTON_*`), la tarjeta
   (`LIST_CARD`, `LIST_PANEL`) y el encabezado (`PageHeader`) están en
   `components/documents/list-design.tsx`, pero no son solo de Documentos. La propuesta es pasarlos a un
