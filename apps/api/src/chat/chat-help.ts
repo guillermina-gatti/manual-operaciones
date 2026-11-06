@@ -7,7 +7,7 @@
 function normalize(text: string): string {
     return text
         .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
+        .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
@@ -130,17 +130,42 @@ const TOPICS: Topic[] = [
     },
 ];
 
+// Preguntas con "lo" en vez de la palabra "documento" ("¿cómo lo cargo?", "¿dónde lo veo?"). Van después de
+// los temas con documento y usan el mismo texto que ellos.
+const replyOf = (name: string): string => {
+    const topic = TOPICS.find((t) => t.name === name);
+    if (!topic) throw new Error(`No hay tema de ayuda "${name}"`);
+    return topic.reply;
+};
+const PRONOUN_TOPICS: Topic[] = [
+    { name: 'cargar-lo', all: [['carg', 'subo', 'subir', 'subi'], ['lo']], reply: replyOf('cargar-documento') },
+    { name: 'ver-lo', all: [['ver', 'veo', 'busc', 'encuentr', 'abr'], ['lo']], reply: replyOf('ver-documento') },
+];
+
+// Respuesta a "ayuda" sola: el menú de temas, para que la persona sepa qué puede preguntar.
+const MENU_REPLY =
+    'Puedo ayudarte con: cómo ver y buscar documentos (/documentos), cómo cargar un documento (si sos administrador), qué significa cada estado, de dónde sale la información de una respuesta, cómo ejecutar un procedimiento (/ejecuciones), las métricas (/metricas) y los avisos de revisión. Preguntame con tus palabras, por ejemplo: "¿cómo lo cargo?" o "¿dónde veo las métricas?".';
+
 // Un mensaje largo es casi seguro una consulta sobre el contenido de los documentos, no una pregunta de ayuda.
 const MAX_TOKENS = 10;
+const MAX_PRONOUN_TOKENS = 4;
 
 // Devuelve el texto de ayuda para la pregunta, o null si es una consulta que hay que buscar en los documentos.
 export function platformHelpReply(question: string): string | null {
     const tokens = normalize(question).split(' ').filter(Boolean);
     if (tokens.length === 0 || tokens.length > MAX_TOKENS) return null;
+    // "ayuda" o "ayudame" solos: el menú. Con más palabras, es una consulta como cualquier otra.
+    if (tokens.length <= 2 && has(tokens, ['ayud'])) return MENU_REPLY;
     if (!has(tokens, INTENT)) return null;
 
     for (const topic of TOPICS) {
         if (topic.all.every((group) => has(tokens, group))) return topic.reply;
+    }
+    // Con "lo", solo preguntas cortas: en una frase larga, "lo" puede ser contenido de un documento.
+    if (tokens.length <= MAX_PRONOUN_TOKENS) {
+        for (const topic of PRONOUN_TOPICS) {
+            if (topic.all.every((group) => has(tokens, group))) return topic.reply;
+        }
     }
     return null;
 }

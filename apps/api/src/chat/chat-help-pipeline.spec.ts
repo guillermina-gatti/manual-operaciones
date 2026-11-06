@@ -48,3 +48,18 @@ describe('prepareChat: ayuda de la plataforma', () => {
         expect(embeddings.calls).toBe(0);
     });
 });
+
+describe('prepareChat: "ayuda" sola', () => {
+    it('responde el menú de temas, sin embedding ni búsqueda', async () => {
+        const embeddings = new FakeEmbeddings();
+        const retrieval = new FakeRetrieval([chunk()]);
+
+        const prepared = await prepareChat(embeddings, retrieval, USER, 'ayuda', new Logger('test'));
+
+        if (prepared.kind !== 'done') throw new Error('se esperaba un resultado final');
+        expect(prepared.outcome.status).toBe('answered');
+        expect(prepared.outcome.answer).toContain('Puedo ayudarte con');
+        expect(embeddings.calls).toBe(0);
+        expect(retrieval.calls).toBe(0);
+    });
+});
