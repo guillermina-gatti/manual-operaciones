@@ -2,9 +2,13 @@
 // izquierda, sobre blanco. Mientras se genera, la burbuja está ocupada (aria-busy) y no se anuncia.
 // Al terminar: citas y fuentes, "No encontré" o el aviso con el enlace a la búsqueda sin IA (HU36).
 // Spec 011: o el aviso de dos documentos que se contradicen, con las dos fuentes.
+// HU25: la valoración, solo en las respuestas que se pueden valorar (answered y conflict).
+// HU19: con no_info, los documentos cercanos.
 import Link from 'next/link';
 import { linkCitations } from '@/lib/chat/citations';
 import { buildSearchUrl, searchTextOf } from '@/lib/chat/search-url';
+import { ChatFeedback } from './ChatFeedback';
+import { ChatNearestDocuments } from './ChatNearestDocuments';
 import { ChatSources } from './ChatSources';
 import { ConflictNotice } from './ConflictNotice';
 import { BUTTON_SECONDARY, TEXT_LINK } from './design';
@@ -55,6 +59,7 @@ function AssistantBody({ message, onRetry, busy }: { message: AssistantMessage }
         <>
           <Answer message={message} />
           <ChatSources sources={message.sources} />
+          <Feedback message={message} />
         </>
       );
 
@@ -65,14 +70,19 @@ function AssistantBody({ message, onRetry, busy }: { message: AssistantMessage }
           <ConflictNotice />
           <Answer message={message} />
           <ChatSources sources={message.sources} title="Las dos fuentes" />
+          <Feedback message={message} />
         </>
       );
 
+    // HU19: sin información, los documentos cercanos para seguir buscando.
     case 'no_info':
       return (
-        <p className="whitespace-pre-wrap rounded-xl border-2 border-dashed border-borde px-4 py-3 text-texto-suave">
-          {message.text}
-        </p>
+        <>
+          <p className="whitespace-pre-wrap rounded-xl border-2 border-dashed border-borde px-4 py-3 text-texto-suave">
+            {message.text}
+          </p>
+          <ChatNearestDocuments documents={message.nearestDocuments} />
+        </>
       );
 
     case 'ai_unavailable':
@@ -112,6 +122,11 @@ function AssistantBody({ message, onRetry, busy }: { message: AssistantMessage }
         </>
       );
   }
+}
+
+// HU25: sin id de mensaje no hay nada que valorar, así que no se muestra.
+function Feedback({ message }: { message: AssistantMessage }) {
+  return message.messageId ? <ChatFeedback messageId={message.messageId} /> : null;
 }
 
 // F4: las marcas [Sn] como citas numeradas que abren el documento de su fuente.

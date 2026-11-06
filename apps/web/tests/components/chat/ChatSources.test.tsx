@@ -1,4 +1,5 @@
 // Spec 011 (T10, PD9): el título opcional de las fuentes. Sin él, igual que en la spec 009.
+// HU18: cada fuente dice desde cuándo está vigente.
 import { render, screen } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { ChatSources } from '@/components/chat/ChatSources';
@@ -32,5 +33,11 @@ describe('ChatSources', () => {
     const { container } = render(<ChatSources sources={[]} title="Las dos fuentes" />);
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  test('HU18: cada fuente dice desde cuándo está vigente', () => {
+    render(<ChatSources sources={[SOURCE]} />);
+
+    expect(screen.getByText('Vigente desde 01/10/2026')).toBeInTheDocument();
   });
 });
