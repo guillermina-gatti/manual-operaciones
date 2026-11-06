@@ -4,7 +4,7 @@
 // El access token vive solamente en memoria. La cookie httpOnly la administra la API.
 import { createContext, useContext, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { login, logout, refresh } from '@/lib/auth/auth-client';
+import { login, logout, refresh, registerWithInvitation } from '@/lib/auth/auth-client';
 import type { SessionState, SessionUser } from './session';
 
 const SERVER_SNAPSHOT: SessionState = { user: null, status: 'loading' };
@@ -16,7 +16,8 @@ let generation = 0;
 let initialized = false;
 let refreshing: Promise<boolean> | null = null;
 let restoring: Promise<void> | null = null;
-let entering: Promise<SessionUser> | null = null;
+let loggingIn: Promise<SessionUser> | null = null;
+let registering: Promise<SessionUser> | null = null;
 let leaving: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
@@ -93,10 +94,14 @@ export function restoreSession(): Promise<void> {
 
 /** Login real. El token queda en RAM; los datos visibles provienen del backend. */
 export function loginSession(email: string, password: string): Promise<SessionUser> {
-  if (entering) return entering; // No enviar dos POST de login simultáneos.
+  if (loggingIn) return loggingIn; // No enviar dos POST de login simultáneos.
   const task = (async (): Promise<SessionUser> => {
-    // No permitir que un login se adelante a un logout todavía en curso.
-    await leaving?.catch(() => undefined);
+    // No permitir que un login se adelante a un logout o registro todavía en curso.
+    if (leaving) await leaving.catch(() => undefined);
+    if (registering) await registering.catch(() => undefined);
+    if (leaving) {
+      throw new Error('La operación fue reemplazada por otro cambio de sesión.');
+    }
     const currentGeneration = ++generation;
     accessToken = null;
     update({ user: null, status: 'loading' });
@@ -121,9 +126,67 @@ export function loginSession(email: string, password: string): Promise<SessionUs
       throw error;
     }
   })();
-  entering = task;
+  loggingIn = task;
   void task.finally(() => {
-    if (entering === task) entering = null;
+    if (loggingIn === task) loggingIn = null;
+  }).catch(() => undefined);
+  return task;
+}
+
+/** Registro con invitación. Establece la sesión en memoria; los datos provienen del backend. */
+export function registerSession(
+  token: string,
+  name: string,
+  password: string,
+): Promise<SessionUser> {
+  // Si ya existe una sesión autenticada lista, rechazar de inmediato sin modificar estado ni llamar HTTP
+  if (snapshot.status === 'ready' && snapshot.user) {
+    return Promise.reject(
+      new Error('Ya existe una sesión activa. Debe cerrar sesión antes de registrar una nueva cuenta.'),
+    );
+  }
+
+  if (registering) return registering; // No enviar dos peticiones de registro simultáneas.
+  const task = (async (): Promise<SessionUser> => {
+    // No permitir que un registro se adelante a un logout o login todavía en curso.
+    if (leaving) await leaving.catch(() => undefined);
+    if (loggingIn) await loggingIn.catch(() => undefined);
+
+    // Re-comprobar tras esperar operaciones en vuelo
+    if (snapshot.status === 'ready' && snapshot.user) {
+      throw new Error('Ya existe una sesión activa. Debe cerrar sesión antes de registrar una nueva cuenta.');
+    }
+    if (leaving) {
+      throw new Error('La operación fue reemplazada por otro cambio de sesión.');
+    }
+
+    const currentGeneration = ++generation;
+    accessToken = null;
+    update({ user: null, status: 'loading' });
+    try {
+      const result = await registerWithInvitation(token, name, password);
+      if (currentGeneration !== generation) {
+        throw new Error('La operación fue reemplazada por otro cambio de sesión.');
+      }
+      accessToken = result.accessToken;
+      const user: SessionUser = {
+        id: result.user.id,
+        name: result.user.name,
+        role: result.user.role,
+      };
+      update({ user, status: 'ready' });
+      return user;
+    } catch (error) {
+      if (currentGeneration === generation) {
+        accessToken = null;
+        update(EMPTY_SESSION);
+      }
+      throw error;
+    }
+  })();
+  registering = task;
+  void task.finally(() => {
+    if (registering === task) registering = null;
   }).catch(() => undefined);
   return task;
 }
@@ -174,13 +237,15 @@ export function logoutSession(): Promise<void> {
   generation += 1;
   accessToken = null;
   update(EMPTY_SESSION);
-  const loginPending = entering;
+  const loginPending = loggingIn;
+  const registerPending = registering;
   const refreshPending = refreshing;
   const restorePending = restoring;
   const task = (async (): Promise<void> => {
     // Si ya había una solicitud iniciada, esperar que termine antes de revocar
     // para impedir que una respuesta tardía deje una cookie nueva tras el logout.
     await loginPending?.catch(() => undefined);
+    await registerPending?.catch(() => undefined);
     await refreshPending?.catch(() => undefined);
     await restorePending?.catch(() => undefined);
     await logout();
@@ -205,7 +270,8 @@ export function __resetSessionForTests(): void {
   initialized = false;
   refreshing = null;
   restoring = null;
-  entering = null;
+  loggingIn = null;
+  registering = null;
   leaving = null;
 }
 
