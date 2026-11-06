@@ -7,12 +7,16 @@ import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SEARCH_MAX, SEARCH_MIN, parseSearchParam } from '@/lib/documents/search-rules';
+import { withView } from '@/lib/documents/view';
+import type { DocumentsView } from '@/lib/documents/view';
 import { BUTTON_SECONDARY, ERROR_TEXT, HINT, SearchIcon } from './design';
 import { LIST_BUTTON_PRIMARY } from './list-design';
 
 interface SearchBoxProps {
   // El ?q= de la dirección, tal cual (null si no hay búsqueda).
   query: string | null;
+  // La vista del listado: buscar y borrar la conservan (por defecto, Lista).
+  view?: DocumentsView;
 }
 
 const TOO_SHORT = `Escribí al menos ${SEARCH_MIN} caracteres para buscar.`;
@@ -25,7 +29,7 @@ function warningFor(value: string | null): string | undefined {
   return parsed.kind === 'invalid' && parsed.text.length > SEARCH_MAX ? TOO_LONG : TOO_SHORT;
 }
 
-export function SearchBox({ query }: SearchBoxProps) {
+export function SearchBox({ query, view = 'lista' }: SearchBoxProps) {
   const router = useRouter();
   const errorId = useId();
   const [value, setValue] = useState(query ?? '');
@@ -43,7 +47,7 @@ export function SearchBox({ query }: SearchBoxProps) {
       return;
     }
     // Sin ?pagina=: toda búsqueda nueva empieza en la página 1.
-    router.push(`/documentos?q=${encodeURIComponent(parsed.text)}`);
+    router.push(withView(`/documentos?q=${encodeURIComponent(parsed.text)}`, view));
   }
 
   return (
@@ -73,7 +77,7 @@ export function SearchBox({ query }: SearchBoxProps) {
           <button
             type="button"
             className={`${BUTTON_SECONDARY} min-h-14`}
-            onClick={() => router.push('/documentos')}
+            onClick={() => router.push(withView('/documentos', view))}
           >
             Borrar búsqueda
           </button>

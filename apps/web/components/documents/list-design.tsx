@@ -34,8 +34,135 @@ export const LIST_CARD_LINK =
   'block truncate text-bosque outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[""]';
 export const LIST_CARD_LAYER = 'relative z-10';
 
+// El título de la vista Tarjetas: hasta dos líneas (el texto completo queda en title).
+export const TILE_LINK =
+  'line-clamp-2 text-bosque outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[""]';
+
 // Una tarjeta quieta (sin enlace), con el mismo relleno que la del listado.
 export const LIST_PANEL = `${CARD} p-6`;
+
+// --- Vista Lista (filas estilo Drive) ----------------------------------------------------------------
+
+// Las columnas: Nombre · Área · Responsable · Revisión · Actualizado. La usan los encabezados y cada
+// fila, así quedan alineadas. Debajo de md: no hay grilla y la fila se apila.
+export const ROW_GRID =
+  'md:grid md:grid-cols-[minmax(0,2.6fr)_minmax(0,1.5fr)_minmax(0,1.4fr)_minmax(0,1.1fr)_minmax(0,1fr)] md:items-center md:gap-x-4';
+
+// El contenedor de las filas: una tarjeta con líneas entre filas.
+export const ROW_PANEL = `${CARD} overflow-hidden`;
+
+// Una fila: toda la superficie lleva al detalle (como la tarjeta). Al pasar, fondo salvia; con foco,
+// el contorno rodea la fila entera, por dentro.
+export const ROW = [
+  'relative flex flex-col gap-1.5 px-4 py-3 transition-colors md:gap-y-1',
+  ROW_GRID,
+  'hover:bg-salvia motion-reduce:transition-none',
+  'has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-naranja',
+].join(' ');
+
+// El enlace del título de la fila, estirado sobre ella.
+export const ROW_LINK =
+  'block truncate font-semibold text-bosque outline-none after:absolute after:inset-0 after:content-[""]';
+
+// --- Selector de vista -----------------------------------------------------------------------------
+
+export const VIEW_SWITCH = 'inline-flex rounded-xl border border-borde bg-blanco p-1';
+
+// La opción elegida va en bosque (aria-pressed); se hunde al apretar y tiene foco visible.
+export const VIEW_OPTION = [
+  'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-texto-suave',
+  'transition-[background-color,color,transform] hover:bg-salvia hover:text-bosque',
+  'active:translate-y-px motion-reduce:transition-none motion-reduce:active:translate-y-0',
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja',
+  'aria-pressed:bg-bosque aria-pressed:text-blanco aria-pressed:hover:bg-bosque aria-pressed:hover:text-blanco',
+].join(' ');
+
+// --- Ícono del tipo de archivo ---------------------------------------------------------------------
+
+// La extensión del archivo en mayúsculas ("PDF", "DOCX"), o "ARCH" si no tiene.
+export function fileExtension(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  const extension = dot > 0 ? fileName.slice(dot + 1).toUpperCase() : '';
+  return extension.slice(0, 4) || 'ARCH';
+}
+
+// Los colores de cada tipo de archivo: el fondo pastel de la hoja y la tinta oscura del mismo tono (el
+// glifo y la extensión). El único lugar donde se definen; los usan el ícono grande (Tarjetas) y el chico
+// (Lista). Contraste de la tinta sobre el fondo, todos AA (4,5:1 o más). Van en hex porque no hay
+// tokens para todos sin tocar globals.css; donde el color ya existe como token, se nombra.
+export const FILE_TYPE_COLORS = {
+  // Los mismos valores que rosa-alerta / rosa-alerta-texto. 5,3:1.
+  pdf: { background: '#FCE1E4', ink: '#B4232C' },
+  // Markdown y Word comparten el azul (el celeste es solo del asistente). 7,2:1.
+  doc: { background: '#DBEAFE', ink: '#1E40AF' },
+  // Texto y cualquier tipo desconocido. texto-suave daría 4,48:1, por eso una tinta propia. 7,9:1.
+  text: { background: '#ECEEED', ink: '#3F4A45' },
+  // Por si se habilitan (hoy la carga acepta solo PDF, TXT y MD).
+  // Los mismos valores que chip-area / chip-area-texto. 5,7:1.
+  sheet: { background: '#E3F4E1', ink: '#1F6B3A' },
+  // Los mismos valores que durazno / durazno-texto. 4,9:1.
+  slides: { background: '#FCE9E0', ink: '#B53C0A' },
+} as const;
+
+export type FileTypeKind = keyof typeof FILE_TYPE_COLORS;
+
+const KIND_BY_EXTENSION: Record<string, FileTypeKind> = {
+  PDF: 'pdf',
+  MD: 'doc',
+  DOC: 'doc',
+  DOCX: 'doc',
+  TXT: 'text',
+  XLS: 'sheet',
+  XLSX: 'sheet',
+  CSV: 'sheet',
+  PPT: 'slides',
+  PPTX: 'slides',
+};
+
+// El tipo de un archivo por su extensión; lo que no se conoce, como texto (gris).
+export function fileTypeKind(fileName: string): FileTypeKind {
+  return KIND_BY_EXTENSION[fileExtension(fileName)] ?? 'text';
+}
+
+const ICON_SIZE = { sm: 'h-8 w-7', lg: 'h-16 w-14' } as const;
+
+// La hoja: esquinas de radio 4 y la superior derecha bien redondeada, como una hoja doblada.
+const SHEET = 'M6 1h20a12 12 0 0 1 12 12v30a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V5a4 4 0 0 1 4-4Z';
+
+// La hoja entera en el tono suave del tipo, con la extensión en la tinta oscura. La grande (Tarjetas)
+// suma arriba un glifo de documento; la chica (Lista) lleva solo la extensión, que a 28 px es lo que se
+// lee. Decorativa: quien la usa dice el tipo con texto (sr-only "Archivo PDF").
+export function FileTypeIcon({ fileName, size }: { fileName: string; size: 'sm' | 'lg' }) {
+  const extension = fileExtension(fileName);
+  const { background, ink } = FILE_TYPE_COLORS[fileTypeKind(fileName)];
+  const long = extension.length > 3;
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 40 48" className={`${ICON_SIZE[size]} shrink-0`}>
+      {/* Un borde de la misma tinta, apenas visible, para que la hoja gris no se pierda sobre blanco. */}
+      <path d={SHEET} fill={background} stroke={ink} strokeOpacity="0.2" strokeWidth="1" />
+      {size === 'lg' && (
+        // Un documento con tres renglones.
+        <g data-part="glyph" fill="none" stroke={ink} strokeWidth="1.6" strokeLinecap="round">
+          <rect x="13" y="8" width="14" height="17" rx="2" />
+          <path d="M16.5 13.5h7M16.5 17h7M16.5 20.5h4.5" />
+        </g>
+      )}
+      <text
+        x="20"
+        y={size === 'lg' ? 38 : 28.5}
+        textAnchor="middle"
+        fill={ink}
+        fontSize={size === 'lg' ? (long ? 8.5 : 9.5) : long ? 9.5 : 11}
+        fontWeight="700"
+        fontFamily="inherit"
+        letterSpacing="0.3"
+      >
+        {extension}
+      </text>
+    </svg>
+  );
+}
 
 // La etiqueta de un dato (dt): chica, en mayúscula, sobre el valor.
 export const META_LABEL = 'text-xs font-semibold tracking-wide text-texto-suave uppercase';
