@@ -19,6 +19,8 @@ export interface AssistantMessage {
   text: string;
   sources: ChatSource[];
   searchUrl?: string;
+  // HU25: el id del mensaje en la API, para valorarlo. Llega con el evento done.
+  messageId?: string;
   // El aviso de un corte, un error o un pedido inválido.
   notice?: string;
 }

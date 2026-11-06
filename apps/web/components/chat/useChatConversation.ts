@@ -98,6 +98,8 @@ export function useChatConversation(context?: ChatContext) {
       // Spec 011 (F1): con conflict, las dos fuentes de la contradicción.
       sources: done.status === 'answered' || done.status === 'conflict' ? done.sources : [],
       searchUrl: done.searchUrl,
+      // HU25: el mensaje que se va a valorar.
+      messageId: done.messageId,
     });
     // Spec 011 (F3): con conflict, el título del aviso antes de la explicación.
     const answer = withoutMarkers(done.answer);

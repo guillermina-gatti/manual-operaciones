@@ -1,6 +1,7 @@
 // Único punto de entrada de lib/api: los componentes importan de '@/lib/api', nunca de un archivo interno.
 import { getAuthHeaders, refreshSession } from '@/lib/session';
 import { createChatApi } from './chat';
+import { createChatFeedbackApi } from './chat-feedback';
 import { createConflictAlertsApi } from './conflict-alerts';
 import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
@@ -83,6 +84,10 @@ export type { MetricsErrorDescription } from './metrics-errors';
 export const { askStream } = createChatApi(apiClient);
 export { ChatStreamError } from './chat';
 export type { ChatRequestBody, ChatResult, ChatResultStatus, ChatSource, ChatStreamDone } from './chat';
+
+// HU25: POST /api/chat/messages/:id/feedback, con el mismo cliente.
+export const { recordFeedback } = createChatFeedbackApi(apiClient);
+export type { ChatFeedbackBody } from './chat-feedback';
 
 // Spec 011 (HU39): las alertas de documentos contradictorios, con el mismo cliente.
 export const { listConflictAlerts, resolveConflictAlert } = createConflictAlertsApi(apiClient);
