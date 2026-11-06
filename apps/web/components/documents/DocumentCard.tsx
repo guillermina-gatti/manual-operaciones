@@ -8,7 +8,7 @@ import type { DocumentSummary } from '@/lib/api';
 import { formatCreatedAt, formatPerson, formatReviewDate } from '@/lib/documents/format';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { AreaChips, FileBadge, StatusDot } from './design';
-import { LIST_CARD, LIST_CARD_LAYER, LIST_CARD_LINK } from './list-design';
+import { LIST_CARD, LIST_CARD_LAYER, LIST_CARD_LINK, META_LABEL } from './list-design';
 
 interface DocumentCardProps {
   document: DocumentSummary;
@@ -46,19 +46,19 @@ export function DocumentCard({ document, isAdmin, children }: DocumentCardProps)
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-borde pt-4 text-sm">
         <div className="col-span-2 flex min-w-0 flex-col gap-1">
-          <dt className="text-xs font-semibold tracking-wide text-texto-suave uppercase">Responsable</dt>
+          <dt className={META_LABEL}>Responsable</dt>
           <dd className="min-w-0 break-words">{formatPerson(document.owner)}</dd>
         </div>
         <div className="flex flex-col gap-1">
-          <dt className="text-xs font-semibold tracking-wide text-texto-suave uppercase">Revisión</dt>
+          <dt className={META_LABEL}>Revisión</dt>
           <dd className="tabular-nums">{formatReviewDate(document.reviewDate)}</dd>
         </div>
         <div className="flex flex-col gap-1">
-          <dt className="text-xs font-semibold tracking-wide text-texto-suave uppercase">Cargado</dt>
+          <dt className={META_LABEL}>Cargado</dt>
           <dd className="tabular-nums">{formatCreatedAt(document.createdAt)}</dd>
         </div>
         <div className="col-span-2 flex min-w-0 flex-col gap-1">
-          <dt className="text-xs font-semibold tracking-wide text-texto-suave uppercase">Áreas</dt>
+          <dt className={META_LABEL}>Áreas</dt>
           <dd className="min-w-0 break-words">
             <AreaChips areas={document.areas} />
           </dd>

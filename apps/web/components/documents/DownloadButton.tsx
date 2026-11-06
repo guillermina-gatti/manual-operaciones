@@ -3,7 +3,8 @@
 // Botón "Descargar" del detalle (F8). El enlace firmado vence a los 5 minutos: se pide a la API
 // en cada clic, se abre y se olvida. Nunca se pide al mostrar la pantalla ni se guarda.
 import { useEffect, useRef, useState } from 'react';
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, ERROR_TEXT } from './design';
+import { ERROR_TEXT } from './design';
+import { LIST_BUTTON_PRIMARY, LIST_BUTTON_SECONDARY } from './list-design';
 import { describeApiError, getDownloadUrl, getVersionDownloadUrl } from '@/lib/api';
 
 interface DownloadButtonProps {
@@ -76,7 +77,7 @@ export function DownloadButton({
     <div className="flex flex-col items-start gap-2">
       <button
         type="button"
-        className={secondary ? BUTTON_SECONDARY : BUTTON_PRIMARY}
+        className={secondary ? LIST_BUTTON_SECONDARY : LIST_BUTTON_PRIMARY}
         onClick={download}
         disabled={busy}
         aria-busy={busy}

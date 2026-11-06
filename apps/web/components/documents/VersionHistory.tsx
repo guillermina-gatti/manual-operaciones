@@ -38,10 +38,16 @@ export function VersionHistory({ documentId, refreshKey = '', openUrl }: Version
             setOpen((value) => !value);
             setRequested(true);
           }}
-          className="flex min-h-11 w-full items-center gap-2 rounded-xl text-left"
+          className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center gap-2 rounded-xl px-2 text-left transition-colors hover:bg-salvia motion-reduce:transition-none"
         >
-          <span aria-hidden="true" className="text-naranja">
-            {open ? '▾' : '▸'}
+          {/* Una sola flecha que gira al abrir; quieta si se pide menos movimiento. */}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-naranja transition-transform duration-200 motion-reduce:transition-none ${
+              open ? 'rotate-90' : ''
+            }`}
+          >
+            ▸
           </span>
           Historial de versiones
         </button>

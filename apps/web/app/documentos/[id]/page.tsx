@@ -15,8 +15,15 @@ export const metadata: Metadata = {
 export default function DocumentoPage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
-      <Link href="/documentos" className={BACK_LINK}>
-        <span aria-hidden="true">←&nbsp;</span>Volver a Documentos
+      <Link href="/documentos" className={`${BACK_LINK} group`}>
+        {/* La flecha se corre a la izquierda al pasar; quieta si se pide menos movimiento. */}
+        <span
+          aria-hidden="true"
+          className="inline-block transition-transform group-hover:-translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+        >
+          ←&nbsp;
+        </span>
+        Volver a Documentos
       </Link>
       <Suspense
         fallback={

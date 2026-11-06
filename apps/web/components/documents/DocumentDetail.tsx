@@ -26,16 +26,14 @@ import { NewVersionForm } from './NewVersionForm';
 import { ProcessingStatusBadge } from './ProcessingStatusBadge';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { VersionHistory } from './VersionHistory';
+import { AreaChips, CARD, FileBadge, FreshnessBar, StatusDot } from './design';
 import {
-  AreaChips,
-  BUTTON_DANGER,
-  BUTTON_SECONDARY,
-  CARD,
-  Card,
-  FileBadge,
-  FreshnessBar,
-  StatusDot,
-} from './design';
+  LIST_BUTTON_DANGER,
+  LIST_BUTTON_SECONDARY,
+  LIST_PANEL,
+  META_LABEL,
+  PageHeader,
+} from './list-design';
 
 type Panel = 'areas' | 'version';
 
@@ -117,6 +115,30 @@ export function DocumentDetail() {
         </p>
       )}
 
+      {/* El encabezado, como el del listado: título, marcas y descripción, con "Descargar" (un único
+          botón) a la derecha desde sm: y debajo en el celular. El enlace se pide en cada clic, nunca
+          al cargar el detalle (F8). */}
+      <PageHeader
+        title={doc.title}
+        wrap
+        meta={
+          <>
+            {isAdmin && archived && <StatusDot tone="gris">Archivado</StatusDot>}
+            {/* Spec 005 (F1): solo llega `review` al ADMIN y al responsable (R4). */}
+            <ReviewStatusBadge status={doc.review?.status} />
+          </>
+        }
+        note={
+          isAdmin &&
+          archived &&
+          doc.archivedAt && (
+            <p className="text-sm text-texto-suave">Archivado desde {formatDay(doc.archivedAt)}</p>
+          )
+        }
+        subtitle={doc.description}
+        action={<DownloadButton documentId={doc.id} />}
+      />
+
       {/* Dos columnas desde 1024 px; debajo se apilan (skill pispiar-design, responsive). Sin nada
           para la columna lateral, el documento ocupa todo el ancho. */}
       <div
@@ -125,30 +147,9 @@ export function DocumentDetail() {
         }`}
       >
         <article className="flex min-w-0 flex-col gap-6">
-          <Card className="flex min-w-0 flex-col gap-6">
-            <header className="flex min-w-0 flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <h1 className="min-w-0 break-words text-3xl font-extrabold tracking-[-0.02em] text-bosque sm:text-[40px] sm:leading-tight">
-                  {doc.title}
-                </h1>
-                {isAdmin && archived && <StatusDot tone="gris">Archivado</StatusDot>}
-                {/* Spec 005 (F1): solo llega `review` al ADMIN y al responsable (R4). */}
-                <ReviewStatusBadge status={doc.review?.status} />
-              </div>
-              {isAdmin && archived && doc.archivedAt && (
-                <p className="text-sm text-texto-suave">
-                  Archivado desde {formatDay(doc.archivedAt)}
-                </p>
-              )}
-              {doc.description && (
-                <p className="break-words text-lg text-texto-suave">{doc.description}</p>
-              )}
-            </header>
-
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[auto_1fr] sm:items-baseline">
-              <Field label="Áreas">
-                <AreaChips areas={doc.areas} />
-              </Field>
+          <div className={`${LIST_PANEL} flex min-w-0 flex-col gap-6`}>
+            {/* Los datos como en la tarjeta del listado: etiqueta chica sobre el valor. */}
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Responsable">{formatPerson(doc.owner)}</Field>
               <Field label="Fecha de revisión">{formatReviewDate(doc.reviewDate)}</Field>
               {/* R11: cuándo y quién hizo la última revisión; nunca revisado, no se muestra. */}
@@ -171,43 +172,43 @@ export function DocumentDetail() {
                   <ProcessingStatusBadge status={version.processingStatus} />
                 </Field>
               )}
+              <Field label="Áreas" wide>
+                <AreaChips areas={doc.areas} />
+              </Field>
             </dl>
 
-            {/* El enlace se pide en cada clic, nunca al cargar el detalle (F8). */}
-            <div className="flex flex-wrap items-start gap-3">
-              <DownloadButton documentId={doc.id} />
-              {canModify && (
-                <>
-                  <button
-                    type="button"
-                    className={BUTTON_SECONDARY}
-                    aria-expanded={panel === 'areas'}
-                    onClick={() => togglePanel('areas')}
-                  >
-                    Cambiar áreas
-                  </button>
-                  <button
-                    type="button"
-                    className={BUTTON_SECONDARY}
-                    aria-expanded={panel === 'version'}
-                    onClick={() => togglePanel('version')}
-                  >
-                    Subir versión nueva
-                  </button>
-                  <button
-                    type="button"
-                    className={BUTTON_DANGER}
-                    onClick={() => {
-                      setNotice(null);
-                      setArchiveOpen(true);
-                    }}
-                  >
-                    Archivar
-                  </button>
-                </>
-              )}
-            </div>
-          </Card>
+            {/* Las acciones del ADMIN al pie; "Archivar" aparte, lejos de las de uso común. */}
+            {canModify && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-borde pt-6">
+                <button
+                  type="button"
+                  className={LIST_BUTTON_SECONDARY}
+                  aria-expanded={panel === 'areas'}
+                  onClick={() => togglePanel('areas')}
+                >
+                  Cambiar áreas
+                </button>
+                <button
+                  type="button"
+                  className={LIST_BUTTON_SECONDARY}
+                  aria-expanded={panel === 'version'}
+                  onClick={() => togglePanel('version')}
+                >
+                  Subir versión nueva
+                </button>
+                <button
+                  type="button"
+                  className={`${LIST_BUTTON_DANGER} sm:ml-auto`}
+                  onClick={() => {
+                    setNotice(null);
+                    setArchiveOpen(true);
+                  }}
+                >
+                  Archivar
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* D8: los paneles van dentro del detalle, de a uno, y ante un error quedan abiertos. */}
           {canModify && panel === 'areas' && (
@@ -271,33 +272,46 @@ export function DocumentDetail() {
   );
 }
 
-// Un panel de acción como tarjeta; en el celular ocupa todo el ancho (F10).
+// Un panel de acción como tarjeta; en el celular ocupa todo el ancho (F10). Es un contenedor
+// (@container): lo de adentro se acomoda según el ancho del panel, no el de la ventana.
 function ActionPanel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card as="section" aria-label={title} className="flex min-w-0 flex-col gap-6">
+    <section aria-label={title} className={`${LIST_PANEL} @container flex min-w-0 flex-col gap-6`}>
       <h2 className="text-xl font-bold">{title}</h2>
       {children}
-    </Card>
+    </section>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+// Un dato: la etiqueta chica arriba y el valor debajo. `wide` ocupa toda la fila (por ejemplo, Áreas).
+function Field({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
   return (
-    <>
-      <dt className="text-sm text-texto-suave">{label}</dt>
+    <div className={`flex min-w-0 flex-col gap-1 ${wide ? 'col-span-full' : ''}`}>
+      <dt className={META_LABEL}>{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
-    </>
+    </div>
   );
 }
 
+// Copia la forma del detalle (encabezado afuera y la tarjeta de datos en grilla), así no salta.
 export function DocumentDetailSkeleton() {
   return (
-    <div aria-hidden="true" className={`${CARD} flex animate-pulse flex-col gap-4 p-8`}>
-      <div className="h-10 w-2/3 rounded-lg bg-borde" />
-      <div className="h-4 w-full rounded-lg bg-borde" />
-      <div className="h-4 w-1/2 rounded-lg bg-borde" />
-      <div className="h-4 w-1/3 rounded-lg bg-borde" />
-      <div className="h-12 w-36 rounded-xl bg-borde" />
+    <div aria-hidden="true" className="flex animate-pulse flex-col gap-6 motion-reduce:animate-none">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-1 flex-col gap-3">
+          <div className="h-10 w-2/3 rounded-lg bg-borde" />
+          <div className="h-5 w-1/2 rounded-lg bg-borde" />
+        </div>
+        <div className="h-12 w-36 rounded-xl bg-borde" />
+      </div>
+      <div className={`${CARD} grid grid-cols-1 gap-5 p-6 sm:grid-cols-2 xl:grid-cols-3`}>
+        {Array.from({ length: 6 }, (_, index) => (
+          <div key={index} className="flex flex-col gap-2">
+            <div className="h-3 w-1/3 rounded bg-borde" />
+            <div className="h-4 w-2/3 rounded-lg bg-borde" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
