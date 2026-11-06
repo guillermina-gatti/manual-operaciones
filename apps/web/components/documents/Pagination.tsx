@@ -28,7 +28,7 @@ function pageHref(page: number, query: string | undefined, basePath: string, ext
 // Al menos 44 × 44 px, para tocarlos en el celular (F10). Como los filtros del diseño: la actual en
 // bosque, las demás blancas con borde.
 const ITEM =
-  'inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm';
+  'inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm transition-[background-color,transform] active:translate-y-px motion-reduce:transition-none motion-reduce:active:translate-y-0';
 const LINK = `${ITEM} border border-borde bg-blanco font-semibold text-bosque hover:bg-salvia`;
 const CURRENT = `${ITEM} bg-bosque font-semibold text-blanco`;
 

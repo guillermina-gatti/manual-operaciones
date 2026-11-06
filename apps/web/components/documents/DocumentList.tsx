@@ -25,6 +25,7 @@ import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
 import { SearchResults } from './SearchResults';
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, TEXT_LINK } from './design';
+import { DocumentsHeader, LIST_BUTTON_PRIMARY } from './list-design';
 
 const LOADING = (
   <ScreenState kind="loading" label="Cargando documentos…">
@@ -38,47 +39,54 @@ export function DocumentList() {
   const query = searchParams.get('q');
   const search = parseSearchParam(query);
   const page = parsePageParam(searchParams.get('pagina'));
+  const isAdmin = status === 'ready' && user?.role === 'ADMIN';
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* key: al ir atrás o adelante, la caja vuelve a arrancar con el ?q= de la dirección. */}
-      <SearchBox key={query ?? ''} query={query} />
-      {/* Spec 005 (F2): el acceso a "Por revisar", con y sin búsqueda. Para quien no es ADMIN ni
-          responsable de nada no muestra nada. */}
-      {status === 'ready' && user && (
-        <div className="flex flex-wrap justify-end gap-3 empty:hidden">
-          {/* Spec 009 (F1, D11): el acceso al asistente, hasta que el menú (pareja A) tenga el enlace. */}
-          <Link href="/asistente" className={BUTTON_SECONDARY}>
-            Preguntale al asistente <span aria-hidden="true">✦</span>
-          </Link>
-          <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
-          {/* Spec 011 (F5, D11): las alertas de contradicción, solo para el ADMIN. */}
-          {user.role === 'ADMIN' && <ConflictAlertsLink userId={user.id} />}
-        </div>
-      )}
-      {search.kind === 'valid' && status === 'ready' && user ? (
-        <>
-          {user.role === 'ADMIN' && (
-            <div className="flex justify-end">
-              <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
-                Cargar documento
-              </Link>
-            </div>
-          )}
+    <>
+      {/* F1: "Cargar documento" solo para el ADMIN, con y sin búsqueda. Va en el encabezado: es la
+          acción principal de la pantalla. */}
+      <DocumentsHeader
+        action={
+          isAdmin && (
+            <Link href="/documentos/nuevo" className={LIST_BUTTON_PRIMARY}>
+              Cargar documento
+            </Link>
+          )
+        }
+      />
+      <div className="flex flex-col gap-6">
+        {/* key: al ir atrás o adelante, la caja vuelve a arrancar con el ?q= de la dirección. */}
+        <SearchBox key={query ?? ''} query={query} />
+        {/* Spec 005 (F2): el acceso a "Por revisar", con y sin búsqueda. Para quien no es ADMIN ni
+            responsable de nada no muestra nada. */}
+        {status === 'ready' && user && (
+          <div className="flex flex-wrap justify-end gap-3 empty:hidden">
+            {/* Spec 009 (F1, D11): el acceso al asistente, hasta que el menú (pareja A) tenga el enlace. */}
+            <Link href="/asistente" className={BUTTON_SECONDARY}>
+              Preguntale al asistente <span aria-hidden="true">✦</span>
+            </Link>
+            <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
+            {/* Spec 011 (F5, D11): las alertas de contradicción, solo para el ADMIN. */}
+            {user.role === 'ADMIN' && <ConflictAlertsLink userId={user.id} />}
+          </div>
+        )}
+        {search.kind === 'valid' && status === 'ready' && user ? (
           <SearchResults
             query={search.text}
             page={page}
             userId={user.id}
             isAdmin={user.role === 'ADMIN'}
           />
-        </>
-      ) : (
-        // Sin búsqueda, o con un ?q= inválido (F2: la caja avisa y no se busca), el listado de siempre.
-        <DocumentListing />
-      )}
-    </div>
+        ) : (
+          // Sin búsqueda, o con un ?q= inválido (F2: la caja avisa y no se busca), el listado de siempre.
+          <DocumentListing />
+        )}
+      </div>
+    </>
   );
 }
+
+const describeTotal = (total: number) => (total === 1 ? '1 documento' : `${total} documentos`);
 
 function DocumentListing() {
   const { user, status } = useSession();
@@ -168,14 +176,8 @@ if (!user) {
 
   // Spec 008 (F1): los nombres del responsable y de las áreas vienen en cada documento.
   return (
-    <div className="flex flex-col gap-6">
-      {isAdmin && (
-        <div className="flex justify-end">
-          <Link href="/documentos/nuevo" className={BUTTON_PRIMARY}>
-            Cargar documento
-          </Link>
-        </div>
-      )}
+    <div className="flex flex-col gap-4">
+      <p className="text-sm font-semibold text-texto-suave">{describeTotal(total)}</p>
 
       <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((document) => (

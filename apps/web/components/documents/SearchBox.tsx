@@ -7,7 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SEARCH_MAX, SEARCH_MIN, parseSearchParam } from '@/lib/documents/search-rules';
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, ERROR_TEXT, SearchIcon } from './design';
+import { BUTTON_SECONDARY, ERROR_TEXT, HINT, SearchIcon } from './design';
+import { LIST_BUTTON_PRIMARY } from './list-design';
 
 interface SearchBoxProps {
   // El ?q= de la dirección, tal cual (null si no hay búsqueda).
@@ -53,7 +54,7 @@ export function SearchBox({ query }: SearchBoxProps) {
           <input
             type="search"
             aria-label="Buscar documentos"
-            placeholder="Buscá también adentro de los documentos… (no importan las tildes)"
+            placeholder="Buscá por título o por contenido"
             maxLength={SEARCH_MAX}
             value={value}
             onChange={(event) => {
@@ -62,10 +63,10 @@ export function SearchBox({ query }: SearchBoxProps) {
             }}
             aria-invalid={warning ? true : undefined}
             aria-describedby={warning ? errorId : undefined}
-            className="min-h-14 w-full min-w-0 rounded-xl border border-borde bg-blanco pr-4 pl-12 text-texto placeholder:text-texto-suave aria-[invalid=true]:border-peligro"
+            className="min-h-14 w-full min-w-0 rounded-xl border border-borde bg-blanco pr-4 pl-12 text-texto shadow-sm transition-colors placeholder:text-texto-suave hover:border-bosque/30 focus:border-bosque aria-[invalid=true]:border-peligro motion-reduce:transition-none"
           />
         </div>
-        <button type="submit" className={`${BUTTON_PRIMARY} min-h-14`}>
+        <button type="submit" className={`${LIST_BUTTON_PRIMARY} min-h-14`}>
           Buscar
         </button>
         {hasSearch && (
@@ -78,10 +79,12 @@ export function SearchBox({ query }: SearchBoxProps) {
           </button>
         )}
       </div>
-      {warning && (
+      {warning ? (
         <p id={errorId} role="alert" className={ERROR_TEXT}>
           {warning}
         </p>
+      ) : (
+        <p className={HINT}>Busca también adentro de los archivos. No importan las tildes.</p>
       )}
     </form>
   );
