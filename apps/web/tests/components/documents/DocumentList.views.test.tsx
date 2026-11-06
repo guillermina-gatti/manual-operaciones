@@ -165,6 +165,8 @@ describe('vista Lista', () => {
     const [row] = await screen.findAllByRole('article');
     expect(within(row).getByRole('heading', { level: 2, name: 'Manual de caja' })).toBeInTheDocument();
     expect(within(row).getAllByRole('link')).toHaveLength(1);
+    // La Lista es la vista por defecto: el detalle no necesita ?vista= para volver a ella.
+    expect(within(row).getByRole('link')).toHaveAttribute('href', `/documentos/${DOC.id}`);
     expect(within(row).getByText('Ventas')).toBeInTheDocument();
     expect(within(row).getByText('Operaciones')).toBeInTheDocument();
     expect(within(row).getByText('Sergio Supervisor de Ventas')).toBeInTheDocument();
@@ -185,6 +187,11 @@ describe('vista Tarjetas', () => {
     const [tile] = await screen.findAllByRole('article');
     expect(within(tile).getByRole('heading', { level: 2, name: 'Manual de caja' })).toBeInTheDocument();
     expect(within(tile).getAllByRole('link')).toHaveLength(1);
+    // Lleva la vista al detalle, para que "Volver a Documentos" vuelva a las Tarjetas.
+    expect(within(tile).getByRole('link')).toHaveAttribute(
+      'href',
+      `/documentos/${DOC.id}?vista=tarjetas`,
+    );
     expect(within(tile).getByText('v3')).toBeInTheDocument();
     expect(within(tile).getByText('Versión 3')).toHaveClass('sr-only');
     expect(within(tile).getByText('Ventas +1')).toHaveAttribute('title', 'Ventas, Operaciones');

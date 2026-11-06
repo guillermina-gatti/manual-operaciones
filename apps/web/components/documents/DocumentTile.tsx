@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { DocumentSummary } from '@/lib/api';
 import { formatArea, formatAreas, formatPerson } from '@/lib/documents/format';
+import { withView } from '@/lib/documents/view';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { UpdatedAt, updatedAtOf } from './UpdatedAt';
 import { StatusDot } from './design';
@@ -41,7 +42,12 @@ export function DocumentTile({ document, isAdmin, now, children }: DocumentTileP
 
       <div className="flex min-w-0 flex-col gap-2">
         <h2 className="min-w-0 text-lg leading-snug font-bold">
-          <Link href={`/documentos/${document.id}`} title={document.title} className={TILE_LINK}>
+          {/* Lleva la vista al detalle, así "Volver a Documentos" vuelve a las Tarjetas. */}
+          <Link
+            href={withView(`/documentos/${document.id}`, 'tarjetas')}
+            title={document.title}
+            className={TILE_LINK}
+          >
             {document.title}
           </Link>
         </h2>
