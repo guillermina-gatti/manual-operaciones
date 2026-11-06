@@ -5,6 +5,7 @@ import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
 import type { Role } from '../common/auth';
 import { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatRequest, ChatResult } from './chat.contract';
+import { resolveSuggestion } from './chat-contact';
 import { recordConflictAlert } from './chat-conflict';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
 import {
@@ -20,6 +21,7 @@ import { ChatLlm, type LlmAnswer } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval } from './ports/chat-retrieval';
 import { ConflictAlertRecorder } from './ports/conflict-alert-recorder';
+import { ContactDirectory } from './ports/contact-directory';
 
 // Se siguen exportando desde acá, como antes de la extracción.
 export {
@@ -44,6 +46,8 @@ export class ChatService {
         @Optional() private readonly contextStore?: ChatContextStore,
         // Spec 011: para registrar la alerta de una contradicción. Opcional: sin él, todo sigue como antes.
         @Optional() private readonly conflictAlerts?: ConflictAlertRecorder,
+        // HU19: a quién consultar cuando no hay información. Opcional: sin él, no se sugiere a nadie.
+        @Optional() private readonly contacts?: ContactDirectory,
     ) { }
 
     async ask(user: ChatUser & { role?: Role }, request: ChatRequest): Promise<ChatResult> {
@@ -58,7 +62,12 @@ export class ChatService {
         }
         await rememberConversationStep(this.contextStore, request, conversationId, stepContext);
 
-        const outcome = await this.run(user, question, stepContext);
+        const outcome = await resolveSuggestion(
+            this.contacts,
+            await this.run(user, question, stepContext),
+            stepContext,
+            this.logger,
+        );
         const result = await saveResult(this.repository, conversationId, question, outcome, started);
         // Spec 011: con una contradicción, la alerta al ADMIN. Sin ella, no hace nada.
         await recordConflictAlert(this.conflictAlerts, outcome, result, question, this.logger);
