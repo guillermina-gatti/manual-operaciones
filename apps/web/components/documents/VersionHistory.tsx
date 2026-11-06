@@ -2,8 +2,9 @@
 
 // Historial de versiones (spec 003, R12, D10; plan 003, 6.5). Solo lo muestra el detalle al ADMIN.
 // Empieza cerrado y pide el historial recién al abrirlo: el detalle no hace un pedido de más.
-// Una fila por versión, de la más nueva a la más vieja, unidas por una línea vertical (diseño
-// "Historia de versiones"): "● Vigente" en verde y "● Reemplazada" en gris.
+// Al abrirlo, una línea de tiempo compacta: un punto por versión (verde la vigente, gris las
+// reemplazadas), de la más nueva a la más vieja. Muestra las 3 más nuevas; "Ver todas" despliega el
+// resto, que ya vino en el mismo pedido.
 import { useId, useState } from 'react';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { describeApiError, listVersions, useApiResource } from '@/lib/api';
@@ -11,7 +12,10 @@ import type { VersionHistoryItem } from '@/lib/api';
 import { formatCreatedAt, formatPerson } from '@/lib/documents/format';
 import { DownloadButton } from './DownloadButton';
 import { ProcessingStatusBadge } from './ProcessingStatusBadge';
-import { CARD, FileBadge, HINT, StatusDot } from './design';
+import { CARD, HINT, TEXT_LINK } from './design';
+
+// Cuántas versiones se ven antes de "Ver todas".
+export const VISIBLE_VERSIONS = 3;
 
 interface VersionHistoryProps {
   documentId: string;
@@ -74,6 +78,7 @@ function HistoryContent({
   const versions = useApiResource(`versions:${documentId}:${refreshKey}`, (signal) =>
     listVersions(documentId, signal),
   );
+  const [showAll, setShowAll] = useState(false);
 
   if (versions.status === 'loading' || versions.status === 'idle') {
     return <ScreenState kind="loading" label="Cargando el historial…" />;
@@ -85,20 +90,39 @@ function HistoryContent({
     );
   }
 
+  const all = versions.data.data;
+  const shown = showAll ? all : all.slice(0, VISIBLE_VERSIONS);
+  const hasMore = all.length > VISIBLE_VERSIONS;
+
   // Spec 008 (P3, F1): quien subió cada versión viene en la respuesta.
   return (
-    // La línea vertical une los puntos de cada versión.
-    <ol aria-label="Versiones" className="flex flex-col gap-6 border-l-2 border-borde pl-5">
-      {versions.data.data.map((version) => (
-        <VersionRow
-          key={version.id}
-          documentId={documentId}
-          version={version}
-          uploadedBy={formatPerson(version.uploadedBy)}
-          openUrl={openUrl}
-        />
-      ))}
-    </ol>
+    <div className="flex flex-col gap-3">
+      {/* La línea vertical une los puntos de cada versión. */}
+      <ol
+        aria-label="Versiones"
+        className="relative flex flex-col gap-5 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-0.5 before:bg-borde before:content-['']"
+      >
+        {shown.map((version) => (
+          <VersionRow
+            key={version.id}
+            documentId={documentId}
+            version={version}
+            uploadedBy={formatPerson(version.uploadedBy)}
+            openUrl={openUrl}
+          />
+        ))}
+      </ol>
+      {hasMore && (
+        <button
+          type="button"
+          aria-expanded={showAll}
+          onClick={() => setShowAll((value) => !value)}
+          className={`${TEXT_LINK} inline-flex min-h-11 items-center self-start`}
+        >
+          {showAll ? 'Ver menos' : `Ver todas (${all.length})`}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -115,32 +139,42 @@ function VersionRow({
 }) {
   const current = version.status === 'CURRENT';
   return (
-    <li className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 className="font-bold">Versión {version.versionNumber}</h3>
-        <StatusDot tone={current ? 'exito' : 'gris'}>{current ? 'Vigente' : 'Reemplazada'}</StatusDot>
-      </div>
-      <div className="flex min-w-0 flex-col gap-1 text-sm">
-        <span className="flex min-w-0 items-center gap-2">
-          <FileBadge fileName={version.originalFileName} />
-          <span title={version.originalFileName} className="truncate font-semibold">
-            {version.originalFileName}
-          </span>
+    <li className="relative flex min-w-0 flex-col gap-1.5 pl-7">
+      {/* El punto sobre la línea: verde la vigente, gris las reemplazadas (el estado va en texto). */}
+      <span
+        aria-hidden="true"
+        className={`absolute top-1.5 left-0 size-3 rounded-full ring-4 ring-blanco ${
+          current ? 'bg-exito' : 'bg-gris-reemplazada'
+        }`}
+      />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <h3 className="text-base font-bold">Versión {version.versionNumber}</h3>
+        <span aria-hidden="true" className="text-texto-suave">
+          ·
         </span>
-        <span className="text-texto-suave">
+        <span className={current ? 'font-semibold text-chip-area-texto' : 'text-texto-suave'}>
+          {current ? 'Vigente' : 'Reemplazada'}
+        </span>
+        <span aria-hidden="true" className="text-texto-suave">
+          ·
+        </span>
+        <ProcessingStatusBadge status={version.processingStatus} />
+      </div>
+      <span title={version.originalFileName} className="truncate text-sm font-semibold">
+        {version.originalFileName}
+      </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <span className="text-xs text-texto-suave">
           {formatCreatedAt(version.createdAt)} · Subida por {uploadedBy}
         </span>
-        <span>
-          <ProcessingStatusBadge status={version.processingStatus} />
-        </span>
+        <DownloadButton
+          documentId={documentId}
+          versionId={version.id}
+          label={`Descargar la versión ${version.versionNumber}`}
+          openUrl={openUrl}
+          secondary
+        />
       </div>
-      <DownloadButton
-        documentId={documentId}
-        versionId={version.id}
-        label={`Descargar la versión ${version.versionNumber}`}
-        openUrl={openUrl}
-        secondary
-      />
     </li>
   );
 }

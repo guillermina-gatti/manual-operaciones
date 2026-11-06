@@ -167,6 +167,45 @@ export function FileTypeIcon({ fileName, size }: { fileName: string; size: 'sm' 
 // La etiqueta de un dato (dt): chica, en mayúscula, sobre el valor.
 export const META_LABEL = 'text-xs font-semibold tracking-wide text-texto-suave uppercase';
 
+// El chip de la versión ("v3"): el mismo en la tarjeta y en el detalle.
+export const VERSION_CHIP =
+  'rounded-md border border-borde bg-fondo px-2 py-0.5 text-xs font-bold text-texto-suave tabular-nums';
+
+// --- Adjunto ---------------------------------------------------------------------------------------
+
+function PaperclipIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5 shrink-0 text-texto-suave"
+    >
+      <path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9" />
+    </svg>
+  );
+}
+
+// El archivo vigente como un adjunto: clip, nombre (recortado, completo en title) y tamaño. Cada uno en
+// su propio elemento; para lectores de pantalla, "Archivo:" y "tamaño:".
+export function AttachmentStrip({ fileName, size }: { fileName: string; size: string }) {
+  return (
+    <p className="flex min-w-0 items-center gap-3 rounded-xl border border-borde bg-fondo px-4 py-3">
+      <PaperclipIcon />
+      <span className="sr-only">Archivo: </span>
+      <span title={fileName} className="min-w-0 truncate font-semibold">
+        {fileName}
+      </span>
+      <span className="sr-only">, tamaño: </span>
+      <span className="ml-auto shrink-0 text-sm text-texto-suave tabular-nums">{size}</span>
+    </p>
+  );
+}
+
 // --- Encabezado ------------------------------------------------------------------------------------
 
 interface PageHeaderProps {
@@ -182,13 +221,13 @@ interface PageHeaderProps {
   wrap?: boolean;
 }
 
-const TITLE =
+export const PAGE_TITLE =
   'text-3xl font-extrabold tracking-[-0.02em] text-bosque sm:text-[40px] sm:leading-tight';
-const SUBTITLE = 'text-lg text-texto-suave';
+export const PAGE_SUBTITLE = 'text-lg text-texto-suave';
 const join = (...classes: (string | false)[]) => classes.filter(Boolean).join(' ');
 
 export function PageHeader({ title, subtitle, meta, note, action, wrap = false }: PageHeaderProps) {
-  const heading = <h1 className={join(TITLE, wrap && 'min-w-0 break-words')}>{title}</h1>;
+  const heading = <h1 className={join(PAGE_TITLE, wrap && 'min-w-0 break-words')}>{title}</h1>;
   return (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex min-w-0 flex-col gap-2">
@@ -201,7 +240,7 @@ export function PageHeader({ title, subtitle, meta, note, action, wrap = false }
           heading
         )}
         {note}
-        {subtitle && <p className={join(SUBTITLE, wrap && 'break-words')}>{subtitle}</p>}
+        {subtitle && <p className={join(PAGE_SUBTITLE, wrap && 'break-words')}>{subtitle}</p>}
       </div>
       {action && <div className="flex shrink-0">{action}</div>}
     </header>

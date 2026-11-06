@@ -9,7 +9,14 @@ import { withView } from '@/lib/documents/view';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { UpdatedAt, updatedAtOf } from './UpdatedAt';
 import { StatusDot } from './design';
-import { FileTypeIcon, LIST_CARD, LIST_CARD_LAYER, TILE_LINK, fileExtension } from './list-design';
+import {
+  FileTypeIcon,
+  LIST_CARD,
+  LIST_CARD_LAYER,
+  TILE_LINK,
+  VERSION_CHIP,
+  fileExtension,
+} from './list-design';
 
 interface DocumentTileProps {
   document: DocumentSummary;
@@ -34,7 +41,7 @@ export function DocumentTile({ document, isAdmin, now, children }: DocumentTileP
       <div className="flex items-start justify-between gap-3">
         <FileTypeIcon fileName={currentVersion.originalFileName} size="lg" />
         <span className="sr-only">Archivo {fileExtension(currentVersion.originalFileName)}</span>
-        <span className="rounded-md border border-borde bg-fondo px-2 py-0.5 text-xs font-bold text-texto-suave tabular-nums">
+        <span className={VERSION_CHIP}>
           <span aria-hidden="true">v{currentVersion.versionNumber}</span>
           <span className="sr-only">Versión {currentVersion.versionNumber}</span>
         </span>

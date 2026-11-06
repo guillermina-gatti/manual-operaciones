@@ -82,7 +82,7 @@ apps/web/
 | `DocumentCard` | cliente | Una tarjeta: título (enlace al detalle), áreas, responsable, fecha de revisión y fecha de carga (F7). Al ADMIN le agrega la etiqueta "Archivado" si corresponde |
 | `Pagination` | cliente | Números de página con `<Link>` a `?pagina=N`, anterior y siguiente, y puntos suspensivos si hay muchas (F7, P6) |
 | `DocumentDetail` | cliente | Pide el detalle; muestra datos, nombre del archivo, tamaño, `DownloadButton` y, solo al ADMIN, `ProcessingStatusBadge` (F6). 404 → "No se encontró el documento" (F9) |
-| `ProcessingStatusBadge` | cliente | `PENDING` → "Pendiente", `PROCESSING` → "Procesando", `READY` → "Listo", `FAILED` → "Con error" |
+| `ProcessingStatusBadge` | cliente | `PENDING` → "Pendiente", `PROCESSING` → "Procesando", `READY` → "Listo", `FAILED` → "Con error". **Actualizada el 06/11/2026:** en el detalle, `READY` se muestra como "Listo para el asistente" (`DetailProcessingStatus`, D8); el historial sigue diciendo "Listo" |
 | `DownloadButton` | cliente | Pide el enlace en el clic y lo abre (F8) |
 | `UploadDocumentForm` | cliente | Estado del formulario, validación (F2), envío único (F5), errores de la API (F3), conserva los datos (F4) y redirige al detalle (F13) |
 | `FileField` | cliente | `<input type="file" accept=".pdf,.txt,.md">`, nombre recortado del archivo elegido, tamaño y su error |
@@ -320,6 +320,7 @@ Tomadas en la revisión del plan el 23/10/2026.
 | D5 · ¿Qué muestra el responsable antes de elegir áreas? | Campo deshabilitado con "Elegí primero las áreas". Mostrar solo a los ADMIN sería válido según F11, pero invita a elegir antes de tiempo | F11 |
 | D6 · F6 oculta el estado a quien no es ADMIN, pero la API se lo devuelve igual | Alcanza para la spec (no es información sensible). Si se quiere que no viaje, que la API lo omita para quien no es ADMIN; sería un cambio de la spec 001 | F6 |
 | D7 · ¿Librería para pedidos (TanStack Query, SWR) o un hook propio? | Hook propio (`useApiResource`) con cargando, datos, error y `reload`: hay solo tres pedidos y no hace falta caché. Si las pantallas de otras parejas lo necesitan, se decide en equipo y se migra | Spec sección 7 |
+| D8 · ¿Qué dice el estado `READY` en el detalle? | Tomada el 06/11/2026, con el rediseño del detalle. En el detalle dice "Listo para el asistente", para que el ADMIN sepa que el documento ya se puede consultar desde el asistente. El historial de versiones conserva "Listo", para que sus filas sigan siendo compactas. `ProcessingStatusBadge` no cambia: el detalle usa `DetailProcessingStatus`, que muestra el texto largo para `READY` y delega en él para el resto | F6 |
 
 ### 9.2 Preguntas abiertas con la pareja A
 

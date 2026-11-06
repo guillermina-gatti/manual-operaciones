@@ -20,19 +20,20 @@ import {
 import { useSession } from '@/lib/session';
 import { ArchiveDialog } from './ArchiveDialog';
 import { ChangeAreasForm } from './ChangeAreasForm';
+import { DetailProcessingStatus } from './DetailProcessingStatus';
+import { DocumentDetailHeader } from './DocumentDetailHeader';
 import { DownloadButton } from './DownloadButton';
 import { MarkReviewedForm } from './MarkReviewedForm';
 import { NewVersionForm } from './NewVersionForm';
-import { ProcessingStatusBadge } from './ProcessingStatusBadge';
-import { ReviewStatusBadge } from './ReviewStatusBadge';
+import { ReviewCountdown } from './ReviewCountdown';
 import { VersionHistory } from './VersionHistory';
-import { AreaChips, CARD, FileBadge, FreshnessBar, StatusDot } from './design';
+import { CARD } from './design';
 import {
+  AttachmentStrip,
   LIST_BUTTON_DANGER,
   LIST_BUTTON_SECONDARY,
   LIST_PANEL,
   META_LABEL,
-  PageHeader,
 } from './list-design';
 
 type Panel = 'areas' | 'version';
@@ -115,27 +116,12 @@ export function DocumentDetail() {
         </p>
       )}
 
-      {/* El encabezado, como el del listado: título, marcas y descripción, con "Descargar" (un único
-          botón) a la derecha desde sm: y debajo en el celular. El enlace se pide en cada clic, nunca
-          al cargar el detalle (F8). */}
-      <PageHeader
-        title={doc.title}
-        wrap
-        meta={
-          <>
-            {isAdmin && archived && <StatusDot tone="gris">Archivado</StatusDot>}
-            {/* Spec 005 (F1): solo llega `review` al ADMIN y al responsable (R4). */}
-            <ReviewStatusBadge status={doc.review?.status} />
-          </>
-        }
-        note={
-          isAdmin &&
-          archived &&
-          doc.archivedAt && (
-            <p className="text-sm text-texto-suave">Archivado desde {formatDay(doc.archivedAt)}</p>
-          )
-        }
-        subtitle={doc.description}
+      {/* El encabezado, como la tarjeta del listado: la hoja del tipo, el título, la versión, las
+          marcas, "Actualizado hace X" y las áreas; "Descargar" (un único botón) alineado con el título.
+          El enlace se pide en cada clic, nunca al cargar el detalle (F8). */}
+      <DocumentDetailHeader
+        document={doc}
+        isAdmin={isAdmin}
         action={<DownloadButton documentId={doc.id} />}
       />
 
@@ -148,10 +134,21 @@ export function DocumentDetail() {
       >
         <article className="flex min-w-0 flex-col gap-6">
           <div className={`${LIST_PANEL} flex min-w-0 flex-col gap-6`}>
-            {/* Los datos como en la tarjeta del listado: etiqueta chica sobre el valor. */}
+            {/* El archivo vigente como un adjunto: nombre (completo en title) y tamaño. */}
+            <AttachmentStrip
+              fileName={version.originalFileName}
+              size={formatSize(version.sizeBytes)}
+            />
+
+            {/* Los datos como en la tarjeta del listado: etiqueta chica sobre el valor. Las áreas van
+                en el encabezado. */}
             <dl className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Responsable">{formatPerson(doc.owner)}</Field>
-              <Field label="Fecha de revisión">{formatReviewDate(doc.reviewDate)}</Field>
+              {/* La fecha de revisión va en el panel "Revisión" cuando está; quien no lo ve (no recibe
+                  `review`, o el documento está archivado) la sigue viendo acá. */}
+              {!canReview && (
+                <Field label="Fecha de revisión">{formatReviewDate(doc.reviewDate)}</Field>
+              )}
               {/* R11: cuándo y quién hizo la última revisión; nunca revisado, no se muestra. */}
               {lastReview && (
                 <Field label="Última revisión">
@@ -159,22 +156,12 @@ export function DocumentDetail() {
                 </Field>
               )}
               <Field label="Cargado">{formatCreatedAt(doc.createdAt)}</Field>
-              <Field label="Archivo">
-                <span className="inline-flex min-w-0 items-center gap-2">
-                  <FileBadge fileName={version.originalFileName} />
-                  <span className="break-all">{version.originalFileName}</span>
-                </span>
-              </Field>
-              <Field label="Tamaño">{formatSize(version.sizeBytes)}</Field>
               {/* Solo el ADMIN ve el estado del procesamiento (F6, P4). */}
               {isAdmin && (
                 <Field label="Procesamiento">
-                  <ProcessingStatusBadge status={version.processingStatus} />
+                  <DetailProcessingStatus status={version.processingStatus} />
                 </Field>
               )}
-              <Field label="Áreas" wide>
-                <AreaChips areas={doc.areas} />
-              </Field>
             </dl>
 
             {/* Las acciones del ADMIN al pie; "Archivar" aparte, lejos de las de uso común. */}
@@ -240,14 +227,13 @@ export function DocumentDetail() {
                 (ADMIN o responsable, R6) y solo si el documento está activo (R9). */}
             {canReview && doc.review && (
               <ActionPanel title="Revisión">
-                {/* El color sale del estado que decide la API; no se recalcula. */}
-                {doc.review.status && (
-                  <FreshnessBar
-                    status={doc.review.status}
-                    reviewDate={doc.reviewDate}
-                    since={doc.review.lastReviewedAt ?? doc.createdAt}
-                  />
-                )}
+                {/* La revisión en un solo lugar: la próxima fecha, cuánto falta y la barra. El color
+                    sale del estado que decide la API; no se recalcula. */}
+                <ReviewCountdown
+                  status={doc.review.status}
+                  reviewDate={doc.reviewDate}
+                  since={doc.review.lastReviewedAt ?? doc.createdAt}
+                />
                 <MarkReviewedForm documentId={doc.id} onDone={() => finish('Revisión registrada')} />
               </ActionPanel>
             )}
@@ -283,34 +269,41 @@ function ActionPanel({ title, children }: { title: string; children: ReactNode }
   );
 }
 
-// Un dato: la etiqueta chica arriba y el valor debajo. `wide` ocupa toda la fila (por ejemplo, Áreas).
-function Field({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
+// Un dato: la etiqueta chica arriba y el valor debajo.
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${wide ? 'col-span-full' : ''}`}>
+    <div className="flex min-w-0 flex-col gap-1">
       <dt className={META_LABEL}>{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </div>
   );
 }
 
-// Copia la forma del detalle (encabezado afuera y la tarjeta de datos en grilla), así no salta.
+// Copia la forma del detalle (la hoja y el título arriba, el adjunto y los datos en grilla), así no
+// salta.
 export function DocumentDetailSkeleton() {
   return (
     <div aria-hidden="true" className="flex animate-pulse flex-col gap-6 motion-reduce:animate-none">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-1 flex-col gap-3">
-          <div className="h-10 w-2/3 rounded-lg bg-borde" />
-          <div className="h-5 w-1/2 rounded-lg bg-borde" />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-1 items-start gap-4">
+          <div className="h-16 w-14 shrink-0 rounded-lg bg-borde" />
+          <div className="flex flex-1 flex-col gap-3">
+            <div className="h-10 w-2/3 rounded-lg bg-borde" />
+            <div className="h-5 w-1/2 rounded-lg bg-borde" />
+          </div>
         </div>
         <div className="h-12 w-36 rounded-xl bg-borde" />
       </div>
-      <div className={`${CARD} grid grid-cols-1 gap-5 p-6 sm:grid-cols-2 xl:grid-cols-3`}>
-        {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="flex flex-col gap-2">
-            <div className="h-3 w-1/3 rounded bg-borde" />
-            <div className="h-4 w-2/3 rounded-lg bg-borde" />
-          </div>
-        ))}
+      <div className={`${CARD} flex flex-col gap-6 p-6`}>
+        <div className="h-12 w-full rounded-xl bg-borde" />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index} className="flex flex-col gap-2">
+              <div className="h-3 w-1/3 rounded bg-borde" />
+              <div className="h-4 w-2/3 rounded-lg bg-borde" />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
