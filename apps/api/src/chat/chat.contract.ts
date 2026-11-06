@@ -15,8 +15,8 @@ export interface ChatSource {
     versionNumber: number;
     section: string;
     chunkId: string;
-    validFrom: string; // fecha de vigencia del documento (YYYY-MM-DD)
-    url: string; // enlace firmado al pasaje
+    validFrom: string; // fecha de carga de la versión vigente (YYYY-MM-DD); siempre viene
+    url: string; // enlace firmado al pasaje; vacío ("") si no se pudo firmar
 }
 
 // HU19: un documento cercano a la consulta cuando no hay información suficiente. No es una fuente.
