@@ -134,6 +134,7 @@ describe('DocumentQueryService.list', () => {
             originalFileName: 'manual.pdf',
             mimeType: 'application/pdf',
             processingStatus: 'PENDING',
+            createdAt: record.currentVersion.createdAt.toISOString(),
           },
         }),
       ],

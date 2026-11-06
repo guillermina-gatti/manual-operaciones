@@ -77,6 +77,10 @@ export class DocumentVersionSummary {
 
   @ApiProperty({ enum: ProcessingStatus })
   processingStatus: ProcessingStatus;
+
+  // Cuándo se subió la versión vigente: la web lo muestra como "actualizado hace X".
+  @ApiProperty({ format: 'date-time' })
+  createdAt: string;
 }
 
 // Una fila del historial (spec 003, plan 1.4): la versión y quién la subió.
@@ -262,6 +266,7 @@ function toVersionSummary(
     originalFileName: version.originalFileName,
     mimeType: version.mimeType,
     processingStatus: version.processingStatus,
+    createdAt: version.createdAt.toISOString(),
   };
 }
 
