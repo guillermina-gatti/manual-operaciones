@@ -16,6 +16,17 @@ import { AuditLog } from '../../src/documents/ports/audit-log';
 import { ProcessingQueue } from '../../src/documents/ports/processing-queue';
 import type { DirectoryUser } from '../../src/documents/ports/users-directory';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { FileStorageBytesReader } from '../../src/processing/adapters/file-storage-bytes-reader';
+import { PrismaProcessingRepository } from '../../src/processing/adapters/prisma-processing.repository';
+import {
+  ProcessDocumentHandler,
+  type HandlerOutcome,
+} from '../../src/processing/process-document.handler';
+import { ProcessingService } from '../../src/processing/processing.service';
+import {
+  EMBEDDING_DIMENSIONS,
+  EmbeddingProvider,
+} from '../../src/processing/ports/embedding-provider';
 import { FileStorage } from '../../src/storage/file-storage';
 import { InMemoryFileStorage } from '../../src/storage/in-memory-file-storage';
 import { seedDirectoryFixtures } from '../directory-fixtures';
@@ -468,4 +479,70 @@ export async function setProcessingStatus(
       processingError: status === 'FAILED' ? 'Error de prueba' : null,
     },
   });
+}
+
+// Spec 003 (T29): embeddings falsos con una compuerta. El worker real se detiene al pedir los
+// embeddings (después de leer, extraer y fragmentar, y antes de abrir la transacción de
+// commitLocked), hasta que el test llame a open(). Así el test decide qué confirma primero: la
+// operación del ADMIN o el worker. Sin cerrar la compuerta (closed: false), deja pasar enseguida.
+// Los vectores son fijos, del tamaño de la columna: los tests solo miran area_ids e is_active.
+export class GatedEmbeddings extends EmbeddingProvider {
+  private release!: () => void;
+  private gate: Promise<void>;
+  private signalReached!: () => void;
+  // Se cumple cuando el worker llegó a la compuerta.
+  readonly reached: Promise<void>;
+
+  constructor(closed = true) {
+    super();
+    this.gate = closed
+      ? new Promise<void>((resolve) => {
+          this.release = resolve;
+        })
+      : Promise.resolve();
+    this.reached = new Promise<void>((resolve) => {
+      this.signalReached = resolve;
+    });
+  }
+
+  open(): void {
+    this.release?.();
+  }
+
+  async embedMany(texts: string[]): Promise<number[][]> {
+    this.signalReached();
+    await this.gate;
+    return texts.map(() =>
+      Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0.01),
+    );
+  }
+}
+
+// Spec 003 (T29): el worker real de Guille (ProcessDocumentHandler, ProcessingService y
+// PrismaProcessingRepository), sin BullMQ: el test le pasa el trabajo como lo haría la cola. Lee los
+// archivos del mismo almacenamiento en memoria de la app del test, y los embeddings, de `embeddings`.
+// `attempts` es la cantidad de intentos de la cola; con `attemptsMade` se simula el último (A3).
+export function createRealWorker(
+  t: Pick<DocumentsTestApp, 'prisma' | 'storage'>,
+  embeddings: EmbeddingProvider,
+) {
+  const repository = new PrismaProcessingRepository(t.prisma);
+  const service = new ProcessingService(
+    repository,
+    new FileStorageBytesReader(t.storage),
+    embeddings,
+  );
+  const handler = new ProcessDocumentHandler(service, repository);
+  return {
+    process(
+      documentVersionId: string,
+      job: { attemptsMade?: number; attempts?: number } = {},
+    ): Promise<HandlerOutcome> {
+      return handler.handle({
+        data: { documentVersionId },
+        attemptsMade: job.attemptsMade ?? 0,
+        opts: { attempts: job.attempts ?? 3 },
+      });
+    },
+  };
 }

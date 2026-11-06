@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (04/11/2026):** todas pendientes. T01 a T08 son la API, T09 y T10 la web del chat, T11 el montaje en `ExecutionView` (pareja B), T12 el Playwright y T13 la [verificación](#t13--verificación-de-la-feature).
+- **Estado (06/11/2026):** T01 a T13 **hechas** (04/11/2026) y mergeadas en `develop` (rama `feat/chat-contexto-paso`). T01 a T08 son la API, T09 y T10 la web del chat, T11 el montaje en `ExecutionView` (pareja B), T12 el Playwright y T13 la [verificación](#t13--verificación-de-la-feature). Quedan abiertos los puntos de T13: la prueba manual con Gemini real (la hace Matías) y Swagger a medias (`ChatRequestDto` sin `@ApiProperty`).
 
 ## Antes de empezar
 
