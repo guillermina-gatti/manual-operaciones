@@ -400,15 +400,15 @@ Va a un archivo nuevo, `apps/api/src/chat/chat-pipeline.ts`, sin cambiar el cód
 ### Para corregir (fuera de esta spec)
 
 8. **Visibilidad distinta de Documentos.** El chat recupera con las áreas de la sesión (`user.areaIds`), que solo trae las activas, y no usa `document-access.policy`.
-   - Un ADMIN sin áreas recibe siempre `no_info`, aunque en Documentos ve todo.
+   - Un ADMIN sin áreas recibe siempre `no_info`, aunque en Documentos ve todo. **Resuelto el 06/11/2026** (22a654d): el ADMIN busca en todos los documentos vigentes.
    - Un EMPLOYEE de un área inactiva no encuentra en el chat lo que sí ve en Documentos (E22 de la spec 008).
 
    Sugerencia: usar la misma regla que la búsqueda (`searchScope` de la spec 004).
-9. **`validFrom` sale de `review_date`,** que es la próxima fecha de revisión (spec 005), no la fecha desde la que el documento está vigente. Mientras tanto, la pantalla no lo muestra (F4).
+9. **`validFrom` sale de `review_date`,** que es la próxima fecha de revisión (spec 005), no la fecha desde la que el documento está vigente. Mientras tanto, la pantalla no lo muestra (F4). **Resuelto el 06/11/2026** (22a654d): `validFrom` sale de `document_versions.created_at`.
 10. **Errores de la base sin mapear.** Si la base no responde al recuperar o al guardar, `POST /api/chat` responde 500, no 503. La ruta nueva responde 503 (R2, R3).
 11. **El embedding de la pregunta no tiene tiempo de espera** en `POST /api/chat`: si Gemini no responde, el pedido queda colgado. La ruta nueva lo limita a 15 s (R9).
 12. **Citas sin referencia.** `ChatSource` no dice a qué marca `[Sn]` corresponde. La web la deduce por orden (D14); un campo `ref` lo haría seguro.
-13. **Campos sin usar:** `suggestedContact` nunca se arma con `no_info`, y `url` de las fuentes queda vacía (TODO de HU18).
+13. **Campos sin usar:** `suggestedContact` nunca se arma con `no_info`, y `url` de las fuentes queda vacía (TODO de HU18). **Resuelto el 06/11/2026** (f69ff3a, HU19: `suggestedContact`; 2135204, HU18: `url` firmada). La web no usa `url` a propósito: las fuentes abren el detalle.
 
 ## 13. Aviso para la pareja A (Camila)
 
