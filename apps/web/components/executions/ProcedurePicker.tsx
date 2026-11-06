@@ -4,7 +4,7 @@
 // one in progress: the API decides (201 or 200) and either way the screen opens it.
 import { useRouter } from 'next/navigation';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/Button';
+import { BUTTON_PRIMARY, CARD, CHIP, ERROR_BOX } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { describeExecutionError, startExecution } from '@/lib/api';
 import { SAMPLE_PROCEDURES } from '@/lib/executions/sample-procedures';
@@ -63,10 +63,7 @@ export function ProcedurePicker({ procedures = SAMPLE_PROCEDURES }: ProcedurePic
   return (
     <div className="flex flex-col gap-6">
       {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
+        <p role="alert" className={ERROR_BOX}>
           {error}
         </p>
       )}
@@ -74,30 +71,31 @@ export function ProcedurePicker({ procedures = SAMPLE_PROCEDURES }: ProcedurePic
         {procedures.map((procedure) => (
           <li
             key={procedure.id}
-            className="flex min-w-0 flex-col justify-between gap-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-200 focus-within:border-blue-400 focus-within:shadow-md hover:border-blue-300 hover:shadow-md motion-safe:hover:-translate-y-0.5 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-blue-500 dark:hover:border-blue-500/70"
+            className={`${CARD} flex min-w-0 flex-col justify-between gap-6 p-6 transition-shadow focus-within:shadow-md hover:shadow-md sm:p-8`}
           >
             <div className="flex min-w-0 flex-col gap-3">
               <h2
                 id={`${baseId}-${procedure.id}`}
-                className="break-words text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+                className="break-words text-[22px] font-bold text-texto"
               >
                 {procedure.name}
               </h2>
-              {/* The area as a chip. */}
-              <p className="inline-flex items-center gap-1 self-start rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-800 ring-1 ring-inset ring-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800">
-                Área: <span className="font-semibold">{procedure.areaName}</span>
+              {/* The area as a chip; "Área:" only for screen readers. */}
+              <p className={`${CHIP} self-start bg-chip-area text-chip-area-texto`}>
+                <span className="sr-only">Área: </span>
+                {procedure.areaName}
               </p>
             </div>
-            <Button
-              // `!` wins over Button's own size classes without editing it; still at least 44 px.
-              className="min-h-12! w-full rounded-lg! px-6! text-base shadow-sm sm:w-auto sm:self-start"
+            <button
+              type="button"
+              className={`${BUTTON_PRIMARY} w-full sm:w-auto sm:self-start`}
               // Every button says the same; the description tells which procedure it opens.
               aria-describedby={`${baseId}-${procedure.id}`}
               disabled={startingId !== null}
               onClick={() => start(procedure.id)}
             >
               {startingId === procedure.id ? 'Abriendo…' : 'Comenzar o continuar'}
-            </Button>
+            </button>
           </li>
         ))}
       </ul>
