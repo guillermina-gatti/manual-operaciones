@@ -187,7 +187,7 @@ describe('vista Tarjetas', () => {
     const [tile] = await screen.findAllByRole('article');
     expect(within(tile).getByRole('heading', { level: 2, name: 'Manual de caja' })).toBeInTheDocument();
     expect(within(tile).getAllByRole('link')).toHaveLength(1);
-    // Lleva la vista al detalle, para que "Volver a Documentos" vuelva a las Tarjetas.
+    // Lleva la vista al detalle, para que la ruta ("Documentos › …") vuelva a las Tarjetas.
     expect(within(tile).getByRole('link')).toHaveAttribute(
       'href',
       `/documentos/${DOC.id}?vista=tarjetas`,

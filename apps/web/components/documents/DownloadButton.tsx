@@ -4,7 +4,7 @@
 // en cada clic, se abre y se olvida. Nunca se pide al mostrar la pantalla ni se guarda.
 import { useEffect, useRef, useState } from 'react';
 import { ERROR_TEXT } from './design';
-import { LIST_BUTTON_PRIMARY, LIST_BUTTON_SECONDARY } from './list-design';
+import { LIST_BUTTON_PRIMARY, LIST_BUTTON_SECONDARY, LIST_BUTTON_SMALL } from './list-design';
 import { describeApiError, getDownloadUrl, getVersionDownloadUrl } from '@/lib/api';
 
 interface DownloadButtonProps {
@@ -15,8 +15,11 @@ interface DownloadButtonProps {
   label?: string;
   // Cómo se abre el enlace. Los tests pasan la suya: jsdom no deja reemplazar location.assign.
   openUrl?: (url: string) => void;
-  // En el historial va como secundario, para no llenar la pantalla de botones primarios.
+  // Secundario, para no llenar la pantalla de botones primarios.
   secondary?: boolean;
+  // Solo el ícono, en un botón cuadrado de 44 px: el de cada fila de "Versiones". El nombre accesible
+  // es `label` (pasalo siempre en este caso), y `title` lo muestra al pasar el puntero.
+  icon?: boolean;
 }
 
 // location.assign y no window.open: los navegadores bloquean las ventanas que se abren después de un await.
@@ -33,12 +36,49 @@ function isWebUrl(value: string): boolean {
   }
 }
 
+// Una flecha hacia una bandeja. Decorativa: el nombre va en el botón.
+function DownloadIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      data-icon="download"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5"
+    >
+      <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" />
+    </svg>
+  );
+}
+
+// Mientras se pide el enlace; quieto si se pide menos movimiento.
+function SpinnerIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="size-5 animate-spin motion-reduce:animate-none"
+    >
+      <path d="M12 3a9 9 0 1 0 9 9" />
+    </svg>
+  );
+}
+
 export function DownloadButton({
   documentId,
   versionId,
   label,
   openUrl = assignLocation,
   secondary = false,
+  icon = false,
 }: DownloadButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,20 +113,30 @@ export function DownloadButton({
     }
   }
 
+  let className = LIST_BUTTON_PRIMARY;
+  if (icon) className = `${LIST_BUTTON_SMALL} size-11 px-0`;
+  else if (secondary) className = LIST_BUTTON_SECONDARY;
+
+  let content;
+  if (icon) content = busy ? <SpinnerIcon /> : <DownloadIcon />;
+  else content = busy ? 'Preparando…' : 'Descargar';
+
   return (
-    <div className="flex flex-col items-start gap-2">
+    <div className={`flex flex-col gap-2 ${icon ? 'items-end' : 'items-start'}`}>
       <button
         type="button"
-        className={secondary ? LIST_BUTTON_SECONDARY : LIST_BUTTON_PRIMARY}
+        className={className}
         onClick={download}
         disabled={busy}
         aria-busy={busy}
         aria-label={label}
+        title={icon ? (busy ? 'Preparando…' : label) : undefined}
       >
-        {busy ? 'Preparando…' : 'Descargar'}
+        {content}
       </button>
       {error && (
-        <p role="alert" className={ERROR_TEXT}>
+        // En una fila, junto al ícono: angosto y alineado a la derecha, para no empujar la fila.
+        <p role="alert" className={icon ? `${ERROR_TEXT} max-w-56 text-right` : ERROR_TEXT}>
           {error}
         </p>
       )}

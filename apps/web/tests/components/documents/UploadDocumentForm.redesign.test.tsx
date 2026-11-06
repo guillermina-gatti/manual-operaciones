@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   listAreas: vi.fn(),
   listOwnerCandidates: vi.fn(),
+  searchParams: new URLSearchParams(),
 }));
 
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -26,6 +27,7 @@ vi.mock('@/lib/directory', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  useSearchParams: () => mocks.searchParams,
   useRouter: () => ({ push: mocks.push }),
 }));
 
@@ -37,6 +39,7 @@ const users = createFakeUsersDirectory({ delayMs: 0 });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.searchParams = new URLSearchParams();
   mocks.listAreas.mockImplementation(() => areas.listAreas());
   mocks.listOwnerCandidates.mockImplementation((ids: string[]) => users.listOwnerCandidates(ids));
 });
@@ -201,13 +204,68 @@ describe('atajos de la fecha de revisión', () => {
 });
 
 describe('vista previa en vivo', () => {
-  test('sin datos, textos de ejemplo', async () => {
+  test('sin archivo, un lugar vacío que dice qué hacer (no una tarjeta sin datos)', async () => {
     await renderForm();
 
-    expect(within(preview()).getByText('Sin título')).toBeInTheDocument();
+    expect(
+      within(preview()).getByText('Elegí un archivo para ver la vista previa'),
+    ).toBeInTheDocument();
+    expect(within(preview()).queryByText('v1')).not.toBeInTheDocument();
+    expect(within(preview()).queryByText('Sin título')).not.toBeInTheDocument();
+    expect(within(preview()).queryByText('Así se va a ver en Documentos.')).not.toBeInTheDocument();
+  });
+
+  test('con archivo y sin áreas ni responsable, la tarjeta con textos de ejemplo', async () => {
+    const user = setupUser();
+    await renderForm();
+
+    await user.upload(fileInput(), fileOf('manual-de-caja.pdf'));
+
+    expect(within(preview()).queryByText(/Elegí un archivo/)).not.toBeInTheDocument();
+    expect(within(preview()).getByText('v1')).toBeInTheDocument();
     expect(within(preview()).getByText('Sin áreas')).toBeInTheDocument();
     expect(within(preview()).getByText('Sin responsable')).toBeInTheDocument();
-    expect(within(preview()).getByText('v1')).toBeInTheDocument();
+    expect(within(preview()).getByText('Así se va a ver en Documentos.')).toBeInTheDocument();
+  });
+
+  test('"Quitar" el archivo vuelve al lugar vacío', async () => {
+    const user = setupUser();
+    await renderForm();
+    await user.upload(fileInput(), fileOf('manual.pdf'));
+
+    await user.click(screen.getByRole('button', { name: 'Quitar el archivo elegido' }));
+
+    expect(
+      within(preview()).getByText('Elegí un archivo para ver la vista previa'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('un solo bloque con pasos numerados', () => {
+  test('los tres pasos en orden, en una lista: Archivo, Datos, Quién lo cuida', async () => {
+    await renderForm();
+
+    const headings = screen.getAllByRole('heading', { level: 2 });
+    expect(headings.map((h) => h.textContent)).toEqual(['Archivo', 'Datos', 'Quién lo cuida']);
+    const steps = headings.map((h) => h.closest('li')!);
+    // Los tres en la misma lista (el mismo bloque), cada uno con su número decorativo.
+    expect(new Set(steps.map((step) => step.parentElement)).size).toBe(1);
+    expect(steps[0].parentElement!.tagName).toBe('OL');
+    expect(steps.map((step) => step.querySelector('[aria-hidden="true"]')!.textContent)).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
+  });
+
+  test.each([
+    ['', '/documentos'],
+    ['vista=tarjetas', '/documentos?vista=tarjetas'],
+  ])('"Cancelar" con ?%s vuelve a %s, como la ruta', async (query, href) => {
+    mocks.searchParams = new URLSearchParams(query);
+    await renderForm();
+
+    expect(screen.getByRole('link', { name: 'Cancelar' })).toHaveAttribute('href', href);
   });
 
   test('muestra el tipo, el título, el área y el responsable a medida que se completan', async () => {

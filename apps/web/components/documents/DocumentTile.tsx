@@ -49,7 +49,7 @@ export function DocumentTile({ document, isAdmin, now, children }: DocumentTileP
 
       <div className="flex min-w-0 flex-col gap-2">
         <h2 className="min-w-0 text-lg leading-snug font-bold">
-          {/* Lleva la vista al detalle, así "Volver a Documentos" vuelve a las Tarjetas. */}
+          {/* Lleva la vista al detalle, así la ruta ("Documentos › …") vuelve a las Tarjetas. */}
           <Link
             href={withView(`/documentos/${document.id}`, 'tarjetas')}
             title={document.title}

@@ -3,7 +3,9 @@
 // Detalle de un documento (F6, F8, F9; plan 002, sección 1). La API ya decide si el usuario puede verlo:
 // si no, responde 404, igual que si no existiera.
 // Spec 003 (plan 003, 6.1): solo el ADMIN ve las acciones del ciclo de vida, si el documento está
-// activo, y el historial de versiones, también si está archivado.
+// activo, y la sección "Versiones", también si está archivado. La sección va en la columna principal,
+// con "Subir versión nueva" adentro; la columna lateral queda solo para "Revisión" (plan 003, D11).
+// Arriba de todo, la ruta "Documentos › título" (plan 002, D9).
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -22,6 +24,7 @@ import { ArchiveDialog } from './ArchiveDialog';
 import { ChangeAreasForm } from './ChangeAreasForm';
 import { DetailProcessingStatus } from './DetailProcessingStatus';
 import { DocumentDetailHeader } from './DocumentDetailHeader';
+import { DocumentsBreadcrumb } from './DocumentsBreadcrumb';
 import { DownloadButton } from './DownloadButton';
 import { MarkReviewedForm } from './MarkReviewedForm';
 import { NewVersionForm } from './NewVersionForm';
@@ -43,11 +46,24 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NOT_FOUND = describeApiError(new ApiError(404), 'detail').message;
 
+// Mientras carga, o si falla, la ruta tiene solo "Documentos": se puede volver igual.
 const LOADING = (
-  <ScreenState kind="loading" label="Cargando el documento…">
-    <DocumentDetailSkeleton />
-  </ScreenState>
+  <>
+    <DocumentsBreadcrumb />
+    <ScreenState kind="loading" label="Cargando el documento…">
+      <DocumentDetailSkeleton />
+    </ScreenState>
+  </>
 );
+
+function withBreadcrumb(state: ReactNode) {
+  return (
+    <>
+      <DocumentsBreadcrumb />
+      {state}
+    </>
+  );
+}
 
 export function DocumentDetail() {
   const { user, status } = useSession();
@@ -66,17 +82,19 @@ export function DocumentDetail() {
 
   if (status === 'loading') return LOADING;
   if (status === 'disabled') {
-    return <ScreenState kind="error" message={describeApiError(new ApiError(401), 'detail').message} />;
+    return withBreadcrumb(
+      <ScreenState kind="error" message={describeApiError(new ApiError(401), 'detail').message} />,
+    );
   }
-  if (!user) return <ScreenState kind="empty" message="Elegí un usuario de prueba" />;
-  if (!validId) return <ScreenState kind="error" message={NOT_FOUND} />;
+  if (!user) return withBreadcrumb(<ScreenState kind="empty" message="Elegí un usuario de prueba" />);
+  if (!validId) return withBreadcrumb(<ScreenState kind="error" message={NOT_FOUND} />);
 
   if (document.status === 'loading' || document.status === 'idle') return LOADING;
 
   if (document.status === 'error') {
     const { message, canRetry } = describeApiError(document.error, 'detail');
-    return (
-      <ScreenState kind="error" message={message} onRetry={canRetry ? document.reload : undefined} />
+    return withBreadcrumb(
+      <ScreenState kind="error" message={message} onRetry={canRetry ? document.reload : undefined} />,
     );
   }
 
@@ -91,7 +109,8 @@ export function DocumentDetail() {
   const canModify = isAdmin && !archived;
   // Spec 005 (R6, R9): la revisión, para quien recibe `review` y si está activo.
   const canReview = doc.review !== undefined && !archived;
-  const hasSideColumn = canReview || isAdmin;
+  // La columna lateral es solo "Revisión" (plan 003, D11).
+  const hasSideColumn = canReview;
 
   // Después de una acción correcta: se cierra lo abierto, se avisa y se vuelve a pedir el detalle.
   function finish(message: string) {
@@ -107,6 +126,8 @@ export function DocumentDetail() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <DocumentsBreadcrumb current={doc.title} />
+
       {notice && (
         <p
           role="status"
@@ -164,7 +185,8 @@ export function DocumentDetail() {
               )}
             </dl>
 
-            {/* Las acciones del ADMIN al pie; "Archivar" aparte, lejos de las de uso común. */}
+            {/* Las acciones del ADMIN al pie; "Archivar" aparte, lejos de las de uso común. "Subir
+                versión nueva" está en la sección "Versiones". */}
             {canModify && (
               <div className="flex flex-wrap items-center gap-3 border-t border-borde pt-6">
                 <button
@@ -174,14 +196,6 @@ export function DocumentDetail() {
                   onClick={() => togglePanel('areas')}
                 >
                   Cambiar áreas
-                </button>
-                <button
-                  type="button"
-                  className={LIST_BUTTON_SECONDARY}
-                  aria-expanded={panel === 'version'}
-                  onClick={() => togglePanel('version')}
-                >
-                  Subir versión nueva
                 </button>
                 <button
                   type="button"
@@ -207,20 +221,35 @@ export function DocumentDetail() {
               />
             </ActionPanel>
           )}
-          {canModify && panel === 'version' && (
-            <ActionPanel title="Subir versión nueva">
-              <NewVersionForm
-                document={doc}
-                onDone={(updated: DocumentResponse) =>
-                  finish(`Versión ${updated.currentVersion.versionNumber} cargada`)
-                }
-                onCancel={() => setPanel(null)}
-              />
-            </ActionPanel>
+          {/* R12: "Versiones" solo para el ADMIN; los demás roles no la ven ni piden el historial.
+              Con el documento activo, "Subir versión nueva" abre su formulario adentro (D8: sigue
+              siendo uno de los paneles, de a uno por vez). */}
+          {isAdmin && (
+            <VersionHistory
+              documentId={doc.id}
+              refreshKey={`${version.id}:${doc.status}`}
+              upload={
+                canModify
+                  ? {
+                      open: panel === 'version',
+                      onToggle: () => togglePanel('version'),
+                      form: (
+                        <NewVersionForm
+                          document={doc}
+                          onDone={(updated: DocumentResponse) =>
+                            finish(`Versión ${updated.currentVersion.versionNumber} cargada`)
+                          }
+                          onCancel={() => setPanel(null)}
+                        />
+                      ),
+                    }
+                  : undefined
+              }
+            />
           )}
         </article>
 
-        {/* La columna lateral: revisión e historial. */}
+        {/* La columna lateral: solo la revisión. */}
         {hasSideColumn && (
           <div className="flex min-w-0 flex-col gap-6">
             {/* Spec 005 (F4, D17): "Marcar como revisado", siempre visible, para quien recibe `review`
@@ -236,11 +265,6 @@ export function DocumentDetail() {
                 />
                 <MarkReviewedForm documentId={doc.id} onDone={() => finish('Revisión registrada')} />
               </ActionPanel>
-            )}
-
-            {/* R12: el historial solo para el ADMIN; los demás roles no lo ven ni lo piden. */}
-            {isAdmin && (
-              <VersionHistory documentId={doc.id} refreshKey={`${version.id}:${doc.status}`} />
             )}
           </div>
         )}

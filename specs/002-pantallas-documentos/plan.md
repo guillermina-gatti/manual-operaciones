@@ -5,7 +5,7 @@
 - **Responsable:** Matías Fauda (pareja C)
 - **Estado:** listo para implementar. Las decisiones están en la sección 9.1 y lo que depende de la pareja A, en la 9.2.
 
-En este plan, F1 a F14 son reglas de la spec; P1 a P8, sus decisiones (spec sección 10); E1 a E12, los escenarios de la spec (sección 11, en el orden en que aparecen); D1 a D7, las decisiones de este plan (sección 9.1); y Q1, Q2 y Q6, las preguntas que siguen abiertas con la pareja A (sección 9.2). Cuando se cita una decisión del plan 001, se aclara ("D1 del plan 001").
+En este plan, F1 a F14 son reglas de la spec; P1 a P8, sus decisiones (spec sección 10); E1 a E12, los escenarios de la spec (sección 11, en el orden en que aparecen); D1 a D9, las decisiones de este plan (sección 9.1); y Q1, Q2 y Q6, las preguntas que siguen abiertas con la pareja A (sección 9.2). Cuando se cita una decisión del plan 001, se aclara ("D1 del plan 001").
 
 | # | Escenario de la spec |
 | --- | --- |
@@ -84,6 +84,7 @@ apps/web/
 | `DocumentDetail` | cliente | Pide el detalle; muestra datos, nombre del archivo, tamaño, `DownloadButton` y, solo al ADMIN, `ProcessingStatusBadge` (F6). 404 → "No se encontró el documento" (F9) |
 | `ProcessingStatusBadge` | cliente | `PENDING` → "Pendiente", `PROCESSING` → "Procesando", `READY` → "Listo", `FAILED` → "Con error". **Actualizada el 06/11/2026:** en el detalle, `READY` se muestra como "Listo para el asistente" (`DetailProcessingStatus`, D8); el historial sigue diciendo "Listo" |
 | `DownloadButton` | cliente | Pide el enlace en el clic y lo abre (F8) |
+| `DocumentsBreadcrumb` | cliente | **Agregada el 06/11/2026 (D9):** la ruta "Documentos › título" del detalle y "Documentos › Cargar documento" de la carga. "Documentos" es el enlace y conserva `?vista=` |
 | `UploadDocumentForm` | cliente | Estado del formulario, validación (F2), envío único (F5), errores de la API (F3), conserva los datos (F4) y redirige al detalle (F13) |
 | `FileField` | cliente | `<input type="file" accept=".pdf,.txt,.md">`, nombre recortado del archivo elegido, tamaño y su error |
 | `AreasField` | cliente | Casillas con las áreas (de `areasDirectory`); al menos una (F2) |
@@ -321,6 +322,7 @@ Tomadas en la revisión del plan el 23/10/2026.
 | D6 · F6 oculta el estado a quien no es ADMIN, pero la API se lo devuelve igual | Alcanza para la spec (no es información sensible). Si se quiere que no viaje, que la API lo omita para quien no es ADMIN; sería un cambio de la spec 001 | F6 |
 | D7 · ¿Librería para pedidos (TanStack Query, SWR) o un hook propio? | Hook propio (`useApiResource`) con cargando, datos, error y `reload`: hay solo tres pedidos y no hace falta caché. Si las pantallas de otras parejas lo necesitan, se decide en equipo y se migra | Spec sección 7 |
 | D8 · ¿Qué dice el estado `READY` en el detalle? | Tomada el 06/11/2026, con el rediseño del detalle. En el detalle dice "Listo para el asistente", para que el ADMIN sepa que el documento ya se puede consultar desde el asistente. El historial de versiones conserva "Listo", para que sus filas sigan siendo compactas. `ProcessingStatusBadge` no cambia: el detalle usa `DetailProcessingStatus`, que muestra el texto largo para `READY` y delega en él para el resto | F6 |
+| D9 · ¿Cómo se vuelve a Documentos desde el detalle y la carga, y cómo se ordena la carga? | Tomada el 06/11/2026, con el rediseño. **Ruta:** en vez de "← Volver a Documentos", una ruta "Documentos › título" (detalle) y "Documentos › Cargar documento" (carga), en un `nav` con `aria-label="Ruta"` y `aria-current="page"` en el último. "Documentos" es el único enlace y conserva la vista (`?vista=`): la tarjeta y "Cargar documento" la pasan, y "Cancelar" de la carga también vuelve a ella. Mientras el detalle carga, o si falla, la ruta tiene solo "Documentos". Alertas y Por revisar conservan su "Volver". **Carga:** un solo bloque con los pasos numerados (1 Archivo, 2 Datos, 3 Quién lo cuida) separados por líneas finas, en un `<ol>`. Sin archivo, la vista previa es un lugar vacío ("Elegí un archivo para ver la vista previa") y no una tarjeta sin datos | F12, F14 |
 
 ### 9.2 Preguntas abiertas con la pareja A
 

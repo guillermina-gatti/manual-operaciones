@@ -5,7 +5,7 @@
 - **Responsable:** Matías Fauda (pareja C)
 - **Estado:** Implementada (T01 a T28 y T30). Pendiente: T29, bloqueada por el worker de Guille. Las decisiones están en la sección 9.1 y la pregunta abierta con Guille, en la 9.2.
 
-En este plan, R1 a R14 son reglas de esta spec; P1 a P7, sus decisiones (spec, sección 10); E1 a E13, sus escenarios (sección 11, en el orden en que aparecen); D1 a D10, las decisiones de este plan (sección 9.1); y Q1, la pregunta que sigue abierta con Guille (sección 9.2). Las reglas y decisiones de otros planes se citan con su número y el plan ("R5 de la spec 001", "D8 del plan 002").
+En este plan, R1 a R14 son reglas de esta spec; P1 a P7, sus decisiones (spec, sección 10); E1 a E13, sus escenarios (sección 11, en el orden en que aparecen); D1 a D11, las decisiones de este plan (sección 9.1); y Q1, la pregunta que sigue abierta con Guille (sección 9.2). Las reglas y decisiones de otros planes se citan con su número y el plan ("R5 de la spec 001", "D8 del plan 002").
 
 | # | Escenario de la spec | # | Escenario de la spec |
 | --- | --- | --- | --- |
@@ -367,6 +367,8 @@ Solo para el ADMIN y solo si el documento está `ACTIVE`, el detalle (`DocumentD
 [ Descargar ]  [ Cambiar áreas ]  [ Subir versión nueva ]  [ Archivar ]
 ```
 
+**Actualizada el 06/11/2026 (D11):** "Descargar" va en el encabezado, y al pie de los datos quedan "Cambiar áreas" y "Archivar". "Subir versión nueva" pasó a la sección "Versiones" (6.5), en la columna principal, y su formulario se abre dentro de esa sección. Sigue siendo uno de los paneles, de a uno por vez (D8). La columna lateral queda solo para "Revisión" (spec 005).
+
 - **"Cambiar áreas" y "Subir versión nueva"** abren un panel **dentro del detalle**, debajo de los datos, de a uno por vez. No son pantallas aparte: el ADMIN ve el documento mientras lo cambia, y en el celular el panel ocupa el ancho de la pantalla (F10 del plan 002). Es la decisión D8.
 - **"Archivar"** abre la confirmación (6.4).
 - **Documento archivado:** el ADMIN ve "Archivado desde 23/10/2026" y **ninguna** de las tres acciones (R11). Sigue pudiendo descargar y ver el historial.
@@ -421,6 +423,12 @@ Solo para el ADMIN y solo si el documento está `ACTIVE`, el detalle (`DocumentD
 ### 6.5 Historial (R12): `VersionHistory`
 
 - **Solo para el ADMIN**, debajo del detalle. Se pide a `GET /api/documents/:id/versions` recién al abrir la sección "Historial de versiones", que empieza cerrada: el detalle no hace un pedido de más.
+- **Actualizada el 06/11/2026 (D11):**
+  - Es la sección "Versiones" (`h2`) de la columna principal, debajo de la tarjeta de datos.
+  - Arriba tiene una línea que explica qué es: "Cada vez que se sube un archivo nuevo, el anterior queda guardado acá. La vigente es la que se descarga arriba."
+  - Con el documento activo, también tiene "Subir versión nueva", y el formulario se abre adentro.
+  - La lista sigue cerrada al principio y se abre con el botón "Historial de versiones" (`aria-expanded`), que es el que dispara el pedido. Abrir el formulario no la pide.
+  - Cada versión es una fila compacta con la descarga como un botón de ícono de 44 px, cuyo nombre accesible es "Descargar la versión N".
 - **Una fila por versión,** de la más nueva a la más vieja:
   - número;
   - nombre del archivo, recortado y completo en `title`;
@@ -546,9 +554,10 @@ Tomadas en la revisión del plan el 23/10/2026.
 | D5 · ¿Archivar como `POST /:id/archive` o como `PATCH /:id` con `status`? | `POST /:id/archive`: es una acción con efectos (fragmentos, auditoría) y no hay otro valor posible para `status` (P1) | R10, R11 |
 | D6 · ¿Se borran del almacenamiento los archivos de versiones reemplazadas o de documentos archivados? | No: el historial los descarga (R12) y la spec deja fuera los borrados definitivos (sección 4 de la spec) | R12 |
 | D7 · ¿Se agrega `reason` a los 409, también al de la carga existente? | Sí (1.2): la web necesita distinguir cuatro 409 distintos. Es un campo extra y no rompe a nadie | R6b, R11, R8 |
-| D8 · ¿Las acciones del detalle son paneles dentro del detalle o pantallas aparte? | Paneles dentro del detalle (6.1): se ve el documento mientras se cambia y no suma rutas. Si los paneles quedan largos en el celular, se pasa a rutas (`/documentos/[id]/areas`, `/documentos/[id]/version`) sin cambiar los formularios | — |
+| D8 · ¿Las acciones del detalle son paneles dentro del detalle o pantallas aparte? | Paneles dentro del detalle (6.1): se ve el documento mientras se cambia y no suma rutas. Si los paneles quedan largos en el celular, se pasa a rutas (`/documentos/[id]/areas`, `/documentos/[id]/version`) sin cambiar los formularios. **Actualizada el 06/11/2026:** el panel de "Subir versión nueva" se abre dentro de la sección "Versiones" (D11); sigue siendo uno de los paneles, de a uno por vez | — |
 | D9 · El dueño de la auditoría (A1 del plan 001) sigue abierto | Seguir con `LoggerAuditLog` y sumar las tres acciones nuevas (1.6); la implementación real las hereda | R13 |
 | D10 · ¿El ADMIN puede descargar una versión vieja de un documento archivado? | Sí: el ADMIN ve todo (R10 de la spec 001) y el historial sigue disponible después de archivar | R10, R12 |
+| D11 · ¿Dónde va el historial en el detalle? | Tomada el 06/11/2026, con el rediseño del detalle. En la columna principal, debajo de los datos, como sección "Versiones", con una línea que explica qué es y "Subir versión nueva" adentro: la versión nueva y las anteriores se ven en el mismo lugar. La columna lateral queda solo para "Revisión". La lista se sigue pidiendo recién al abrir "Historial de versiones" (6.5), y cada versión es una fila compacta con la descarga como botón de ícono. Con el documento archivado, la sección sigue, sin "Subir versión nueva" (D10, R11) | R7, R12 |
 
 ### 9.2 Pregunta abierta
 

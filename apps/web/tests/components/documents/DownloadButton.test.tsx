@@ -216,6 +216,25 @@ describe('descarga de una versión (spec 003)', () => {
     expect(screen.getByRole('button', { name: 'Descargar la versión 2' })).toBeInTheDocument();
   });
 
+  test('con icon, solo el ícono (decorativo) y el nombre de label, también en title', () => {
+    render(
+      <DownloadButton
+        documentId={ID}
+        versionId={V2}
+        label="Descargar la versión 2"
+        openUrl={vi.fn()}
+        icon
+      />,
+    );
+
+    const download = screen.getByRole('button', { name: 'Descargar la versión 2' });
+    expect(download).toHaveTextContent('');
+    expect(download).toHaveAttribute('title', 'Descargar la versión 2');
+    expect(download.querySelector('svg[data-icon="download"]')).toHaveAttribute('aria-hidden', 'true');
+    // 44 px: lo mínimo para tocar en el celular.
+    expect(download).toHaveClass('size-11');
+  });
+
   test('un 404 (versión de otro documento) muestra "No se encontró el documento."', async () => {
     fetchMock.mockImplementation(() =>
       Promise.resolve(
