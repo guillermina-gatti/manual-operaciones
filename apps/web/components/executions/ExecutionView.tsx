@@ -2,10 +2,10 @@
 
 // Step-by-step execution of a procedure (HU12, spec 005). The API decides who can see it: for
 // another employee, a missing execution or a lost area it answers the same 404.
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ExecutionChatPanel } from '@/components/chat/ExecutionChatPanel';
+import { CHIP, ERROR_BOX, PageHeader } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import {
   ApiError,
@@ -16,11 +16,12 @@ import {
   useApiResource,
 } from '@/lib/api';
 import type { ExecutionResponse } from '@/lib/api';
-import { formatDuration } from '@/lib/executions/format';
-import { procedureName } from '@/lib/executions/sample-procedures';
+import { SAMPLE_PROCEDURES, procedureName } from '@/lib/executions/sample-procedures';
 import { summarizeExecution } from '@/lib/executions/summary';
 import { useSession } from '@/lib/session';
+import { CompletedPanel } from './CompletedPanel';
 import { ExecutionProgress } from './ExecutionProgress';
+import { ExecutionSummaryCard } from './ExecutionSummaryCard';
 import { StepList } from './StepList';
 
 // The same format the API accepts (ParseUUIDPipe). Any other id cannot exist.
@@ -108,6 +109,9 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
   const summary = summarizeExecution(execution);
   const completed = execution.status === 'COMPLETED';
+  // The execution only brings the procedure id; its area comes from the sample procedures.
+  const areaName = SAMPLE_PROCEDURES.find((p) => p.id === execution.procedureId)?.areaName;
+  const resumed = summary.resumed && !completedHere;
 
   async function complete(stepId: string) {
     if (completingRef.current) return;
@@ -153,42 +157,35 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
   return (
     <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
-        <header className="flex min-w-0 flex-col gap-3">
-          <h1 className="break-words text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl dark:text-zinc-50">
-            {procedureName(execution.procedureId)}
-          </h1>
-          {summary.resumed && !completedHere && (
-            <p className="self-start rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-800 ring-1 ring-inset ring-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800">
-              Retomaste donde quedaste.
-            </p>
-          )}
-        </header>
-
-        {completed && (
-          <div
-            role="status"
-            className="flex items-start gap-4 rounded-xl border border-green-200 border-l-4 border-l-green-600 bg-green-50 p-5 text-green-900 shadow-sm dark:border-green-900 dark:border-l-green-500 dark:bg-green-950/60 dark:text-green-100"
-          >
-            <span
-              aria-hidden="true"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-700 text-lg font-bold text-white dark:bg-green-500 dark:text-zinc-950"
-            >
-              ✓
-            </span>
-            <div className="flex flex-col gap-1 pt-1">
-              <p className="text-lg font-semibold">Completaste el procedimiento</p>
-              <p>Tiempo total: {formatDuration(summary.totalDurationMs)}</p>
+        <div className="flex min-w-0 flex-col gap-3">
+          <PageHeader
+            title={procedureName(execution.procedureId)}
+            subtitle="Seguí los pasos en orden y marcá cada uno cuando lo termines."
+          />
+          {(areaName || resumed) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {areaName && (
+                <span className={`${CHIP} bg-chip-area text-chip-area-texto`}>{areaName}</span>
+              )}
+              {/* Salvia, not celeste: in the design, celeste is only for the assistant. */}
+              {resumed && (
+                <p className={`${CHIP} bg-salvia text-texto`}>Retomaste donde quedaste</p>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <ExecutionProgress summary={summary} />
 
+        {completed && (
+          <CompletedPanel
+            procedureName={procedureName(execution.procedureId)}
+            totalDurationMs={summary.totalDurationMs}
+          />
+        )}
+
         {notice && (
-          <p
-            role="alert"
-            className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-          >
+          <p role="alert" className={ERROR_BOX}>
             {notice}
           </p>
         )}
@@ -199,23 +196,18 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
           onComplete={complete}
           focusCurrent={completedHere}
         />
-
-        {completed && (
-          <Link
-            href="/ejecuciones"
-            className="inline-flex min-h-12 items-center self-start rounded-lg border border-blue-200 bg-white px-6 font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300 dark:hover:bg-blue-950"
-          >
-            Elegir otro procedimiento
-          </Link>
-        )}
       </article>
 
-      {/* The assistant of pair C for the current step (spec 010). Hidden once the execution is
-          completed, so screen readers do not announce an empty region. On a phone it goes below
-          the steps; from lg on, in the right column. */}
-      <aside data-slot="chat-panel" aria-label="Asistente" hidden={completed} className="min-w-0">
-        <ExecutionChatPanel execution={execution} />
-      </aside>
+      {/* The side column: our summary and, below it, the assistant of pair C for the current step
+          (spec 010), untouched. The assistant is hidden once the execution is completed, so screen
+          readers do not announce an empty region. On a phone the column goes below the steps;
+          from lg on, it is on the right. */}
+      <div className="flex min-w-0 flex-col gap-6">
+        <ExecutionSummaryCard execution={execution} summary={summary} />
+        <aside data-slot="chat-panel" aria-label="Asistente" hidden={completed} className="min-w-0">
+          <ExecutionChatPanel execution={execution} />
+        </aside>
+      </div>
     </div>
   );
 }
@@ -223,11 +215,11 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 export function ExecutionSkeleton() {
   return (
     <div aria-hidden="true" className="flex animate-pulse flex-col gap-6">
-      <div className="h-10 w-2/3 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-28 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-12 w-2/3 rounded-xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
+      <div className="h-32 w-full rounded-2xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
     </div>
   );
 }

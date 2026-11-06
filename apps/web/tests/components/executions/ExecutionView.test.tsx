@@ -47,7 +47,9 @@ beforeEach(() => {
 
 const heading = () => screen.findByRole('heading', { level: 1, name: 'Cierre de caja' });
 const stepItem = (n: number) =>
-  within(screen.getByRole('list', { name: 'Pasos' })).getAllByRole('listitem')[n - 1];
+  within(screen.getByRole('list', { name: 'Pasos del procedimiento' })).getAllByRole('listitem')[
+    n - 1
+  ];
 const finishButton = () => screen.getByRole('button', { name: 'Terminé este paso' });
 
 describe('loading and session', () => {
@@ -111,6 +113,16 @@ describe('errors when loading', () => {
 });
 
 describe('an execution in progress', () => {
+  test('the header says the procedure, what the screen is for and its area', async () => {
+    render(<ExecutionView />);
+
+    await heading();
+    expect(
+      screen.getByText('Seguí los pasos en orden y marcá cada uno cuando lo termines.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Ventas')).toBeInTheDocument();
+  });
+
   test('shows the progress and every step in order', async () => {
     render(<ExecutionView />);
 
@@ -139,7 +151,7 @@ describe('an execution in progress', () => {
     render(<ExecutionView />);
 
     await heading();
-    expect(screen.getByText('Retomaste donde quedaste.')).toBeInTheDocument();
+    expect(screen.getByText('Retomaste donde quedaste')).toBeInTheDocument();
     expect(screen.getByText('Paso 3 de 4')).toBeInTheDocument();
     expect(stepItem(1)).toHaveTextContent('Terminado');
     expect(stepItem(1)).toHaveTextContent('3 min');
@@ -147,11 +159,37 @@ describe('an execution in progress', () => {
     expect(within(stepItem(3)).getByRole('button', { name: 'Terminé este paso' })).toBeInTheDocument();
   });
 
+  test('each step says its state and its times, the current one marked as the step', async () => {
+    mocks.getExecution.mockResolvedValue(execution(2));
+    render(<ExecutionView />);
+    await heading();
+
+    expect(stepItem(1)).toHaveTextContent('TerminadoTerminó a las 10:03 · duró 3 min');
+    expect(stepItem(3)).toHaveTextContent('En cursoEmpezó a las 10:06');
+    expect(stepItem(3)).toHaveAttribute('aria-current', 'step');
+    expect(stepItem(4)).toHaveTextContent('Pendiente');
+    expect(stepItem(4)).not.toHaveAttribute('aria-current');
+    expect(within(stepItem(4)).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Paso 4: Guardar el efectivo en la caja fuerte',
+    );
+  });
+
+  test('the last step says so on its button', async () => {
+    mocks.getExecution.mockResolvedValue(execution(3));
+    render(<ExecutionView />);
+    await heading();
+
+    expect(
+      within(stepItem(4)).getByRole('button', { name: 'Terminé el último paso' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
+  });
+
   test('a new execution does not say it was resumed', async () => {
     render(<ExecutionView />);
 
     await heading();
-    expect(screen.queryByText('Retomaste donde quedaste.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Retomaste donde quedaste')).not.toBeInTheDocument();
   });
 });
 
@@ -212,7 +250,7 @@ describe('completing a step', () => {
     await userEvent.click(finishButton());
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se encontró la ejecución.');
-    expect(screen.queryByRole('list', { name: 'Pasos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Pasos del procedimiento' })).not.toBeInTheDocument();
   });
 
   test('503 → a notice above the steps, and the button can be pressed again', async () => {
@@ -240,29 +278,55 @@ describe('a completed execution', () => {
     render(<ExecutionView />);
     await heading();
 
-    await userEvent.click(finishButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Terminé el último paso' }));
 
-    expect(await screen.findByText('Completaste el procedimiento')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '¡Procedimiento completado!' })).toBeInTheDocument();
   });
 
-  test('shows the total time, every duration, no button, and a link to choose another', async () => {
+  test('shows the completed panel, every duration and no button', async () => {
     mocks.getExecution.mockResolvedValue(execution(4));
     render(<ExecutionView />);
     await heading();
 
-    expect(screen.getByText('Completaste el procedimiento')).toBeInTheDocument();
-    expect(screen.getByText('Tiempo total: 12 min')).toBeInTheDocument();
+    const panel = screen.getByRole('status');
+    expect(within(panel).getByRole('heading', { level: 2 })).toHaveTextContent(
+      '¡Procedimiento completado!',
+    );
+    expect(panel).toHaveTextContent('Terminaste Cierre de caja en 12 min. Quedó registrado.');
     expect(screen.getByRole('progressbar', { name: 'Pasos terminados' })).toHaveAttribute(
       'aria-valuenow',
       '4',
     );
     STEPS.forEach((_, i) => expect(stepItem(i + 1)).toHaveTextContent('3 min'));
     expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Retomaste donde quedaste.')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Elegir otro procedimiento' })).toHaveAttribute(
+    expect(screen.queryByText('Retomaste donde quedaste')).not.toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'Ver otro procedimiento' })).toHaveAttribute(
       'href',
       '/ejecuciones',
     );
+    expect(within(panel).getByRole('link', { name: 'Volver al inicio' })).toHaveAttribute(
+      'href',
+      '/',
+    );
+  });
+
+  test('the completed panel goes between the progress and the steps', async () => {
+    mocks.getExecution.mockResolvedValue(execution(4));
+    render(<ExecutionView />);
+    await heading();
+
+    const progress = screen.getByRole('progressbar', { name: 'Pasos terminados' });
+    const panel = screen.getByRole('status');
+    const steps = screen.getByRole('list', { name: 'Pasos del procedimiento' });
+    expect(progress.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('an execution in progress has no completed panel', async () => {
+    render(<ExecutionView />);
+    await heading();
+
+    expect(screen.queryByRole('heading', { name: '¡Procedimiento completado!' })).not.toBeInTheDocument();
   });
 });
 
@@ -313,4 +377,15 @@ test('keeps a place for the assistant next to the steps', async () => {
 
   await heading();
   expect(document.querySelector('[data-slot="chat-panel"]')).not.toBeNull();
+});
+
+test('the side column has the summary above the assistant', async () => {
+  render(<ExecutionView />);
+  await heading();
+
+  const summary = screen.getByRole('region', { name: 'Resumen' });
+  const assistant = screen.getByRole('complementary', { name: 'Asistente' });
+  expect(summary.parentElement).toBe(assistant.parentElement);
+  expect(summary.compareDocumentPosition(assistant) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(summary).toHaveTextContent('Pasos terminados0 de 4');
 });
