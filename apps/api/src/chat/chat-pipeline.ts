@@ -204,7 +204,7 @@ export function toSources(chunks: RetrievedChunk[]): ChatSource[] {
         section: c.section ?? 'Sin sección',
         chunkId: c.chunkId,
         validFrom: c.validFrom,
-        // TODO HU18: reemplazar por el enlace firmado al pasaje.
-        url: '',
+        // HU18: el enlace firmado lo pone withSignedLinks (chat-links.ts); sin él, queda vacío.
+        url: c.url ?? '',
     }));
 }
