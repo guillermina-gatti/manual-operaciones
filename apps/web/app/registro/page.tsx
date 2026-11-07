@@ -56,6 +56,11 @@ function RegistroContent() {
       return;
     }
 
+    // Si la invitación ya fue validada, no reiniciar validación ante cambios de status durante el envío
+    if (state.kind === 'valid') {
+      return;
+    }
+
     let cancelled = false;
 
     // 1 y 2. Leer hash y extraer token (o reutilizar token ya extraído en tokenRef ante Strict Mode)
@@ -117,9 +122,9 @@ function RegistroContent() {
     return () => {
       cancelled = true;
     };
-  }, [status, user]);
+  }, [status, user, state.kind]);
 
-  if (status === 'loading') {
+  if (status === 'loading' && state.kind !== 'valid') {
     return (
       <div className="text-center">
         <p role="status">Preparando sesión…</p>
