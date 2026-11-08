@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MyActivityPanel } from '@/components/executions/MyActivityPanel';
@@ -77,6 +77,13 @@ const loaded = () => screen.findByText('Empezadas', { selector: 'dt' });
 // A tile: its label (dt) and, in the same box, its number and its line.
 const tile = (label: string) =>
   within(summary()).getByText(label, { selector: 'dt' }).parentElement!;
+// Opens the area selector and reads the name of each option (without its hint).
+async function areaOptionTexts(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /^Área/ }));
+  return within(screen.getByRole('listbox', { name: 'Área' }))
+    .getAllByRole('option')
+    .map((option) => option.querySelector('span:not([class*="text-sm"])')?.textContent);
+}
 
 describe('filters', () => {
   test('without filters in the address asks for this month of all their areas', async () => {
@@ -106,16 +113,34 @@ describe('filters', () => {
     render(<MyActivityPanel />);
     await loaded();
 
-    await user.click(screen.getByRole('button', { name: /^Área/ }));
-    const options = within(screen.getByRole('listbox', { name: 'Área' }))
-      .getAllByRole('option')
-      .map((option) => option.querySelector('span:not([class*="text-sm"])')?.textContent);
-    expect(options).toEqual(['Todas mis áreas', 'Ventas', 'Operaciones']);
+    expect(await areaOptionTexts(user)).toEqual(['Todas mis áreas', 'Ventas', 'Operaciones']);
 
     await user.click(screen.getByRole('option', { name: /^Ventas/ }));
     expect(mocks.push).toHaveBeenCalledWith(
       `/ejecuciones/mi-actividad?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`,
     );
+  });
+});
+
+describe('session', () => {
+  test('never asks for the activity without a session', () => {
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    render(<MyActivityPanel />);
+
+    expect(mocks.getMyMetrics).not.toHaveBeenCalled();
+  });
+
+  test('switching the test user asks again, for the new one', async () => {
+    const { rerender } = render(<MyActivityPanel />);
+    await loaded();
+
+    mocks.useSession.mockReturnValue({
+      user: { id: '0b000000-0000-4000-8000-000000000099', name: 'Otra Empleada', role: 'EMPLOYEE' },
+      status: 'ready',
+    });
+    rerender(<MyActivityPanel />);
+
+    await waitFor(() => expect(mocks.getMyMetrics).toHaveBeenCalledTimes(2));
   });
 });
 
@@ -167,6 +192,37 @@ describe('errors', () => {
       '/ejecuciones/mi-actividad?desde=2026-10-01&hasta=2026-10-27',
     );
     expect(screen.queryByText('No se encontró el área')).not.toBeInTheDocument();
+  });
+
+  test.each([
+    [400, 'Revisá las fechas y el área elegidas.'],
+    [401, 'Tu sesión no es válida. Volvé a ingresar.'],
+    [403, 'Solo los empleados pueden ver su actividad.'],
+  ])('%i says why, without retry', async (status, message) => {
+    mocks.getMyMetrics.mockRejectedValue(new ApiError(status));
+    render(<MyActivityPanel />);
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
+  });
+
+  test('with an error, neither the list to resume nor the table', async () => {
+    mocks.getMyMetrics.mockRejectedValue(new ApiError(503));
+    render(<MyActivityPanel />);
+
+    await screen.findByRole('button', { name: 'Reintentar' });
+    expect(screen.queryByRole('region', { name: 'Para retomar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  test('without the area names the selector still offers "Todas mis áreas"', async () => {
+    const user = userEvent.setup();
+    mocks.listAreas.mockRejectedValue(new Error('down'));
+    render(<MyActivityPanel />);
+
+    await loaded();
+    await waitFor(() => expect(mocks.listAreas).toHaveBeenCalled());
+    expect(await areaOptionTexts(user)).toEqual(['Todas mis áreas']);
   });
 
   test('the service down can be retried', async () => {

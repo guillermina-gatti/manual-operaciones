@@ -2,7 +2,11 @@ import { describe, expect, test, vi } from 'vitest';
 import { ApiError } from '@/lib/api';
 import type { ApiClient } from '@/lib/api';
 import { MESSAGES } from '@/lib/api/error-messages';
-import { MY_METRICS_MESSAGES, describeMyMetricsError } from '@/lib/api/metrics-errors';
+import {
+  METRICS_MESSAGES,
+  MY_METRICS_MESSAGES,
+  describeMyMetricsError,
+} from '@/lib/api/metrics-errors';
 import { createMyMetricsApi } from '@/lib/api/my-metrics';
 import { VENTAS, myMetricsResponse } from '../../support/my-metrics';
 
@@ -38,6 +42,7 @@ describe('getMyMetrics', () => {
 describe('describeMyMetricsError', () => {
   test.each([
     [0, MESSAGES.noConnection, true],
+    [400, METRICS_MESSAGES.checkFilters, false],
     [401, MESSAGES.sessionInvalid, false],
     [403, MY_METRICS_MESSAGES.noPermission, false],
     [503, MESSAGES.unavailable, true],
