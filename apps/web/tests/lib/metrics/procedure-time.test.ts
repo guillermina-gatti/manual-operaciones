@@ -79,6 +79,14 @@ describe('procedureTimeRows', () => {
     ]);
   });
 
+  test('keeps the fastest and the slowest execution of each procedure', () => {
+    const row = procedureTimeRows([
+      { ...procedure('a', 60000), minCompletionMs: 30000, maxCompletionMs: 120000 },
+    ])[0];
+
+    expect([row.minCompletionMs, row.maxCompletionMs]).toEqual([30000, 120000]);
+  });
+
   test('the slowest step is the one of the latest version', () => {
     const latest = procedure('a', 60000, [step(1, 'Nuevo', 30000)]);
     latest.versions.push({ ...latest.versions[0], steps: [step(1, 'Viejo', 90000)] });
