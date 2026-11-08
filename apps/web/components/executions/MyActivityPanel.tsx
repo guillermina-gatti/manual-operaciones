@@ -1,7 +1,8 @@
 'use client';
 
-// The employee's own activity: the filters of /metricas (area and period, in the address) and
-// the summary of their executions. Only their data: the API takes the user from the session.
+// The employee's own activity: the filters of /metricas (area and period, in the address), the
+// summary of their executions and the ones they can resume (of any date). Only their data: the
+// API takes the user from the session.
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useId } from 'react';
@@ -27,6 +28,7 @@ import type { PanelFilters } from '@/lib/metrics/filters';
 import { formatCount, formatPercent } from '@/lib/metrics/format';
 import { outcomeShares } from '@/lib/metrics/summary';
 import { useSession } from '@/lib/session';
+import { ResumeList } from './ResumeList';
 
 // A white card for the states of a section (error, empty), with the design's padding.
 const STATE_CARD = `${CARD} px-6 sm:px-8`;
@@ -64,6 +66,12 @@ export function MyActivityPanel() {
         path={MY_ACTIVITY_PATH}
       />
       <SummarySection filters={filters} state={metrics} />
+      {metrics.status === 'success' && (
+        <ResumeList
+          items={metrics.data.resume}
+          staleAfterHours={metrics.data.staleAfterHours}
+        />
+      )}
     </div>
   );
 }

@@ -5,8 +5,10 @@ import { MyActivityPanel } from '@/components/executions/MyActivityPanel';
 import { ApiError } from '@/lib/api';
 import type { SessionState } from '@/lib/session';
 import {
+  CURRENT_EXECUTION,
   EMPTY_MY_METRICS,
   OPERACIONES,
+  STALE_EXECUTION,
   VENTAS,
   myMetricsResponse,
 } from '../../support/my-metrics';
@@ -174,5 +176,71 @@ describe('errors', () => {
 
     expect(await screen.findByText('Completadas')).toBeInTheDocument();
     expect(mocks.getMyMetrics).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('to resume', () => {
+  const resume = () => screen.getByRole('region', { name: 'Para retomar' });
+  const card = (name: string) =>
+    within(resume()).getByRole('heading', { name }).closest('li')!;
+
+  test('each execution in progress with its step, its last move and a link to resume it', async () => {
+    render(<MyActivityPanel />);
+    await screen.findByText('Completadas');
+
+    const cierre = card('Cierre de caja');
+    expect(cierre).toHaveTextContent('Paso 2 de 4:Comparar con el reporte');
+    expect(cierre).toHaveTextContent('Último avance:27 oct 2026, 10:05');
+    expect(within(cierre).getByText('En curso')).toBeInTheDocument();
+    expect(within(cierre).getByRole('link', { name: 'Retomar →' })).toHaveAttribute(
+      'href',
+      `/ejecuciones/${CURRENT_EXECUTION}`,
+    );
+  });
+
+  test('the most recently moved first', async () => {
+    render(<MyActivityPanel />);
+    await screen.findByText('Completadas');
+
+    const names = within(resume())
+      .getAllByRole('heading', { level: 3 })
+      .map((heading) => heading.textContent);
+    expect(names).toEqual(['Cierre de caja', 'Recepción de mercadería']);
+  });
+
+  test('one without progress for more than 24 h says so with its text', async () => {
+    render(<MyActivityPanel />);
+    await screen.findByText('Completadas');
+
+    const recepcion = card('Recepción de mercadería');
+    expect(within(recepcion).getByText('Sin avanzar hace más de 24 h')).toBeInTheDocument();
+    expect(within(recepcion).getByRole('link', { name: 'Retomar →' })).toHaveAttribute(
+      'href',
+      `/ejecuciones/${STALE_EXECUTION}`,
+    );
+  });
+
+  test('the link says which procedure it opens', async () => {
+    render(<MyActivityPanel />);
+    await screen.findByText('Completadas');
+
+    const links = within(resume()).getAllByRole('link', { name: 'Retomar →' });
+    expect(links[0]).toHaveAccessibleDescription('Cierre de caja');
+    expect(links[1]).toHaveAccessibleDescription('Recepción de mercadería');
+  });
+
+  test('shown even when the period has no executions: it does not depend on the dates', async () => {
+    mocks.getMyMetrics.mockResolvedValue({ ...EMPTY_MY_METRICS, resume: myMetricsResponse().resume });
+    render(<MyActivityPanel />);
+
+    await screen.findByText('No empezaste procedimientos en este período.');
+    expect(within(resume()).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  test('without executions to resume, says so', async () => {
+    mocks.getMyMetrics.mockResolvedValue(EMPTY_MY_METRICS);
+    render(<MyActivityPanel />);
+
+    expect(await screen.findByText('No tenés ejecuciones sin terminar.')).toBeInTheDocument();
   });
 });
