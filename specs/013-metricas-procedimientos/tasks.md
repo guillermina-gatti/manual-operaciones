@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Mayra Limachi (pareja B)
-- **Estado (08/11/2026):** T01 a T07 **hechas** y en `develop`. T08 a T10 quedan pendientes: dependen de otras parejas o de campos nuevos de la API. Esta lista se armó después del código, con los commits reales.
+- **Estado (08/11/2026):** T01 a T07 **hechas** y en `develop`; T09 **hecha** en `feat/B-metrics-followups`, sin pushear. T08 y T10 quedan pendientes: dependen de otras parejas. Esta lista se armó después del código, con los commits reales.
 
 ## Convenciones
 
@@ -72,8 +72,10 @@
 ### T09 · Campos nuevos de la API
 
 - **Qué hace:** sumar a la respuesta, sin cambiar los campos actuales, la duración mínima y máxima de las ejecuciones completadas, el tiempo medio exacto del total, el tiempo por versión y el resumen por área para el selector; en la web, las columnas "Más rápida" y "Más lenta", la fila "Procedimiento completo" con varias versiones y el tiempo medio del resumen.
-- **Depende de:** —
-- **Estado:** pendiente.
+- **Commits (API):** `ac1a591 feat(api): add the fastest and slowest completed execution per procedure`, `65fa614 feat(api): add the exact average completion time to the metrics totals`, `b1ff936 feat(api): add the average completion time per procedure version`, `ae9c03b feat(api): add the procedures per area summary for the area selector`
+- **Commits (web):** `400256e`, `0496697`, `306aad6`, `28b84a4`, `b023820`
+- **Verificación:** lint, typecheck y unitarios en cada commit. Los e2e nuevos de `test/executions/metrics.e2e-spec.ts` están escritos y los corre Mayra.
+- **Estado:** hecha.
 
 ### T10 · Nombre real del procedimiento
 

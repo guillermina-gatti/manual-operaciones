@@ -26,7 +26,6 @@ Esta feature agrega `GET /api/metrics/procedures`, que agrupa las ejecuciones de
 ## 4. Fuera de alcance
 
 - Los procedimientos sin ejecuciones en el período: no aparecen (decisión P3).
-- La duración mínima y máxima de las ejecuciones, el tiempo medio exacto del total, el tiempo por versión y el resumen por área para el selector: no están en la respuesta. La web no muestra esas columnas.
 - El nombre del procedimiento: la API solo da su id; la web usa los nombres de ejemplo hasta que el catálogo entregue el título.
 - Las métricas del asistente: dependen de `GET /api/metrics/assistant` de la pareja C, que no existe al 08/11/2026.
 - Ver quién hizo cada ejecución: la respuesta nunca incluye usuarios.
@@ -45,11 +44,16 @@ El ADMIN o SUPERVISOR entra a `/metricas`. Sin filtros en la dirección, la web 
 - **R4 · Áreas actuales.** Un procedimiento entra en el alcance por las áreas que tiene hoy, en todas sus versiones. Si se mueve de área, sus ejecuciones pasadas se ven desde el área nueva.
 - **R5 · Período.** `from` y `to` son opcionales, con formato `YYYY-MM-DD` y un día que exista; si no, 400. Si `from` es posterior a `to`: 400 "La fecha de inicio no puede ser posterior a la fecha de fin". El período se aplica al inicio de la ejecución, con los dos días inclusive y en hora de Argentina (`APP_TIMEZONE`). Sin `from` o sin `to`, ese lado queda sin límite; sin ninguno, cuentan todas. "Este mes" es solo el valor por defecto de la web.
 - **R6 · Abandonada.** Una ejecución en curso cuyo paso actual empezó hace más de 24 h (`staleAfterHours`, fijo para el MVP) cuenta como abandonada en ese paso. No se cierra: el empleado la puede retomar.
-- **R7 · Conteos.** Por procedimiento, por versión y en el total: `started = completed + inProgress + abandoned`, los tres excluyentes. `completionRate = completed / started`, o `null` sin ejecuciones. `avgCompletionMs` del procedimiento: el promedio de duración de sus ejecuciones completadas, o `null`.
+- **R7 · Conteos.** Por procedimiento, por versión y en el total: `started = completed + inProgress + abandoned`, los tres excluyentes. `completionRate = completed / started`, o `null` sin ejecuciones.
+- **R7b · Tiempos.** Todos en milisegundos y `null` sin ejecuciones completadas:
+  - `avgCompletionMs` del procedimiento: el promedio de sus ejecuciones completadas, de todas sus versiones; `minCompletionMs` y `maxCompletionMs`: la más rápida y la más lenta.
+  - `avgCompletionMs` de cada versión: el promedio de las completadas de esa versión.
+  - `totals.avgCompletionMs`: el promedio de todas las completadas a la vista, calculado con las sumas exactas (no con los promedios redondeados de cada procedimiento).
 - **R8 · Pasos.** Cada versión trae todos sus pasos en orden, con `reached` (ejecuciones que lo empezaron), `finished`, `avgDurationMs` (o `null` si nadie lo terminó), `abandoned` y `abandonRate = abandoned / reached` (o `null`). Un paso que nadie alcanzó tiene ceros y `null`.
 - **R9 · Versiones.** Cada procedimiento trae sus versiones con ejecuciones en el período, la de la ejecución más reciente primero. Una versión que el catálogo no conoce se deja afuera y se registra en el log.
 - **R10 · Orden.** Los procedimientos más empezados primero; a igual cantidad, por id.
-- **R11 · Respuesta.** 200 con `filters` (los recibidos, `null` en los que no vinieron), `staleAfterHours`, `areaIds` (las áreas por las que puede filtrar: `null` para el ADMIN), `totals` y `procedures`. Nunca incluye usuarios.
+- **R11 · Respuesta.** 200 con `filters` (los recibidos, `null` en los que no vinieron), `staleAfterHours`, `areaIds` (las áreas por las que puede filtrar: `null` para el ADMIN), `totals`, `procedures` y `areaSummary`. Nunca incluye usuarios.
+- **R11b · Resumen por área.** `areaSummary` dice cuántos procedimientos con ejecuciones en el período tiene cada área, para el selector del panel. Ignora `areaId`: se calcula sobre todo lo que el usuario puede ver. Solo trae áreas con procedimientos, ordenadas por id. Un procedimiento con dos áreas cuenta en cada una. Para un SUPERVISOR, solo sus áreas activas, aunque un procedimiento compartido tenga otras.
 - **R12 · Errores.** Con el formato de NestJS. Si la base, el catálogo o los directorios no responden: 503 "No se pudo completar la consulta de las métricas. Intentá de nuevo más tarde.". Cualquier otro error: 500, con la causa solo en el log.
 
 ## 7. Estados
@@ -88,6 +92,7 @@ Aprobadas por Mayra el 27/10/2026, salvo que diga otra fecha.
 | P7 · ¿Acceso en la web? | Un guard local para ADMIN y SUPERVISOR; no se toca `RequireRole` | Sección 9 |
 | P8 · ¿Métricas de la pareja C? | Un puerto en la web (`lib/metrics/`); documentos conectado el 04/11/2026; asistente con un adaptador vacío hasta que exista su endpoint | Sección 4 |
 | P9 · ¿Período por defecto? | En la web, el mes en curso hasta hoy; en la API, sin límites | R5 |
+| P10 · ¿Campos nuevos? | Más rápida, más lenta, tiempo por versión, tiempo medio exacto del total y resumen por área; solo se agregan campos, sin cambiar los existentes (08/11/2026) | R7b, R11b |
 
 ## 11. Criterios de aceptación
 
