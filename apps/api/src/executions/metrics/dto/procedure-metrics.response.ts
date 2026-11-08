@@ -74,6 +74,15 @@ export class VersionMetricsResponse extends ExecutionCountsResponse {
   procedureVersionId: string;
 
   @ApiProperty({
+    example: 540000,
+    type: Number,
+    nullable: true,
+    description:
+      'Average duration of the completed executions of this version in milliseconds',
+  })
+  avgCompletionMs: number | null;
+
+  @ApiProperty({
     type: [StepMetricsResponse],
     description: 'Every step of the version, in order',
   })
@@ -202,6 +211,7 @@ const toVersion = (version: VersionMetrics): VersionMetricsResponse => ({
   completed: version.completed,
   inProgress: version.inProgress,
   abandoned: version.abandoned,
+  avgCompletionMs: version.avgCompletionMs,
   steps: version.steps.map(toStep),
 });
 

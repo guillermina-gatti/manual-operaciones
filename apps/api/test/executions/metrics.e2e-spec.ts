@@ -36,7 +36,11 @@ interface ProcedureBody {
   avgCompletionMs: number | null;
   minCompletionMs: number | null;
   maxCompletionMs: number | null;
-  versions: { procedureVersionId: string; steps: StepBody[] }[];
+  versions: {
+    procedureVersionId: string;
+    avgCompletionMs: number | null;
+    steps: StepBody[];
+  }[];
 }
 
 interface MetricsBody {
@@ -291,6 +295,11 @@ describe('Procedures metrics (integration)', () => {
     expect(cierre.versions.map((v) => v.steps.length)).toEqual([
       CIERRE_V2.steps.length,
       CIERRE_V1.steps.length,
+    ]);
+    // Each version with the time of its own completed execution.
+    expect(cierre.versions.map((v) => v.avgCompletionMs)).toEqual([
+      CIERRE_V2.steps.length * STEP_MS,
+      CIERRE_V1.steps.length * STEP_MS,
     ]);
   });
 

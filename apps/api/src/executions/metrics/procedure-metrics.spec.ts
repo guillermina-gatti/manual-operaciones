@@ -258,6 +258,40 @@ describe('buildProcedureMetrics', () => {
     expect(cierre.avgCompletionMs).toBe(150);
   });
 
+  it('each version has the average of its own completed executions', () => {
+    const [cierre] = buildProcedureMetrics(
+      [
+        executions(V1, {
+          started: 1,
+          completed: 1,
+          completedDurationMs: 100,
+          lastStartedAt: new Date('2026-10-01T10:00:00.000Z'),
+        }),
+        executions(V2, {
+          started: 4,
+          completed: 3,
+          completedDurationMs: 500,
+          lastStartedAt: new Date('2026-10-20T10:00:00.000Z'),
+        }),
+      ],
+      [],
+      ALL,
+    );
+
+    // V2 first: it has the latest execution. 500 / 3 rounded.
+    expect(cierre.versions.map((v) => v.avgCompletionMs)).toEqual([167, 100]);
+  });
+
+  it('a version without completed executions has no average', () => {
+    const [cierre] = buildProcedureMetrics(
+      [executions(V2, { started: 1, inProgress: 1 })],
+      [],
+      ALL,
+    );
+
+    expect(cierre.versions[0].avgCompletionMs).toBeNull();
+  });
+
   it('the abandoned executions are the abandoned steps, so the counts add up', () => {
     const [cierre] = buildProcedureMetrics(
       [executions(V2, { started: 3, inProgress: 3 })],

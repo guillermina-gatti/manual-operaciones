@@ -47,6 +47,8 @@ export interface ExecutionCounts {
 
 export interface VersionMetrics extends ExecutionCounts {
   procedureVersionId: string;
+  // The average of the completed executions of this version; null without any.
+  avgCompletionMs: number | null;
   steps: StepMetrics[];
 }
 
@@ -182,6 +184,10 @@ function toVersionMetrics(
     completed: aggregate.completed,
     inProgress: aggregate.inProgress - abandoned,
     abandoned,
+    avgCompletionMs: average(
+      aggregate.completedDurationMs,
+      aggregate.completed,
+    ),
     steps,
   };
 }

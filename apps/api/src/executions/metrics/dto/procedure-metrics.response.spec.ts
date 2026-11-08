@@ -34,6 +34,7 @@ const VIEW: ProcedureMetricsView = {
         {
           procedureVersionId: '1b000000-0000-4000-8000-000000000002',
           ...counts,
+          avgCompletionMs: 540000,
           steps: [step],
         },
       ],
