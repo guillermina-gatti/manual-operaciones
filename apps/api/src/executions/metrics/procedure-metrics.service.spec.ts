@@ -23,6 +23,7 @@ import {
   ExecutionMetricsRepository,
   MetricsAggregates,
   MetricsWindow,
+  MyAggregates,
 } from './execution-metrics.repository';
 import type { ExecutionAggregate } from './procedure-metrics';
 import { ProcedureMetricsService } from './procedure-metrics.service';
@@ -49,6 +50,13 @@ class FakeMetricsRepository extends ExecutionMetricsRepository {
     return this.failure
       ? Promise.reject(this.failure)
       : Promise.resolve(this.aggregates);
+  }
+
+  // The procedures metrics never read one user's executions.
+  mine(): Promise<MyAggregates> {
+    return Promise.reject(
+      new Error('the procedures metrics must not call mine'),
+    );
   }
 }
 

@@ -31,6 +31,8 @@ interface MetricsFiltersFormProps {
   areas: AreaOption[];
   // "YYYY-MM-DD" in the company: the quick periods end today.
   today: string;
+  // The page the filters go to; /metricas unless another page reuses them.
+  path?: string;
 }
 
 export const FILTER_MESSAGES = {
@@ -38,7 +40,12 @@ export const FILTER_MESSAGES = {
   fromAfterTo: 'La fecha "Desde" no puede ser posterior a "Hasta".',
 } as const;
 
-export function MetricsFiltersForm({ filters, areas, today }: MetricsFiltersFormProps) {
+export function MetricsFiltersForm({
+  filters,
+  areas,
+  today,
+  path = METRICS_PATH,
+}: MetricsFiltersFormProps) {
   const router = useRouter();
   const id = useId();
   const [areaId, setAreaId] = useState(filters.areaId ?? '');
@@ -53,7 +60,7 @@ export function MetricsFiltersForm({ filters, areas, today }: MetricsFiltersForm
     if (!from || !to) return setError(FILTER_MESSAGES.missingDates);
     // "YYYY-MM-DD" sorts like the dates it represents.
     if (from > to) return setError(FILTER_MESSAGES.fromAfterTo);
-    router.push(metricsHref({ areaId: areaId || null, from, to }));
+    router.push(metricsHref({ areaId: areaId || null, from, to }, path));
   }
 
   // An area applies at once, with the dates loaded in the form. If they are not valid (an
@@ -67,13 +74,13 @@ export function MetricsFiltersForm({ filters, areas, today }: MetricsFiltersForm
         areaId: value || null,
         from: datesOk ? from : filters.from,
         to: datesOk ? to : filters.to,
-      }),
+      }, path),
     );
   }
 
   // A quick period applies at once, with the area chosen in the selector.
   function applyQuickPeriod(period: QuickPeriod) {
-    router.push(metricsHref({ areaId: areaId || null, ...quickPeriodRange(period, today) }));
+    router.push(metricsHref({ areaId: areaId || null, ...quickPeriodRange(period, today) }, path));
   }
 
   // Changing a date by hand leaves no quick period marked.
@@ -184,7 +191,7 @@ export function MetricsFiltersForm({ filters, areas, today }: MetricsFiltersForm
         </p>
         <button
           type="button"
-          onClick={() => router.push(METRICS_PATH)}
+          onClick={() => router.push(path)}
           className={`${TEXT_LINK} min-h-11 self-start underline sm:self-auto`}
         >
           Limpiar filtros

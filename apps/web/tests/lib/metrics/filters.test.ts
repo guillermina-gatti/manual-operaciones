@@ -118,6 +118,12 @@ describe('metricsHref', () => {
       '/metricas?desde=2026-10-01&hasta=2026-10-27',
     );
   });
+
+  test('another page can reuse the same filters', () => {
+    expect(
+      metricsHref({ areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' }, '/ejecuciones/mi-actividad'),
+    ).toBe(`/ejecuciones/mi-actividad?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`);
+  });
 });
 
 describe('areaOptions', () => {
