@@ -40,6 +40,7 @@ const VIEW: ProcedureMetricsView = {
       ],
     },
   ],
+  areaSummary: [{ areaId: VENTAS, procedures: 1 }],
 };
 
 describe('toProceduresMetricsResponse', () => {

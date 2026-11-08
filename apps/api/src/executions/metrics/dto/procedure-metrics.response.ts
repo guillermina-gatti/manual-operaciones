@@ -154,6 +154,17 @@ export class MetricsTotalsResponse extends ExecutionCountsResponse {
   avgCompletionMs: number | null;
 }
 
+export class AreaSummaryResponse {
+  @ApiProperty({ format: 'uuid' })
+  areaId: string;
+
+  @ApiProperty({
+    example: 3,
+    description: 'Procedures of this area with executions in the period',
+  })
+  procedures: number;
+}
+
 export class MetricsFiltersResponse {
   @ApiProperty({ format: 'uuid', type: String, nullable: true })
   areaId: string | null;
@@ -192,6 +203,13 @@ export class ProceduresMetricsResponse {
       'Procedures with executions in the period, the most started first',
   })
   procedures: ProcedureMetricsResponse[];
+
+  @ApiProperty({
+    type: [AreaSummaryResponse],
+    description:
+      'For the area selector: procedures with executions in the period per area the viewer may filter by, whatever areaId says. Only areas with procedures, by id',
+  })
+  areaSummary: AreaSummaryResponse[];
 }
 
 const toStep = (step: StepMetrics): StepMetricsResponse => ({
@@ -252,4 +270,8 @@ export const toProceduresMetricsResponse = (
   areaIds: view.areaIds && [...view.areaIds],
   totals: toTotals(view.totals),
   procedures: view.procedures.map(toProcedure),
+  areaSummary: view.areaSummary.map((area) => ({
+    areaId: area.areaId,
+    procedures: area.procedures,
+  })),
 });

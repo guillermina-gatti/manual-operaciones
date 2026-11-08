@@ -70,6 +70,13 @@ export interface MetricsTotals extends ExecutionCounts {
   avgCompletionMs: number | null;
 }
 
+// How many procedures with executions in the period an area has: the hints of the
+// area selector of the panel.
+export interface AreaSummary {
+  areaId: string;
+  procedures: number;
+}
+
 // null instead of dividing by zero.
 export const ratio = (part: number, whole: number): number | null =>
   whole === 0 ? null : part / whole;
@@ -151,6 +158,25 @@ export function totalsOf(
     completionRate: ratio(counts.completed, counts.started),
     avgCompletionMs: average(completedDurationMs, counts.completed),
   };
+}
+
+// One entry per area with procedures, in the order of their ids. A procedure with two
+// areas counts in each, as the panel shows it in both. With `filterable` (a supervisor),
+// only those areas: the other areas of a shared procedure are not theirs to see.
+export function areaSummaryOf(
+  procedures: ProcedureMetrics[],
+  filterable: string[] | null,
+): AreaSummary[] {
+  const counts = new Map<string, number>();
+  for (const procedure of procedures) {
+    for (const areaId of new Set(procedure.areaIds)) {
+      if (filterable && !filterable.includes(areaId)) continue;
+      counts.set(areaId, (counts.get(areaId) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([areaId, count]) => ({ areaId, procedures: count }));
 }
 
 function toVersionMetrics(

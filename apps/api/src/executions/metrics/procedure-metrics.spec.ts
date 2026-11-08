@@ -2,6 +2,7 @@ import type { CatalogProcedureVersion } from '../ports/procedures-catalog';
 import {
   ExecutionAggregate,
   StepAggregate,
+  areaSummaryOf,
   buildProcedureMetrics,
   ratio,
   totalsOf,
@@ -386,5 +387,31 @@ describe('totalsOf', () => {
       completionRate: null,
       avgCompletionMs: null,
     });
+  });
+});
+
+describe('areaSummaryOf', () => {
+  const shared = version(CIERRE, CIERRE_V2, [VENTAS, OPERACIONES], 2, 3);
+  const procedures = buildProcedureMetrics(
+    [executions(shared, { started: 1 }), executions(R1, { started: 1 })],
+    [],
+    new Map([shared, R1].map((v) => [v.versionId, v])),
+  );
+
+  it('ADMIN: every area with its procedures; a shared one counts in each', () => {
+    expect(areaSummaryOf(procedures, null)).toEqual([
+      { areaId: VENTAS, procedures: 1 },
+      { areaId: OPERACIONES, procedures: 2 },
+    ]);
+  });
+
+  it('a supervisor: only their areas, never the other area of a shared procedure', () => {
+    expect(areaSummaryOf(procedures, [VENTAS])).toEqual([
+      { areaId: VENTAS, procedures: 1 },
+    ]);
+  });
+
+  it('without procedures, no areas', () => {
+    expect(areaSummaryOf([], null)).toEqual([]);
   });
 });

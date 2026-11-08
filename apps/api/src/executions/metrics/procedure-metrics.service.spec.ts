@@ -180,6 +180,35 @@ describe('ProcedureMetricsService', () => {
       expect(view.totals.started).toBe(1);
     });
 
+    it('the area summary ignores the area filter and asks the catalog once per version', async () => {
+      const findVersion = jest.spyOn(catalog, 'findVersion');
+
+      const view = await build().procedures(ADMIN, {
+        areaId: AREA_IDS.operaciones,
+      });
+
+      expect(view.areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+        { areaId: AREA_IDS.operaciones, procedures: 1 },
+      ]);
+      expect(findVersion).toHaveBeenCalledTimes(2);
+    });
+
+    it('a supervisor of Ventas: the summary has only Ventas, also for a shared procedure', async () => {
+      catalog.assignAreas(PROCEDURE_IDS.cierreDeCaja, [
+        AREA_IDS.ventas,
+        AREA_IDS.operaciones,
+      ]);
+
+      const view = await build().procedures(SUPERVISOR_VENTAS, {
+        areaId: AREA_IDS.ventas,
+      });
+
+      expect(view.areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+      ]);
+    });
+
     it('a supervisor of Ventas does not see the procedures of Operaciones', async () => {
       const view = await build().procedures(SUPERVISOR_VENTAS, {});
 

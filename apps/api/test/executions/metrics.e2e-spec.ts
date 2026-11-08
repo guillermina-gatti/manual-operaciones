@@ -54,6 +54,7 @@ interface MetricsBody {
     avgCompletionMs: number | null;
   };
   procedures: ProcedureBody[];
+  areaSummary: { areaId: string; procedures: number }[];
 }
 
 const CIERRE = PROCEDURE_IDS.cierreDeCaja;
@@ -229,6 +230,11 @@ describe('Procedures metrics (integration)', () => {
 
       expect(procedureIds(body as MetricsBody)).toEqual([RECEPCION]);
       expect((body as MetricsBody).totals.started).toBe(1);
+      // The summary for the selector still counts every area.
+      expect((body as MetricsBody).areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+        { areaId: AREA_IDS.operaciones, procedures: 1 },
+      ]);
     });
 
     it('a supervisor of Ventas sees only Ventas, with or without the area in the filter', async () => {
@@ -240,6 +246,9 @@ describe('Procedures metrics (integration)', () => {
 
       expect(procedureIds(all.body as MetricsBody)).toEqual([CIERRE]);
       expect((all.body as MetricsBody).areaIds).toEqual([AREA_IDS.ventas]);
+      expect((all.body as MetricsBody).areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+      ]);
       expect(filtered.body).toEqual(
         expect.objectContaining({
           procedures: (all.body as MetricsBody).procedures,

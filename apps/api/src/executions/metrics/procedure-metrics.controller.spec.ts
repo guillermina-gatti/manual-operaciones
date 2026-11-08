@@ -33,6 +33,7 @@ const view: ProcedureMetricsView = {
     avgCompletionMs: null,
   },
   procedures: [],
+  areaSummary: [],
 };
 
 describe('ProcedureMetricsController (HTTP, service mocked)', () => {
