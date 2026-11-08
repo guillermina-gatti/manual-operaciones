@@ -361,11 +361,24 @@ describe('with data', () => {
     expect(tile('Completadas')).toHaveTextContent('360,0% del total');
     expect(tile('En curso')).toHaveTextContent('120,0% del total');
     expect(tile('Abandonadas')).toHaveTextContent('120,0% del total');
-    // (12 min × 2 + 5 min × 1) ÷ 3 completed.
+    // totals.avgCompletionMs: (12 min × 2 + 5 min × 1) ÷ 3 completed.
     expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 spor ejecución completada');
     expect(
       screen.getByText(/^En curso: con avance en las últimas 24 h\. Abandonadas: sin avanzar/),
     ).toBeInTheDocument();
+  });
+
+  test('the average time of the summary is the one of the totals, not one computed here', async () => {
+    const answer = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...answer,
+      totals: { ...answer.totals, avgCompletionMs: 123000 },
+    });
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const tile = screen.getAllByText('Tiempo medio', { selector: 'dt' })[0].parentElement!;
+    expect(tile).toHaveTextContent('2 min 3 s');
   });
 
   test('the distribution bar tells the counts as text, and the legend only counts', async () => {
