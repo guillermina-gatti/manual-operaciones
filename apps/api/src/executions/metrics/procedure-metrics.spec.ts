@@ -309,31 +309,48 @@ describe('buildProcedureMetrics', () => {
 
 describe('totalsOf', () => {
   it('adds up every procedure', () => {
-    const procedures = buildProcedureMetrics(
-      [
-        executions(V2, { started: 2, completed: 1, inProgress: 1 }),
-        executions(R1, { started: 2, completed: 2 }),
-      ],
-      [],
-      ALL,
-    );
+    const aggregates = [
+      executions(V2, {
+        started: 2,
+        completed: 1,
+        inProgress: 1,
+        completedDurationMs: 100,
+      }),
+      executions(R1, { started: 2, completed: 2, completedDurationMs: 201 }),
+    ];
+    const procedures = buildProcedureMetrics(aggregates, [], ALL);
 
-    expect(totalsOf(procedures)).toEqual({
+    expect(totalsOf(procedures, aggregates)).toEqual({
       started: 4,
       completed: 3,
       inProgress: 1,
       abandoned: 0,
       completionRate: 0.75,
+      // (100 + 201) / 3, from the exact sums: the procedures' averages are 100 and 101
+      // (rounded from 100,5), which would give 100,67.
+      avgCompletionMs: 100,
     });
   });
 
-  it('with no executions the completion rate is null', () => {
-    expect(totalsOf([])).toEqual({
+  it('the average leaves out the versions not in view', () => {
+    const aggregates = [
+      executions(V2, { started: 1, completed: 1, completedDurationMs: 600 }),
+      executions(R1, { started: 1, completed: 1, completedDurationMs: 60_000 }),
+    ];
+    const onlyV2 = new Map([[V2.versionId, V2]]);
+    const procedures = buildProcedureMetrics(aggregates, [], onlyV2);
+
+    expect(totalsOf(procedures, aggregates).avgCompletionMs).toBe(600);
+  });
+
+  it('with no executions the completion rate and the average are null', () => {
+    expect(totalsOf([], [])).toEqual({
       started: 0,
       completed: 0,
       inProgress: 0,
       abandoned: 0,
       completionRate: null,
+      avgCompletionMs: null,
     });
   });
 });

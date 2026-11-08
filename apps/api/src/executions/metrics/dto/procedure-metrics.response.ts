@@ -134,6 +134,15 @@ export class ProcedureMetricsResponse extends ExecutionCountsResponse {
 export class MetricsTotalsResponse extends ExecutionCountsResponse {
   @ApiProperty({ ...RATE, description: 'completed / started' })
   completionRate: number | null;
+
+  @ApiProperty({
+    example: 540000,
+    type: Number,
+    nullable: true,
+    description:
+      'Average duration of every completed execution in view, in milliseconds',
+  })
+  avgCompletionMs: number | null;
 }
 
 export class MetricsFiltersResponse {
@@ -218,6 +227,7 @@ const toTotals = (totals: MetricsTotals): MetricsTotalsResponse => ({
   inProgress: totals.inProgress,
   abandoned: totals.abandoned,
   completionRate: totals.completionRate,
+  avgCompletionMs: totals.avgCompletionMs,
 });
 
 export const toProceduresMetricsResponse = (

@@ -47,6 +47,7 @@ interface MetricsBody {
     inProgress: number;
     abandoned: number;
     completionRate: number | null;
+    avgCompletionMs: number | null;
   };
   procedures: ProcedureBody[];
 }
@@ -175,6 +176,10 @@ describe('Procedures metrics (integration)', () => {
         inProgress: 1,
         abandoned: 0,
         completionRate: 2 / 3,
+        // One completed Cierre de caja and one completed Recepción.
+        avgCompletionMs: Math.round(
+          ((CIERRE_V2.steps.length + RECEPCION_V1.steps.length) * STEP_MS) / 2,
+        ),
       });
 
       const cierre = procedure(result, CIERRE)!;
@@ -329,6 +334,7 @@ describe('Procedures metrics (integration)', () => {
           inProgress: 0,
           abandoned: 0,
           completionRate: null,
+          avgCompletionMs: null,
         },
         procedures: [],
       });

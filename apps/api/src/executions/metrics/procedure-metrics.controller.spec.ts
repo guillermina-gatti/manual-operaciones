@@ -30,6 +30,7 @@ const view: ProcedureMetricsView = {
     inProgress: 0,
     abandoned: 0,
     completionRate: null,
+    avgCompletionMs: null,
   },
   procedures: [],
 };

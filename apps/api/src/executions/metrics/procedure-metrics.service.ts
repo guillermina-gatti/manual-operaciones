@@ -113,7 +113,7 @@ export class ProcedureMetricsService {
       filters: { areaId: areaId ?? null, from: from ?? null, to: to ?? null },
       staleAfterHours: STALE_AFTER_HOURS,
       areaIds: filterableAreaIds(user.role, viewerAreaIds),
-      totals: totalsOf(procedures),
+      totals: totalsOf(procedures, aggregates.executions),
       procedures,
     };
   }

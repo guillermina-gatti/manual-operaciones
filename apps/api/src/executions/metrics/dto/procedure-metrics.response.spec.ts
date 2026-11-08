@@ -20,7 +20,7 @@ const VIEW: ProcedureMetricsView = {
   filters: { areaId: VENTAS, from: '2026-10-01', to: null },
   staleAfterHours: 24,
   areaIds: [VENTAS],
-  totals: { ...counts, completionRate: 0.5 },
+  totals: { ...counts, completionRate: 0.5, avgCompletionMs: 540000 },
   procedures: [
     {
       procedureId: '1a000000-0000-4000-8000-000000000001',

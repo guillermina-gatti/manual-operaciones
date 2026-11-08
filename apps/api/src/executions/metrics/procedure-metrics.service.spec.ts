@@ -167,6 +167,7 @@ describe('ProcedureMetricsService', () => {
         inProgress: 0,
         abandoned: 0,
         completionRate: 1,
+        avgCompletionMs: 600_000,
       });
     });
 

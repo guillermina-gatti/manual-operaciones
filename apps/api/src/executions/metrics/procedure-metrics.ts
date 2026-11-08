@@ -63,6 +63,9 @@ export interface ProcedureMetrics extends ExecutionCounts {
 
 export interface MetricsTotals extends ExecutionCounts {
   completionRate: number | null;
+  // The average of every completed execution in view, from the exact sums: not the
+  // average of the procedures' rounded averages. null without completed ones.
+  avgCompletionMs: number | null;
 }
 
 // null instead of dividing by zero.
@@ -127,9 +130,25 @@ export function buildProcedureMetrics(
   );
 }
 
-export function totalsOf(procedures: ProcedureMetrics[]): MetricsTotals {
+// `executions` are the aggregates read from the database; only those of the versions in
+// `procedures` (the ones the viewer can see) count for the average.
+export function totalsOf(
+  procedures: ProcedureMetrics[],
+  executions: ExecutionAggregate[],
+): MetricsTotals {
   const counts = sumCounts(procedures);
-  return { ...counts, completionRate: ratio(counts.completed, counts.started) };
+  const inView = new Set(
+    procedures.flatMap((p) => p.versions.map((v) => v.procedureVersionId)),
+  );
+  const completedDurationMs = sum(
+    executions.filter((e) => inView.has(e.procedureVersionId)),
+    (e) => e.completedDurationMs,
+  );
+  return {
+    ...counts,
+    completionRate: ratio(counts.completed, counts.started),
+    avgCompletionMs: average(completedDurationMs, counts.completed),
+  };
 }
 
 function toVersionMetrics(
