@@ -27,8 +27,18 @@ const procedure = (
   abandoned: avgCompletionMs === null ? 2 : 0,
   completionRate: avgCompletionMs === null ? 0 : 1,
   avgCompletionMs,
+  minCompletionMs: avgCompletionMs,
+  maxCompletionMs: avgCompletionMs,
   versions: [
-    { procedureVersionId: `${id}-v`, started: 2, completed: 2, inProgress: 0, abandoned: 0, steps },
+    {
+      procedureVersionId: `${id}-v`,
+      started: 2,
+      completed: 2,
+      inProgress: 0,
+      abandoned: 0,
+      avgCompletionMs,
+      steps,
+    },
   ],
 });
 
