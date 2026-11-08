@@ -80,6 +80,8 @@ const executions = (
   completed,
   inProgress: 0,
   completedDurationMs: completed * 600_000,
+  minCompletionMs: 600_000,
+  maxCompletionMs: 600_000,
   lastStartedAt: new Date('2026-11-03T13:00:00.000Z'),
 });
 

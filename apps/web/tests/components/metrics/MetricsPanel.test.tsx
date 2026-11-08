@@ -169,7 +169,9 @@ describe('loading and filters', () => {
   test('SUPERVISOR chooses only among their areas', async () => {
     const user = userEvent.setup();
     mocks.useSession.mockReturnValue(SERGIO);
-    mocks.getProcedureMetrics.mockResolvedValue(metricsResponse({ areaIds: [VENTAS] }));
+    mocks.getProcedureMetrics.mockResolvedValue(
+      metricsResponse({ areaIds: [VENTAS], areaSummary: [{ areaId: VENTAS, procedures: 1 }] }),
+    );
     render(<MetricsPanel />);
 
     await procedureCard();
@@ -186,6 +188,7 @@ describe('loading and filters', () => {
     mocks.getProcedureMetrics.mockResolvedValue({
       ...metrics,
       procedures: metrics.procedures.filter((procedure) => procedure.areaIds.includes(VENTAS)),
+      areaSummary: [{ areaId: VENTAS, procedures: 1 }],
     });
     render(<MetricsPanel />);
 
@@ -194,14 +197,27 @@ describe('loading and filters', () => {
     expect(await optionTexts(user)).toContain('Operaciones · Sin datos');
   });
 
-  test('with an area chosen, the other areas show no counts', async () => {
+  test('with an area chosen, every area keeps its count from the summary', async () => {
     const user = userEvent.setup();
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    const metrics = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...metrics,
+      procedures: metrics.procedures.filter((procedure) => procedure.areaIds.includes(VENTAS)),
+      areaSummary: [
+        { areaId: VENTAS, procedures: 1 },
+        { areaId: OPERACIONES, procedures: 3 },
+      ],
+    });
     render(<MetricsPanel />);
 
     await procedureCard();
     await waitFor(() => expect(areaButton()).toHaveTextContent('Ventas'));
-    expect(await optionTexts(user)).toEqual(['Todas las áreas · 2 áreas', 'Ventas', 'Operaciones']);
+    expect(await optionTexts(user)).toEqual([
+      'Todas las áreas · 2 áreas',
+      'Ventas · 1 procedimiento',
+      'Operaciones · 3 procedimientos',
+    ]);
   });
 
   test('choosing an area applies it at once, with the loaded dates', async () => {
@@ -361,11 +377,24 @@ describe('with data', () => {
     expect(tile('Completadas')).toHaveTextContent('360,0% del total');
     expect(tile('En curso')).toHaveTextContent('120,0% del total');
     expect(tile('Abandonadas')).toHaveTextContent('120,0% del total');
-    // (12 min × 2 + 5 min × 1) ÷ 3 completed.
+    // totals.avgCompletionMs: (12 min × 2 + 5 min × 1) ÷ 3 completed.
     expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 spor ejecución completada');
     expect(
       screen.getByText(/^En curso: con avance en las últimas 24 h\. Abandonadas: sin avanzar/),
     ).toBeInTheDocument();
+  });
+
+  test('the average time of the summary is the one of the totals, not one computed here', async () => {
+    const answer = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...answer,
+      totals: { ...answer.totals, avgCompletionMs: 123000 },
+    });
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const tile = screen.getAllByText('Tiempo medio', { selector: 'dt' })[0].parentElement!;
+    expect(tile).toHaveTextContent('2 min 3 s');
   });
 
   test('the distribution bar tells the counts as text, and the legend only counts', async () => {
@@ -485,11 +514,11 @@ describe('with data', () => {
     expect(cells).toEqual(['3', '0', '0', '0', '—']);
   });
 
-  test('"Procedimiento completo" shows the time only with a single version', async () => {
+  test('"Procedimiento completo" shows the time of each version', async () => {
     render(<MetricsPanel />);
     const card = await procedureCard();
 
-    // Cierre de caja has two versions in the period: no time per version.
+    // Cierre de caja has two versions in the period: each one with its own time.
     const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
     const complete = within(table).getByRole('row', { name: /Procedimiento completo/ });
     expect(within(complete).getByRole('rowheader')).toHaveTextContent(
@@ -500,8 +529,19 @@ describe('with data', () => {
       '3',
       '1',
       '1',
-      '—',
+      '14 min',
     ]);
+    const older = within(card).getByRole('table', {
+      name: 'Versión anterior 1 de Cierre de caja',
+      hidden: true,
+    });
+    const olderComplete = within(older).getByRole('row', {
+      name: /Procedimiento completo/,
+      hidden: true,
+    });
+    expect(within(olderComplete).getAllByRole('cell', { hidden: true }).at(-1)).toHaveTextContent(
+      '10 min',
+    );
 
     // Recepción de mercadería has one: its average time.
     const recepcion = screen.getByRole('table', { name: 'Pasos de Recepción de mercadería' });

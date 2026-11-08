@@ -145,19 +145,6 @@ export function areaOptions(
   return [{ value: '', label: isAdmin ? 'Todas las áreas' : 'Todas mis áreas' }, ...options];
 }
 
-// How many procedures with executions each area has. Only meaningful for an answer without an
-// area filter: with one, the other areas are not in it. A procedure with two areas counts in each
-// of them, as it is shown in both.
-export function proceduresPerArea(procedures: { areaIds: string[] }[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const procedure of procedures) {
-    for (const areaId of new Set(procedure.areaIds)) {
-      counts.set(areaId, (counts.get(areaId) ?? 0) + 1);
-    }
-  }
-  return counts;
-}
-
 const plural = (count: number, one: string, many: string) =>
   count === 1 ? `1 ${one}` : `${count} ${many}`;
 

@@ -7,7 +7,7 @@ import { CARD } from '@/components/documents/design';
 import type { ProceduresMetricsResponse } from '@/lib/api';
 import { formatDuration } from '@/lib/executions/format';
 import { formatCount, formatPercent } from '@/lib/metrics/format';
-import { averageCompletionMs, outcomeShares } from '@/lib/metrics/summary';
+import { outcomeShares } from '@/lib/metrics/summary';
 import { FeatherBar, FeatherLegend } from './FeatherBar';
 import { MetricTiles } from './MetricTiles';
 import type { MetricTile } from './MetricTiles';
@@ -51,7 +51,8 @@ export function MetricsSummary({ metrics }: { metrics: ProceduresMetricsResponse
     {
       label: 'Tiempo medio',
       icon: <TimerIcon />,
-      value: formatDuration(averageCompletionMs(metrics.procedures)),
+      // The exact average of the API, from the sums of every completed execution.
+      value: formatDuration(totals.avgCompletionMs),
       hint: 'por ejecución completada',
       small: true,
     },

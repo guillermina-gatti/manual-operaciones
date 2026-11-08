@@ -10,6 +10,9 @@ export interface ExecutionAggregate {
   completed: number;
   inProgress: number; // every IN_PROGRESS, abandoned ones included
   completedDurationMs: number; // sum of finishedAt - startedAt of the completed ones
+  // The shortest and the longest completed execution; null without completed ones.
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
   lastStartedAt: Date;
 }
 
@@ -44,6 +47,8 @@ export interface ExecutionCounts {
 
 export interface VersionMetrics extends ExecutionCounts {
   procedureVersionId: string;
+  // The average of the completed executions of this version; null without any.
+  avgCompletionMs: number | null;
   steps: StepMetrics[];
 }
 
@@ -52,11 +57,24 @@ export interface ProcedureMetrics extends ExecutionCounts {
   areaIds: string[];
   completionRate: number | null; // completed / started
   avgCompletionMs: number | null;
+  // The fastest and the slowest completed execution, of any version; null without any.
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
   versions: VersionMetrics[]; // the one with the latest execution first
 }
 
 export interface MetricsTotals extends ExecutionCounts {
   completionRate: number | null;
+  // The average of every completed execution in view, from the exact sums: not the
+  // average of the procedures' rounded averages. null without completed ones.
+  avgCompletionMs: number | null;
+}
+
+// How many procedures with executions in the period an area has: the hints of the
+// area selector of the panel.
+export interface AreaSummary {
+  areaId: string;
+  procedures: number;
 }
 
 // null instead of dividing by zero.
@@ -100,6 +118,16 @@ export function buildProcedureMetrics(
         ...counts,
         completionRate: ratio(counts.completed, counts.started),
         avgCompletionMs: average(completedDurationMs, counts.completed),
+        minCompletionMs: extreme(
+          aggregates,
+          (a) => a.minCompletionMs,
+          Math.min,
+        ),
+        maxCompletionMs: extreme(
+          aggregates,
+          (a) => a.maxCompletionMs,
+          Math.max,
+        ),
         versions: versionMetrics,
       };
     },
@@ -111,9 +139,44 @@ export function buildProcedureMetrics(
   );
 }
 
-export function totalsOf(procedures: ProcedureMetrics[]): MetricsTotals {
+// `executions` are the aggregates read from the database; only those of the versions in
+// `procedures` (the ones the viewer can see) count for the average.
+export function totalsOf(
+  procedures: ProcedureMetrics[],
+  executions: ExecutionAggregate[],
+): MetricsTotals {
   const counts = sumCounts(procedures);
-  return { ...counts, completionRate: ratio(counts.completed, counts.started) };
+  const inView = new Set(
+    procedures.flatMap((p) => p.versions.map((v) => v.procedureVersionId)),
+  );
+  const completedDurationMs = sum(
+    executions.filter((e) => inView.has(e.procedureVersionId)),
+    (e) => e.completedDurationMs,
+  );
+  return {
+    ...counts,
+    completionRate: ratio(counts.completed, counts.started),
+    avgCompletionMs: average(completedDurationMs, counts.completed),
+  };
+}
+
+// One entry per area with procedures, in the order of their ids. A procedure with two
+// areas counts in each, as the panel shows it in both. With `filterable` (a supervisor),
+// only those areas: the other areas of a shared procedure are not theirs to see.
+export function areaSummaryOf(
+  procedures: ProcedureMetrics[],
+  filterable: string[] | null,
+): AreaSummary[] {
+  const counts = new Map<string, number>();
+  for (const procedure of procedures) {
+    for (const areaId of new Set(procedure.areaIds)) {
+      if (filterable && !filterable.includes(areaId)) continue;
+      counts.set(areaId, (counts.get(areaId) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([areaId, count]) => ({ areaId, procedures: count }));
 }
 
 function toVersionMetrics(
@@ -147,6 +210,10 @@ function toVersionMetrics(
     completed: aggregate.completed,
     inProgress: aggregate.inProgress - abandoned,
     abandoned,
+    avgCompletionMs: average(
+      aggregate.completedDurationMs,
+      aggregate.completed,
+    ),
     steps,
   };
 }
@@ -158,6 +225,17 @@ function sumCounts(items: ExecutionCounts[]): ExecutionCounts {
     inProgress: sum(items, (i) => i.inProgress),
     abandoned: sum(items, (i) => i.abandoned),
   };
+}
+
+// The smallest or largest of the values that are not null, rounded to the millisecond;
+// null when every one is null.
+function extreme<T>(
+  items: T[],
+  value: (item: T) => number | null,
+  pick: (...values: number[]) => number,
+): number | null {
+  const values = items.map(value).filter((v): v is number => v !== null);
+  return values.length === 0 ? null : Math.round(pick(...values));
 }
 
 function sum<T>(items: T[], value: (item: T) => number): number {

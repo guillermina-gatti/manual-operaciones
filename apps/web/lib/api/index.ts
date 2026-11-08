@@ -71,6 +71,7 @@ export type { ExecutionErrorContext, ExecutionErrorDescription } from './executi
 export const { getProcedureMetrics } = createMetricsApi(apiClient);
 export { metricsQuery } from './metrics';
 export type {
+  AreaSummaryResponse,
   ExecutionCounts,
   MetricsFilters,
   ProcedureMetricsResponse,

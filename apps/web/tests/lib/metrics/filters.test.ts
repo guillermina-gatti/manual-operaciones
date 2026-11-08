@@ -8,7 +8,6 @@ import {
   matchingQuickPeriod,
   metricsHref,
   parseMetricsFilters,
-  proceduresPerArea,
   quickPeriodRange,
   todayInCompany,
   withAreaHints,
@@ -173,19 +172,6 @@ describe('areaOptions', () => {
       value: unknown,
       label: 'Área elegida',
     });
-  });
-});
-
-describe('proceduresPerArea', () => {
-  test('counts each procedure once per area, also when it has two', () => {
-    const counts = proceduresPerArea([
-      { areaIds: [VENTAS] },
-      { areaIds: [VENTAS, OPERACIONES] },
-      { areaIds: [VENTAS, VENTAS] },
-    ]);
-
-    expect(counts.get(VENTAS)).toBe(3);
-    expect(counts.get(OPERACIONES)).toBe(1);
   });
 });
 

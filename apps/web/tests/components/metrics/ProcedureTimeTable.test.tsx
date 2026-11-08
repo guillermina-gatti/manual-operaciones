@@ -21,7 +21,7 @@ const rowTexts = () =>
     );
 
 describe('ProcedureTimeTable', () => {
-  test('one row per procedure, slowest first, with its areas and slowest step', () => {
+  test('one row per procedure, slowest first, with its areas, extremes and slowest step', () => {
     render(
       <ProcedureTimeTable procedures={metricsResponse().procedures} areaNames={AREA_NAMES} />,
     );
@@ -33,12 +33,19 @@ describe('ProcedureTimeTable', () => {
       ),
     ).toBeInTheDocument();
     expect(rowTexts()).toEqual([
-      ['Cierre de cajaVentas', '2', '12 min', 'Comparar con el reporte · 3 min 20 s'],
-      ['Recepción de mercaderíaOperaciones (inactiva)', '1', '5 min', 'Revisar el remito · 3 min'],
+      ['Cierre de cajaVentas', '2', '12 min', '10 min', '14 min', 'Comparar con el reporte · 3 min 20 s'],
+      [
+        'Recepción de mercaderíaOperaciones (inactiva)',
+        '1',
+        '5 min',
+        '5 min',
+        '5 min',
+        'Revisar el remito · 3 min',
+      ],
     ]);
   });
 
-  test('the columns of the design that wait for the API are not shown', () => {
+  test('the columns, with the fastest and the slowest execution', () => {
     render(
       <ProcedureTimeTable procedures={metricsResponse().procedures} areaNames={AREA_NAMES} />,
     );
@@ -50,6 +57,8 @@ describe('ProcedureTimeTable', () => {
       'Procedimiento',
       'Completadas',
       'Tiempo medio total',
+      'Más rápida',
+      'Más lenta',
       'Paso que más tarda',
     ]);
   });
@@ -68,7 +77,7 @@ describe('ProcedureTimeTable', () => {
     expect(document.body.textContent).not.toContain(CIERRE_DE_CAJA);
   });
 
-  test('without completed executions the time and the step are "—"', () => {
+  test('without completed executions the times and the step are "—"', () => {
     const [cierre] = metricsResponse().procedures;
     render(
       <ProcedureTimeTable
@@ -77,6 +86,8 @@ describe('ProcedureTimeTable', () => {
             ...cierre,
             completed: 0,
             avgCompletionMs: null,
+            minCompletionMs: null,
+            maxCompletionMs: null,
             versions: [{ ...cierre.versions[0], steps: [] }],
           },
         ]}
@@ -84,7 +95,7 @@ describe('ProcedureTimeTable', () => {
       />,
     );
 
-    expect(rowTexts()).toEqual([['Cierre de cajaVentas', '0', '—', '—']]);
+    expect(rowTexts()).toEqual([['Cierre de cajaVentas', '0', '—', '—', '—', '—']]);
   });
 
   test('without procedures says there are no executions', () => {

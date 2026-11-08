@@ -61,6 +61,8 @@ const aggregate = (
   completed: 1,
   inProgress: 0,
   completedDurationMs: 10 * MINUTE,
+  minCompletionMs: 10 * MINUTE,
+  maxCompletionMs: 10 * MINUTE,
   lastStartedAt: new Date('2026-11-01T13:00:00.000Z'),
   ...values,
 });

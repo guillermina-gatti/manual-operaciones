@@ -27,8 +27,18 @@ const procedure = (
   abandoned: avgCompletionMs === null ? 2 : 0,
   completionRate: avgCompletionMs === null ? 0 : 1,
   avgCompletionMs,
+  minCompletionMs: avgCompletionMs,
+  maxCompletionMs: avgCompletionMs,
   versions: [
-    { procedureVersionId: `${id}-v`, started: 2, completed: 2, inProgress: 0, abandoned: 0, steps },
+    {
+      procedureVersionId: `${id}-v`,
+      started: 2,
+      completed: 2,
+      inProgress: 0,
+      abandoned: 0,
+      avgCompletionMs,
+      steps,
+    },
   ],
 });
 
@@ -67,6 +77,14 @@ describe('procedureTimeRows', () => {
       ['con', 1],
       ['sin', 0],
     ]);
+  });
+
+  test('keeps the fastest and the slowest execution of each procedure', () => {
+    const row = procedureTimeRows([
+      { ...procedure('a', 60000), minCompletionMs: 30000, maxCompletionMs: 120000 },
+    ])[0];
+
+    expect([row.minCompletionMs, row.maxCompletionMs]).toEqual([30000, 120000]);
   });
 
   test('the slowest step is the one of the latest version', () => {

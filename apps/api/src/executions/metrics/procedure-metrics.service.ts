@@ -14,7 +14,11 @@ import { Clock } from '../ports/clock';
 import { ProceduresCatalog } from '../ports/procedures-catalog';
 import { activeAreaIdsOf } from '../viewer-areas';
 import { ExecutionMetricsRepository } from './execution-metrics.repository';
-import { filterableAreaIds, metricsScope } from './metrics-access.policy';
+import {
+  filterableAreaIds,
+  inScope,
+  metricsScope,
+} from './metrics-access.policy';
 import {
   DEFAULT_TIME_ZONE,
   STALE_AFTER_HOURS,
@@ -22,11 +26,13 @@ import {
   toMetricsPeriod,
 } from './metrics-period';
 import {
+  areaSummaryOf,
   buildProcedureMetrics,
   MetricsTotals,
   ProcedureMetrics,
   totalsOf,
 } from './procedure-metrics';
+import type { AreaSummary } from './procedure-metrics';
 import { findVisibleVersions } from './visible-versions';
 
 // Already validated by the DTO: from and to are "YYYY-MM-DD" days that exist.
@@ -42,6 +48,8 @@ export interface ProcedureMetricsView {
   areaIds: string[] | null; // the areas the viewer may filter by; null: any
   totals: MetricsTotals;
   procedures: ProcedureMetrics[];
+  // Procedures per area of everything the viewer may see, whatever areaId says.
+  areaSummary: AreaSummary[];
 }
 
 // The same answer for an area that is not the supervisor's and one that does not
@@ -97,24 +105,42 @@ export class ProcedureMetricsService {
       ...toMetricsPeriod(from, to, this.timeZone),
       staleBefore: staleBefore(this.clock.now()),
     });
-    const versions = await findVisibleVersions(
+    // The versions of everything the viewer may see, without the area filter: the area
+    // summary needs them. The ones of the requested scope come out of them, so the
+    // catalog is asked once per version.
+    const viewerScope = metricsScope(user.role, viewerAreaIds) ?? scope;
+    const viewerVersions = await findVisibleVersions(
       this.catalog,
       this.logger,
       aggregates.executions.map((e) => e.procedureVersionId),
-      scope,
+      viewerScope,
+    );
+    const versions = new Map(
+      [...viewerVersions].filter(([, version]) =>
+        inScope(scope, version.areaIds),
+      ),
     );
     const procedures = buildProcedureMetrics(
       aggregates.executions,
       aggregates.steps,
       versions,
     );
+    const filterable = filterableAreaIds(user.role, viewerAreaIds);
 
     return {
       filters: { areaId: areaId ?? null, from: from ?? null, to: to ?? null },
       staleAfterHours: STALE_AFTER_HOURS,
-      areaIds: filterableAreaIds(user.role, viewerAreaIds),
-      totals: totalsOf(procedures),
+      areaIds: filterable,
+      totals: totalsOf(procedures, aggregates.executions),
       procedures,
+      areaSummary: areaSummaryOf(
+        buildProcedureMetrics(
+          aggregates.executions,
+          aggregates.steps,
+          viewerVersions,
+        ),
+        filterable,
+      ),
     };
   }
 }

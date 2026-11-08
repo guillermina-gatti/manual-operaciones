@@ -5,8 +5,9 @@ import type { ExecutionCounts, ProcedureMetricsResponse } from '@/lib/api';
 
 // The average time of a completed execution, weighted by how many each procedure completed:
 // Σ (average of the procedure × its completed) ÷ Σ completed. null without completed ones.
-// TODO(HU38): use totals.avgCompletionMs once the API gives it; avgCompletionMs comes rounded
-// to the millisecond, so this can differ from the exact average by less than a millisecond.
+// For a group of procedures the API does not sum up (the area cards); the general summary uses
+// totals.avgCompletionMs. The procedures' averages come rounded to the millisecond, so this can
+// differ from the exact average by less than a millisecond.
 export function averageCompletionMs(
   procedures: Pick<ProcedureMetricsResponse, 'completed' | 'avgCompletionMs'>[],
 ): number | null {

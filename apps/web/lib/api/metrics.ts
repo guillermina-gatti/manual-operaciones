@@ -27,6 +27,8 @@ export interface ExecutionCounts {
 
 export interface VersionMetricsResponse extends ExecutionCounts {
   procedureVersionId: string;
+  // Average of the completed executions of this version; null without any.
+  avgCompletionMs: number | null;
   steps: StepMetricsResponse[];
 }
 
@@ -35,6 +37,9 @@ export interface ProcedureMetricsResponse extends ExecutionCounts {
   areaIds: string[];
   completionRate: number | null;
   avgCompletionMs: number | null;
+  // The fastest and the slowest completed execution, of any version; null without any.
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
   // The version with the latest execution first.
   versions: VersionMetricsResponse[];
 }
@@ -44,8 +49,17 @@ export interface ProceduresMetricsResponse {
   staleAfterHours: number;
   // The areas the user may filter by; null means any (ADMIN).
   areaIds: string[] | null;
-  totals: ExecutionCounts & { completionRate: number | null };
+  // avgCompletionMs: the exact average of every completed execution in view; null without any.
+  totals: ExecutionCounts & { completionRate: number | null; avgCompletionMs: number | null };
   procedures: ProcedureMetricsResponse[];
+  // For the area selector: procedures with executions in the period per area the user may
+  // filter by, whatever the area filter says. Only areas with procedures.
+  areaSummary: AreaSummaryResponse[];
+}
+
+export interface AreaSummaryResponse {
+  areaId: string;
+  procedures: number;
 }
 
 // Days as "YYYY-MM-DD", both inclusive. A missing value is not sent.

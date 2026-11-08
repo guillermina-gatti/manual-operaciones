@@ -12,15 +12,12 @@ import { TimerIcon } from './icons';
 interface StepMetricsTableProps {
   version: VersionMetricsResponse;
   caption: string;
-  // The average time of the whole procedure. Only known for a single version: the API gives it
-  // per procedure, so with more versions in the period the last row says "—".
-  completeMs: number | null;
 }
 
 const HEAD = 'px-4 py-3 text-left text-sm font-semibold text-texto-suave';
 const NUMBER = 'px-4 py-3 text-right tabular-nums';
 
-export function StepMetricsTable({ version, caption, completeMs }: StepMetricsTableProps) {
+export function StepMetricsTable({ version, caption }: StepMetricsTableProps) {
   const rows = stepRows(version.steps);
 
   return (
@@ -97,7 +94,8 @@ export function StepMetricsTable({ version, caption, completeMs }: StepMetricsTa
             <td className={NUMBER}>{formatCount(version.started)}</td>
             <td className={NUMBER}>{formatCount(version.completed)}</td>
             <td className={NUMBER}>{formatCount(version.abandoned)}</td>
-            <td className="px-4 py-3 text-bosque">{formatDuration(completeMs)}</td>
+            {/* The average of the completed executions of this version, from start to end. */}
+            <td className="px-4 py-3 text-bosque">{formatDuration(version.avgCompletionMs)}</td>
           </tr>
         </tfoot>
       </table>

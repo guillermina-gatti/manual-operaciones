@@ -52,6 +52,10 @@ export function executionAggregatesSql(
            count(*) FILTER (WHERE e.status = 'IN_PROGRESS')::int AS "inProgress",
            coalesce(sum(${duration}) FILTER (WHERE e.status = 'COMPLETED'), 0)::float8
              AS "completedDurationMs",
+           (min(${duration}) FILTER (WHERE e.status = 'COMPLETED'))::float8
+             AS "minCompletionMs",
+           (max(${duration}) FILTER (WHERE e.status = 'COMPLETED'))::float8
+             AS "maxCompletionMs",
            max(e.started_at) AS "lastStartedAt"
     FROM executions e
     WHERE ${periodCondition(window, userId)}
@@ -185,6 +189,8 @@ const toExecutionAggregate = (row: ExecutionAggregate): ExecutionAggregate => ({
   completed: row.completed,
   inProgress: row.inProgress,
   completedDurationMs: row.completedDurationMs,
+  minCompletionMs: row.minCompletionMs,
+  maxCompletionMs: row.maxCompletionMs,
   lastStartedAt: row.lastStartedAt,
 });
 

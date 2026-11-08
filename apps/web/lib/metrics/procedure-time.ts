@@ -12,6 +12,9 @@ export interface ProcedureTimeRow {
   areaIds: string[];
   completed: number;
   avgCompletionMs: number | null;
+  // The fastest and the slowest completed execution; null without any.
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
   // Bar length: this average over the slowest one of the list, from 0 to 1.
   barRatio: number;
   slowestStep: SlowestStep | null;
@@ -40,6 +43,8 @@ export function procedureTimeRows(procedures: ProcedureMetricsResponse[]): Proce
       areaIds: procedure.areaIds,
       completed: procedure.completed,
       avgCompletionMs: procedure.avgCompletionMs,
+      minCompletionMs: procedure.minCompletionMs,
+      maxCompletionMs: procedure.maxCompletionMs,
       barRatio:
         procedure.avgCompletionMs === null || longest === 0
           ? 0
