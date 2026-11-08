@@ -41,3 +41,17 @@ export function describeMetricsError(error: unknown): MetricsErrorDescription {
 function describe(message: string, canRetry: boolean): MetricsErrorDescription {
   return { message, canRetry, areaNotFound: false };
 }
+
+// The employee's own activity (/api/metrics/me): the same cases, with its own texts.
+export const MY_METRICS_MESSAGES = {
+  noPermission: 'Solo los empleados pueden ver su actividad.',
+  areaNotFound: 'No encontramos esa área entre las tuyas.',
+} as const;
+
+export function describeMyMetricsError(error: unknown): MetricsErrorDescription {
+  const description = describeMetricsError(error);
+  if (!(error instanceof ApiError)) return description;
+  if (error.status === 403) return { ...description, message: MY_METRICS_MESSAGES.noPermission };
+  if (error.status === 404) return { ...description, message: MY_METRICS_MESSAGES.areaNotFound };
+  return description;
+}
