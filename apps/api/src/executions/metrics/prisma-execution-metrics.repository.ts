@@ -137,6 +137,12 @@ export class PrismaExecutionMetricsRepository extends ExecutionMetricsRepository
   // The same snapshot for the three queries, like aggregate: an execution completed in
   // between cannot be counted in progress and also be missing from the resume list.
   async mine(userId: string, window: MetricsWindow): Promise<MyAggregates> {
+    // Without a user the SQL would leave out its filter and add up everyone's executions.
+    if (!userId.trim()) {
+      throw new Error(
+        'Personal metrics need the id of the user of the session',
+      );
+    }
     try {
       const [executions, steps, inProgress] = await this.prisma.$transaction(
         [

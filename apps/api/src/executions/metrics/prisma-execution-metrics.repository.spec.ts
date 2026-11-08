@@ -276,6 +276,16 @@ describe('PrismaExecutionMetricsRepository', () => {
       });
     });
 
+    it.each(['', '   '])(
+      'without a user id (%p) fails without reading anyone else',
+      async (userId) => {
+        await expect(repository.mine(userId, WINDOW)).rejects.toThrow(
+          'Personal metrics need the id of the user of the session',
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      },
+    );
+
     it('translates a database that is down', async () => {
       prisma.$transaction.mockRejectedValue(knownError('P1001'));
 
