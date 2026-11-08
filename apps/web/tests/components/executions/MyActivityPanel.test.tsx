@@ -163,6 +163,23 @@ describe('summary', () => {
     expect(screen.queryByText(/abandonad/i)).not.toBeInTheDocument();
   });
 
+  test('nor in what a screen reader says: labels, descriptions, titles', async () => {
+    const { container } = render(<MyActivityPanel />);
+    await loaded();
+    // The three sections are on screen, with an execution without progress for 24 h.
+    screen.getByRole('region', { name: 'Para retomar' });
+    screen.getByRole('table', { name: 'Tus procedimientos recientes' });
+
+    const said = [...container.querySelectorAll('*')].flatMap((element) =>
+      ['aria-label', 'aria-description', 'aria-roledescription', 'aria-valuetext', 'title', 'alt']
+        .map((name) => element.getAttribute(name))
+        .filter((value): value is string => value !== null),
+    );
+    expect(said.join(' ')).not.toMatch(/abandon/i);
+    // Text hidden from sight but read aloud (sr-only) is in textContent too.
+    expect(container.textContent).not.toMatch(/abandon/i);
+  });
+
   test('a period without executions says so', async () => {
     mocks.getMyMetrics.mockResolvedValue(EMPTY_MY_METRICS);
     render(<MyActivityPanel />);
