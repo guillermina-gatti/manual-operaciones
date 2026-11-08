@@ -1,6 +1,6 @@
 'use client';
 
-// Step-by-step execution of a procedure (HU12, spec 005). The API decides who can see it: for
+// Step-by-step execution of a procedure (HU12, spec 012). The API decides who can see it: for
 // another employee, a missing execution or a lost area it answers the same 404.
 import { useParams } from 'next/navigation';
 import { useLayoutEffect, useRef, useState } from 'react';
