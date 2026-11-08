@@ -72,6 +72,8 @@ afterEach(() => {
 });
 
 const summary = () => screen.getByRole('region', { name: 'Tu resumen' });
+// The answer arrived: the tiles are there.
+const loaded = () => screen.findByText('Empezadas', { selector: 'dt' });
 // A tile: its label (dt) and, in the same box, its number and its line.
 const tile = (label: string) =>
   within(summary()).getByText(label, { selector: 'dt' }).parentElement!;
@@ -80,7 +82,7 @@ describe('filters', () => {
   test('without filters in the address asks for this month of all their areas', async () => {
     render(<MyActivityPanel />);
 
-    await screen.findByText('Completadas');
+    await loaded();
     expect(mocks.getMyMetrics).toHaveBeenCalledWith(
       { areaId: null, from: '2026-10-01', to: '2026-10-27' },
       expect.any(AbortSignal),
@@ -92,7 +94,7 @@ describe('filters', () => {
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-10&hasta=2026-10-20`);
     render(<MyActivityPanel />);
 
-    await screen.findByText('Completadas');
+    await loaded();
     expect(mocks.getMyMetrics).toHaveBeenCalledWith(
       { areaId: VENTAS, from: '2026-10-10', to: '2026-10-20' },
       expect.any(AbortSignal),
@@ -102,7 +104,7 @@ describe('filters', () => {
   test('the area selector offers only their areas, and applying stays on this page', async () => {
     const user = userEvent.setup();
     render(<MyActivityPanel />);
-    await screen.findByText('Completadas');
+    await loaded();
 
     await user.click(screen.getByRole('button', { name: /^Área/ }));
     const options = within(screen.getByRole('listbox', { name: 'Área' }))
@@ -120,7 +122,7 @@ describe('filters', () => {
 describe('summary', () => {
   test('their counts and their average time', async () => {
     render(<MyActivityPanel />);
-    await screen.findByText('Completadas');
+    await loaded();
 
     expect(tile('Empezadas')).toHaveTextContent('5');
     expect(tile('Completadas')).toHaveTextContent('60,0% del total');
@@ -130,7 +132,7 @@ describe('summary', () => {
 
   test('says "Sin avanzar hace más de 24 h", never "abandonadas"', async () => {
     render(<MyActivityPanel />);
-    await screen.findByText('Completadas');
+    await loaded();
 
     expect(tile('Sin avanzar hace más de 24 h')).toHaveTextContent('20,0% del total');
     expect(screen.queryByText(/abandonad/i)).not.toBeInTheDocument();
@@ -174,7 +176,7 @@ describe('errors', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Reintentar' }));
 
-    expect(await screen.findByText('Completadas')).toBeInTheDocument();
+    expect(await loaded()).toBeInTheDocument();
     expect(mocks.getMyMetrics).toHaveBeenCalledTimes(2);
   });
 });
@@ -186,7 +188,7 @@ describe('to resume', () => {
 
   test('each execution in progress with its step, its last move and a link to resume it', async () => {
     render(<MyActivityPanel />);
-    await screen.findByText('Completadas');
+    await loaded();
 
     const cierre = card('Cierre de caja');
     expect(cierre).toHaveTextContent('Paso 2 de 4:Comparar con el reporte');
@@ -200,7 +202,7 @@ describe('to resume', () => {
 
   test('the most recently moved first', async () => {
     render(<MyActivityPanel />);
-    await screen.findByText('Completadas');
+    await loaded();
 
     const names = within(resume())
       .getAllByRole('heading', { level: 3 })
@@ -210,7 +212,7 @@ describe('to resume', () => {
 
   test('one without progress for more than 24 h says so with its text', async () => {
     render(<MyActivityPanel />);
-    await screen.findByText('Completadas');
+    await loaded();
 
     const recepcion = card('Recepción de mercadería');
     expect(within(recepcion).getByText('Sin avanzar hace más de 24 h')).toBeInTheDocument();
@@ -222,7 +224,7 @@ describe('to resume', () => {
 
   test('the link says which procedure it opens', async () => {
     render(<MyActivityPanel />);
-    await screen.findByText('Completadas');
+    await loaded();
 
     const links = within(resume()).getAllByRole('link', { name: 'Retomar →' });
     expect(links[0]).toHaveAccessibleDescription('Cierre de caja');
@@ -242,5 +244,70 @@ describe('to resume', () => {
     render(<MyActivityPanel />);
 
     expect(await screen.findByText('No tenés ejecuciones sin terminar.')).toBeInTheDocument();
+  });
+});
+
+describe('recent procedures', () => {
+  const table = () => screen.getByRole('table', { name: 'Tus procedimientos recientes' });
+  const rowOf = (name: string) =>
+    within(table()).getByRole('rowheader', { name: new RegExp(`^${name}`) }).closest('tr')!;
+  const cells = (name: string) =>
+    within(rowOf(name))
+      .getAllByRole('cell')
+      .map((cell) => cell.textContent);
+
+  test('the most recently started first, with its areas', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const names = within(table())
+      .getAllByRole('rowheader')
+      .map((header) => header.textContent);
+    expect(names).toEqual(['Cierre de cajaVentas', 'Recepción de mercaderíaOperaciones']);
+  });
+
+  test('their counts, their average time, their slowest step and the last start', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(cells('Cierre de caja')).toEqual([
+      '4',
+      '3',
+      '0',
+      '10 min',
+      'Paso 2: Comparar con el reporte · 4 min',
+      '27 oct 2026, 09:50',
+    ]);
+  });
+
+  test('without completed ones or finished steps, a dash', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(cells('Recepción de mercadería')).toEqual([
+      '1',
+      '0',
+      '1',
+      '—',
+      '—',
+      '25 oct 2026, 11:00',
+    ]);
+  });
+
+  test('the column says "Sin avanzar hace más de 24 h", never "abandonadas"', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(
+      within(table()).getByRole('columnheader', { name: 'Sin avanzar hace más de 24 h' }),
+    ).toBeInTheDocument();
+  });
+
+  test('without procedures in the period, no table', async () => {
+    mocks.getMyMetrics.mockResolvedValue(EMPTY_MY_METRICS);
+    render(<MyActivityPanel />);
+
+    await screen.findByText('No empezaste procedimientos en este período.');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

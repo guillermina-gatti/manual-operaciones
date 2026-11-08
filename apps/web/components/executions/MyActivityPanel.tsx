@@ -1,8 +1,8 @@
 'use client';
 
 // The employee's own activity: the filters of /metricas (area and period, in the address), the
-// summary of their executions and the ones they can resume (of any date). Only their data: the
-// API takes the user from the session.
+// summary of their executions, the ones they can resume (of any date) and their procedures. Only
+// their data: the API takes the user from the session.
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useId } from 'react';
@@ -15,6 +15,7 @@ import { ScreenState } from '@/components/ui/ScreenState';
 import { describeMyMetricsError, getMyMetrics, metricsQuery, useApiResource } from '@/lib/api';
 import type { ApiResource, MyMetricsResponse } from '@/lib/api';
 import { areasDirectory } from '@/lib/directory';
+import { displayAreaName } from '@/lib/directory/areas-directory';
 import { formatDuration } from '@/lib/executions/format';
 import { MY_ACTIVITY_PATH, staleLabel } from '@/lib/executions/my-activity';
 import {
@@ -28,6 +29,7 @@ import type { PanelFilters } from '@/lib/metrics/filters';
 import { formatCount, formatPercent } from '@/lib/metrics/format';
 import { outcomeShares } from '@/lib/metrics/summary';
 import { useSession } from '@/lib/session';
+import { RecentProceduresTable } from './RecentProceduresTable';
 import { ResumeList } from './ResumeList';
 
 // A white card for the states of a section (error, empty), with the design's padding.
@@ -70,6 +72,13 @@ export function MyActivityPanel() {
         <ResumeList
           items={metrics.data.resume}
           staleAfterHours={metrics.data.staleAfterHours}
+        />
+      )}
+      {metrics.status === 'success' && metrics.data.procedures.length > 0 && (
+        <RecentProceduresTable
+          procedures={metrics.data.procedures}
+          staleAfterHours={metrics.data.staleAfterHours}
+          areaNames={new Map(areaList.map((area) => [area.id, displayAreaName(area)]))}
         />
       )}
     </div>
