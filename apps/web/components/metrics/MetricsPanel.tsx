@@ -17,7 +17,6 @@ import {
   areaOptions,
   metricsHref,
   parseMetricsFilters,
-  proceduresPerArea,
   todayInCompany,
   withAreaHints,
 } from '@/lib/metrics/filters';
@@ -47,11 +46,11 @@ export function MetricsPanel() {
   // Without the area names the panel still works: the selector offers only "Todas".
   const areaList = areas.status === 'success' ? areas.data : [];
   const isAdmin = user?.role === 'ADMIN';
-  // The procedures per area are only known from an answer for every area: with one area
-  // chosen, the others are not in it, and the selector shows no counts.
+  // The procedures per area come from the API's summary, which ignores the area filter: the
+  // selector shows them also with an area chosen. A procedure with two areas counts in each.
   const counts =
-    metrics.status === 'success' && filters.areaId === null
-      ? proceduresPerArea(metrics.data.procedures)
+    metrics.status === 'success'
+      ? new Map(metrics.data.areaSummary.map((area) => [area.areaId, area.procedures]))
       : null;
   const options = withAreaHints(
     areaOptions(

@@ -169,7 +169,9 @@ describe('loading and filters', () => {
   test('SUPERVISOR chooses only among their areas', async () => {
     const user = userEvent.setup();
     mocks.useSession.mockReturnValue(SERGIO);
-    mocks.getProcedureMetrics.mockResolvedValue(metricsResponse({ areaIds: [VENTAS] }));
+    mocks.getProcedureMetrics.mockResolvedValue(
+      metricsResponse({ areaIds: [VENTAS], areaSummary: [{ areaId: VENTAS, procedures: 1 }] }),
+    );
     render(<MetricsPanel />);
 
     await procedureCard();
@@ -186,6 +188,7 @@ describe('loading and filters', () => {
     mocks.getProcedureMetrics.mockResolvedValue({
       ...metrics,
       procedures: metrics.procedures.filter((procedure) => procedure.areaIds.includes(VENTAS)),
+      areaSummary: [{ areaId: VENTAS, procedures: 1 }],
     });
     render(<MetricsPanel />);
 
@@ -194,14 +197,27 @@ describe('loading and filters', () => {
     expect(await optionTexts(user)).toContain('Operaciones · Sin datos');
   });
 
-  test('with an area chosen, the other areas show no counts', async () => {
+  test('with an area chosen, every area keeps its count from the summary', async () => {
     const user = userEvent.setup();
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    const metrics = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...metrics,
+      procedures: metrics.procedures.filter((procedure) => procedure.areaIds.includes(VENTAS)),
+      areaSummary: [
+        { areaId: VENTAS, procedures: 1 },
+        { areaId: OPERACIONES, procedures: 3 },
+      ],
+    });
     render(<MetricsPanel />);
 
     await procedureCard();
     await waitFor(() => expect(areaButton()).toHaveTextContent('Ventas'));
-    expect(await optionTexts(user)).toEqual(['Todas las áreas · 2 áreas', 'Ventas', 'Operaciones']);
+    expect(await optionTexts(user)).toEqual([
+      'Todas las áreas · 2 áreas',
+      'Ventas · 1 procedimiento',
+      'Operaciones · 3 procedimientos',
+    ]);
   });
 
   test('choosing an area applies it at once, with the loaded dates', async () => {
