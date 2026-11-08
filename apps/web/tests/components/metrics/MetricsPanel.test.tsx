@@ -485,11 +485,11 @@ describe('with data', () => {
     expect(cells).toEqual(['3', '0', '0', '0', '—']);
   });
 
-  test('"Procedimiento completo" shows the time only with a single version', async () => {
+  test('"Procedimiento completo" shows the time of each version', async () => {
     render(<MetricsPanel />);
     const card = await procedureCard();
 
-    // Cierre de caja has two versions in the period: no time per version.
+    // Cierre de caja has two versions in the period: each one with its own time.
     const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
     const complete = within(table).getByRole('row', { name: /Procedimiento completo/ });
     expect(within(complete).getByRole('rowheader')).toHaveTextContent(
@@ -500,8 +500,19 @@ describe('with data', () => {
       '3',
       '1',
       '1',
-      '—',
+      '14 min',
     ]);
+    const older = within(card).getByRole('table', {
+      name: 'Versión anterior 1 de Cierre de caja',
+      hidden: true,
+    });
+    const olderComplete = within(older).getByRole('row', {
+      name: /Procedimiento completo/,
+      hidden: true,
+    });
+    expect(within(olderComplete).getAllByRole('cell', { hidden: true }).at(-1)).toHaveTextContent(
+      '10 min',
+    );
 
     // Recepción de mercadería has one: its average time.
     const recepcion = screen.getByRole('table', { name: 'Pasos de Recepción de mercadería' });
