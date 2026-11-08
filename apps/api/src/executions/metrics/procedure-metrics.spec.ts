@@ -49,6 +49,8 @@ const executions = (
   completed: 0,
   inProgress: 0,
   completedDurationMs: 0,
+  minCompletionMs: null,
+  maxCompletionMs: null,
   lastStartedAt: new Date('2026-10-27T10:00:00.000Z'),
   ...overrides,
 });
@@ -78,6 +80,45 @@ describe('ratio', () => {
 });
 
 describe('buildProcedureMetrics', () => {
+  it('the fastest and the slowest completed execution, of any version', () => {
+    const [cierre] = buildProcedureMetrics(
+      [
+        executions(V1, {
+          started: 2,
+          completed: 2,
+          minCompletionMs: 300_000,
+          maxCompletionMs: 900_000.4,
+        }),
+        executions(V2, {
+          started: 1,
+          completed: 1,
+          minCompletionMs: 240_000.6,
+          maxCompletionMs: 240_000.6,
+        }),
+      ],
+      [],
+      ALL,
+    );
+
+    expect(cierre).toMatchObject({
+      minCompletionMs: 240_001,
+      maxCompletionMs: 900_000,
+    });
+  });
+
+  it('without completed executions, no fastest nor slowest', () => {
+    const [cierre] = buildProcedureMetrics(
+      [executions(V2, { started: 1, inProgress: 1 })],
+      [],
+      ALL,
+    );
+
+    expect(cierre).toMatchObject({
+      minCompletionMs: null,
+      maxCompletionMs: null,
+    });
+  });
+
   it('counts executions and computes the averages of each step', () => {
     // 4 started: 2 completed, 1 in progress, 1 abandoned at step 2.
     const [cierre] = buildProcedureMetrics(

@@ -34,6 +34,8 @@ interface ProcedureBody {
   abandoned: number;
   completionRate: number | null;
   avgCompletionMs: number | null;
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
   versions: { procedureVersionId: string; steps: StepBody[] }[];
 }
 
@@ -183,6 +185,9 @@ describe('Procedures metrics (integration)', () => {
         abandoned: 0,
         completionRate: 0.5,
         avgCompletionMs: CIERRE_V2.steps.length * STEP_MS,
+        // A single completed execution: the fastest and the slowest.
+        minCompletionMs: CIERRE_V2.steps.length * STEP_MS,
+        maxCompletionMs: CIERRE_V2.steps.length * STEP_MS,
       });
       const [first, second, third] = cierre.versions[0].steps;
       expect(first).toMatchObject({
@@ -271,6 +276,9 @@ describe('Procedures metrics (integration)', () => {
     const cierre = procedure(body as MetricsBody, CIERRE)!;
 
     expect(cierre.started).toBe(2);
+    // The fastest and the slowest come from different versions.
+    expect(cierre.minCompletionMs).toBe(CIERRE_V1.steps.length * STEP_MS);
+    expect(cierre.maxCompletionMs).toBe(CIERRE_V2.steps.length * STEP_MS);
     expect(cierre.versions.map((v) => v.procedureVersionId)).toEqual([
       CIERRE_V2.versionId,
       CIERRE_V1.versionId,

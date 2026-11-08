@@ -10,6 +10,9 @@ export interface ExecutionAggregate {
   completed: number;
   inProgress: number; // every IN_PROGRESS, abandoned ones included
   completedDurationMs: number; // sum of finishedAt - startedAt of the completed ones
+  // The shortest and the longest completed execution; null without completed ones.
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
   lastStartedAt: Date;
 }
 
@@ -52,6 +55,9 @@ export interface ProcedureMetrics extends ExecutionCounts {
   areaIds: string[];
   completionRate: number | null; // completed / started
   avgCompletionMs: number | null;
+  // The fastest and the slowest completed execution, of any version; null without any.
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
   versions: VersionMetrics[]; // the one with the latest execution first
 }
 
@@ -100,6 +106,16 @@ export function buildProcedureMetrics(
         ...counts,
         completionRate: ratio(counts.completed, counts.started),
         avgCompletionMs: average(completedDurationMs, counts.completed),
+        minCompletionMs: extreme(
+          aggregates,
+          (a) => a.minCompletionMs,
+          Math.min,
+        ),
+        maxCompletionMs: extreme(
+          aggregates,
+          (a) => a.maxCompletionMs,
+          Math.max,
+        ),
         versions: versionMetrics,
       };
     },
@@ -158,6 +174,17 @@ function sumCounts(items: ExecutionCounts[]): ExecutionCounts {
     inProgress: sum(items, (i) => i.inProgress),
     abandoned: sum(items, (i) => i.abandoned),
   };
+}
+
+// The smallest or largest of the values that are not null, rounded to the millisecond;
+// null when every one is null.
+function extreme<T>(
+  items: T[],
+  value: (item: T) => number | null,
+  pick: (...values: number[]) => number,
+): number | null {
+  const values = items.map(value).filter((v): v is number => v !== null);
+  return values.length === 0 ? null : Math.round(pick(...values));
 }
 
 function sum<T>(items: T[], value: (item: T) => number): number {

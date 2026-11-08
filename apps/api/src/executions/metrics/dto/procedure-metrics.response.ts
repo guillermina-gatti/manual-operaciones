@@ -107,6 +107,24 @@ export class ProcedureMetricsResponse extends ExecutionCountsResponse {
   avgCompletionMs: number | null;
 
   @ApiProperty({
+    example: 420000,
+    type: Number,
+    nullable: true,
+    description:
+      'Duration of the fastest completed execution, of any version, in milliseconds',
+  })
+  minCompletionMs: number | null;
+
+  @ApiProperty({
+    example: 780000,
+    type: Number,
+    nullable: true,
+    description:
+      'Duration of the slowest completed execution, of any version, in milliseconds',
+  })
+  maxCompletionMs: number | null;
+
+  @ApiProperty({
     type: [VersionMetricsResponse],
     description: 'The version with the latest execution first',
   })
@@ -189,6 +207,8 @@ const toProcedure = (
   abandoned: procedure.abandoned,
   completionRate: procedure.completionRate,
   avgCompletionMs: procedure.avgCompletionMs,
+  minCompletionMs: procedure.minCompletionMs,
+  maxCompletionMs: procedure.maxCompletionMs,
   versions: procedure.versions.map(toVersion),
 });
 

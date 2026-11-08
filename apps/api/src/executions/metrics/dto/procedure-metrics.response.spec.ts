@@ -28,6 +28,8 @@ const VIEW: ProcedureMetricsView = {
       ...counts,
       completionRate: 0.5,
       avgCompletionMs: 540000,
+      minCompletionMs: 420000,
+      maxCompletionMs: 660000,
       versions: [
         {
           procedureVersionId: '1b000000-0000-4000-8000-000000000002',
