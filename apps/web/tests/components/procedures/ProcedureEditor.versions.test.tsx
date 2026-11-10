@@ -88,6 +88,23 @@ describe('the versions of the procedure (spec 015, R8)', () => {
     expect(screen.queryByRole('button', { name: 'Crear nueva versión' })).not.toBeInTheDocument();
   });
 
+  test('the confirmation to publish names a replaced version only if one is published', async () => {
+    mocks.listVersions.mockResolvedValue(page([versionItem({ id: V2 })]));
+    saveProcedure(ADMIN_ID, storedDraft());
+    const { unmount } = render(<ProcedureEditor />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Publicar' }));
+    expect(screen.getByRole('group', { name: 'Confirmar publicación' })).not.toHaveTextContent('reemplazada');
+    unmount();
+
+    mocks.listVersions.mockResolvedValue(page([versionItem(), published()]));
+    render(<ProcedureEditor />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Publicar' }));
+
+    expect(screen.getByRole('group', { name: 'Confirmar publicación' })).toHaveTextContent(
+      'La versión vigente pasa a reemplazada.',
+    );
+  });
+
   test('a procedure that is not in this session does not ask for any history', () => {
     render(<ProcedureEditor />);
 

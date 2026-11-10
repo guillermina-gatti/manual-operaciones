@@ -21,7 +21,16 @@ beforeEach(() => {
   mocks.publishVersion.mockResolvedValue(published({ id: V2, versionNumber: 2 }));
 });
 
-const setup = () => render(<PublishVersion procedureId={PROCEDURE_ID} version={versionItem()} onPublished={onPublished} />);
+// By default there is a published version that this one replaces.
+const setup = (replacesPublished = true) =>
+  render(
+    <PublishVersion
+      procedureId={PROCEDURE_ID}
+      version={versionItem()}
+      replacesPublished={replacesPublished}
+      onPublished={onPublished}
+    />,
+  );
 const publishButton = () => screen.getByRole('button', { name: 'Publicar' });
 const confirmButton = () => screen.getByRole('button', { name: 'Sí, publicar' });
 
@@ -42,6 +51,16 @@ describe('PublishVersion (spec 015, R2)', () => {
     const confirmation = screen.getByRole('group', { name: 'Confirmar publicación' });
     expect(confirmation).toHaveTextContent('¿Publicar la versión 2? La versión vigente pasa a reemplazada.');
     expect(mocks.publishVersion).not.toHaveBeenCalled();
+  });
+
+  test('the first publication does not say that anything is replaced, because there is nothing', async () => {
+    setup(false);
+
+    await userEvent.click(publishButton());
+
+    const confirmation = screen.getByRole('group', { name: 'Confirmar publicación' });
+    expect(confirmation).toHaveTextContent('¿Publicar la versión 2? Va a ser la versión vigente.');
+    expect(confirmation).not.toHaveTextContent('reemplazada');
   });
 
   test('"Cancelar" goes back without publishing', async () => {

@@ -27,7 +27,14 @@ export function VersionActions({
 }: VersionActionsProps) {
   const draft = findDraft(versions);
   if (draft?.id === currentVersionId) {
-    return <PublishVersion procedureId={procedureId} version={draft} onPublished={onChanged} />;
+    return (
+      <PublishVersion
+        procedureId={procedureId}
+        version={draft}
+        replacesPublished={hasPublished(versions)}
+        onPublished={onChanged}
+      />
+    );
   }
   if (draft || hasPublished(versions)) {
     return <StartDraft procedureId={procedureId} draft={draft} onStarted={onDraftStarted} />;
