@@ -314,6 +314,7 @@ describe('MyMetricsService', () => {
     it('the users directory down is a 503, without reading their executions', async () => {
       users = {
         findById: () => Promise.reject(new RepositoryUnavailableError('down')),
+        findByIds: () => Promise.reject(new RepositoryUnavailableError('down')),
       };
 
       await expect(build().mine(ELENA, {})).rejects.toThrow(
