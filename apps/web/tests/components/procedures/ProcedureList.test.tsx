@@ -91,14 +91,21 @@ describe('the list', () => {
     expect(titles).toEqual(['Recepción de mercadería', 'Cierre de caja']);
   });
 
-  test('each one links to its editor', () => {
+  test('the title of each one links to its editor, and it is the only link of the card', () => {
     saveProcedure(ADMIN_ID, stored());
     render(<ProcedureList />);
 
-    expect(within(card('Cierre de caja')).getByRole('link', { name: 'Abrir' })).toHaveAttribute(
-      'href',
-      `/procedimientos/${PROCEDURE_ID}`,
-    );
+    const links = within(card('Cierre de caja')).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName('Cierre de caja');
+    expect(links[0]).toHaveAttribute('href', `/procedimientos/${PROCEDURE_ID}`);
+  });
+
+  test('has no "Abrir" button: the card is the way in', () => {
+    saveProcedure(ADMIN_ID, stored());
+    render(<ProcedureList />);
+
+    expect(screen.queryByRole('link', { name: 'Abrir' })).not.toBeInTheDocument();
   });
 
   test('does not show what another user created', () => {

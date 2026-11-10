@@ -242,3 +242,10 @@ Convenciones:
 - **Archivos:** `apps/web/lib/api/procedures.ts` y `procedure-errors.ts`; `apps/web/lib/procedures/*`; `apps/web/components/procedures/*`; `apps/web/app/procedimientos/page.tsx` y `[id]/page.tsx`; y sus tests en `apps/web/tests/`.
 - **Verificación:** `pnpm --filter web lint`, `pnpm --filter web test` y `pnpm --filter web build` en verde. La prueba manual contra la API real la hace Micaela. No hay enlace de navegación hacia `/procedimientos`: se entra escribiendo la URL.
 - **Estado:** hecha (04/11/2026). Lint, test (73 archivos, 911 tests) y build de la web en verde.
+- **Actualizada el 10/11/2026 (rediseño con DESIGN.md).** Decisiones, sin cambios de comportamiento de la API ni de `lib/procedures`:
+  - **D-web-1:** la lista de `/procedimientos` pasa a tarjetas con un solo enlace (el título lleva al editor). El botón "Abrir" desaparece; "Quitar de la lista" queda sobre la tarjeta. Cambia el test `ProcedureList.test.tsx` ("each one links to its editor" pasa a buscar el enlace por el título y a comprobar que es el único de la tarjeta).
+  - **D-web-2:** el botón principal de página, "Crear procedimiento" (lleva al formulario), va en el encabezado y solo en el listado, solo para ADMIN. Cada formulario (crear, borrador, paso, áreas) conserva su botón de envío dentro de su tarjeta.
+  - **D-web-3:** cada procedimiento de la lista muestra un chip con el conteo ("N pasos · N áreas"), sin nombres de área: los nombres llegan con HU11.
+  - **D-web-4:** se vuelve con `BACK_LINK` ("← Volver a procedimientos").
+  - **D-web-5:** las pantallas importan botones, campos y encabezado de `components/documents/design.tsx` y `list-design.tsx` (DESIGN.md 1 y 9); `components/procedures/design.tsx` queda solo con la fila de un paso, su número, la caja de agregar y los íconos.
+  - **Pendiente:** llevar el foco al primer campo con error después de enviar un formulario con errores (DESIGN.md 8). Es comportamiento nuevo: va con su criterio y su test primero, y no se hizo en este rediseño.
