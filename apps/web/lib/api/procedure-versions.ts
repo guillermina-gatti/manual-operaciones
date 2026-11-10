@@ -51,6 +51,34 @@ export interface PublishValues {
   changeSummary?: string;
 }
 
+// A step as the comparison shows it (spec 015, R10).
+export interface ComparedStep {
+  id: string;
+  order: number;
+  title: string;
+  description: string;
+}
+
+export type ChangedField = 'title' | 'description' | 'order';
+
+export interface ModifiedStep {
+  before: ComparedStep;
+  after: ComparedStep;
+  changedFields: ChangedField[];
+}
+
+export interface VersionComparison {
+  from: { id: string; versionNumber: number; status: ProcedureVersionStatus };
+  to: { id: string; versionNumber: number; status: ProcedureVersionStatus };
+  // In `to` and not in `from`.
+  added: ComparedStep[];
+  // In `from` and not in `to`.
+  removed: ComparedStep[];
+  modified: ModifiedStep[];
+  // How many steps are the same in both.
+  unchanged: number;
+}
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 const versionsPath = (procedureId: string) =>
@@ -80,6 +108,14 @@ export function createProcedureVersionsApi(client: ApiClient) {
         `${versionsPath(procedureId)}/${encodeURIComponent(versionId)}`,
         { signal },
       );
+    },
+
+    // What changed from the version `from` to the version `to` (R10).
+    compareVersions(procedureId: string, from: string, to: string, signal?: AbortSignal) {
+      const query = new URLSearchParams({ from, to });
+      return client.request<VersionComparison>(`${versionsPath(procedureId)}/compare?${query}`, {
+        signal,
+      });
     },
 
     // The draft becomes the published version (R2 to R5).

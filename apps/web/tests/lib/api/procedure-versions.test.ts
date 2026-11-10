@@ -79,6 +79,27 @@ describe('publishVersion (spec 015, R2)', () => {
   });
 });
 
+describe('compareVersions (spec 015, R10)', () => {
+  test('asks what changed from one version to the other, and returns the comparison as it comes', async () => {
+    const comparison = { added: [], removed: [], modified: [], unchanged: 2 };
+    const { api, request } = fakeClient(comparison);
+    const signal = new AbortController().signal;
+
+    const result = await api.compareVersions(PROCEDURE_ID, 'v-1', VERSION_ID, signal);
+
+    expect(result).toBe(comparison);
+    expect(request).toHaveBeenCalledWith(`${VERSIONS}/compare?from=v-1&to=${VERSION_ID}`, { signal });
+  });
+
+  test('encodes the ids that go in the query', async () => {
+    const { api, request } = fakeClient();
+
+    await api.compareVersions(PROCEDURE_ID, 'a&b', 'c d');
+
+    expect(request).toHaveBeenCalledWith(`${VERSIONS}/compare?from=a%26b&to=c+d`, { signal: undefined });
+  });
+});
+
 describe('createVersionDraft (spec 006, R4)', () => {
   test('posts to the versions of the procedure and returns the new draft', async () => {
     const draft = { id: VERSION_ID, versionNumber: 2 };

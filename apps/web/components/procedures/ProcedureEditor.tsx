@@ -15,6 +15,7 @@ import { removeProcedure, saveProcedure, useStoredProcedures } from '@/lib/proce
 import { withDraftVersion } from '@/lib/procedures/snapshot';
 import { versionSummary } from '@/lib/procedures/versions';
 import { useSession } from '@/lib/session';
+import { CompareVersions } from './CompareVersions';
 import { DraftSections } from './DraftSections';
 import { SECTION, SECTION_TITLE } from './design';
 import { Notice } from './Notice';
@@ -106,13 +107,16 @@ export function ProcedureEditor() {
 
       <VersionsSection versions={versions}>
         {(items) => (
-          <VersionActions
-            procedureId={id}
-            versions={items}
-            currentVersionId={procedure.versionId}
-            onChanged={versions.reload}
-            onDraftStarted={followDraft}
-          />
+          <>
+            <VersionActions
+              procedureId={id}
+              versions={items}
+              currentVersionId={procedure.versionId}
+              onChanged={versions.reload}
+              onDraftStarted={followDraft}
+            />
+            <CompareVersions procedureId={id} versions={items} />
+          </>
         )}
       </VersionsSection>
     </>

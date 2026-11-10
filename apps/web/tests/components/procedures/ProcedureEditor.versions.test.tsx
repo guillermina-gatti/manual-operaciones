@@ -105,6 +105,19 @@ describe('the versions of the procedure (spec 015, R8)', () => {
     );
   });
 
+  test('spec 015, R10: with two versions or more it offers to compare them; with one it does not', async () => {
+    saveProcedure(ADMIN_ID, storedDraft());
+    const { unmount } = render(<ProcedureEditor />);
+    expect(await screen.findByRole('heading', { level: 3, name: 'Comparar versiones' })).toBeInTheDocument();
+    unmount();
+
+    mocks.listVersions.mockResolvedValue(page([versionItem()]));
+    render(<ProcedureEditor />);
+    await screen.findByRole('list', { name: 'Versiones' });
+
+    expect(screen.queryByRole('heading', { name: 'Comparar versiones' })).not.toBeInTheDocument();
+  });
+
   test('a procedure that is not in this session does not ask for any history', () => {
     render(<ProcedureEditor />);
 

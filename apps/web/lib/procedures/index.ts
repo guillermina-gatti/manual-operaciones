@@ -5,10 +5,14 @@ import { createProcedureVersionsApi } from '@/lib/api/procedure-versions';
 import { createProceduresApi } from '@/lib/api/procedures';
 
 // Spec 015: publish, history and detail of a version, and a new draft from the published one.
-export const { listVersions, getVersion, publishVersion, createVersionDraft } =
+export const { listVersions, getVersion, publishVersion, createVersionDraft, compareVersions } =
   createProcedureVersionsApi(apiClient);
 export type {
+  ChangedField,
+  ComparedStep,
+  ModifiedStep,
   PublishValues,
+  VersionComparison,
   VersionDetail,
   VersionHistoryItem,
   VersionHistoryPage,
