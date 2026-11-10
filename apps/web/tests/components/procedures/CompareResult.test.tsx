@@ -50,6 +50,26 @@ describe('CompareResult (spec 015, R10)', () => {
     expect(screen.getByText('1 paso sin cambios')).toBeInTheDocument();
   });
 
+  test('a step whose title changed shows the title it had before, next to the new one', () => {
+    render(
+      <CompareResult
+        comparison={comparison({
+          modified: [
+            {
+              before: step('s1', 2, 'Encender las luces'),
+              after: step('s2', 2, 'Salón y vidriera'),
+              changedFields: ['title'],
+            },
+          ],
+        })}
+      />,
+    );
+
+    const modified = group('Modificados · 1');
+    expect(within(modified).getByText('Salón y vidriera · antes: Encender las luces')).toBeInTheDocument();
+    expect(within(modified).getByText('Cambió el título')).toBeInTheDocument();
+  });
+
   test('E13: a step that only moved says from which place to which', () => {
     render(
       <CompareResult

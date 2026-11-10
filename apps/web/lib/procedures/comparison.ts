@@ -10,6 +10,10 @@ const FIELD_TEXT: Record<ChangedField, string> = {
 export const hasDifferences = (comparison: VersionComparison): boolean =>
   comparison.added.length + comparison.removed.length + comparison.modified.length > 0;
 
+// The title of a modified step; if the title changed, also the one it had: "Nuevo · antes: Viejo".
+export const modifiedTitle = ({ before, after, changedFields }: ModifiedStep): string =>
+  changedFields.includes('title') ? `${after.title} · antes: ${before.title}` : after.title;
+
 // "Cambió el título y la descripción"; a step that moved says from which place to which.
 export function describeChange({ before, after, changedFields }: ModifiedStep): string {
   const parts = changedFields.map((field) => FIELD_TEXT[field]);

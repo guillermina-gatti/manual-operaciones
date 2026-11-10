@@ -2,8 +2,8 @@
 // with its count, and how many are the same. A group with nothing in it is not shown. Only the view.
 import { useId } from 'react';
 import type { ReactNode } from 'react';
-import type { ComparedStep, VersionComparison } from '@/lib/procedures';
-import { describeChange, hasDifferences } from '@/lib/procedures/comparison';
+import type { VersionComparison } from '@/lib/procedures';
+import { describeChange, hasDifferences, modifiedTitle } from '@/lib/procedures/comparison';
 import { VERSION_LABELS } from '@/lib/procedures/versions';
 
 const GROUP_TITLE = 'text-lg font-bold';
@@ -21,10 +21,10 @@ function Group({ title, count, children }: { title: string; count: number; child
   );
 }
 
-function Step({ step, note }: { step: ComparedStep; note?: string }) {
+function Step({ title, note }: { title: string; note?: string }) {
   return (
     <li className="flex min-w-0 flex-col rounded-xl bg-fondo p-3">
-      <span className="break-words font-semibold">{step.title}</span>
+      <span className="break-words font-semibold">{title}</span>
       {note && <span className="text-texto-suave">{note}</span>}
     </li>
   );
@@ -40,14 +40,14 @@ export function CompareResult({ comparison }: { comparison: VersionComparison })
       <p className="text-texto-suave">{`De ${side(comparison.from)} a ${side(comparison.to)}`}</p>
       {!hasDifferences(comparison) && <p className="font-semibold">Las dos versiones tienen los mismos pasos.</p>}
       <Group title="Agregados" count={added.length}>
-        {added.map((step) => <Step key={step.id} step={step} />)}
+        {added.map((step) => <Step key={step.id} title={step.title} />)}
       </Group>
       <Group title="Quitados" count={removed.length}>
-        {removed.map((step) => <Step key={step.id} step={step} />)}
+        {removed.map((step) => <Step key={step.id} title={step.title} />)}
       </Group>
       <Group title="Modificados" count={modified.length}>
         {modified.map((item) => (
-          <Step key={item.after.id} step={item.after} note={describeChange(item)} />
+          <Step key={item.after.id} title={modifiedTitle(item)} note={describeChange(item)} />
         ))}
       </Group>
       {unchanged > 0 && (
