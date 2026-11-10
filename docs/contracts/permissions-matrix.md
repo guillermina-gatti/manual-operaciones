@@ -39,7 +39,7 @@ Cada usuario posee un rol global y puede pertenecer a múltiples áreas.
 
 | Operación | ADMIN | SUPERVISOR | EMPLOYEE |
 |---|---|---|---|
-| Invitar usuarios | ✅ | ❌ | ❌ |
+| Invitar usuarios (`POST /api/users/invitations`) | ✅ | ❌ | ❌ |
 | Consultar y administrar usuarios | ✅ | ❌ | ❌ |
 | Modificar roles | ✅ | ❌ | ❌ |
 | Asignar o quitar áreas a usuarios | ✅ | ❌ | ❌ |
@@ -50,7 +50,7 @@ Cada usuario posee un rol global y puede pertenecer a múltiples áreas.
 | Consultar datos de su propia cuenta | ✅ | ✅ | ✅ |
 | Iniciar y cerrar su propia sesión | ✅ | ✅ | ✅ |
 
-Todos los accesos requieren autenticación, excepto login, registro por invitación y los endpoints expresamente públicos.
+Todos los accesos requieren autenticación, excepto login (`POST /api/auth/login`), validación y registro por invitación (`POST /api/auth/invitations/validate` y `POST /api/auth/register`, protegidos con rate limiting en Redis; ver [A-14 / HU29](./A-14-invitaciones-y-registro.md)) y los endpoints expresamente públicos.
 
 ### Documentos — Equipo C
 

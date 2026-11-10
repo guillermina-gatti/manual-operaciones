@@ -90,10 +90,20 @@ Representa la relación entre usuarios y áreas.
 - Solo pueden asignarse áreas existentes y habilitadas.
 - Cuando se modifica la asignación de áreas, los permisos deben reflejarse en la siguiente petición autenticada.
 
+### UserInvitation y UserInvitationArea (HU29)
+
+Representan las invitaciones de un solo uso emitidas por un `ADMIN` (`user_invitations`) y las áreas asignadas a cada invitación (`user_invitation_areas`).
+
+- Almacenan únicamente el `tokenHash` (SHA-256), nunca el token en texto plano.
+- Tienen una vigencia de 48 horas (`expiresAt`) y trazabilidad de aceptación (`acceptedAt`), revocación (`revokedAt`) y administrador emisor (`createdById`).
+- Cuentan con el índice único parcial `user_invitations_one_pending_per_email_idx` (`WHERE accepted_at IS NULL AND revoked_at IS NULL`) para impedir invitaciones pendientes duplicadas por correo; cuando una invitación previa ha expirado (`expires_at <= now()`), `InvitationsService.createInvitation()` la marca atómicamente con `revoked_at = now()` dentro de la misma transacción para que no bloquee la emisión de una nueva invitación.
+- El detalle completo de modelos, endpoints y reglas de seguridad se documenta en [A-14 / HU29 — Contrato de Invitaciones y Registro](./A-14-invitaciones-y-registro.md).
+
 ## 4. Relación entre entidades
 
 ```text
 User 1 ─── N UserArea N ─── 1 Area
+User (ADMIN) 1 ─── N UserInvitation 1 ─── N UserInvitationArea N ─── 1 Area
 ```
 
 Un usuario puede tener múltiples asignaciones y un área puede tener múltiples usuarios.
@@ -161,6 +171,8 @@ El objeto autenticado mantendrá, como mínimo, los campos `id` y `role`, para c
 La sesión deberá consultar los permisos actuales, evitando depender de roles o áreas desactualizados dentro del JWT.
 
 La restauración y renovación de sesión se implementaron en A-08/A-09; ver [A-06.5](./A-06.5-restauracion-sesion.md).
+
+La emisión de invitaciones (`POST /api/users/invitations`), validación pública (`POST /api/auth/invitations/validate`) y registro atómico con inicio de sesión (`POST /api/auth/register`) se implementaron en HU29; ver [A-14 / HU29](./A-14-invitaciones-y-registro.md).
 
 ## 7. Reglas de acceso acordadas
 
