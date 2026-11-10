@@ -10,7 +10,6 @@ import {
 import type { AuthUser } from '../../common/auth';
 import { Clock } from '../../common/clock';
 import type { DocumentReference } from '../document-references';
-import { findUsersByIds } from '../find-users-by-ids';
 import { toHttpException } from '../http-errors';
 import { AuditLog } from '../ports/audit-log';
 import { UsersDirectory } from '../ports/users-directory';
@@ -114,7 +113,7 @@ export class ConflictAlertsService {
         records.flatMap((r) => (r.resolvedById ? [r.resolvedById] : [])),
       ),
     ];
-    const found = ids.length > 0 ? await findUsersByIds(this.users, ids) : [];
+    const found = ids.length > 0 ? await this.users.findByIds(ids) : [];
     const byId = new Map(found.map((user) => [user.id, user]));
     const referenceOf = (id: string): DocumentReference => {
       const user = byId.get(id);
