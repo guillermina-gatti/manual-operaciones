@@ -24,11 +24,7 @@ export function ProcedureList() {
 
   return (
     <>
-      <section
-        id="crear"
-        aria-labelledby={`${baseId}-create`}
-        className={`${LIST_PANEL} flex scroll-mt-8 flex-col gap-5`}
-      >
+      <section aria-labelledby={`${baseId}-create`} className={`${LIST_PANEL} flex flex-col gap-5`}>
         <h2 id={`${baseId}-create`} className={SECTION_TITLE}>
           Crear un procedimiento
         </h2>

@@ -2,7 +2,6 @@
 // another role sees RequireRole's message and the screen is not even mounted. The API answers 403 anyway.
 import type { Metadata } from 'next';
 import { PageHeader } from '@/components/documents/list-design';
-import { CreateProcedureLink } from '@/components/procedures/CreateProcedureLink';
 import { ProcedureList } from '@/components/procedures/ProcedureList';
 import { RequireRole } from '@/components/session/RequireRole';
 
@@ -12,11 +11,10 @@ export const metadata: Metadata = {
 
 export default function ProcedimientosPage() {
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 pt-8 pb-28">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 pt-8 pb-28 text-base">
       <PageHeader
         title="Procedimientos"
         subtitle="Creá un procedimiento y armá su borrador con pasos y áreas."
-        action={<CreateProcedureLink />}
       />
       <RequireRole
         role="ADMIN"
