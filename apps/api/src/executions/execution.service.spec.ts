@@ -692,4 +692,140 @@ describe('ExecutionService', () => {
       expect(repository.completions).toHaveLength(0);
     });
   });
+
+  // ── HU33: the procedure changed while it runs ─────────────────────────────
+
+  describe('HU33: versionChange', () => {
+    // Ventas on v1 with an execution in progress; then v2 is published.
+    const startOnV1 = async () =>
+      (await service.start(empleadoVentas, CIERRE)).execution;
+    const withV2 = (overrides: Partial<FixtureProcedureVersion> = {}) => {
+      catalog = new InMemoryProceduresCatalog([
+        { ...V1, published: true, superseded: false },
+        { ...V2, published: false, ...overrides },
+        ...FIXTURE_PROCEDURE_VERSIONS.filter((v) => v.procedureId !== CIERRE),
+      ]);
+      service = build();
+    };
+
+    it('a new execution starts on the current version: no change', async () => {
+      const execution = await startOnV1();
+
+      expect(execution.versionChange).toEqual({
+        changed: false,
+        critical: false,
+        currentVersionId: null,
+        currentVersionNumber: null,
+        changes: [],
+      });
+    });
+
+    it('opening it after v2 is published says so, with what changed', async () => {
+      withV2();
+      const execution = await startOnV1();
+      catalog.publish(V2.versionId);
+
+      const found = await service.findOne(empleadoVentas, execution.id);
+
+      expect(found.procedureVersionId).toBe(V1.versionId);
+      expect(found.versionChange).toEqual({
+        changed: true,
+        critical: false,
+        currentVersionId: V2.versionId,
+        currentVersionNumber: 2,
+        changes: [
+          {
+            versionNumber: 2,
+            isCritical: false,
+            changeSummary: V2.changeSummary,
+            publishedAt: V2.publishedAt,
+          },
+        ],
+      });
+    });
+
+    it('resuming it (start again) says so too', async () => {
+      withV2({ isCritical: true, changeSummary: 'Cambia el límite de caja' });
+      await startOnV1();
+      catalog.publish(V2.versionId);
+
+      const resumed = await service.start(empleadoVentas, CIERRE);
+
+      expect(resumed.created).toBe(false);
+      expect(resumed.execution.versionChange).toMatchObject({
+        changed: true,
+        critical: true,
+      });
+    });
+
+    it('a critical version in between is enough, though the current one is not', async () => {
+      const V3 = '1b000000-0000-4000-8000-000000000009';
+      withV2({ isCritical: true, changeSummary: 'Cambia el límite de caja' });
+      const execution = await startOnV1();
+      catalog.publish(V2.versionId);
+      catalog.addVersion({
+        ...V2,
+        versionId: V3,
+        versionNumber: 3,
+        isCritical: false,
+        changeSummary: 'Corrige una palabra',
+        published: false,
+      });
+      catalog.publish(V3);
+
+      const found = await service.findOne(empleadoVentas, execution.id);
+
+      expect(found.versionChange).toMatchObject({
+        changed: true,
+        critical: true,
+        currentVersionId: V3,
+        currentVersionNumber: 3,
+      });
+      expect(found.versionChange.changes.map((c) => c.versionNumber)).toEqual([
+        2, 3,
+      ]);
+    });
+
+    it('a completed execution never shows a change', async () => {
+      withV2();
+      const execution = await startOnV1();
+      for (const step of V1.steps) {
+        await service.completeStep(empleadoVentas, execution.id, step.id);
+      }
+      catalog.publish(V2.versionId);
+
+      const found = await service.findOne(empleadoVentas, execution.id);
+
+      expect(found.status).toBe('COMPLETED');
+      expect(found.versionChange.changed).toBe(false);
+    });
+
+    it('completing a step keeps telling a change that is not critical', async () => {
+      withV2();
+      const execution = await startOnV1();
+      catalog.publish(V2.versionId);
+
+      const updated = await service.completeStep(
+        empleadoVentas,
+        execution.id,
+        V1.steps[0].id,
+      );
+
+      expect(updated.versionChange).toMatchObject({
+        changed: true,
+        critical: false,
+      });
+    });
+
+    it('a catalog that does not answer while comparing is a 503', async () => {
+      const execution = await startOnV1();
+      jest
+        .spyOn(catalog, 'findPublishedAfter')
+        .mockRejectedValue(new CatalogUnavailableError('down'));
+
+      await expect(
+        service.findOne(empleadoVentas, execution.id),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+  });
 });

@@ -35,6 +35,13 @@ const view: ExecutionView = {
       durationMs: null,
     },
   ],
+  versionChange: {
+    changed: false,
+    critical: false,
+    currentVersionId: null,
+    currentVersionNumber: null,
+    changes: [],
+  },
 };
 
 describe('toExecutionResponse', () => {
@@ -71,6 +78,48 @@ describe('toExecutionResponse', () => {
           startedAt: null,
           finishedAt: null,
           durationMs: null,
+        },
+      ],
+      versionChange: {
+        changed: false,
+        critical: false,
+        currentVersionId: null,
+        currentVersionNumber: null,
+        changes: [],
+      },
+    });
+  });
+
+  it('maps a change of version, with its dates as ISO strings (HU33)', () => {
+    const changed: ExecutionView = {
+      ...view,
+      versionChange: {
+        changed: true,
+        critical: true,
+        currentVersionId: '1b000000-0000-4000-8000-000000000002',
+        currentVersionNumber: 2,
+        changes: [
+          {
+            versionNumber: 2,
+            isCritical: true,
+            changeSummary: 'Cambia el límite de caja',
+            publishedAt: new Date('2026-11-10T12:00:00.000Z'),
+          },
+        ],
+      },
+    };
+
+    expect(toExecutionResponse(changed).versionChange).toEqual({
+      changed: true,
+      critical: true,
+      currentVersionId: '1b000000-0000-4000-8000-000000000002',
+      currentVersionNumber: 2,
+      changes: [
+        {
+          versionNumber: 2,
+          isCritical: true,
+          changeSummary: 'Cambia el límite de caja',
+          publishedAt: '2026-11-10T12:00:00.000Z',
         },
       ],
     });

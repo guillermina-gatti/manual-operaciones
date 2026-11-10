@@ -39,6 +39,13 @@ const view: ExecutionView = {
       durationMs: null,
     },
   ],
+  versionChange: {
+    changed: false,
+    critical: false,
+    currentVersionId: null,
+    currentVersionNumber: null,
+    changes: [],
+  },
 };
 
 const body = {
@@ -59,6 +66,13 @@ const body = {
       durationMs: null,
     },
   ],
+  versionChange: {
+    changed: false,
+    critical: false,
+    currentVersionId: null,
+    currentVersionNumber: null,
+    changes: [],
+  },
 };
 
 describe('ExecutionsController (HTTP, service mocked)', () => {

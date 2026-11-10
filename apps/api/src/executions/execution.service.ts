@@ -29,6 +29,8 @@ import {
   CatalogProcedureVersion,
   ProceduresCatalog,
 } from './ports/procedures-catalog';
+import { noVersionChange, versionChangeOf } from './version-change';
+import type { VersionChange } from './version-change';
 import { activeAreaIdsOf } from './viewer-areas';
 
 // One step of the version as the user sees it. Steps not started yet have null dates.
@@ -51,6 +53,9 @@ export interface ExecutionView {
   finishedAt: Date | null;
   currentStepId: string | null; // where to resume (CA3); null when completed
   steps: ExecutionStepView[];
+  // HU33: whether a newer version of the procedure is the current one. Only for an
+  // execution in progress; a completed one never shows a change.
+  versionChange: VersionChange;
 }
 
 export interface StartResult {
@@ -158,7 +163,7 @@ export class ExecutionService {
       areaIds,
       await this.executions.findById(id),
     );
-    return toView(execution, version);
+    return toView(execution, version, await this.versionChangeOf(execution));
   }
 
   // Access and the version are resolved first, outside the transaction: versions are
@@ -170,13 +175,14 @@ export class ExecutionService {
     stepId: string,
   ): Promise<ExecutionView> {
     const areaIds = await this.areasOf(user);
-    const { version } = await this.visible(
+    const { execution: before, version } = await this.visible(
       user,
       areaIds,
       await this.executions.findById(id),
     );
     const step = version.steps.find((s) => s.id === stepId);
     if (!step) throw executionNotFound();
+    const change = await this.versionChangeOf(before);
 
     return this.executions.runInTransaction(async (tx) => {
       // Owner and version never change; status and steps may have, so re-read them.
@@ -199,7 +205,12 @@ export class ExecutionService {
         finishedAt: this.clock.now(),
         next: next && { stepId: next.id, stepOrder: next.order },
       });
-      return toView(updated, version);
+      // The change only matters while the execution is still in progress.
+      return toView(
+        updated,
+        version,
+        updated.status === 'IN_PROGRESS' ? change : noVersionChange(),
+      );
     });
   }
 
@@ -255,7 +266,35 @@ export class ExecutionService {
     if (!version || !canAccessProcedure(areaIds, version.areaIds)) {
       throw procedureNotFound();
     }
-    return { execution: toView(execution, version), created: false };
+    return {
+      execution: toView(
+        execution,
+        version,
+        await this.versionChangeOf(execution),
+      ),
+      created: false,
+    };
+  }
+
+  // HU33: compares the version of an execution in progress with the current one, and
+  // tells whether any version published since then was a critical change. Read from the
+  // catalog, never inside a transaction.
+  private async versionChangeOf(
+    execution: Pick<
+      ExecutionRecord,
+      'status' | 'procedureId' | 'procedureVersionId'
+    >,
+  ): Promise<VersionChange> {
+    if (execution.status !== 'IN_PROGRESS') return noVersionChange();
+    const [current, publishedAfter] = await Promise.all([
+      this.catalog.findPublished(execution.procedureId),
+      this.catalog.findPublishedAfter(execution.procedureVersionId),
+    ]);
+    return versionChangeOf(
+      execution.procedureVersionId,
+      current,
+      publishedAfter,
+    );
   }
 }
 
@@ -263,6 +302,7 @@ export class ExecutionService {
 function toView(
   execution: ExecutionRecord,
   version: CatalogProcedureVersion,
+  versionChange: VersionChange = noVersionChange(),
 ): ExecutionView {
   const recorded = new Map(execution.steps.map((s) => [s.stepId, s]));
   return {
@@ -284,5 +324,6 @@ function toView(
         durationMs: row ? stepDurationMs(row) : null,
       };
     }),
+    versionChange,
   };
 }

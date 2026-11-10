@@ -33,6 +33,12 @@ export const NO_CHANGE: VersionChange = {
   changes: [],
 };
 
+// A fresh copy of NO_CHANGE: callers may change what they get.
+export const noVersionChange = (): VersionChange => ({
+  ...NO_CHANGE,
+  changes: [],
+});
+
 // `current` is the published version now (null if there is none); `publishedAfter`, the
 // versions published after the one of the execution. Without a published version there is
 // nothing to change to. A version published after the current one cannot exist, but if the
@@ -42,9 +48,8 @@ export function versionChangeOf(
   current: CatalogProcedureVersion | null,
   publishedAfter: CatalogPublication[],
 ): VersionChange {
-  // A fresh copy: callers may change what they get.
   if (!current || current.versionId === executionVersionId) {
-    return { ...NO_CHANGE, changes: [] };
+    return noVersionChange();
   }
 
   const upTo = current.versionNumber;

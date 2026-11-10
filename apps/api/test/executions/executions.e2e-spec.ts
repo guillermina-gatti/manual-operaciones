@@ -27,6 +27,17 @@ interface ExecutionBody {
     finishedAt: string | null;
     durationMs: number | null;
   }[];
+  versionChange: {
+    changed: boolean;
+    critical: boolean;
+    currentVersionId: string | null;
+    currentVersionNumber: number | null;
+    changes: {
+      versionNumber: number;
+      isCritical: boolean;
+      changeSummary: string | null;
+    }[];
+  };
 }
 
 const CIERRE = PROCEDURE_IDS.cierreDeCaja;
@@ -117,6 +128,108 @@ describe('Executions (integration)', () => {
     } finally {
       t.catalog.publish(PROCEDURE_VERSION_IDS.cierreDeCajaV2);
     }
+  });
+
+  describe('HU33: the procedure changed while it runs', () => {
+    const V1 = PROCEDURE_VERSION_IDS.cierreDeCajaV1;
+    const V2 = PROCEDURE_VERSION_IDS.cierreDeCajaV2;
+    const V3 = '1b000000-0000-4000-8000-000000000009';
+
+    // An execution of Elena started on v1, while v1 was the published version.
+    const startOnV1 = async () => {
+      t.catalog.publish(V1);
+      const { body } = await start(ventas).expect(201);
+      return body as ExecutionBody;
+    };
+    const get = (id: string) =>
+      http().get(`/api/executions/${id}`).set(ventas).expect(200);
+
+    afterEach(() => {
+      t.catalog.publish(V2);
+    });
+
+    it('a new execution has no change', async () => {
+      const { body } = await start(ventas).expect(201);
+
+      expect((body as ExecutionBody).versionChange).toEqual({
+        changed: false,
+        critical: false,
+        currentVersionId: null,
+        currentVersionNumber: null,
+        changes: [],
+      });
+    });
+
+    it('opening it after v2 is published tells the change, and it stays on v1', async () => {
+      const execution = await startOnV1();
+      t.catalog.publish(V2);
+
+      const found = (await get(execution.id)).body as ExecutionBody;
+
+      expect(found.procedureVersionId).toBe(V1);
+      expect(found.versionChange).toMatchObject({
+        changed: true,
+        critical: false,
+        currentVersionId: V2,
+        currentVersionNumber: 2,
+        changes: [{ versionNumber: 2, isCritical: false }],
+      });
+    });
+
+    it('resuming it (start again, 200) tells the change too', async () => {
+      await startOnV1();
+      t.catalog.publish(V2);
+
+      const { body } = await start(ventas).expect(200);
+
+      expect((body as ExecutionBody).versionChange.changed).toBe(true);
+    });
+
+    it('a critical version in between makes it critical, with its summary', async () => {
+      const execution = await startOnV1();
+      t.catalog.addVersion({
+        ...FIXTURE_PROCEDURE_VERSIONS.find((v) => v.versionId === V2)!,
+        versionId: V3,
+        versionNumber: 3,
+        isCritical: true,
+        changeSummary: 'Cambia el límite de caja',
+        published: false,
+      });
+      t.catalog.publish(V2);
+      t.catalog.publish(V3);
+
+      const found = (await get(execution.id)).body as ExecutionBody;
+
+      expect(found.versionChange).toMatchObject({
+        changed: true,
+        critical: true,
+        currentVersionId: V3,
+        changes: [
+          { versionNumber: 2, isCritical: false },
+          {
+            versionNumber: 3,
+            isCritical: true,
+            changeSummary: 'Cambia el límite de caja',
+          },
+        ],
+      });
+    });
+
+    it('a completed execution never shows a change', async () => {
+      const execution = await startOnV1();
+      const v1Steps = FIXTURE_PROCEDURE_VERSIONS.find(
+        (v) => v.versionId === V1,
+      )!.steps;
+      for (const step of v1Steps) {
+        await complete(execution.id, step.id).expect(200);
+      }
+      t.catalog.publish(V2);
+
+      const found = (await get(execution.id)).body as ExecutionBody;
+
+      expect(found.status).toBe('COMPLETED');
+      expect(found.versionChange.changed).toBe(false);
+    });
   });
 
   it('409 for a finished step and for a step out of order', async () => {
