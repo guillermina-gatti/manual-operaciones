@@ -16,6 +16,15 @@ export class ExecutionStepResponse {
   title: string;
 
   @ApiProperty({
+    example: 'Contá los billetes y las monedas de la caja.',
+    type: String,
+    nullable: true,
+    description:
+      'The instruction of the step; null when the catalog does not give it',
+  })
+  description: string | null;
+
+  @ApiProperty({
     format: 'date-time',
     type: String,
     nullable: true,
@@ -88,6 +97,15 @@ export class ExecutionResponse {
   procedureId: string;
 
   @ApiProperty({
+    example: 'Cierre de caja',
+    type: String,
+    nullable: true,
+    description:
+      'The title of the version the execution runs; null when the catalog does not give it',
+  })
+  procedureTitle: string | null;
+
+  @ApiProperty({
     format: 'uuid',
     description: 'The version the execution was started with',
   })
@@ -124,6 +142,7 @@ const toStepResponse = (step: ExecutionStepView): ExecutionStepResponse => ({
   stepId: step.stepId,
   order: step.order,
   title: step.title,
+  description: step.description,
   startedAt: toIso(step.startedAt),
   finishedAt: toIso(step.finishedAt),
   durationMs: step.durationMs,
@@ -153,6 +172,7 @@ export const toExecutionResponse = (
 ): ExecutionResponse => ({
   id: execution.id,
   procedureId: execution.procedureId,
+  procedureTitle: execution.procedureTitle,
   procedureVersionId: execution.procedureVersionId,
   status: execution.status,
   startedAt: execution.startedAt.toISOString(),

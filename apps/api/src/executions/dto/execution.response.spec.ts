@@ -4,6 +4,7 @@ import { toExecutionResponse } from './execution.response';
 const view: ExecutionView = {
   id: '1d000000-0000-4000-8000-000000000001',
   procedureId: '1a000000-0000-4000-8000-000000000001',
+  procedureTitle: 'Cierre de caja',
   procedureVersionId: '1b000000-0000-4000-8000-000000000001',
   status: 'IN_PROGRESS',
   startedAt: new Date('2026-10-27T10:00:00.000Z'),
@@ -14,6 +15,7 @@ const view: ExecutionView = {
       stepId: '1c000000-0000-4000-8000-000000000001',
       order: 1,
       title: 'Contar el efectivo',
+      description: 'Contá los billetes y las monedas de la caja.',
       startedAt: new Date('2026-10-27T10:00:00.000Z'),
       finishedAt: new Date('2026-10-27T10:03:00.000Z'),
       durationMs: 180000,
@@ -22,6 +24,7 @@ const view: ExecutionView = {
       stepId: '1c000000-0000-4000-8000-000000000002',
       order: 2,
       title: 'Comparar con el reporte del sistema',
+      description: null,
       startedAt: new Date('2026-10-27T10:03:00.000Z'),
       finishedAt: null,
       durationMs: null,
@@ -30,6 +33,7 @@ const view: ExecutionView = {
       stepId: '1c000000-0000-4000-8000-000000000003',
       order: 3,
       title: 'Guardar el efectivo en la caja fuerte',
+      description: null,
       startedAt: null,
       finishedAt: null,
       durationMs: null,
@@ -49,6 +53,7 @@ describe('toExecutionResponse', () => {
     expect(toExecutionResponse(view)).toEqual({
       id: view.id,
       procedureId: view.procedureId,
+      procedureTitle: 'Cierre de caja',
       procedureVersionId: view.procedureVersionId,
       status: 'IN_PROGRESS',
       startedAt: '2026-10-27T10:00:00.000Z',
@@ -59,6 +64,7 @@ describe('toExecutionResponse', () => {
           stepId: '1c000000-0000-4000-8000-000000000001',
           order: 1,
           title: 'Contar el efectivo',
+          description: 'Contá los billetes y las monedas de la caja.',
           startedAt: '2026-10-27T10:00:00.000Z',
           finishedAt: '2026-10-27T10:03:00.000Z',
           durationMs: 180000,
@@ -67,6 +73,7 @@ describe('toExecutionResponse', () => {
           stepId: '1c000000-0000-4000-8000-000000000002',
           order: 2,
           title: 'Comparar con el reporte del sistema',
+          description: null,
           startedAt: '2026-10-27T10:03:00.000Z',
           finishedAt: null,
           durationMs: null,
@@ -75,6 +82,7 @@ describe('toExecutionResponse', () => {
           stepId: '1c000000-0000-4000-8000-000000000003',
           order: 3,
           title: 'Guardar el efectivo en la caja fuerte',
+          description: null,
           startedAt: null,
           finishedAt: null,
           durationMs: null,
@@ -123,6 +131,17 @@ describe('toExecutionResponse', () => {
         },
       ],
     });
+  });
+
+  it('a title or an instruction the catalog does not give arrives as null', () => {
+    const response = toExecutionResponse({
+      ...view,
+      procedureTitle: null,
+      steps: view.steps.map((step) => ({ ...step, description: null })),
+    });
+
+    expect(response.procedureTitle).toBeNull();
+    response.steps.forEach((step) => expect(step.description).toBeNull());
   });
 
   it('maps a completed execution', () => {

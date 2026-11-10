@@ -38,6 +38,8 @@ export interface ExecutionStepView {
   stepId: string;
   order: number;
   title: string;
+  // The instruction of the step, when the catalog gives it (TODO(HU11): not the real one yet).
+  description: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   durationMs: number | null;
@@ -47,6 +49,8 @@ export interface ExecutionStepView {
 export interface ExecutionView {
   id: string;
   procedureId: string;
+  // The title of the version the execution runs, when the catalog gives it.
+  procedureTitle: string | null;
   procedureVersionId: string;
   status: ExecutionStatus;
   startedAt: Date;
@@ -381,6 +385,7 @@ function toView(
   return {
     id: execution.id,
     procedureId: execution.procedureId,
+    procedureTitle: textOrNull(version.title),
     procedureVersionId: execution.procedureVersionId,
     status: execution.status,
     startedAt: execution.startedAt,
@@ -396,6 +401,7 @@ function toView(
         stepId: step.id,
         order: step.order,
         title: step.title,
+        description: textOrNull(step.description),
         startedAt: row?.startedAt ?? null,
         finishedAt: row?.finishedAt ?? null,
         durationMs: row ? stepDurationMs(row) : null,
@@ -403,4 +409,9 @@ function toView(
     }),
     versionChange,
   };
+}
+
+// A text of the catalog, or null when it does not give one or it is only spaces.
+function textOrNull(text: string | undefined): string | null {
+  return text && text.trim() ? text : null;
 }

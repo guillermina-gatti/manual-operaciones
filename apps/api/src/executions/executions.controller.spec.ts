@@ -24,6 +24,7 @@ const EMPLOYEE = bearer(SPEC_USERS.empleadoVentas);
 const view: ExecutionView = {
   id: EXECUTION_ID,
   procedureId: PROCEDURE_ID,
+  procedureTitle: 'Cierre de caja',
   procedureVersionId: '1b000000-0000-4000-8000-000000000001',
   status: 'IN_PROGRESS',
   startedAt: new Date('2026-10-27T10:00:00.000Z'),
@@ -34,6 +35,7 @@ const view: ExecutionView = {
       stepId: STEP_1,
       order: 1,
       title: 'Contar el efectivo',
+      description: 'Contá los billetes y las monedas de la caja.',
       startedAt: new Date('2026-10-27T10:00:00.000Z'),
       finishedAt: null,
       durationMs: null,
@@ -51,6 +53,7 @@ const view: ExecutionView = {
 const body = {
   id: EXECUTION_ID,
   procedureId: PROCEDURE_ID,
+  procedureTitle: 'Cierre de caja',
   procedureVersionId: '1b000000-0000-4000-8000-000000000001',
   status: 'IN_PROGRESS',
   startedAt: '2026-10-27T10:00:00.000Z',
@@ -61,6 +64,7 @@ const body = {
       stepId: STEP_1,
       order: 1,
       title: 'Contar el efectivo',
+      description: 'Contá los billetes y las monedas de la caja.',
       startedAt: '2026-10-27T10:00:00.000Z',
       finishedAt: null,
       durationMs: null,

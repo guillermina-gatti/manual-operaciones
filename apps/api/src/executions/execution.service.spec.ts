@@ -1089,4 +1089,33 @@ describe('ExecutionService', () => {
       );
     });
   });
+
+  describe('title and instructions from the catalog', () => {
+    it('the execution brings the title of its version and the instruction of each step', async () => {
+      const { execution } = await service.start(empleadoVentas, CIERRE);
+
+      expect(execution.procedureTitle).toBe('Cierre de caja');
+      expect(execution.steps[0].description).toBe(V1.steps[0].description);
+    });
+
+    it('a catalog without them (as the real one today) gives null, also for blank texts', async () => {
+      catalog = new InMemoryProceduresCatalog([
+        {
+          ...V1,
+          published: true,
+          title: undefined,
+          steps: V1.steps.map((step, i) => ({
+            ...step,
+            description: i === 0 ? '   ' : undefined,
+          })),
+        },
+      ]);
+      service = build();
+
+      const { execution } = await service.start(empleadoVentas, CIERRE);
+
+      expect(execution.procedureTitle).toBeNull();
+      execution.steps.forEach((step) => expect(step.description).toBeNull());
+    });
+  });
 });
