@@ -5,10 +5,10 @@
 // a function that receives the versions once they are loaded.
 import { useId } from 'react';
 import type { ReactNode } from 'react';
-import { LIST_PANEL } from '@/components/documents/list-design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import type { ApiResource } from '@/lib/api';
 import type { VersionHistoryItem } from '@/lib/procedures';
+import { SECTION, SECTION_TITLE } from './design';
 import { Skeleton } from './Skeleton';
 import { VersionTimeline } from './VersionTimeline';
 
@@ -39,8 +39,8 @@ function Content({ versions }: Pick<VersionsSectionProps, 'versions'>) {
 export function VersionsSection({ versions, children }: VersionsSectionProps) {
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className={`${LIST_PANEL} flex min-w-0 flex-col gap-5`}>
-      <h2 id={titleId} className="text-xl font-bold">
+    <section aria-labelledby={titleId} className={SECTION}>
+      <h2 id={titleId} className={SECTION_TITLE}>
         Versiones
       </h2>
       <Content versions={versions} />

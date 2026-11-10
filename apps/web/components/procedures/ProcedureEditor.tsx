@@ -1,26 +1,28 @@
 'use client';
 
-// One procedure (HU09 and HU10): its draft, its steps and its areas. The API has no GET for
-// procedures until HU11, so the data come from the copy kept in sessionStorage; every change the API
-// accepts updates that copy. It has no box of its own: the main of the page lays its parts out.
+// One procedure (HU09, HU10 and HU32): its draft, its steps, its areas and its versions. The API has
+// no GET for procedures until HU11, so the data come from the copy kept in sessionStorage; every
+// change the API accepts updates that copy. If the version of the copy is no longer a draft, it is
+// shown read-only. It has no box of its own: the main of the page lays its parts out.
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useId } from 'react';
-import { BACK_LINK, HINT } from '@/components/documents/design';
-import { LIST_PANEL, PageHeader } from '@/components/documents/list-design';
+import { BACK_LINK } from '@/components/documents/design';
+import { PageHeader } from '@/components/documents/list-design';
 import { ScreenState } from '@/components/ui/ScreenState';
+import type { VersionDetail } from '@/lib/procedures';
 import { removeProcedure, saveProcedure, useStoredProcedures } from '@/lib/procedures/session-list';
+import { withDraftVersion } from '@/lib/procedures/snapshot';
+import { VERSION_LABELS } from '@/lib/procedures/versions';
 import { useSession } from '@/lib/session';
-import { DraftForm } from './DraftForm';
+import { DraftSections } from './DraftSections';
+import { SECTION, SECTION_TITLE } from './design';
 import { Notice } from './Notice';
 import { ProcedureAreasForm } from './ProcedureAreasForm';
-import { MAX_STEPS, StepsEditor } from './StepsEditor';
 import { useVersions } from './useVersions';
 import { VersionActions } from './VersionActions';
+import { VersionReadOnly } from './VersionReadOnly';
 import { VersionsSection } from './VersionsSection';
-
-const SECTION = `${LIST_PANEL} flex min-w-0 flex-col gap-5`;
-const SECTION_TITLE = 'text-xl font-bold';
 
 export function ProcedureEditor() {
   const { user } = useSession();
@@ -47,11 +49,17 @@ export function ProcedureEditor() {
     );
   }
 
+  // Until the history says otherwise, the version of the copy is the draft.
+  const shown = versions.data?.find((version) => version.id === procedure.versionId)?.status ?? 'DRAFT';
   const leave = () => {
     removeProcedure(user.id, procedure.id);
     router.push('/procedimientos');
   };
   const update = (next: typeof procedure) => saveProcedure(user.id, next);
+  const followDraft = (draft: VersionDetail) => {
+    update(withDraftVersion(procedure, draft));
+    versions.reload();
+  };
 
   return (
     <>
@@ -59,27 +67,22 @@ export function ProcedureEditor() {
         <span aria-hidden="true">←&nbsp;</span>Volver a procedimientos
       </Link>
 
-      <PageHeader wrap title={procedure.title} subtitle={`Versión ${procedure.versionNumber} · borrador`} />
+      <PageHeader
+        wrap
+        title={procedure.title}
+        subtitle={`Versión ${procedure.versionNumber} · ${shown === 'DRAFT' ? 'borrador' : VERSION_LABELS[shown].toLowerCase()}`}
+      />
       <Notice tone="info" role="note">
         Estos datos son la copia de esta sesión del navegador: la API todavía no tiene un GET (llega
         con HU11). Si el procedimiento se cambia desde otro lugar, la copia puede quedar
         desactualizada.
       </Notice>
 
-      <section aria-labelledby={`${baseId}-draft`} className={SECTION}>
-        <h2 id={`${baseId}-draft`} className={SECTION_TITLE}>
-          Borrador
-        </h2>
-        <DraftForm procedure={procedure} onChange={update} onGone={leave} />
-      </section>
-
-      <section aria-labelledby={`${baseId}-steps`} className={SECTION}>
-        <h2 id={`${baseId}-steps`} className={SECTION_TITLE}>
-          Pasos · {procedure.steps.length} de {MAX_STEPS}
-        </h2>
-        <p className={`${HINT} -mt-3`}>La numeración se acomoda sola.</p>
-        <StepsEditor procedure={procedure} onChange={update} onGone={leave} />
-      </section>
+      {shown === 'DRAFT' ? (
+        <DraftSections procedure={procedure} onChange={update} onGone={leave} />
+      ) : (
+        <VersionReadOnly procedureId={id} versionId={procedure.versionId} />
+      )}
 
       <section aria-labelledby={`${baseId}-areas`} className={SECTION}>
         <h2 id={`${baseId}-areas`} className={SECTION_TITLE}>
@@ -90,7 +93,13 @@ export function ProcedureEditor() {
 
       <VersionsSection versions={versions}>
         {(items) => (
-          <VersionActions procedureId={id} versions={items} onChanged={versions.reload} />
+          <VersionActions
+            procedureId={id}
+            versions={items}
+            currentVersionId={procedure.versionId}
+            onChanged={versions.reload}
+            onDraftStarted={followDraft}
+          />
         )}
       </VersionsSection>
     </>

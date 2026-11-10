@@ -1,5 +1,6 @@
 // How each answer of the API changes the local copy of a procedure (spec 006). Pure functions: they
 // return a new copy and never change the one they receive.
+import type { VersionDetail } from '@/lib/api/procedure-versions';
 import type { ProcedureResponse, StepResponse, VersionResponse } from '@/lib/api/procedures';
 import type { StoredProcedure, StoredStep } from './session-list';
 
@@ -64,4 +65,17 @@ export function withStepsReordered(
 
 export function withAreas(procedure: StoredProcedure, areaIds: string[]): StoredProcedure {
   return { ...procedure, areaIds: [...areaIds] };
+}
+
+// The copy follows a new draft (spec 015, T13): its version and steps, with what belongs to the
+// procedure (id, areas, creation) as it was.
+export function withDraftVersion(procedure: StoredProcedure, draft: VersionDetail): StoredProcedure {
+  return {
+    ...procedure,
+    versionId: draft.id,
+    versionNumber: draft.versionNumber,
+    title: draft.title,
+    description: draft.description,
+    steps: draft.steps.map((step) => ({ ...step })).sort(byOrder),
+  };
 }

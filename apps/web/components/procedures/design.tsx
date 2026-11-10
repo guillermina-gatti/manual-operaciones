@@ -2,6 +2,11 @@
 // línea. Los botones, los campos, los títulos y las tarjetas no se copian acá: se importan de
 // components/documents/design.tsx y list-design.tsx (DESIGN.md 1 y 9).
 import type { ReactNode } from 'react';
+import { LIST_PANEL } from '@/components/documents/list-design';
+
+// Una sección de la pantalla de un procedimiento: la tarjeta con su título h2.
+export const SECTION = `${LIST_PANEL} flex min-w-0 flex-col gap-5`;
+export const SECTION_TITLE = 'text-xl font-bold';
 
 // Fila de un paso (solo la caja: quien la usa pone la distribución) y la caja de "Agregar paso", que
 // es el propio formulario.
