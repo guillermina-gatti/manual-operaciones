@@ -172,12 +172,14 @@ export class PrismaProceduresRepository extends ProceduresRepository {
               title: current.title,
               description: current.description,
               createdById: data.createdById,
-              // The steps get new ids: Prisma generates them (@default(uuid())).
+              // The steps get new ids (Prisma generates them, @default(uuid())) and keep their step
+              // key, which joins "the same step" across versions (spec 015, R7).
               steps: {
                 create: current.steps.map((step) => ({
                   stepOrder: step.stepOrder,
                   title: step.title,
                   description: step.description,
+                  stepKey: step.stepKey,
                 })),
               },
             },
@@ -384,7 +386,8 @@ export class PrismaProceduresRepository extends ProceduresRepository {
 }
 
 // SELECT … FOR UPDATE: the row stays locked until the transaction ends. true if it exists.
-async function lockProcedure(
+// Exported so the versions repository locks the procedure the same way (spec 015, PD2).
+export async function lockProcedure(
   tx: Prisma.TransactionClient,
   procedureId: string,
 ): Promise<boolean> {

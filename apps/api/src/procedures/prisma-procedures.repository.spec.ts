@@ -293,6 +293,43 @@ describe('PrismaProceduresRepository', () => {
       });
     });
 
+    it('spec 015, R7: the copied steps keep their step key and get new ids', async () => {
+      const keys = [
+        '1d000000-0000-4000-8000-000000000001',
+        '1d000000-0000-4000-8000-000000000002',
+      ];
+      happyPath();
+      txClient.procedureVersion.findFirst
+        .mockReset()
+        .mockResolvedValueOnce(null) // draft
+        .mockResolvedValueOnce({
+          ...published,
+          steps: published.steps.map((step, index) => ({
+            ...step,
+            id: `old-${index}`,
+            stepKey: keys[index],
+          })),
+        });
+
+      await repository.createDraft(newDraft);
+
+      const data = (
+        txClient.procedureVersion.create.mock.calls[0][0] as {
+          data: { steps: { create: Record<string, unknown>[] } };
+        }
+      ).data;
+      expect(data.steps.create).toEqual([
+        { stepOrder: 1, title: 'Contar', description: '', stepKey: keys[0] },
+        {
+          stepOrder: 2,
+          title: 'Comparar',
+          description: 'Con el reporte',
+          stepKey: keys[1],
+        },
+      ]);
+      expect(data.steps.create.some((step) => 'id' in step)).toBe(false);
+    });
+
     it('runs in a transaction with a timeout', async () => {
       happyPath();
 
