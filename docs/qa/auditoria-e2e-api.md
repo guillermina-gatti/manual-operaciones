@@ -109,3 +109,58 @@ Antes de incorporarlas es necesario definir una infraestructura aislada de Postg
 ## 8. Criterio de cierre
 
 La auditoría estará completa cuando el inventario esté registrado, los conflictos de comportamiento tengan responsables identificados y exista un procedimiento seguro para ejecutar pruebas E2E sin afectar datos de desarrollo.
+
+
+## C-02 — Validación E2E aislada (10/11/2026)
+
+### Incidente de infraestructura
+
+Durante la ejecución general de las pruebas se observaron
+timeouts de Jest y errores de transacciones de Prisma.
+
+Posteriormente se confirmó una falla del motor Docker Desktop.
+Se recuperó Docker y se verificó:
+
+- PostgreSQL disponible en localhost:5433.
+- Redis operativo.
+- Sin conexiones adicionales a manual_test al consultar.
+- Contenedores activos con bajo consumo de recursos en reposo.
+
+### Ejecuciones posteriores a la recuperación
+
+**Suite 1 — A-15: áreas y candidatos**
+
+Archivo: `test/auth/auth-directory-catalog.e2e-spec.ts`
+
+- Suites: 1/1 PASS.
+- Tests: 10/10 PASS.
+- Duración: 14,82 s.
+
+**Suite 2 — Ciclo de vida del repositorio de documentos**
+
+Archivo: `test/documents/lifecycle.repository.e2e-spec.ts`
+
+- Suites: 1/1 PASS.
+- Tests: 27/27 PASS.
+- Duración: 16,893 s.
+
+### Resultado consolidado
+
+- 2 suites aprobadas.
+- 37 tests aprobados.
+- 0 tests fallidos en las ejecuciones aisladas.
+
+### Conclusión
+
+La suite de ciclo de vida, anteriormente afectada por
+timeouts, pasó completamente tras recuperar Docker Desktop.
+
+La inestabilidad del entorno es una explicación plausible
+del incidente, pero su causa raíz no está confirmada.
+
+Pendiente:
+- Validar ejecución conjunta de varias suites.
+- Investigar posibles interferencias entre pruebas.
+- Resolver la contradicción contractual del escenario E22
+  sobre documentos asociados a áreas inactivas.
+- Definir estrategia E2E para CI con PostgreSQL y Redis aislados.
