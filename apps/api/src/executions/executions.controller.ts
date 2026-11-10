@@ -129,4 +129,34 @@ export class ExecutionsController {
       await this.executions.completeStep(user, id, stepId),
     );
   }
+
+  // POST /executions/:id/restart (HU33): closes it as RESTARTED and starts a new one on
+  // the current version, from step 1.
+  @Post(':id/restart')
+  @ApiResponse({
+    status: 201,
+    description:
+      'La ejecución nueva, sobre la versión vigente; la anterior queda RESTARTED',
+    type: ExecutionResponse,
+  })
+  @ApiResponse({ status: 400, description: 'El id no es un UUID' })
+  @ApiResponse(UNAUTHORIZED)
+  @ApiResponse(FORBIDDEN)
+  @ApiResponse({
+    status: 404,
+    description:
+      'La ejecución no existe, es de otro usuario o de un área que perdió, o el procedimiento ya no tiene versión publicada',
+  })
+  @ApiResponse({
+    status: 409,
+    description:
+      'reason: "EXECUTION_COMPLETED" (ya terminó), "EXECUTION_RESTARTED" (ya se reinició) o "PROCEDURE_NOT_CHANGED" (sigue en la versión vigente)',
+  })
+  @ApiResponse(UNAVAILABLE)
+  async restart(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<ExecutionResponse> {
+    return toExecutionResponse(await this.executions.restart(user, id));
+  }
 }

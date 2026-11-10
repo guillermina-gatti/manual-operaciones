@@ -16,6 +16,7 @@ const PHRASES: [ExecutionOperation, string][] = [
   ['start', 'el inicio de la ejecución'],
   ['find', 'la consulta de la ejecución'],
   ['complete', 'el registro del paso'],
+  ['restart', 'el reinicio de la ejecución'],
   ['metrics', 'la consulta de las métricas'],
 ];
 

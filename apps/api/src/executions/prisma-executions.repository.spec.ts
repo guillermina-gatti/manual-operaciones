@@ -406,4 +406,89 @@ describe('PrismaExecutionsRepository', () => {
       ).rejects.toBeInstanceOf(ExecutionsRepositoryUnavailableError);
     });
   });
+
+  describe('restart (HU33)', () => {
+    const NEW_ID = '1d000000-0000-4000-8000-000000000002';
+    const NEW_VERSION = '1b000000-0000-4000-8000-000000000002';
+    const NEW_STEP = '1c000000-0000-4000-8000-000000000011';
+    const restartData = {
+      executionId: EXECUTION_ID,
+      closedAt: T3,
+      next: {
+        ...newExecution,
+        id: NEW_ID,
+        procedureVersionId: NEW_VERSION,
+        startedAt: T3,
+        firstStep: { stepId: NEW_STEP, stepOrder: 1 },
+      },
+    };
+
+    it('closes the old one as RESTARTED, then creates the new one with step 1 started', async () => {
+      txClient.execution.create.mockResolvedValue(
+        row({
+          id: NEW_ID,
+          procedureVersionId: NEW_VERSION,
+          startedAt: T3,
+          steps: [
+            {
+              id: 'row-9',
+              executionId: NEW_ID,
+              stepId: NEW_STEP,
+              stepOrder: 1,
+              startedAt: T3,
+              finishedAt: null,
+            },
+          ],
+        }),
+      );
+
+      const record = await repository.restart(tx, restartData);
+
+      expect(txClient.execution.update).toHaveBeenCalledWith({
+        where: { id: EXECUTION_ID },
+        data: { status: 'RESTARTED', finishedAt: T3 },
+      });
+      expect(txClient.execution.create).toHaveBeenCalledWith({
+        data: {
+          id: NEW_ID,
+          userId: USER_ID,
+          procedureId: PROCEDURE_ID,
+          procedureVersionId: NEW_VERSION,
+          status: 'IN_PROGRESS',
+          startedAt: T3,
+          steps: {
+            create: { stepId: NEW_STEP, stepOrder: 1, startedAt: T3 },
+          },
+        },
+        include: STEPS_INCLUDE,
+      });
+      // The old one stops being in progress before the new one is inserted.
+      expect(
+        txClient.execution.update.mock.invocationCallOrder[0],
+      ).toBeLessThan(txClient.execution.create.mock.invocationCallOrder[0]);
+      expect(record).toMatchObject({
+        id: NEW_ID,
+        procedureVersionId: NEW_VERSION,
+        status: 'IN_PROGRESS',
+      });
+    });
+
+    it('writes only through the transaction client', async () => {
+      txClient.execution.create.mockResolvedValue(row({ id: NEW_ID }));
+
+      await repository.restart(tx, restartData);
+
+      expect(prisma.execution.update).not.toHaveBeenCalled();
+      expect(prisma.execution.create).not.toHaveBeenCalled();
+    });
+
+    it('translates a database that is down', async () => {
+      txClient.execution.update.mockRejectedValue(knownError('P1001'));
+
+      await expect(repository.restart(tx, restartData)).rejects.toBeInstanceOf(
+        ExecutionsRepositoryUnavailableError,
+      );
+      expect(txClient.execution.create).not.toHaveBeenCalled();
+    });
+  });
 });

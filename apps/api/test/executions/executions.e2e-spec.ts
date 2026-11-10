@@ -18,7 +18,7 @@ import {
 interface ExecutionBody {
   id: string;
   procedureVersionId: string;
-  status: 'IN_PROGRESS' | 'COMPLETED';
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'RESTARTED';
   finishedAt: string | null;
   currentStepId: string | null;
   steps: {
@@ -215,6 +215,89 @@ describe('Executions (integration)', () => {
       });
     });
 
+    const restart = (id: string, headers = ventas) =>
+      http().post(`/api/executions/${id}/restart`).set(headers);
+
+    it('restart: 201 with a new execution on v2 from step 1; the old one is RESTARTED', async () => {
+      const old = await startOnV1();
+      t.catalog.publish(V2);
+
+      const { body } = await restart(old.id).expect(201);
+      const fresh = body as ExecutionBody;
+
+      expect(fresh.id).not.toBe(old.id);
+      expect(fresh).toMatchObject({
+        procedureVersionId: V2,
+        status: 'IN_PROGRESS',
+        currentStepId: V2_STEPS[0].id,
+        versionChange: { changed: false },
+      });
+      const closed = (await get(old.id)).body as ExecutionBody;
+      expect(closed).toMatchObject({
+        status: 'RESTARTED',
+        currentStepId: null,
+        versionChange: { changed: false },
+      });
+      expect(closed.finishedAt).toBe(fresh.steps[0].startedAt);
+
+      // Starting again gives the new one; the old one cannot move.
+      const again = await start(ventas).expect(200);
+      expect((again.body as ExecutionBody).id).toBe(fresh.id);
+      const moved = await complete(old.id, old.steps[0].stepId).expect(409);
+      expect(moved.body.reason).toBe('EXECUTION_RESTARTED');
+    });
+
+    it('two restarts at once: one 201, the other 409 EXECUTION_RESTARTED, one in progress', async () => {
+      const old = await startOnV1();
+      t.catalog.publish(V2);
+
+      const responses = await Promise.all([restart(old.id), restart(old.id)]);
+
+      expect(responses.map((r) => r.status).sort((a, b) => a - b)).toEqual([
+        201, 409,
+      ]);
+      expect(responses.find((r) => r.status === 409)!.body.reason).toBe(
+        'EXECUTION_RESTARTED',
+      );
+      const inProgress = await t.prisma.execution.count({
+        where: {
+          userId: FIXTURE_USERS.empleadoVentas.id,
+          procedureId: CIERRE,
+          status: 'IN_PROGRESS',
+        },
+      });
+      expect(inProgress).toBe(1);
+    });
+
+    it('restart without a change of version: 409 PROCEDURE_NOT_CHANGED', async () => {
+      const { body } = await start(ventas).expect(201);
+
+      const response = await restart((body as ExecutionBody).id).expect(409);
+
+      expect(response.body.reason).toBe('PROCEDURE_NOT_CHANGED');
+    });
+
+    it("restart someone else's execution: the same 404 as a missing one", async () => {
+      const old = await startOnV1();
+      t.catalog.publish(V2);
+
+      const response = await restart(old.id, otroVentas).expect(404);
+      const missing = await restart(MISSING).expect(404);
+
+      expect(response.body).toEqual(missing.body);
+    });
+
+    it('restart: 401 without a session, 403 for ADMIN and SUPERVISOR', async () => {
+      const old = await startOnV1();
+      t.catalog.publish(V2);
+
+      await http().post(`/api/executions/${old.id}/restart`).expect(401);
+      await restart(old.id, authHeaders(FIXTURE_USERS.admin)).expect(403);
+      await restart(old.id, authHeaders(FIXTURE_USERS.supervisorVentas)).expect(
+        403,
+      );
+    });
+
     it('a completed execution never shows a change', async () => {
       const execution = await startOnV1();
       const v1Steps = FIXTURE_PROCEDURE_VERSIONS.find(
@@ -229,6 +312,8 @@ describe('Executions (integration)', () => {
 
       expect(found.status).toBe('COMPLETED');
       expect(found.versionChange.changed).toBe(false);
+      const response = await restart(execution.id).expect(409);
+      expect(response.body.reason).toBe('EXECUTION_COMPLETED');
     });
   });
 

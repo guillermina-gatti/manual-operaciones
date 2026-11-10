@@ -24,6 +24,7 @@ import {
 } from './adapters/procedure-fixtures';
 import { ExecutionService } from './execution.service';
 import {
+  ExecutionRestart,
   ExecutionInProgressError,
   ExecutionsRepositoryUnavailableError,
   ExecutionRecord,
@@ -56,21 +57,30 @@ class FakeExecutionsRepository extends ExecutionsRepository {
   readonly transactions: RepositoryTransaction[] = [];
   readonly completions: { tx: RepositoryTransaction; data: StepCompletion }[] =
     [];
+  readonly restarts: { tx: RepositoryTransaction; data: ExecutionRestart }[] =
+    [];
   inTransaction = false;
+  // One transaction at a time, like the row lock (SELECT … FOR UPDATE) of the real one.
+  private queue: Promise<unknown> = Promise.resolve();
 
-  async runInTransaction<T>(
+  runInTransaction<T>(
     fn: (tx: RepositoryTransaction) => Promise<T>,
   ): Promise<T> {
-    const tx = {
-      id: this.transactions.length,
-    } as unknown as RepositoryTransaction;
-    this.transactions.push(tx);
-    this.inTransaction = true;
-    try {
-      return await fn(tx);
-    } finally {
-      this.inTransaction = false;
-    }
+    const run = async () => {
+      const tx = {
+        id: this.transactions.length,
+      } as unknown as RepositoryTransaction;
+      this.transactions.push(tx);
+      this.inTransaction = true;
+      try {
+        return await fn(tx);
+      } finally {
+        this.inTransaction = false;
+      }
+    };
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => undefined);
+    return result;
   }
 
   create(data: NewExecution): Promise<ExecutionRecord> {
@@ -141,6 +151,36 @@ class FakeExecutionsRepository extends ExecutionsRepository {
       record.status = 'COMPLETED';
       record.finishedAt = data.finishedAt;
     }
+    return Promise.resolve(copy(record));
+  }
+
+  restart(
+    tx: RepositoryTransaction,
+    data: ExecutionRestart,
+  ): Promise<ExecutionRecord> {
+    this.restarts.push({ tx, data });
+    const old = this.records.get(data.executionId)!;
+    old.status = 'RESTARTED';
+    old.finishedAt = data.closedAt;
+    const { next } = data;
+    const record: ExecutionRecord = {
+      id: next.id,
+      userId: next.userId,
+      procedureId: next.procedureId,
+      procedureVersionId: next.procedureVersionId,
+      status: 'IN_PROGRESS',
+      startedAt: next.startedAt,
+      finishedAt: null,
+      steps: [
+        {
+          stepId: next.firstStep.stepId,
+          stepOrder: next.firstStep.stepOrder,
+          startedAt: next.startedAt,
+          finishedAt: null,
+        },
+      ],
+    };
+    this.records.set(record.id, record);
     return Promise.resolve(copy(record));
   }
 }
@@ -826,6 +866,166 @@ describe('ExecutionService', () => {
       await expect(
         service.findOne(empleadoVentas, execution.id),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+  });
+
+  describe('HU33: restart', () => {
+    // Elena on v1; then v2 is published (critical unless told otherwise).
+    const onV1ThenV2 = async (isCritical = true) => {
+      catalog = new InMemoryProceduresCatalog([
+        { ...V1, published: true, superseded: false },
+        {
+          ...V2,
+          published: false,
+          isCritical,
+          changeSummary: 'Cambia el límite de caja',
+        },
+        ...FIXTURE_PROCEDURE_VERSIONS.filter((v) => v.procedureId !== CIERRE),
+      ]);
+      service = build();
+      const { execution } = await service.start(empleadoVentas, CIERRE);
+      catalog.publish(V2.versionId);
+      clock.set('2026-10-27T11:00:00.000Z');
+      return execution;
+    };
+
+    it('closes the old one as RESTARTED and starts a new one on the current version, from step 1', async () => {
+      const old = await onV1ThenV2();
+
+      const fresh = await service.restart(empleadoVentas, old.id);
+
+      expect(fresh).toMatchObject({
+        procedureVersionId: V2.versionId,
+        status: 'IN_PROGRESS',
+        startedAt: new Date('2026-10-27T11:00:00.000Z'),
+        currentStepId: V2.steps[0].id,
+        versionChange: { changed: false },
+      });
+      expect(fresh.id).not.toBe(old.id);
+      const closed = await service.findOne(empleadoVentas, old.id);
+      expect(closed).toMatchObject({
+        status: 'RESTARTED',
+        finishedAt: new Date('2026-10-27T11:00:00.000Z'),
+        currentStepId: null,
+        versionChange: { changed: false },
+      });
+    });
+
+    it('the two writes go in one transaction, on the row read again inside it', async () => {
+      const old = await onV1ThenV2();
+
+      await service.restart(empleadoVentas, old.id);
+
+      expect(repository.restarts).toHaveLength(1);
+      expect(repository.restarts[0].tx).toBe(repository.transactions.at(-1));
+    });
+
+    it('also for a change that is not critical: the employee may choose it', async () => {
+      const old = await onV1ThenV2(false);
+
+      await expect(
+        service.restart(empleadoVentas, old.id),
+      ).resolves.toMatchObject({ procedureVersionId: V2.versionId });
+    });
+
+    it('starting again after a restart gives the new one', async () => {
+      const old = await onV1ThenV2();
+      const fresh = await service.restart(empleadoVentas, old.id);
+
+      const again = await service.start(empleadoVentas, CIERRE);
+
+      expect(again).toMatchObject({ created: false });
+      expect(again.execution.id).toBe(fresh.id);
+    });
+
+    it('two restarts at once: one wins, the other is a 409 EXECUTION_RESTARTED', async () => {
+      const old = await onV1ThenV2();
+
+      const results = await Promise.allSettled([
+        service.restart(empleadoVentas, old.id),
+        service.restart(empleadoVentas, old.id),
+      ]);
+
+      expect(results.map((r) => r.status).sort()).toEqual([
+        'fulfilled',
+        'rejected',
+      ]);
+      const rejected = results.find((r) => r.status === 'rejected')!;
+      expect((rejected as PromiseRejectedResult).reason).toMatchObject({
+        response: expect.objectContaining({
+          reason: 'EXECUTION_RESTARTED',
+        }) as unknown,
+      });
+      expect(repository.restarts).toHaveLength(1);
+      expect(
+        [...repository.records.values()].filter(
+          (r) => r.status === 'IN_PROGRESS',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('a restarted execution cannot be restarted nor moved: 409 EXECUTION_RESTARTED', async () => {
+      const old = await onV1ThenV2(false);
+      await service.restart(empleadoVentas, old.id);
+
+      await expectConflict(
+        service.restart(empleadoVentas, old.id),
+        'EXECUTION_RESTARTED',
+      );
+      await expectConflict(
+        service.completeStep(empleadoVentas, old.id, V1.steps[0].id),
+        'EXECUTION_RESTARTED',
+      );
+    });
+
+    it('a completed execution cannot be restarted: 409 EXECUTION_COMPLETED', async () => {
+      const { execution } = await service.start(empleadoVentas, CIERRE);
+      for (const step of V1.steps) {
+        await service.completeStep(empleadoVentas, execution.id, step.id);
+      }
+      catalog.publish(V2.versionId);
+
+      await expectConflict(
+        service.restart(empleadoVentas, execution.id),
+        'EXECUTION_COMPLETED',
+      );
+    });
+
+    it('without a change of version: 409 PROCEDURE_NOT_CHANGED, without writing', async () => {
+      const { execution } = await service.start(empleadoVentas, CIERRE);
+
+      await expectConflict(
+        service.restart(empleadoVentas, execution.id),
+        'PROCEDURE_NOT_CHANGED',
+      );
+      expect(repository.restarts).toHaveLength(0);
+    });
+
+    it('another employee gets the same 404 as a missing execution', async () => {
+      const old = await onV1ThenV2();
+
+      const message = await expectNotFound(service.restart(otroVentas, old.id));
+
+      expect(message).toBe('No se encontró la ejecución');
+      expect(repository.restarts).toHaveLength(0);
+    });
+
+    it('a procedure moved to another area: 404', async () => {
+      const old = await onV1ThenV2();
+      catalog.assignAreas(CIERRE, [AREA_IDS.operaciones]);
+
+      await expectNotFound(service.restart(empleadoVentas, old.id));
+    });
+
+    it('a database that is down is a 503 with the restart message', async () => {
+      const old = await onV1ThenV2();
+      jest
+        .spyOn(repository, 'restart')
+        .mockRejectedValue(new ExecutionsRepositoryUnavailableError('down'));
+
+      await expect(service.restart(empleadoVentas, old.id)).rejects.toThrow(
+        'No se pudo completar el reinicio de la ejecución. Intentá de nuevo más tarde.',
+      );
     });
   });
 });
