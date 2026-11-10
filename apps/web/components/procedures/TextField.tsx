@@ -29,13 +29,13 @@ export function TextField({ label, value, onChange, error, rows }: TextFieldProp
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={id} className={LABEL}>
+      <label htmlFor={id} className={`${LABEL} text-base`}>
         {label}
       </label>
       {rows ? (
-        <textarea rows={rows} className={`${INPUT} py-3`} {...shared} />
+        <textarea rows={rows} className={`${INPUT} py-3 text-base`} {...shared} />
       ) : (
-        <input type="text" className={INPUT} {...shared} />
+        <input type="text" className={`${INPUT} text-base`} {...shared} />
       )}
       <FieldError id={errorId} message={error} />
     </div>

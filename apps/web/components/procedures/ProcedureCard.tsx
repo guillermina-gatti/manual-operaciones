@@ -34,7 +34,7 @@ export function ProcedureCard({ procedure, onRemove }: ProcedureCardProps) {
           {procedure.title}
         </Link>
       </h3>
-      <p className="text-sm text-texto-suave">Versión {procedure.versionNumber} · borrador</p>
+      <p className="text-base text-texto-suave">Versión {procedure.versionNumber} · borrador</p>
       {procedure.description && (
         <p className="line-clamp-2 break-words">{procedure.description}</p>
       )}

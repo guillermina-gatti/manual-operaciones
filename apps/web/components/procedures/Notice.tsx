@@ -2,11 +2,12 @@
 import type { ComponentProps } from 'react';
 import { ERROR_BOX } from '@/components/documents/design';
 
-const BOX = 'rounded-xl border p-4 text-sm';
+// A notice is text to read: 16 px (DESIGN.md 3), never text-sm or text-xs.
+const BOX = 'rounded-xl border p-4 text-base';
 
 const TONES = {
   info: `${BOX} border-borde bg-fondo text-texto`,
-  error: `${ERROR_BOX} text-sm`,
+  error: `${ERROR_BOX} text-base`,
   success: `${BOX} border-bosque/20 bg-salvia text-bosque`,
 } as const;
 
