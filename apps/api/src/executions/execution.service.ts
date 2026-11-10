@@ -88,6 +88,8 @@ const CONFLICT_MESSAGES = {
   EXECUTION_RESTARTED: 'La ejecución se reinició con la versión nueva',
   PROCEDURE_NOT_CHANGED:
     'El procedimiento no cambió: la ejecución sigue con la versión vigente',
+  PROCEDURE_CHANGED_CRITICAL:
+    'El procedimiento tuvo un cambio crítico: reiniciá la ejecución con la versión nueva',
 } as const;
 
 // An execution that is no longer in progress cannot move: 409 with why.
@@ -207,6 +209,13 @@ export class ExecutionService {
 
       if (execution.status !== 'IN_PROGRESS') {
         throw notInProgress(execution.status);
+      }
+      // HU33: after a critical change the only way on is to restart.
+      if (change.critical) {
+        throw conflict(
+          'PROCEDURE_CHANGED_CRITICAL',
+          CONFLICT_MESSAGES.PROCEDURE_CHANGED_CRITICAL,
+        );
       }
       const rejection = checkCompletable(version.steps, execution.steps, step);
       if (rejection) throw conflict(rejection, CONFLICT_MESSAGES[rejection]);

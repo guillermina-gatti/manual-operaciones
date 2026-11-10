@@ -144,6 +144,17 @@ describe('Executions (integration)', () => {
     const get = (id: string) =>
       http().get(`/api/executions/${id}`).set(ventas).expect(200);
 
+    // v3, a critical change, as a draft: each test publishes it when it needs it.
+    const addCriticalV3 = () =>
+      t.catalog.addVersion({
+        ...FIXTURE_PROCEDURE_VERSIONS.find((v) => v.versionId === V2)!,
+        versionId: V3,
+        versionNumber: 3,
+        isCritical: true,
+        changeSummary: 'Cambia el límite de caja',
+        published: false,
+      });
+
     afterEach(() => {
       t.catalog.publish(V2);
     });
@@ -187,19 +198,18 @@ describe('Executions (integration)', () => {
 
     it('a critical version in between makes it critical, with its summary', async () => {
       const execution = await startOnV1();
-      t.catalog.addVersion({
-        ...FIXTURE_PROCEDURE_VERSIONS.find((v) => v.versionId === V2)!,
-        versionId: V3,
-        versionNumber: 3,
-        isCritical: true,
-        changeSummary: 'Cambia el límite de caja',
-        published: false,
-      });
+      addCriticalV3();
       t.catalog.publish(V2);
       t.catalog.publish(V3);
 
       const found = (await get(execution.id)).body as ExecutionBody;
 
+      // Moving on is blocked until it restarts.
+      const blocked = await complete(
+        execution.id,
+        execution.steps[0].stepId,
+      ).expect(409);
+      expect(blocked.body.reason).toBe('PROCEDURE_CHANGED_CRITICAL');
       expect(found.versionChange).toMatchObject({
         changed: true,
         critical: true,
@@ -296,6 +306,20 @@ describe('Executions (integration)', () => {
       await restart(old.id, authHeaders(FIXTURE_USERS.supervisorVentas)).expect(
         403,
       );
+    });
+
+    it('after a critical change, restarting lets the new execution move on', async () => {
+      const execution = await startOnV1();
+      addCriticalV3();
+      t.catalog.publish(V2);
+      t.catalog.publish(V3);
+
+      const { body } = await restart(execution.id).expect(201);
+      const fresh = body as ExecutionBody;
+      const moved = await complete(fresh.id, fresh.steps[0].stepId).expect(200);
+
+      expect(fresh.procedureVersionId).toBe(V3);
+      expect((moved.body as ExecutionBody).status).toBe('IN_PROGRESS');
     });
 
     it('a completed execution never shows a change', async () => {

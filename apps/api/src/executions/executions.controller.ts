@@ -117,7 +117,7 @@ export class ExecutionsController {
   @ApiResponse({
     status: 409,
     description:
-      'reason: "EXECUTION_COMPLETED" (la ejecución ya terminó), "STEP_OUT_OF_ORDER" (no es el paso actual) o "STEP_ALREADY_FINISHED" (el paso ya terminó)',
+      'reason: "EXECUTION_COMPLETED" (la ejecución ya terminó), "EXECUTION_RESTARTED" (se reinició con la versión nueva), "PROCEDURE_CHANGED_CRITICAL" (el procedimiento tuvo un cambio crítico: hay que reiniciar), "STEP_OUT_OF_ORDER" (no es el paso actual) o "STEP_ALREADY_FINISHED" (el paso ya terminó)',
   })
   @ApiResponse(UNAVAILABLE)
   async completeStep(

@@ -857,6 +857,67 @@ describe('ExecutionService', () => {
       });
     });
 
+    it('completing a step after a critical change: 409 PROCEDURE_CHANGED_CRITICAL, nothing written', async () => {
+      withV2({ isCritical: true, changeSummary: 'Cambia el límite de caja' });
+      const execution = await startOnV1();
+      catalog.publish(V2.versionId);
+
+      await expectConflict(
+        service.completeStep(empleadoVentas, execution.id, V1.steps[0].id),
+        'PROCEDURE_CHANGED_CRITICAL',
+      );
+      expect(repository.completions).toHaveLength(0);
+    });
+
+    it('a critical version in between blocks it too, though the current one is not critical', async () => {
+      const V3 = '1b000000-0000-4000-8000-000000000009';
+      withV2({ isCritical: true, changeSummary: 'Cambia el límite de caja' });
+      const execution = await startOnV1();
+      catalog.publish(V2.versionId);
+      catalog.addVersion({
+        ...V2,
+        versionId: V3,
+        versionNumber: 3,
+        isCritical: false,
+        published: false,
+      });
+      catalog.publish(V3);
+
+      await expectConflict(
+        service.completeStep(empleadoVentas, execution.id, V1.steps[0].id),
+        'PROCEDURE_CHANGED_CRITICAL',
+      );
+    });
+
+    it('a completed execution answers EXECUTION_COMPLETED, not the critical change', async () => {
+      withV2({ isCritical: true, changeSummary: 'Cambia el límite de caja' });
+      const execution = await startOnV1();
+      for (const step of V1.steps) {
+        await service.completeStep(empleadoVentas, execution.id, step.id);
+      }
+      catalog.publish(V2.versionId);
+
+      await expectConflict(
+        service.completeStep(empleadoVentas, execution.id, V1.steps[0].id),
+        'EXECUTION_COMPLETED',
+      );
+    });
+
+    it('after restarting, the new execution moves on as usual', async () => {
+      withV2({ isCritical: true, changeSummary: 'Cambia el límite de caja' });
+      const execution = await startOnV1();
+      catalog.publish(V2.versionId);
+
+      const fresh = await service.restart(empleadoVentas, execution.id);
+      const moved = await service.completeStep(
+        empleadoVentas,
+        fresh.id,
+        V2.steps[0].id,
+      );
+
+      expect(moved.currentStepId).toBe(V2.steps[1].id);
+    });
+
     it('a catalog that does not answer while comparing is a 503', async () => {
       const execution = await startOnV1();
       jest
