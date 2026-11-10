@@ -108,16 +108,21 @@ export const toVersionHistoryItem = (
 
 export const toVersionDetailResponse = (
   version: WithPublisherName<VersionDetailRecord>,
-): VersionDetailResponse => ({
-  ...toVersionHistoryItem(version),
-  description: version.description,
-  steps: version.steps.map((step) => ({
-    id: step.id,
-    order: step.order,
-    title: step.title,
-    description: step.description,
-  })),
-});
+): VersionDetailResponse => {
+  // As plain fields, so the spread does not copy a class instance.
+  const item: Pick<VersionHistoryItemResponse, keyof VersionHistoryItemResponse> =
+    toVersionHistoryItem(version);
+  return {
+    ...item,
+    description: version.description,
+    steps: version.steps.map((step) => ({
+      id: step.id,
+      order: step.order,
+      title: step.title,
+      description: step.description,
+    })),
+  };
+};
 
 export const toVersionHistoryPage = (
   page: { data: WithPublisherName<VersionHistoryRecord>[]; total: VersionsPage['total'] },
