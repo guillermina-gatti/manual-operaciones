@@ -213,6 +213,93 @@ describe('Procedures: versions (integration)', () => {
     });
   });
 
+  describe('compare', () => {
+    interface ComparisonBody {
+      added: { title: string }[];
+      removed: { title: string }[];
+      modified: { after: { title: string }; changedFields: string[] }[];
+      unchanged: number;
+    }
+
+    // Version 1 PUBLISHED with A, B and C, and a draft 2 created from it through the API, so the
+    // steps keep their step keys. Gives the ids of the steps of the draft by order.
+    const withCopy = async () => {
+      const { procedureId, versionIds } = await seedProcedure(t.prisma, {
+        areaIds: [AREA_IDS.ventas],
+        versions: [{ versionNumber: 1, status: 'PUBLISHED', stepTitles: ['A', 'B', 'C'] }],
+      });
+      const { body } = await http().post(versionsPath(procedureId)).set(admin).expect(201);
+      const draftId = (body as VersionBody).id;
+      const steps = await storedSteps(draftId);
+      return { procedureId, fromId: versionIds[0], draftId, stepIds: steps.map((step) => step.id) };
+    };
+    const compare = (procedureId: string, from: string, to: string) =>
+      http().get(`${versionsPath(procedureId)}/compare?from=${from}&to=${to}`);
+
+    it('E12: tells the step added, the one removed and the one modified, and counts the unchanged', async () => {
+      const { procedureId, fromId, draftId, stepIds } = await withCopy();
+      const draft = `${versionsPath(procedureId)}/${draftId}/steps`;
+      await http().patch(`${draft}/${stepIds[1]}`).set(admin).send({ description: 'Con el reporte' }).expect(200);
+      await http().delete(`${draft}/${stepIds[2]}`).set(admin).expect(204);
+      await http().post(draft).set(admin).send({ title: 'D' }).expect(201);
+
+      const { body } = await compare(procedureId, fromId, draftId).set(admin).expect(200);
+
+      const result = body as ComparisonBody;
+      expect(result.added.map((step) => step.title)).toEqual(['D']);
+      expect(result.removed.map((step) => step.title)).toEqual(['C']);
+      expect(result.modified.map((step) => [step.after.title, step.changedFields])).toEqual([
+        ['B', ['description']],
+      ]);
+      expect(result.unchanged).toBe(1);
+      expect(JSON.stringify(body)).not.toContain('stepKey');
+    });
+
+    it('E13: a step that only changed its place is modified in its order', async () => {
+      const { procedureId, fromId, draftId, stepIds } = await withCopy();
+      await http()
+        .put(`${versionsPath(procedureId)}/${draftId}/steps/order`)
+        .set(admin)
+        .send({ stepIds: [stepIds[1], stepIds[0], stepIds[2]] })
+        .expect(200);
+
+      const { body } = await compare(procedureId, fromId, draftId).set(admin).expect(200);
+
+      const result = body as ComparisonBody;
+      expect(result.modified.map((step) => [step.after.title, step.changedFields])).toEqual([
+        ['B', ['order']],
+        ['A', ['order']],
+      ]);
+      expect(result.unchanged).toBe(1);
+    });
+
+    it('E14: the same version on both sides is 400, and so is a missing parameter', async () => {
+      const { procedureId, fromId } = await withCopy();
+
+      await compare(procedureId, fromId, fromId).set(admin).expect(400);
+      await http().get(`${versionsPath(procedureId)}/compare?from=${fromId}`).set(admin).expect(400);
+    });
+
+    it('E16: a version of another procedure and a missing procedure give the same 404', async () => {
+      const mine = await withCopy();
+      const other = await withCopy();
+
+      const foreign = await compare(mine.procedureId, mine.fromId, other.draftId).set(admin).expect(404);
+      const missing = await compare(randomUUID(), mine.fromId, mine.draftId).set(admin).expect(404);
+
+      expect((foreign.body as { message: string }).message).toBe(NOT_FOUND);
+      expect(missing.body).toEqual(foreign.body);
+    });
+
+    it('E15: 403 for a SUPERVISOR and an EMPLOYEE, and 401 without a session', async () => {
+      const { procedureId, fromId, draftId } = await withCopy();
+
+      await compare(procedureId, fromId, draftId).set(supervisor).expect(403);
+      await compare(procedureId, fromId, draftId).set(employee).expect(403);
+      await compare(procedureId, fromId, draftId).expect(401);
+    });
+  });
+
   describe('errors', () => {
     it('E15: 403 for a SUPERVISOR and an EMPLOYEE, and 401 without a session', async () => {
       const { procedureId, versionIds } = await withDraft();
