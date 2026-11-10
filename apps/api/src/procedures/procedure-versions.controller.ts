@@ -4,6 +4,8 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Use
 import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../common/auth';
 import type { AuthUser } from '../common/auth';
+import { CompareResponse, toCompareResponse } from './dto/compare.response';
+import { CompareVersionsQuery } from './dto/compare-versions.query';
 import { ListVersionsQuery } from './dto/list-versions.query';
 import { PublishVersionDto } from './dto/publish-version.dto';
 import { toVersionDetailResponse, VersionDetailResponse } from './dto/version-detail.response';
@@ -13,6 +15,7 @@ import {
   VersionHistoryItemResponse,
   VersionHistoryPageResponse,
 } from './dto/version-history.response';
+import { ProcedureCompareService } from './procedure-compare.service';
 import { ProcedureHistoryService } from './procedure-history.service';
 import { ProcedurePublishService } from './procedure-publish.service';
 import { FORBIDDEN, INVALID, NOT_FOUND, UNAUTHORIZED, UNAVAILABLE } from './version-api-responses';
@@ -32,6 +35,7 @@ export class ProcedureVersionsController {
   constructor(
     private readonly publishing: ProcedurePublishService,
     private readonly history: ProcedureHistoryService,
+    private readonly comparing: ProcedureCompareService,
   ) {}
 
   // R2: the draft becomes the PUBLISHED one.
@@ -68,6 +72,22 @@ export class ProcedureVersionsController {
   ): Promise<VersionHistoryPageResponse> {
     const page = await this.history.list(user, id, query.page, query.limit);
     return toVersionHistoryPage(page, query.page, query.limit);
+  }
+
+  // R10: what changed between two versions. Before :versionId, so "compare" is not taken for an id.
+  @Get(':id/versions/compare')
+  @ApiResponse({ status: 200, description: 'Pasos agregados, quitados y modificados', type: CompareResponse })
+  @ApiResponse({ ...INVALID, description: 'Falta from o to, no son UUID, o son la misma versión' })
+  @ApiResponse(UNAUTHORIZED)
+  @ApiResponse(FORBIDDEN)
+  @ApiResponse(NOT_FOUND)
+  @ApiResponse(UNAVAILABLE)
+  async compare(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: CompareVersionsQuery,
+    @CurrentUser() user: AuthUser,
+  ): Promise<CompareResponse> {
+    return toCompareResponse(await this.comparing.compare(user, id, query.from, query.to));
   }
 
   // R9: one version with its steps, in any state.

@@ -8,6 +8,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProcedureAreasService } from './procedure-areas.service';
 import { ProcedureDraftService } from './procedure-draft.service';
+import { ProcedureCompareService } from './procedure-compare.service';
 import { ProcedureHistoryService } from './procedure-history.service';
 import { ProcedurePublishService } from './procedure-publish.service';
 import { ProcedureVersionsController } from './procedure-versions.controller';
@@ -64,6 +65,7 @@ describe('ProceduresModule', () => {
     expect(moduleRef.get(UsersDirectory)).toBeInstanceOf(PrismaUsersDirectory);
     expect(moduleRef.get(ProcedurePublishService)).toBeInstanceOf(ProcedurePublishService);
     expect(moduleRef.get(ProcedureHistoryService)).toBeInstanceOf(ProcedureHistoryService);
+    expect(moduleRef.get(ProcedureCompareService)).toBeInstanceOf(ProcedureCompareService);
     expect(moduleRef.get(ProcedureVersionsController)).toBeInstanceOf(ProcedureVersionsController);
   });
 });

@@ -105,6 +105,65 @@ describe('PrismaVersionsRepository', () => {
     });
   });
 
+  describe('findForCompare', () => {
+    const FROM = PREVIOUS_ID;
+    const rows = () => [
+      versionRow({
+        id: VERSION_ID,
+        versionNumber: 2,
+        steps: [{ id: 'n1', stepOrder: 1, title: 'Contar', description: '', stepKey: 'k1' }],
+      }),
+      versionRow({
+        id: FROM,
+        versionNumber: 1,
+        status: 'PUBLISHED',
+        steps: [
+          { id: 'o1', stepOrder: 1, title: 'Contar', description: 'Todo', stepKey: 'k1' },
+          { id: 'o2', stepOrder: 2, title: 'Cerrar', description: '', stepKey: 'k2' },
+        ],
+      }),
+    ];
+
+    it('R10: gives the two versions, from and to as asked, with their steps and step keys', async () => {
+      prisma.procedureVersion.findMany.mockResolvedValue(rows());
+
+      const found = await repository.findForCompare(PROCEDURE_ID, FROM, VERSION_ID);
+
+      expect(found?.from).toMatchObject({ id: FROM, versionNumber: 1, status: 'PUBLISHED' });
+      expect(found?.to).toMatchObject({ id: VERSION_ID, versionNumber: 2, status: 'DRAFT' });
+      expect(found?.from.steps).toEqual([
+        { key: 'k1', id: 'o1', order: 1, title: 'Contar', description: 'Todo' },
+        { key: 'k2', id: 'o2', order: 2, title: 'Cerrar', description: '' },
+      ]);
+    });
+
+    it('looks for both ids inside the procedure, so a version of another procedure is not found', async () => {
+      prisma.procedureVersion.findMany.mockResolvedValue(rows());
+
+      await repository.findForCompare(PROCEDURE_ID, FROM, VERSION_ID);
+
+      expect(prisma.procedureVersion.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { procedureId: PROCEDURE_ID, id: { in: [FROM, VERSION_ID] } },
+        }),
+      );
+    });
+
+    it.each([['only one'], ['none']])('R10: if %s of the two is in that procedure, it is null', async (case_) => {
+      prisma.procedureVersion.findMany.mockResolvedValue(case_ === 'none' ? [] : rows().slice(0, 1));
+
+      await expect(repository.findForCompare(PROCEDURE_ID, FROM, VERSION_ID)).resolves.toBeNull();
+    });
+
+    it('a database that does not answer is a ProceduresRepositoryUnavailableError', async () => {
+      prisma.procedureVersion.findMany.mockRejectedValue(knownError('P1001'));
+
+      await expect(repository.findForCompare(PROCEDURE_ID, FROM, VERSION_ID)).rejects.toBeInstanceOf(
+        ProceduresRepositoryUnavailableError,
+      );
+    });
+  });
+
   describe('findVersion', () => {
     it('R9: gives the version with its steps in order', async () => {
       prisma.procedureVersion.findFirst.mockResolvedValue(

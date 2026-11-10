@@ -6,6 +6,7 @@ import { AreasDirectory } from '../documents/ports/areas-directory';
 import { UsersDirectory } from '../documents/ports/users-directory';
 import { ProcedureAreasService } from './procedure-areas.service';
 import { ProcedureDraftService } from './procedure-draft.service';
+import { ProcedureCompareService } from './procedure-compare.service';
 import { ProcedureHistoryService } from './procedure-history.service';
 import { ProcedurePublishService } from './procedure-publish.service';
 import { ProcedureVersionsController } from './procedure-versions.controller';
@@ -26,6 +27,7 @@ import { VersionsRepository } from './versions.repository';
     ProcedureAreasService,
     ProcedurePublishService,
     ProcedureHistoryService,
+    ProcedureCompareService,
     { provide: ProceduresRepository, useClass: PrismaProceduresRepository },
     { provide: PublishRepository, useClass: PrismaPublishRepository },
     { provide: VersionsRepository, useClass: PrismaVersionsRepository },

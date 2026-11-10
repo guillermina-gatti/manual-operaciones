@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   INestApplication,
   NotFoundException,
@@ -14,6 +15,7 @@ import {
   record as historyRecord,
 } from '../../test/procedures/version-fixtures';
 import { configureApp } from '../app.setup';
+import { ProcedureCompareService } from './procedure-compare.service';
 import { ProcedureHistoryService } from './procedure-history.service';
 import { ProcedurePublishService } from './procedure-publish.service';
 import { ProcedureVersionsController } from './procedure-versions.controller';
@@ -35,14 +37,15 @@ const publishUrl = `${base}/${VERSION_ID}/publish`;
 
 describe('ProcedureVersionsController (HTTP, service mocked)', () => {
   let app: INestApplication;
-  let service: Record<'publish' | 'list' | 'getVersion', jest.Mock>;
+  let service: Record<'publish' | 'list' | 'getVersion' | 'compare', jest.Mock>;
 
   beforeAll(async () => {
-    service = { publish: jest.fn(), list: jest.fn(), getVersion: jest.fn() };
+    service = { publish: jest.fn(), list: jest.fn(), getVersion: jest.fn(), compare: jest.fn() };
     const moduleRef = await Test.createTestingModule({
       controllers: [ProcedureVersionsController],
       providers: [
         { provide: ProcedurePublishService, useValue: { publish: service.publish } },
+        { provide: ProcedureCompareService, useValue: { compare: service.compare } },
         { provide: ProcedureHistoryService, useValue: { list: service.list, getVersion: service.getVersion } },
         ...realAuthProviders(), // the real JwtAuthGuard, users from a fake database
       ],
@@ -130,6 +133,59 @@ describe('ProcedureVersionsController (HTTP, service mocked)', () => {
         description: 'Al final del turno',
         steps: [{ id: 's1', order: 1, title: 'Contar', description: '' }],
       });
+    });
+  });
+
+  describe('compare (spec 015, R10)', () => {
+    const FROM = '1b000000-0000-4000-8000-000000000001';
+    const comparePath = `${base}/compare`;
+    const comparison = {
+      from: { id: FROM, versionNumber: 1, status: 'SUPERSEDED' },
+      to: { id: VERSION_ID, versionNumber: 2, status: 'PUBLISHED' },
+      added: [{ id: 's3', order: 3, title: 'Guardar', description: '' }],
+      removed: [],
+      modified: [],
+      unchanged: 2,
+    };
+
+    it('GET …/versions/compare answers 200 with the comparison and asks the compare service, not the detail', async () => {
+      service.compare.mockResolvedValue(comparison);
+
+      const response = await http().get(`${comparePath}?from=${FROM}&to=${VERSION_ID}`).set(ADMIN).expect(200);
+
+      expect(service.compare).toHaveBeenCalledWith(ADMIN_USER, PROCEDURE_ID, FROM, VERSION_ID);
+      expect(service.getVersion).not.toHaveBeenCalled();
+      expect(response.body).toEqual(comparison);
+    });
+
+    it.each([
+      ['from is missing', `?to=${VERSION_ID}`],
+      ['to is missing', `?from=${FROM}`],
+      ['from is not a UUID', `?from=xyz&to=${VERSION_ID}`],
+      ['a parameter that does not exist', `?from=${FROM}&to=${VERSION_ID}&x=1`],
+    ])('is a 400 when %s, and the service is not asked', async (_case, query) => {
+      await http().get(`${comparePath}${query}`).set(ADMIN).expect(400);
+
+      expect(service.compare).not.toHaveBeenCalled();
+    });
+
+    it('is a 401 without a session and a 403 for a SUPERVISOR and an EMPLOYEE', async () => {
+      const url = `${comparePath}?from=${FROM}&to=${VERSION_ID}`;
+
+      await http().get(url).expect(401);
+      await http().get(url).set(SUPERVISOR).expect(403);
+      await http().get(url).set(EMPLOYEE).expect(403);
+
+      expect(service.compare).not.toHaveBeenCalled();
+    });
+
+    it('the errors of the service leave as they are: a 400 for the same version and a 404', async () => {
+      service.compare
+        .mockRejectedValueOnce(new BadRequestException('Elegí dos versiones distintas para comparar'))
+        .mockRejectedValueOnce(new NotFoundException('No se encontró el procedimiento'));
+
+      await http().get(`${comparePath}?from=${FROM}&to=${FROM}`).set(ADMIN).expect(400);
+      await http().get(`${comparePath}?from=${FROM}&to=${VERSION_ID}`).set(ADMIN).expect(404);
     });
   });
 

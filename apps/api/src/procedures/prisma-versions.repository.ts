@@ -13,6 +13,26 @@ const detailInclude = {
   },
 } satisfies Prisma.ProcedureVersionInclude;
 
+const compareInclude = {
+  steps: {
+    orderBy: { stepOrder: 'asc' },
+    select: { id: true, stepOrder: true, title: true, description: true, stepKey: true },
+  },
+} satisfies Prisma.ProcedureVersionInclude;
+
+const toCompareVersion = (row: Prisma.ProcedureVersionGetPayload<{ include: typeof compareInclude }>) => ({
+  id: row.id,
+  versionNumber: row.versionNumber,
+  status: row.status,
+  steps: row.steps.map((step) => ({
+    key: step.stepKey,
+    id: step.id,
+    order: step.stepOrder,
+    title: step.title,
+    description: step.description,
+  })),
+});
+
 @Injectable()
 export class PrismaVersionsRepository extends VersionsRepository {
   constructor(private readonly prisma: PrismaService) {
@@ -38,6 +58,19 @@ export class PrismaVersionsRepository extends VersionsRepository {
         this.prisma.procedureVersion.count({ where: { procedureId } }),
       ]);
       return { data: rows.map(toHistoryRecord), total };
+    });
+  }
+
+  findForCompare(procedureId: string, fromId: string, toId: string) {
+    return translateUnavailable(async () => {
+      // Inside the procedure: a version of another procedure is not found.
+      const rows = await this.prisma.procedureVersion.findMany({
+        where: { procedureId, id: { in: [fromId, toId] } },
+        include: compareInclude,
+      });
+      const from = rows.find((row) => row.id === fromId);
+      const to = rows.find((row) => row.id === toId);
+      return from && to ? { from: toCompareVersion(from), to: toCompareVersion(to) } : null;
     });
   }
 

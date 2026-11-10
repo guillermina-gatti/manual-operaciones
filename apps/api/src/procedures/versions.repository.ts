@@ -1,5 +1,6 @@
 /* Port to read versions (spec 015, R8 and R9), without depending on Prisma */
 import type { ProcedureVersionStatus } from '../generated/prisma/client';
+import type { CompareVersion } from './version-compare';
 
 // A version as the history shows it. publishedById is a user of Pareja A, by id only.
 export interface VersionHistoryRecord {
@@ -49,4 +50,12 @@ export abstract class VersionsRepository {
     procedureId: string,
     versionId: string,
   ): Promise<VersionDetailRecord | null>;
+
+  // The two versions with their steps and step keys, `from` and `to` as asked; null if either is
+  // not in that procedure (R10).
+  abstract findForCompare(
+    procedureId: string,
+    fromId: string,
+    toId: string,
+  ): Promise<{ from: CompareVersion; to: CompareVersion } | null>;
 }
