@@ -38,6 +38,19 @@ describe('VersionsSection (spec 015, R8)', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  test('gives the loaded versions to what goes inside, and only when they are loaded', () => {
+    const inside = vi.fn(() => <p>Acciones</p>);
+
+    const { rerender } = render(
+      <VersionsSection versions={resource({ status: 'loading', data: undefined })}>{inside}</VersionsSection>,
+    );
+    expect(inside).not.toHaveBeenCalled();
+
+    rerender(<VersionsSection versions={resource({ data: [published()] })}>{inside}</VersionsSection>);
+    expect(inside).toHaveBeenCalledWith([published()]);
+    expect(screen.getByText('Acciones')).toBeInTheDocument();
+  });
+
   test('a procedure with no versions says so', () => {
     render(<VersionsSection versions={resource({ data: [] })} />);
 

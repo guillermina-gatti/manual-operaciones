@@ -1,7 +1,8 @@
 'use client';
 
 // The section "Versiones" of a procedure (spec 015, R8): the timeline with its loading, empty and
-// error states. What can be done with the versions (publish, new version) goes in as children.
+// error states. What can be done with the versions (publish, new version) goes in as children,
+// a function that receives the versions once they are loaded.
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { LIST_PANEL } from '@/components/documents/list-design';
@@ -13,7 +14,7 @@ import { VersionTimeline } from './VersionTimeline';
 
 interface VersionsSectionProps {
   versions: ApiResource<VersionHistoryItem[]>;
-  children?: ReactNode;
+  children?: (versions: VersionHistoryItem[]) => ReactNode;
 }
 
 function Content({ versions }: Pick<VersionsSectionProps, 'versions'>) {
@@ -43,7 +44,7 @@ export function VersionsSection({ versions, children }: VersionsSectionProps) {
         Versiones
       </h2>
       <Content versions={versions} />
-      {versions.status === 'success' && children}
+      {versions.status === 'success' && children?.(versions.data)}
     </section>
   );
 }

@@ -58,6 +58,19 @@ describe('the versions of the procedure (spec 015, R8)', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Borrador' })).toBeInTheDocument();
   });
 
+  test('spec 015, R2: with a draft in the history it offers "Publicar"; without one it does not', async () => {
+    saveProcedure(ADMIN_ID, stored());
+    const { unmount } = render(<ProcedureEditor />);
+    expect(await screen.findByRole('button', { name: 'Publicar' })).toBeInTheDocument();
+    unmount();
+
+    mocks.listVersions.mockResolvedValue(page([published()]));
+    render(<ProcedureEditor />);
+    await screen.findByRole('list', { name: 'Versiones' });
+
+    expect(screen.queryByRole('button', { name: 'Publicar' })).not.toBeInTheDocument();
+  });
+
   test('a procedure that is not in this session does not ask for any history', () => {
     render(<ProcedureEditor />);
 

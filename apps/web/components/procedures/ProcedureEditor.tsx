@@ -16,6 +16,7 @@ import { Notice } from './Notice';
 import { ProcedureAreasForm } from './ProcedureAreasForm';
 import { MAX_STEPS, StepsEditor } from './StepsEditor';
 import { useVersions } from './useVersions';
+import { VersionActions } from './VersionActions';
 import { VersionsSection } from './VersionsSection';
 
 const SECTION = `${LIST_PANEL} flex min-w-0 flex-col gap-5`;
@@ -87,7 +88,11 @@ export function ProcedureEditor() {
         <ProcedureAreasForm procedure={procedure} onChange={update} />
       </section>
 
-      <VersionsSection versions={versions} />
+      <VersionsSection versions={versions}>
+        {(items) => (
+          <VersionActions procedureId={id} versions={items} onChanged={versions.reload} />
+        )}
+      </VersionsSection>
     </>
   );
 }
