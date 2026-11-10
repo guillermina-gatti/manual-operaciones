@@ -505,6 +505,11 @@ model ProcedureVersion {
   createdById   String                 @map("created_by_id") @db.Uuid // users de A
   createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  // Publicación (spec 015, HU32): quién y cuándo publicó, y el cambio crítico con su resumen.
+  publishedAt   DateTime?              @map("published_at") @db.Timestamptz(3)
+  publishedById String?                @map("published_by_id") @db.Uuid // users de A
+  isCritical    Boolean                @default(false) @map("is_critical")
+  changeSummary String?                @map("change_summary") @db.VarChar(300)
 
   procedure Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
   steps     Step[]
@@ -512,6 +517,8 @@ model ProcedureVersion {
   @@unique([procedureId, versionNumber])
   // Como máximo un borrador por procedimiento (spec 006, R3; plan 006, D2).
   @@unique([procedureId], map: "procedure_versions_one_draft_idx", where: { status: "DRAFT" })
+  // Como máximo una versión publicada por procedimiento (spec 015, R4 y D5).
+  @@unique([procedureId], map: "procedure_versions_one_published_idx", where: { status: "PUBLISHED" })
   @@map("procedure_versions")
 }
 
@@ -521,10 +528,14 @@ model Step {
   stepOrder          Int    @map("step_order") // 1..n sin huecos (R7)
   title              String @db.VarChar(200)
   description        String @default("") @db.VarChar(2000)
+  // Clave del paso: la genera la base y las copias a otra versión la conservan; une "el mismo
+  // paso" entre versiones para compararlas (spec 015, R7 y D11).
+  stepKey            String @default(dbgenerated("gen_random_uuid()")) @map("step_key") @db.Uuid
 
   version ProcedureVersion @relation(fields: [procedureVersionId], references: [id], onDelete: Cascade)
 
   @@unique([procedureVersionId, stepOrder])
+  @@unique([procedureVersionId, stepKey])
   @@map("steps")
 }
 
