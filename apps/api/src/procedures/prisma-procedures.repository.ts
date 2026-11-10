@@ -33,7 +33,7 @@ import {
 // Same limits as the documents and executions repositories, so a frozen database never hangs a request.
 const TRANSACTION_TIMEOUT_MS = 5000;
 const TRANSACTION_MAX_WAIT_MS = 2000;
-const TRANSACTION_OPTIONS = {
+export const TRANSACTION_OPTIONS = {
   timeout: TRANSACTION_TIMEOUT_MS,
   maxWait: TRANSACTION_MAX_WAIT_MS,
 };
@@ -463,7 +463,7 @@ function toStepRecord(row: StepRow): StepRecord {
   };
 }
 
-function isUnavailable(error: unknown): boolean {
+export function isUnavailable(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -480,7 +480,7 @@ function isUnavailable(error: unknown): boolean {
 
 // With the pg adapter, a P2002 carries the name of the index that clashed in
 // meta.driverAdapterError.cause.constraint.index (reported by PostgreSQL).
-function isUniqueViolationOn(error: unknown, index: string): boolean {
+export function isUniqueViolationOn(error: unknown, index: string): boolean {
   if (
     !(error instanceof Prisma.PrismaClientKnownRequestError) ||
     error.code !== 'P2002'
