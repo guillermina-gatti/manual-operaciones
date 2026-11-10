@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Tareas:** [tasks.md](./tasks.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado:** listo para implementar (10/11/2026). La migración (T02) espera la revisión de Micaela.
+- **Estado:** implementado (10/11/2026). La migración está aplicada; los e2e los corre Micaela. La estructura final de la API es la de `tasks.md` (un archivo por responsabilidad, el adaptador del catálogo en `adapters/`).
 
 Este plan dice cómo se construye dentro del sistema que ya existe. Las reglas (R1 a R13), los escenarios (E1 a E23) y las decisiones de la spec (D1 a D17) no se repiten acá: se citan.
 

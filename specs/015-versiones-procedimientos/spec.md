@@ -4,7 +4,7 @@
 - **Responsable:** Micaela Franco (pareja B)
 - **Depende de:** spec 006 (borradores, pasos y áreas; sus reglas R3, R4, R9 y R10 se usan tal cual), `docs/contracts/permissions-matrix.md` (solo el ADMIN publica), `UsersDirectory` de documentos (para el nombre de quien publicó) y el puerto `ProceduresCatalog` de Mayra (`executions/ports/procedures-catalog.ts`), que no se modifica. **Dependencia con Mayra:** para `/metricas` ella agrega `title` (el título del procedimiento) a `CatalogProcedureVersion` en el puerto; el adaptador de esta spec lo llena. Si el puerto todavía no lo tiene cuando se escriba el adaptador, este funciona sin título y llenarlo queda como tarea pendiente (D17).
 - **Habilita:** HU33 (propuestas de cambio), HU28 (aprobación), HU38 (métricas por versión) y el catálogo real de ejecuciones.
-- **Estado:** listo para plan y tareas (10/11/2026). Las preguntas de la etapa de aclaración están respondidas y pasaron a la sección 10 (D10 a D17). No quedan preguntas críticas abiertas (sección 11). No hay código ni cambios de esquema todavía.
+- **Estado:** implementada (10/11/2026), Partes 1 y 2. Las preguntas de la aclaración pasaron a la sección 10 (D10 a D17); la prueba visual de la Parte 1 sumó D18 a D20 (pantalla). Los e2e los corre Micaela. Pendiente: el título del procedimiento en el catálogo cuando Mayra lo agregue al puerto (D17).
 
 ## 1. Problema y objetivo
 
@@ -145,6 +145,9 @@ Tomadas el 10/11/2026 por ser menores; la regla correspondiente las usa.
 | D15 · Detalle de una versión | Se incluye `GET …/versions/:versionId` con sus pasos; HU11 lo reutiliza | R9 |
 | D16 · Quién ve versiones | Solo el ADMIN. SUPERVISOR y EMPLOYEE reciben 403, también si el recurso no existe. El 404 es "no existe" o "la versión no es de ese procedimiento" | R1 |
 | D17 · Título en el catálogo | Mayra agrega `title` a `CatalogProcedureVersion` para `/metricas`; el adaptador lo llena con el título de la versión. Si el puerto aún no lo tiene, el adaptador funciona sin título y llenarlo queda como tarea pendiente | R12 |
+| D18 · Historial al día en la pantalla | Cuando cambian el título, la descripción o los pasos del borrador, la pantalla pide el historial otra vez y deja a la vista la lista anterior mientras llega la nueva, para que el conteo de pasos de la línea de tiempo no quede viejo | R8 |
+| D19 · Estado real en la lista | La copia local del procedimiento guarda el estado de su versión (la pantalla lo aprende del historial); la lista de `/procedimientos` y el editor muestran el mismo texto: "Versión N · borrador", "publicada" o "reemplazada" | R6, R8 |
+| D20 · Texto de la confirmación | "La versión vigente pasa a reemplazada" solo se dice si hay una versión publicada; en la primera publicación dice "Va a ser la versión vigente" | R4 |
 
 ## 11. Preguntas abiertas
 
