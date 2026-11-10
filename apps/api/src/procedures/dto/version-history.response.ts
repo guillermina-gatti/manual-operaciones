@@ -1,13 +1,8 @@
-// Response classes for the history and the detail of a version (Swagger) and the field-by-field
-// mapping from the repository records (spec 015, R8 and R9). There is no createdById: it is internal.
+// The history of versions (spec 015, R8): Swagger classes and the mapping from the records.
+// There is no createdById: it is internal.
 import { ApiProperty } from '@nestjs/swagger';
 import { ProcedureVersionStatus } from '../../generated/prisma/enums';
-import type {
-  VersionDetailRecord,
-  VersionHistoryRecord,
-  VersionsPage,
-  WithPublisherName,
-} from '../versions.repository';
+import type { VersionHistoryRecord, WithPublisherName } from '../versions.repository';
 
 export class VersionPublisherResponse {
   @ApiProperty({ format: 'uuid' })
@@ -52,28 +47,6 @@ export class VersionHistoryItemResponse {
   stepCount: number;
 }
 
-export class VersionStepResponse {
-  @ApiProperty({ format: 'uuid' })
-  id: string;
-
-  @ApiProperty({ example: 1, description: 'Place in the version, from 1' })
-  order: number;
-
-  @ApiProperty({ example: 'Contar el efectivo' })
-  title: string;
-
-  @ApiProperty({ example: 'Billetes y monedas', description: 'Empty if none' })
-  description: string;
-}
-
-export class VersionDetailResponse extends VersionHistoryItemResponse {
-  @ApiProperty({ type: String, nullable: true })
-  description: string | null;
-
-  @ApiProperty({ type: [VersionStepResponse], description: 'In order' })
-  steps: VersionStepResponse[];
-}
-
 export class VersionHistoryPageResponse {
   @ApiProperty({ type: [VersionHistoryItemResponse], description: 'Newest first' })
   data: VersionHistoryItemResponse[];
@@ -106,26 +79,8 @@ export const toVersionHistoryItem = (
   stepCount: version.stepCount,
 });
 
-export const toVersionDetailResponse = (
-  version: WithPublisherName<VersionDetailRecord>,
-): VersionDetailResponse => {
-  // As plain fields, so the spread does not copy a class instance.
-  const item: Pick<VersionHistoryItemResponse, keyof VersionHistoryItemResponse> =
-    toVersionHistoryItem(version);
-  return {
-    ...item,
-    description: version.description,
-    steps: version.steps.map((step) => ({
-      id: step.id,
-      order: step.order,
-      title: step.title,
-      description: step.description,
-    })),
-  };
-};
-
 export const toVersionHistoryPage = (
-  page: { data: WithPublisherName<VersionHistoryRecord>[]; total: VersionsPage['total'] },
+  page: { data: WithPublisherName<VersionHistoryRecord>[]; total: number },
   pageNumber: number,
   limit: number,
 ): VersionHistoryPageResponse => ({
