@@ -47,7 +47,7 @@ describe('the notice', () => {
     render(<ProcedureList />);
 
     expect(screen.getByRole('note')).toHaveTextContent(
-      'Esta lista muestra solo los procedimientos que creaste en esta sesión del navegador. Todavía no hay un listado en la API: llega con HU11.',
+      'Todavía no hay un listado completo de procedimientos; por ahora se ven los que creaste en esta sesión del navegador.',
     );
   });
 });

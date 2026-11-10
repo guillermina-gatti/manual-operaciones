@@ -72,7 +72,7 @@ function AreasForm({ procedure, onChange, areas }: ProcedureAreasFormProps & { a
     <form onSubmit={submit} noValidate className="flex flex-col gap-5">
       <AreasField areas={areas} selected={areaIds} onChange={setAreaIds} />
       <p className={HINT}>
-        Un procedimiento puede quedar sin áreas, pero no se podrá publicar sin al menos una (HU32).
+        Un procedimiento puede quedar sin áreas, pero no se puede publicar sin al menos una.
       </p>
 
       {error && (

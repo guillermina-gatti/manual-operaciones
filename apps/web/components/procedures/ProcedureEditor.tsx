@@ -25,6 +25,11 @@ import { VersionActions } from './VersionActions';
 import { VersionReadOnly } from './VersionReadOnly';
 import { VersionsSection } from './VersionsSection';
 
+const COPY_NOTICE =
+  'Estos datos son la copia de esta sesión del navegador: todavía no se pueden recuperar desde el servidor. Si el procedimiento se cambia desde otro lugar, la copia puede quedar desactualizada.';
+const NOT_IN_SESSION =
+  'No tenemos los datos de este procedimiento en esta sesión del navegador. Por ahora solo se pueden abrir los procedimientos que creaste en esta sesión.';
+
 export function ProcedureEditor() {
   const { user } = useSession();
   const { id } = useParams<{ id: string }>();
@@ -48,7 +53,7 @@ export function ProcedureEditor() {
     return (
       <ScreenState
         kind="empty"
-        message="No tenemos los datos de este procedimiento en esta sesión del navegador. Todavía no hay un GET en la API para recuperarlos: llega con HU11."
+        message={NOT_IN_SESSION}
         action={
           <Link href="/procedimientos" className={BACK_LINK}>
             Volver a procedimientos
@@ -67,12 +72,7 @@ export function ProcedureEditor() {
   const update = (next: typeof procedure) => saveProcedure(user.id, next);
   // What the API looks at to publish (title, description, steps and areas): when it changes, the
   // actions start again, so an error of an old attempt does not stay on screen.
-  const draftKey = JSON.stringify([
-    procedure.title,
-    procedure.description,
-    procedure.steps,
-    procedure.areaIds,
-  ]);
+  const draftKey = JSON.stringify([procedure.title, procedure.description, procedure.steps, procedure.areaIds]);
   // The draft changed (title, description or steps): the history shows its new count and title.
   const changeDraft = (next: typeof procedure) => {
     update(next);
@@ -95,9 +95,7 @@ export function ProcedureEditor() {
         subtitle={versionSummary(procedure.versionNumber, shown)}
       />
       <Notice tone="info" role="note">
-        Estos datos son la copia de esta sesión del navegador: la API todavía no tiene un GET (llega
-        con HU11). Si el procedimiento se cambia desde otro lugar, la copia puede quedar
-        desactualizada.
+        {COPY_NOTICE}
       </Notice>
 
       {shown === 'DRAFT' ? (
