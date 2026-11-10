@@ -10,8 +10,9 @@ import { IconDown, IconTrash, IconUp, STEP_ROW, StepNumber } from './design';
 import { StepForm } from './StepForm';
 import type { Busy } from './useStepActions';
 
-// A button with only an icon: square, 48 px. It always has an aria-label.
-const ICON_ONLY = 'size-12 px-0';
+// A button with only an icon: square, 48 px. It always has an aria-label. The button classes bring
+// px-5, so px-0 has to be important or the padding squeezes the icon.
+const ICON_ONLY = 'size-12 px-0!';
 
 interface StepItemProps {
   step: StoredStep;

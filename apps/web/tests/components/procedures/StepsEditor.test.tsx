@@ -103,6 +103,23 @@ describe('the list', () => {
     expect(stepButton('Bajar', 'Comparar con el sistema')).toBeDisabled();
   });
 
+  // The button has 20 px of padding on each side by default: without px-0! the 48 px square leaves the
+  // icon 8 px, and a flex item shrinks, so it was drawn as a dash.
+  test.each([
+    ['Subir', 'text-bosque'],
+    ['Bajar', 'text-bosque'],
+    ['Borrar', 'text-peligro'],
+  ])('the "%s" button draws its icon at full size and in its color', (verb, color) => {
+    setup();
+
+    const button = stepButton(verb, 'Contar los comprobantes');
+    const icon = button.querySelector('svg');
+
+    expect(button).toHaveClass('px-0!', color);
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
+    expect(icon).toHaveClass('size-5', 'shrink-0');
+  });
+
   test('does not call the API until something is done', () => {
     setup();
 
