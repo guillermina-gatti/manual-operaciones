@@ -16,6 +16,8 @@ interface StepListProps {
   onComplete: (stepId: string) => void;
   // After finishing a step in this screen, the focus moves to the button of the next one.
   focusCurrent: boolean;
+  // HU33: a critical change is pending; the current step cannot be finished until it restarts.
+  blocked?: boolean;
 }
 
 const STATE: Record<StepState, { label: string; tone: DotTone }> = {
@@ -37,7 +39,13 @@ const CIRCLE_STYLES: Record<StepState, string> = {
   pending: 'border border-borde bg-fondo text-texto-suave',
 };
 
-export function StepList({ execution, completing, onComplete, focusCurrent }: StepListProps) {
+export function StepList({
+  execution,
+  completing,
+  onComplete,
+  focusCurrent,
+  blocked = false,
+}: StepListProps) {
   const last = execution.steps.at(-1);
 
   return (
@@ -72,7 +80,12 @@ export function StepList({ execution, completing, onComplete, focusCurrent }: St
                 </p>
               </div>
             </div>
-            {state === 'current' && (
+            {state === 'current' && blocked && (
+              <p className="text-texto sm:ml-16">
+                Para seguir, reiniciá con la versión nueva.
+              </p>
+            )}
+            {state === 'current' && !blocked && (
               <button
                 type="button"
                 className={`${BUTTON_PRIMARY} min-h-14 w-full text-lg sm:ml-16 sm:w-auto sm:self-start`}
