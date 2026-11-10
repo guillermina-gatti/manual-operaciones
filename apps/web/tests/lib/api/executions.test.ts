@@ -26,6 +26,20 @@ const EXECUTION: ExecutionResponse = {
       durationMs: null,
     },
   ],
+  versionChange: {
+    changed: true,
+    critical: true,
+    currentVersionId: '1b000000-0000-4000-8000-000000000009',
+    currentVersionNumber: 3,
+    changes: [
+      {
+        versionNumber: 3,
+        isCritical: true,
+        changeSummary: 'Cambia el límite de caja',
+        publishedAt: '2026-11-10T12:00:00.000Z',
+      },
+    ],
+  },
 };
 
 function fakeClient() {
@@ -80,5 +94,27 @@ describe('completeStep', () => {
       `/api/executions/${EXECUTION_ID}/steps/${STEP_ID}/complete`,
       { method: 'POST', signal: undefined },
     );
+  });
+});
+
+describe('restartExecution (HU33)', () => {
+  test('posts to the restart route of that execution, without a body, and returns the new one', async () => {
+    const { api, request } = fakeClient();
+    const signal = new AbortController().signal;
+
+    await expect(api.restartExecution(EXECUTION_ID, signal)).resolves.toBe(EXECUTION);
+
+    expect(request).toHaveBeenCalledWith(`/api/executions/${EXECUTION_ID}/restart`, {
+      method: 'POST',
+      signal,
+    });
+  });
+
+  test('encodes the id so it cannot change the path', async () => {
+    const { api, request } = fakeClient();
+
+    await api.restartExecution('../x');
+
+    expect(request.mock.calls[0][0]).toBe('/api/executions/..%2Fx/restart');
   });
 });
