@@ -158,7 +158,12 @@ Tomadas en la etapa de aclaración (clarify) el 27/10/2026.
 | P18 · ¿Qué devuelve `PUT /procedures/:id/areas`? | 200 con `{ areaIds }`, las áreas que quedaron, ordenadas. Un conjunto vacío es válido | R11 |
 | P19 · ¿Cómo se valida el pedido de áreas? | Formato en el DTO (arreglo de UUID, sin repetidos, hasta 100) y estado de las áreas (existencia e `isActive`) con `AreasDirectory.findByIds`. El orden de los chequeos es: rol (403), formato (400), existencia de las áreas (400), área inactiva nueva (400) y por último el procedimiento (404) | R11 |
 | D16 · ¿Cómo se autentica ahora que está el login real de la Pareja A? | El servidor exige `Authorization: Bearer <jwt>` y rechaza con 401 los headers `x-user-id` y `x-user-role`. El rol y las áreas salen de la base en cada pedido. Los tests de controlador corren detrás del guard real con `real-auth.ts` de Mayra; los e2e firman los tokens con `signTestJwt` de Camila. Swagger pasa de los headers a Bearer. No cambia ninguna regla de negocio ni ninguna respuesta de las rutas | R1, R15 |
-| P20 · ¿Qué pasa con las áreas inactivas y la sesión? | El guard excluye las áreas inactivas de `user.areaIds` (`jwt-auth.guard.ts`, líneas 73 a 78), y la matriz lo documenta: SUPERVISOR y EMPLOYEE no acceden a procedimientos vinculados solo a áreas inactivas (`docs/contracts/permissions-matrix.md`, líneas 149 a 151). Para HU11 se decide si se usa `user.areaIds` o `UsersDirectory`; hoy el directorio no filtra las inactivas (`prisma-users-directory.ts`). No se modifica código ajeno: la regla se acuerda con las parejas A y C | R11, R13, R15 |
+| P20 · ¿Qué pasa con las áreas inactivas y la sesión? | El guard excluye las áreas inactivas de `user.areaIds` (`jwt-auth.guard.ts`, líneas 73 a 78), y la matriz lo documenta: SUPERVISOR y EMPLOYEE no acceden a procedimientos vinculados solo a áreas inactivas (`docs/contracts/permissions-matrix.md`, líneas 149 a 151). **Decidido (10/11/2026), con el criterio de A-SEC (rama `feat/A-SEC-areas-inactivas`, `viewerFor` de `documents/document-access.ts`, todavía sin mergear):** el ADMIN no necesita áreas; para los demás, las áreas del visor son las del `UsersDirectory` que además están en `user.areaIds` (el guard ya dejó afuera las inactivas). Un usuario desconocido o inactivo para el directorio no tiene áreas. Así un área desactivada no da acceso. Se implementa en `procedures`, sin importar ni copiar código de `documents`; no se toca el guard ni `canViewProcedure` ni `currentVersion` (los usa el chat de Matías) | R11, R13, R15 |
+| P21 · ¿Qué trae cada ítem del listado? | Id, título y descripción de la versión vigente, su número y estado, cantidad de pasos y áreas con nombre (una sola consulta a `AreasDirectory.findByIds` por página). Al ADMIN, además, `hasOpenDraft` y los datos del borrador si no hay publicada. Límite por defecto 20, máximo 100; desempate del orden por `id` | R16 |
+| P22 · ¿Qué trae el detalle? | ADMIN: el borrador abierto con sus pasos (o la vigente si no hay borrador), las áreas y `hasOpenDraft`, sin repetir el historial (es de `GET /versions`, HU32). SUPERVISOR y EMPLOYEE: solo la vigente con sus pasos y las áreas, sin `ownerId` ni datos internos | R13, R14 |
+| P23 · ¿Cómo se ven las áreas desactivadas? | Solo el ADMIN las ve, marcadas "desactivada" (R11). Para los demás rige P20: solo áreas activas | R11, R13 |
+| P24 · ¿Un procedimiento que solo tiene borrador? | El ADMIN lo ve en el listado como "borrador"; los demás roles, no | R13, R16 |
+| P25 · ¿Qué pasa con la copia en `sessionStorage` de la web? | Desde HU11 la web lee del servidor; el código de la copia que deje de usarse se elimina y los datos viejos no se migran | R16 |
 
 ## 11. Preguntas abiertas
 
@@ -358,6 +363,17 @@ Escenario: E27 · versiones solo para el ADMIN
   Dado un EMPLOYEE con sesión
   Cuando pide una versión de un procedimiento por su identificador
   Entonces la respuesta es 403
+
+Escenario: E39 · área desactivada (P20)
+  Dado un EMPLOYEE cuya única área de un procedimiento publicado fue desactivada
+  Cuando pide el listado y el detalle de ese procedimiento
+  Entonces el listado no lo incluye
+  Y el detalle responde 404, igual que uno inexistente
+
+Escenario: E40 · usuario inactivo (P20)
+  Dado un usuario que el directorio marca como inactivo
+  Cuando pide el listado
+  Entonces recibe una lista vacía
 
 # --- Adjuntos (última parte) ---
 
