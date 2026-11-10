@@ -15,6 +15,8 @@ import { DraftForm } from './DraftForm';
 import { Notice } from './Notice';
 import { ProcedureAreasForm } from './ProcedureAreasForm';
 import { MAX_STEPS, StepsEditor } from './StepsEditor';
+import { useVersions } from './useVersions';
+import { VersionsSection } from './VersionsSection';
 
 const SECTION = `${LIST_PANEL} flex min-w-0 flex-col gap-5`;
 const SECTION_TITLE = 'text-xl font-bold';
@@ -24,11 +26,12 @@ export function ProcedureEditor() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const procedures = useStoredProcedures(user?.id ?? null);
+  const procedure = procedures.find((item) => item.id === id);
+  const versions = useVersions(procedure ? id : null);
   const baseId = useId();
 
   if (!user) return <ScreenState kind="loading" label="Cargando el procedimiento…" />;
 
-  const procedure = procedures.find((item) => item.id === id);
   if (!procedure) {
     return (
       <ScreenState
@@ -83,6 +86,8 @@ export function ProcedureEditor() {
         </h2>
         <ProcedureAreasForm procedure={procedure} onChange={update} />
       </section>
+
+      <VersionsSection versions={versions} />
     </>
   );
 }
