@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado (10/11/2026):** T01 a T09 y T14 hechas en la API (tests unitarios en verde: 485 en `src/procedures` y el adaptador; los e2e están escritos y los corre Micaela al final). Siguen el front de la Parte 1 (T10 a T13) y la Parte 2 (T15 a T21), sin empezar. T14 funciona sin título: queda pendiente llenar `title` cuando Mayra lo agregue al puerto.
+- **Estado (10/11/2026):** **Parte 1 terminada** (T01 a T14). API: 1921 tests unitarios en verde; los e2e (`versions-indexes`, `versions` y `catalog`) están escritos y los corre Micaela al final. Web: 1518 tests, lint y build en verde. La Parte 2 (T15 a T21: cambio crítico y comparar) está sin empezar. T14 funciona sin título: queda pendiente llenar `title` cuando Mayra lo agregue al puerto.
 - **Estructura final de la API (commit `refactor(procedures)`):** cada archivo con una responsabilidad y menos de 100 líneas. Donde las tareas dicen `procedure-versions.service.ts`, son `procedure-publish.service.ts` (publicar) y `procedure-history.service.ts` (historial y detalle, y luego comparar en su propio servicio); donde dicen `prisma-versions.repository.ts`, son `prisma-publish.repository.ts` (publicar) y `prisma-versions.repository.ts` (historial y detalle), con `publish.repository.ts` y `versions.repository.ts` como puertos y `prisma-version-rows.ts` y `version-operation.ts` con lo común.
 
 Convenciones:
@@ -191,14 +191,14 @@ Se completa la columna "Resultado" a medida que cada test pasa.
 | Regla | Escenarios | Tareas | Tests | Resultado |
 | --- | --- | --- | --- | --- |
 | R1 · Quién | E15 | T06, T07, T08, T17 | `procedure-publish.service.spec.ts`, `procedure-history.service.spec.ts`, `procedure-versions.controller.spec.ts`, `versions.e2e-spec.ts` | unitarios ✔ (10/11); e2e escrito, lo corre Micaela |
-| R2 · Publicar | E1, E10 | T04, T05, T06, T08, T10, T12 | `publish-version.dto.spec.ts`, `prisma-publish.repository.spec.ts`, `procedure-publish.service.spec.ts`, `PublishVersion.test.tsx` | API ✔ (10/11); front pendiente |
+| R2 · Publicar | E1, E10 | T04, T05, T06, T08, T10, T12 | `publish-version.dto.spec.ts`, `prisma-publish.repository.spec.ts`, `procedure-publish.service.spec.ts`, `PublishVersion.test.tsx` | API ✔ y front ✔ (10/11) |
 | R3 · Condiciones | E3, E4, E5, E16 | T05, T06, T09, T12 | `prisma-publish.repository.spec.ts`, `procedure-publish.service.spec.ts`, `versions.e2e-spec.ts` | unitarios ✔ (10/11); e2e escrito |
 | R4 · Una sola publicada | E2, E18, E20 | T02, T05, T09 | `versions-indexes.e2e-spec.ts`, `versions.repository.e2e-spec.ts`, `prisma-publish.repository.spec.ts` | unitarios ✔ (10/11); e2e escrito |
 | R5 · Cambio crítico | E10, E11 | T04, T15, T19 | `publish-version.dto.spec.ts`, `procedure-publish.service.spec.ts`, `PublishVersion.test.tsx` | DTO y servicio ✔; la regla "obligatorio si es crítico" y el front, pendientes (T15, T19) |
-| R6 · Inmutabilidad | E6 | T05, T09, T13 | `versions.e2e-spec.ts`, `VersionReadOnly.test.tsx` | e2e escrito; front pendiente |
-| R7 · Copia propia de pasos | E6, E7 | T02, T03, T09, T13 | `prisma-procedures.repository.spec.ts`, `versions-indexes.e2e-spec.ts`, `versions.e2e-spec.ts` | unitario ✔ (10/11); e2e escrito |
-| R8 · Historial | E8 | T04, T05, T07, T08, T10, T11 | `version-history.response.spec.ts`, `prisma-versions.repository.spec.ts`, `procedure-history.service.spec.ts`, `VersionTimeline.test.tsx` | API ✔ (10/11); front pendiente |
-| R9 · Detalle de una versión | E9 | T04, T07, T08, T13 | `version-detail.response.spec.ts`, `procedure-history.service.spec.ts`, `procedure-versions.controller.spec.ts`, `VersionReadOnly.test.tsx` | API ✔ (10/11); front pendiente |
+| R6 · Inmutabilidad | E6 | T05, T09, T13 | `versions.e2e-spec.ts`, `VersionReadOnly.test.tsx`, `ProcedureEditor.versions.test.tsx` | front ✔ (10/11); e2e escrito |
+| R7 · Copia propia de pasos | E6, E7 | T02, T03, T09, T13 | `prisma-procedures.repository.spec.ts`, `versions-indexes.e2e-spec.ts`, `versions.e2e-spec.ts`, `StartDraft.test.tsx`, `snapshot.versions.test.ts` | unitarios ✔ y front ✔ (10/11); e2e escrito |
+| R8 · Historial | E8 | T04, T05, T07, T08, T10, T11 | `version-history.response.spec.ts`, `prisma-versions.repository.spec.ts`, `procedure-history.service.spec.ts`, `VersionTimeline.test.tsx`, `VersionsSection.test.tsx` | API ✔ y front ✔ (10/11) |
+| R9 · Detalle de una versión | E9 | T04, T07, T08, T13 | `version-detail.response.spec.ts`, `procedure-history.service.spec.ts`, `procedure-versions.controller.spec.ts`, `VersionReadOnly.test.tsx` | API ✔ y front ✔ (10/11) |
 | R10 · Comparar | E12, E13, E14 | T16, T17, T18, T20 | `version-compare.spec.ts`, `CompareVersions.test.tsx` | pendiente (Parte 2) |
 | R11 · Qué no cambia al publicar | E19 | T06, T09, T14 | `procedure-publish.service.spec.ts`, `versions.e2e-spec.ts`, `catalog.e2e-spec.ts` | unitarios ✔ (10/11); e2e escrito |
 | R12 · Catálogo de ejecuciones | E19, E21, E22, E23 | T14 | `prisma-procedures-catalog.spec.ts`, `catalog.e2e-spec.ts` | unitario ✔ (10/11, 12 tests); e2e escrito; `title` pendiente de Mayra |
