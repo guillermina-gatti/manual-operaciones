@@ -5,7 +5,16 @@ import { MESSAGES } from './error-messages';
 
 // 'create': the new procedure. 'draft': title and description of the draft. 'discard': deleting the
 // draft. 'step': adding, editing or deleting a step. 'reorder': moving a step. 'areas': the areas.
-export type ProcedureErrorContext = 'create' | 'draft' | 'discard' | 'step' | 'reorder' | 'areas';
+// 'publish' and 'versions': publishing a draft and reading or creating versions (spec 015).
+export type ProcedureErrorContext =
+  | 'create'
+  | 'draft'
+  | 'discard'
+  | 'step'
+  | 'reorder'
+  | 'areas'
+  | 'publish'
+  | 'versions';
 
 export interface ProcedureErrorDescription {
   message: string;
@@ -24,6 +33,10 @@ export const PROCEDURE_MESSAGES = {
   versionNotEditable: 'Esa versión ya no es un borrador y no se puede modificar.',
   stepLimit: 'El borrador ya tiene 50 pasos.',
   changed: 'El procedimiento cambió. Volvé a intentar.',
+  versionNotDraft: 'Esa versión ya no es un borrador, así que no se puede publicar.',
+  noSteps: 'La versión no tiene pasos. Agregá al menos uno para publicarla.',
+  noAreas: 'El procedimiento no tiene áreas. Asignale al menos una para publicarlo.',
+  draftAlreadyExists: 'El procedimiento ya tiene un borrador abierto.',
 } as const;
 
 export function describeProcedureError(
@@ -68,6 +81,14 @@ function conflictMessage(reason: string | undefined): string {
       return PROCEDURE_MESSAGES.versionNotEditable;
     case 'STEP_LIMIT_REACHED':
       return PROCEDURE_MESSAGES.stepLimit;
+    case 'VERSION_NOT_DRAFT':
+      return PROCEDURE_MESSAGES.versionNotDraft;
+    case 'NO_STEPS':
+      return PROCEDURE_MESSAGES.noSteps;
+    case 'NO_AREAS':
+      return PROCEDURE_MESSAGES.noAreas;
+    case 'DRAFT_ALREADY_EXISTS':
+      return PROCEDURE_MESSAGES.draftAlreadyExists;
     default:
       return PROCEDURE_MESSAGES.changed;
   }
