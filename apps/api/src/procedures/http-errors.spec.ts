@@ -21,6 +21,10 @@ const PHRASES: [ProcedureOperation, string][] = [
   ['removeStep', 'el borrado del paso'],
   ['reorderSteps', 'el reordenamiento de los pasos'],
   ['setAreas', 'la asignación de áreas'],
+  ['publish', 'la publicación de la versión'],
+  ['listVersions', 'la consulta del historial de versiones'],
+  ['getVersion', 'la consulta de la versión'],
+  ['compareVersions', 'la comparación de versiones'],
 ];
 
 describe('toHttpException (procedures)', () => {

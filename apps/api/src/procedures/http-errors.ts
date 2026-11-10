@@ -18,7 +18,11 @@ export type ProcedureOperation =
   | 'updateStep'
   | 'removeStep'
   | 'reorderSteps'
-  | 'setAreas';
+  | 'setAreas'
+  | 'publish'
+  | 'listVersions'
+  | 'getVersion'
+  | 'compareVersions';
 
 // How each operation is named in the messages, with its article.
 const PHRASES: Record<ProcedureOperation, string> = {
@@ -31,6 +35,10 @@ const PHRASES: Record<ProcedureOperation, string> = {
   removeStep: 'el borrado del paso',
   reorderSteps: 'el reordenamiento de los pasos',
   setAreas: 'la asignación de áreas',
+  publish: 'la publicación de la versión',
+  listVersions: 'la consulta del historial de versiones',
+  getVersion: 'la consulta de la versión',
+  compareVersions: 'la comparación de versiones',
 };
 
 const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1);
