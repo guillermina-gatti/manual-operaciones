@@ -194,6 +194,7 @@ describe('Procedures metrics (integration)', () => {
         inProgress: 1,
         abandoned: 0,
         completionRate: 0.5,
+        title: 'Cierre de caja', // from the in-memory catalog
         avgCompletionMs: CIERRE_V2.steps.length * STEP_MS,
         // A single completed execution: the fastest and the slowest.
         minCompletionMs: CIERRE_V2.steps.length * STEP_MS,

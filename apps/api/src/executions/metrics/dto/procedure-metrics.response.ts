@@ -94,6 +94,15 @@ export class ProcedureMetricsResponse extends ExecutionCountsResponse {
   procedureId: string;
 
   @ApiProperty({
+    example: 'Cierre de caja',
+    type: String,
+    nullable: true,
+    description:
+      'The title of the latest version with executions; null when the catalog does not give it',
+  })
+  title: string | null;
+
+  @ApiProperty({
     type: [String],
     format: 'uuid',
     description: 'The areas currently assigned to the procedure',
@@ -237,6 +246,7 @@ const toProcedure = (
   procedure: ProcedureMetrics,
 ): ProcedureMetricsResponse => ({
   procedureId: procedure.procedureId,
+  title: procedure.title,
   areaIds: [...procedure.areaIds],
   started: procedure.started,
   completed: procedure.completed,

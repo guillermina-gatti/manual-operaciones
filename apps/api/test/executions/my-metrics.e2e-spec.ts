@@ -203,6 +203,7 @@ describe('Personal metrics of the employee (integration)', () => {
       expect(resume).toHaveLength(1);
       expect(resume[0]).toMatchObject({
         executionId: current,
+        procedureTitle: 'Cierre de caja',
         procedureId: CIERRE,
         currentStep: {
           stepId: CIERRE_V2.steps[1].id,
