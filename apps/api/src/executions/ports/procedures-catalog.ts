@@ -7,6 +7,8 @@ export interface CatalogStep {
   title: string;
   // Optional: what an adapter may give. The instruction of the step, and the key that
   // copies of the step keep across versions (spec 015, R7).
+  // TODO(HU11): only the in-memory catalog fills them; Mica's PrismaProceduresCatalog does
+  // not yet (its tests fix the old shape). Connect them when she finishes HU11.
   description?: string;
   stepKey?: string;
 }
@@ -24,6 +26,9 @@ export interface CatalogProcedureVersion {
   // Optional: what an adapter may give. The title of this version of the procedure, its
   // number (1..n within the procedure) and whether it was published as a critical change,
   // with its summary.
+  // TODO(HU11): only the in-memory catalog fills them; Mica's PrismaProceduresCatalog does
+  // not yet (its tests fix the old shape). Connect them when she finishes HU11. HU33 does not
+  // need them: findPublishedAfter gives the number and the critical change.
   title?: string;
   versionNumber?: number;
   isCritical?: boolean;
