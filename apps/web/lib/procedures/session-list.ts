@@ -2,6 +2,7 @@
 // GET for procedures until HU11, so the screens work from this local copy: each answer of the API
 // updates it. It is per user, and it may be out of date if the procedure is changed somewhere else.
 import { useMemo, useSyncExternalStore } from 'react';
+import type { ProcedureVersionStatus } from '@/lib/api/procedures';
 
 export interface StoredStep {
   id: string;
@@ -12,9 +13,12 @@ export interface StoredStep {
 
 export interface StoredProcedure {
   id: string;
-  // The draft the screens edit (version 1: a new procedure only has that one).
+  // The version the screens work on: a draft at first. When the history says it is no longer one
+  // (it was published), the editor shows it read-only until a new draft is created.
   versionId: string;
   versionNumber: number;
+  // The state of that version. A copy saved before this field existed has none: it is a draft.
+  status?: ProcedureVersionStatus;
   title: string;
   description: string | null;
   areaIds: string[];
@@ -66,12 +70,15 @@ function isStoredStep(value: unknown): value is StoredStep {
   );
 }
 
+const STATUSES = new Set<unknown>(['DRAFT', 'PUBLISHED', 'SUPERSEDED']);
+
 function isStoredProcedure(value: unknown): value is StoredProcedure {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
     typeof value.versionId === 'string' &&
     typeof value.versionNumber === 'number' &&
+    (value.status === undefined || STATUSES.has(value.status)) &&
     typeof value.title === 'string' &&
     (value.description === null || typeof value.description === 'string') &&
     Array.isArray(value.areaIds) &&

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ProcedureEditor } from '@/components/procedures/ProcedureEditor';
@@ -182,6 +182,15 @@ describe('a version that is no longer a draft (spec 015, R6 and R7)', () => {
     expect(screen.getByText('Versión 1 · publicada')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 2, name: 'Borrador' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Título' })).not.toBeInTheDocument();
+  });
+
+  test('the local copy learns the state of its version from the history, so the list can show it', async () => {
+    saveProcedure(ADMIN_ID, storedPublished());
+    render(<ProcedureEditor />);
+
+    await screen.findByRole('heading', { level: 2, name: 'Versión 1 · Publicada' }, { timeout: 4000 });
+
+    await waitFor(() => expect(loadProcedures(ADMIN_ID)[0].status).toBe('PUBLISHED'));
   });
 
   test('"Crear nueva versión" makes the copy follow the new draft, which can be edited and published', async () => {

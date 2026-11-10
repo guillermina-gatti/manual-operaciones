@@ -6,14 +6,14 @@
 // shown read-only. It has no box of its own: the main of the page lays its parts out.
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import { BACK_LINK } from '@/components/documents/design';
 import { PageHeader } from '@/components/documents/list-design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import type { VersionDetail } from '@/lib/procedures';
 import { removeProcedure, saveProcedure, useStoredProcedures } from '@/lib/procedures/session-list';
 import { withDraftVersion } from '@/lib/procedures/snapshot';
-import { VERSION_LABELS } from '@/lib/procedures/versions';
+import { versionSummary } from '@/lib/procedures/versions';
 import { useSession } from '@/lib/session';
 import { DraftSections } from './DraftSections';
 import { SECTION, SECTION_TITLE } from './design';
@@ -31,7 +31,15 @@ export function ProcedureEditor() {
   const procedures = useStoredProcedures(user?.id ?? null);
   const procedure = procedures.find((item) => item.id === id);
   const versions = useVersions(procedure ? id : null);
+  const known = versions.data?.find((version) => version.id === procedure?.versionId)?.status;
   const baseId = useId();
+
+  // The copy keeps the state the history says, so the list of procedures shows the real one.
+  useEffect(() => {
+    if (user && procedure && known && known !== (procedure.status ?? 'DRAFT')) {
+      saveProcedure(user.id, { ...procedure, status: known });
+    }
+  }, [user, procedure, known]);
 
   if (!user) return <ScreenState kind="loading" label="Cargando el procedimiento…" />;
 
@@ -50,7 +58,7 @@ export function ProcedureEditor() {
   }
 
   // Until the history says otherwise, the version of the copy is the draft.
-  const shown = versions.data?.find((version) => version.id === procedure.versionId)?.status ?? 'DRAFT';
+  const shown = known ?? 'DRAFT';
   const leave = () => {
     removeProcedure(user.id, procedure.id);
     router.push('/procedimientos');
@@ -75,7 +83,7 @@ export function ProcedureEditor() {
       <PageHeader
         wrap
         title={procedure.title}
-        subtitle={`Versión ${procedure.versionNumber} · ${shown === 'DRAFT' ? 'borrador' : VERSION_LABELS[shown].toLowerCase()}`}
+        subtitle={versionSummary(procedure.versionNumber, shown)}
       />
       <Notice tone="info" role="note">
         Estos datos son la copia de esta sesión del navegador: la API todavía no tiene un GET (llega

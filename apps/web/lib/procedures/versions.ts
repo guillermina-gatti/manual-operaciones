@@ -16,6 +16,10 @@ export const VERSION_TONES = {
   SUPERSEDED: 'gris',
 } as const satisfies Record<ProcedureVersionStatus, 'azul' | 'exito' | 'gris'>;
 
+// "Versión 2 · publicada": the same text in the editor and in the list of procedures.
+export const versionSummary = (versionNumber: number, status: ProcedureVersionStatus) =>
+  `Versión ${versionNumber} · ${VERSION_LABELS[status].toLowerCase()}`;
+
 // The history comes newest first; this keeps it so whatever the order it arrives in.
 export const newestFirst = (versions: readonly VersionHistoryItem[]): VersionHistoryItem[] =>
   [...versions].sort((a, b) => b.versionNumber - a.versionNumber);

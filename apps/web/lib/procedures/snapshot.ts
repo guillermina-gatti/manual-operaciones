@@ -74,6 +74,7 @@ export function withDraftVersion(procedure: StoredProcedure, draft: VersionDetai
     ...procedure,
     versionId: draft.id,
     versionNumber: draft.versionNumber,
+    status: draft.status,
     title: draft.title,
     description: draft.description,
     steps: draft.steps.map((step) => ({ ...step })).sort(byOrder),

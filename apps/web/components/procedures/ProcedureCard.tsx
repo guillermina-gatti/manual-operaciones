@@ -11,6 +11,7 @@ import {
   TILE_LINK,
 } from '@/components/documents/list-design';
 import type { StoredProcedure } from '@/lib/procedures/session-list';
+import { versionSummary } from '@/lib/procedures/versions';
 
 function summary(procedure: StoredProcedure): string {
   const steps = procedure.steps.length;
@@ -34,7 +35,9 @@ export function ProcedureCard({ procedure, onRemove }: ProcedureCardProps) {
           {procedure.title}
         </Link>
       </h3>
-      <p className="text-base text-texto-suave">Versión {procedure.versionNumber} · borrador</p>
+      <p className="text-base text-texto-suave">
+        {versionSummary(procedure.versionNumber, procedure.status ?? 'DRAFT')}
+      </p>
       {procedure.description && (
         <p className="line-clamp-2 break-words">{procedure.description}</p>
       )}
