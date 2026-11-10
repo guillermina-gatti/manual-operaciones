@@ -11,6 +11,8 @@ interface VersionBody {
   id: string;
   versionNumber: number;
   status: 'DRAFT' | 'PUBLISHED' | 'SUPERSEDED';
+  isCritical: boolean;
+  changeSummary: string | null;
   publishedAt: string | null;
   publishedBy: { id: string; name: string | null } | null;
   steps?: { id: string; order: number; title: string }[];
@@ -111,6 +113,34 @@ describe('Procedures: versions (integration)', () => {
         { versionNumber: 1, status: 'PUBLISHED' },
         { versionNumber: 2, status: 'DRAFT' },
       ]);
+    });
+
+    it('E10: a critical change is saved with its summary and the history shows it', async () => {
+      const { procedureId, versionIds } = await withDraft();
+
+      await http()
+        .post(publishPath(procedureId, versionIds[1]))
+        .set(admin)
+        .send({ isCritical: true, changeSummary: 'Cambia el límite de caja' })
+        .expect(200);
+      const { body } = await http().get(versionsPath(procedureId)).set(admin).expect(200);
+
+      const [newest, oldest] = (body as { data: VersionBody[] }).data;
+      expect(newest).toMatchObject({ versionNumber: 2, isCritical: true, changeSummary: 'Cambia el límite de caja' });
+      expect(oldest).toMatchObject({ versionNumber: 1, isCritical: false, changeSummary: null });
+    });
+
+    it.each([
+      ['no summary', { isCritical: true }],
+      ['a summary of only spaces', { isCritical: true, changeSummary: '   ' }],
+      ['a summary of 301 characters', { isCritical: true, changeSummary: 'a'.repeat(301) }],
+    ])('E11: a critical change with %s is 400, naming the field, and stays a draft', async (_case, payload) => {
+      const { procedureId, versionIds } = await withDraft();
+
+      const { body } = await http().post(publishPath(procedureId, versionIds[1])).set(admin).send(payload).expect(400);
+
+      expect(JSON.stringify(body)).toContain('changeSummary');
+      expect((await statuses(procedureId))[1].status).toBe('DRAFT');
     });
 
     it('E18: two publications at the same time: one wins, the other is 409, and there is one PUBLISHED', async () => {

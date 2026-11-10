@@ -56,6 +56,30 @@ describe('PublishVersionDto (spec 015, R2 and R5)', () => {
     },
   );
 
+  describe('a critical change needs its summary (R5, D14)', () => {
+    it.each([
+      ['no summary', { isCritical: true }],
+      ['a summary that is null', { isCritical: true, changeSummary: null }],
+      ['an empty summary', { isCritical: true, changeSummary: '' }],
+      ['a summary of only spaces', { isCritical: true, changeSummary: '   ' }],
+      ['a summary of 301 characters', { isCritical: true, changeSummary: 'a'.repeat(301) }],
+    ])('rejects it with %s, naming changeSummary', async (_case, plain) => {
+      const { failed } = await check(plain);
+
+      expect(failed).toEqual(['changeSummary']);
+    });
+
+    it('accepts it with a summary, also of exactly 300 characters', async () => {
+      expect((await check({ isCritical: true, changeSummary: 'Cambia el límite' })).failed).toEqual([]);
+      expect((await check({ isCritical: true, changeSummary: 'a'.repeat(300) })).failed).toEqual([]);
+    });
+
+    it('does not ask for it when the change is not critical', async () => {
+      expect((await check({ isCritical: false })).failed).toEqual([]);
+      expect((await check({})).failed).toEqual([]);
+    });
+  });
+
   it('rejects a field that does not exist (D8)', async () => {
     const { failed } = await check({ publishedById: 'x' });
 
