@@ -331,6 +331,32 @@ describe('Personal metrics of the employee (integration)', () => {
     });
   });
 
+  it('HU33: a RESTARTED execution counts nowhere and is not in the resume list', async () => {
+    const old = await seed(CIERRE_V2, hoursAgo(30), 1);
+    await t.prisma.execution.update({
+      where: { id: old },
+      data: { status: 'RESTARTED', finishedAt: hoursAgo(2) },
+    });
+    const fresh = await seed(CIERRE_V2, hoursAgo(2), 1);
+
+    const { body } = await mine(elena).expect(200);
+    const result = body as MyMetricsBody;
+
+    expect(result.totals).toMatchObject({
+      started: 1,
+      completed: 0,
+      inProgress: 1,
+      abandoned: 0,
+    });
+    expect(result.totals.started).toBe(
+      result.totals.completed +
+        result.totals.inProgress +
+        result.totals.abandoned,
+    );
+    expect(result.resume.map((r) => r.executionId)).toEqual([fresh]);
+    expect(result.procedures[0]).toMatchObject({ started: 1, abandoned: 0 });
+  });
+
   it('a step still running after more than 24 hours: abandoned in the totals, stale in the resume list', async () => {
     await seed(CIERRE_V2, hoursAgo(30), 1);
 

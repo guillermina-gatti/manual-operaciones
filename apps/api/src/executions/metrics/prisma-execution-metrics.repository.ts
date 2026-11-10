@@ -18,20 +18,22 @@ import type { ExecutionAggregate, StepAggregate } from './procedure-metrics';
 const durationMs = (from: Prisma.Sql, to: Prisma.Sql) =>
   Prisma.sql`extract(epoch FROM ${to} - ${from}) * 1000`;
 
-// The period applies to when the execution started. With userId, only that user's
+// Which executions count. Never a RESTARTED one (HU33): it was replaced by the new one
+// on the current version, so it is neither started, in progress nor abandoned, and its
+// steps are not reached; that keeps started = completed + inProgress + abandoned. The
+// period applies to when the execution started. With userId, only that user's
 // executions (personal metrics); without it, everyone's, as before.
-function periodCondition(
+function windowCondition(
   { from, to }: MetricsWindow,
   userId?: string,
 ): Prisma.Sql {
   const conditions = [
+    Prisma.sql`e.status <> 'RESTARTED'`,
     userId ? Prisma.sql`e.user_id = ${userId}::uuid` : null,
     from ? Prisma.sql`e.started_at >= ${from}` : null,
     to ? Prisma.sql`e.started_at < ${to}` : null,
   ].filter((condition): condition is Prisma.Sql => condition !== null);
-  return conditions.length === 0
-    ? Prisma.sql`TRUE`
-    : Prisma.join(conditions, ' AND ');
+  return Prisma.join(conditions, ' AND ');
 }
 
 // Counts are cast to int and sums to float8, so they arrive as numbers and not as
@@ -58,7 +60,7 @@ export function executionAggregatesSql(
              AS "maxCompletionMs",
            max(e.started_at) AS "lastStartedAt"
     FROM executions e
-    WHERE ${periodCondition(window, userId)}
+    WHERE ${windowCondition(window, userId)}
     GROUP BY e.procedure_id, e.procedure_version_id
   `;
 }
@@ -86,7 +88,7 @@ export function stepAggregatesSql(
            )::int AS abandoned
     FROM execution_steps s
     JOIN executions e ON e.id = s.execution_id
-    WHERE ${periodCondition(window, userId)}
+    WHERE ${windowCondition(window, userId)}
     GROUP BY e.procedure_version_id, s.step_id
   `;
 }
