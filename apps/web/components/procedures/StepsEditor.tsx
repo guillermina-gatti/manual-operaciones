@@ -4,8 +4,9 @@
 // (each move asks the API for the whole list in the new order). One change at a time; every answer
 // of the API updates the local copy through onChange. It has no box of its own: the section that
 // holds it lays its parts out.
+import { LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { StoredProcedure } from '@/lib/procedures/session-list';
-import { ADD_BOX, BUTTON_SECONDARY } from './design';
+import { ADD_BOX } from './design';
 import { Notice } from './Notice';
 import { StepForm } from './StepForm';
 import { StepItem } from './StepItem';
@@ -33,7 +34,7 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
         <Notice tone="error" role="alert" className="flex flex-col items-start gap-3">
           <p>{failure.message}</p>
           {failure.notFound && (
-            <button type="button" className={BUTTON_SECONDARY} onClick={onGone}>
+            <button type="button" className={LIST_BUTTON_SECONDARY} onClick={onGone}>
               Quitar de la lista
             </button>
           )}

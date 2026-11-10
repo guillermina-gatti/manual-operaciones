@@ -4,9 +4,9 @@
 // It checks the data and gives them, trimmed, to onSubmit; the screen that owns the form talks to the API.
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { LIST_BUTTON_PRIMARY, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import { validateStep } from '@/lib/procedures/validate';
 import type { FormErrors, FormValues } from '@/lib/procedures/validate';
-import { BUTTON_PRIMARY, BUTTON_SECONDARY } from './design';
 import { TextField } from './TextField';
 
 interface StepFormProps {
@@ -82,12 +82,17 @@ export function StepForm({
           }}
         />
         <footer className="flex flex-wrap gap-3">
-          <button type="submit" className={BUTTON_PRIMARY} disabled={disabled} aria-busy={working}>
+          <button type="submit" className={LIST_BUTTON_PRIMARY} disabled={disabled} aria-busy={working}>
             {resetOnSuccess && !working && <span aria-hidden="true">+</span>}
             {working ? busyLabel : submitLabel}
           </button>
           {onCancel && (
-            <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={disabled}>
+            <button
+              type="button"
+              className={LIST_BUTTON_SECONDARY}
+              onClick={onCancel}
+              disabled={disabled}
+            >
               Cancelar
             </button>
           )}

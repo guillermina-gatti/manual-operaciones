@@ -5,10 +5,10 @@
 // its own: the section that holds it lays its parts out.
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { LIST_BUTTON_PRIMARY, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { StoredProcedure } from '@/lib/procedures/session-list';
 import { validateProcedure } from '@/lib/procedures/validate';
 import type { FormErrors } from '@/lib/procedures/validate';
-import { BUTTON_PRIMARY, BUTTON_SECONDARY } from './design';
 import { DiscardDraft } from './DiscardDraft';
 import { Notice } from './Notice';
 import { TextField } from './TextField';
@@ -70,7 +70,7 @@ export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
         />
         <button
           type="submit"
-          className={`${BUTTON_PRIMARY} self-start`}
+          className={`${LIST_BUTTON_PRIMARY} self-start`}
           disabled={busy !== null}
           aria-busy={busy === 'save'}
         >
@@ -88,7 +88,7 @@ export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
         <Notice tone="error" role="alert" className="flex flex-col items-start gap-3">
           <p>{failure.message}</p>
           {failure.notFound && (
-            <button type="button" className={BUTTON_SECONDARY} onClick={onGone}>
+            <button type="button" className={LIST_BUTTON_SECONDARY} onClick={onGone}>
               Quitar de la lista
             </button>
           )}

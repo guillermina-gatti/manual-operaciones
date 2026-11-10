@@ -3,7 +3,7 @@
 // The button to discard the draft (HU09, R10) and its confirmation. The screen that owns it does the
 // discard: onDiscard says whether the draft is gone; if not, the confirmation closes.
 import { useLayoutEffect, useState } from 'react';
-import { BUTTON_DANGER, BUTTON_SECONDARY } from './design';
+import { LIST_BUTTON_DANGER, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 
 interface DiscardDraftProps {
   busy: 'save' | 'discard' | null;
@@ -26,7 +26,7 @@ export function DiscardDraft({ busy, onStart, onDiscard }: DiscardDraftProps) {
     return (
       <button
         type="button"
-        className={BUTTON_DANGER}
+        className={LIST_BUTTON_DANGER}
         disabled={busy !== null}
         onClick={() => {
           onStart();
@@ -46,7 +46,7 @@ export function DiscardDraft({ busy, onStart, onDiscard }: DiscardDraftProps) {
       </p>
       <button
         type="button"
-        className={BUTTON_DANGER}
+        className={LIST_BUTTON_DANGER}
         onClick={confirm}
         disabled={busy !== null}
         aria-busy={busy === 'discard'}
@@ -55,7 +55,7 @@ export function DiscardDraft({ busy, onStart, onDiscard }: DiscardDraftProps) {
       </button>
       <button
         type="button"
-        className={BUTTON_SECONDARY}
+        className={LIST_BUTTON_SECONDARY}
         onClick={() => setConfirming(false)}
         disabled={busy !== null}
       >

@@ -5,6 +5,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { ProcedureEditor } from '@/components/procedures/ProcedureEditor';
+import { Skeleton } from '@/components/procedures/Skeleton';
 import { RequireRole } from '@/components/session/RequireRole';
 import { ScreenState } from '@/components/ui/ScreenState';
 
@@ -14,17 +15,21 @@ export const metadata: Metadata = {
 
 export default function ProcedimientoPage() {
   return (
-    <div className="flex-1">
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12">
-        <Suspense fallback={<ScreenState kind="loading" label="Cargando el procedimiento…" />}>
-          <RequireRole
-            role="ADMIN"
-            deniedMessage="Solo un administrador puede crear y editar procedimientos."
-          >
-            <ProcedureEditor />
-          </RequireRole>
-        </Suspense>
-      </main>
-    </div>
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 pt-8 pb-28">
+      <Suspense
+        fallback={
+          <ScreenState kind="loading" label="Cargando el procedimiento…">
+            <Skeleton heights={['h-12 w-2/3', 'h-48', 'h-64', 'h-32']} />
+          </ScreenState>
+        }
+      >
+        <RequireRole
+          role="ADMIN"
+          deniedMessage="Solo un administrador puede crear y editar procedimientos."
+        >
+          <ProcedureEditor />
+        </RequireRole>
+      </Suspense>
+    </main>
   );
 }

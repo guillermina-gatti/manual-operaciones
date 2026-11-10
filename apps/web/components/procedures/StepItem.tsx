@@ -2,21 +2,16 @@
 
 // One step of the draft (HU09, R6 to R8): its number, title and description, and the buttons to
 // move, edit and delete it. While it is being edited, the form takes its place.
+import { LIST_BUTTON_DANGER, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { StoredStep } from '@/lib/procedures/session-list';
 import type { Direction } from '@/lib/procedures/steps';
 import type { FormValues } from '@/lib/procedures/validate';
-import {
-  BUTTON_ICON,
-  BUTTON_ICON_DANGER,
-  BUTTON_SECONDARY,
-  IconDown,
-  IconTrash,
-  IconUp,
-  STEP_ROW,
-  StepNumber,
-} from './design';
+import { IconDown, IconTrash, IconUp, STEP_ROW, StepNumber } from './design';
 import { StepForm } from './StepForm';
 import type { Busy } from './useStepActions';
+
+// A button with only an icon: square, 48 px. It always has an aria-label.
+const ICON_ONLY = 'size-12 px-0';
 
 interface StepItemProps {
   step: StoredStep;
@@ -76,7 +71,7 @@ export function StepItem({
       <footer className="col-span-2 mt-2 flex flex-wrap gap-2 sm:col-span-1 sm:col-start-2">
         <button
           type="button"
-          className={BUTTON_ICON}
+          className={`${LIST_BUTTON_SECONDARY} ${ICON_ONLY}`}
           aria-label={`Subir paso: ${step.title}`}
           disabled={busy !== null || isFirst}
           onClick={() => onMove('up')}
@@ -85,7 +80,7 @@ export function StepItem({
         </button>
         <button
           type="button"
-          className={BUTTON_ICON}
+          className={`${LIST_BUTTON_SECONDARY} ${ICON_ONLY}`}
           aria-label={`Bajar paso: ${step.title}`}
           disabled={busy !== null || isLast}
           onClick={() => onMove('down')}
@@ -94,7 +89,7 @@ export function StepItem({
         </button>
         <button
           type="button"
-          className={BUTTON_SECONDARY}
+          className={LIST_BUTTON_SECONDARY}
           aria-label={`Editar paso: ${step.title}`}
           disabled={busy !== null}
           onClick={onStartEdit}
@@ -103,7 +98,7 @@ export function StepItem({
         </button>
         <button
           type="button"
-          className={BUTTON_ICON_DANGER}
+          className={`${LIST_BUTTON_DANGER} ${ICON_ONLY} sm:ml-auto`}
           aria-label={`Borrar paso: ${step.title}`}
           disabled={busy !== null}
           onClick={onRemove}

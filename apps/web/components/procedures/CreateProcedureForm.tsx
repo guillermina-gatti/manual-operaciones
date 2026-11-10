@@ -5,13 +5,14 @@
 import Link from 'next/link';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { TEXT_LINK } from '@/components/documents/design';
+import { LIST_BUTTON_PRIMARY } from '@/components/documents/list-design';
 import { createProcedure, describeProcedureError } from '@/lib/procedures';
 import { saveProcedure } from '@/lib/procedures/session-list';
 import { fromCreated } from '@/lib/procedures/snapshot';
 import { validateProcedure } from '@/lib/procedures/validate';
 import type { FormErrors } from '@/lib/procedures/validate';
 import { useSession } from '@/lib/session';
-import { ACTION_LINK, BUTTON_PRIMARY } from './design';
 import { Notice } from './Notice';
 import { TextField } from './TextField';
 
@@ -109,7 +110,7 @@ export function CreateProcedureForm() {
       {createdId && (
         <Notice tone="success" role="status">
           Procedimiento creado.{' '}
-          <Link href={`/procedimientos/${createdId}`} className={ACTION_LINK}>
+          <Link href={`/procedimientos/${createdId}`} className={TEXT_LINK}>
             Abrir el borrador
           </Link>
         </Notice>
@@ -117,7 +118,7 @@ export function CreateProcedureForm() {
 
       <button
         type="submit"
-        className={`${BUTTON_PRIMARY} self-start`}
+        className={`${LIST_BUTTON_PRIMARY} self-start`}
         disabled={submitting}
         aria-busy={submitting}
       >

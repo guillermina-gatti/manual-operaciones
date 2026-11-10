@@ -1,10 +1,13 @@
 // A notice with its text. The role (note, alert or status) is set by whoever uses it.
 import type { ComponentProps } from 'react';
+import { ERROR_BOX } from '@/components/documents/design';
+
+const BOX = 'rounded-xl border p-4 text-sm';
 
 const TONES = {
-  info: 'border-borde bg-salvia text-texto',
-  error: 'border-peligro bg-rosa-alerta text-rosa-alerta-texto',
-  success: 'border-transparent bg-chip-area text-chip-area-texto',
+  info: `${BOX} border-borde bg-fondo text-texto`,
+  error: `${ERROR_BOX} text-sm`,
+  success: `${BOX} border-bosque/20 bg-salvia text-bosque`,
 } as const;
 
 export function Notice({
@@ -12,5 +15,5 @@ export function Notice({
   className = '',
   ...rest
 }: ComponentProps<'div'> & { tone: keyof typeof TONES }) {
-  return <div className={`rounded-xl border p-4 text-sm ${TONES[tone]} ${className}`} {...rest} />;
+  return <div className={`${TONES[tone]} ${className}`} {...rest} />;
 }
