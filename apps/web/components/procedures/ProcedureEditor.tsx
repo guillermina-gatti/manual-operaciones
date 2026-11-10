@@ -56,6 +56,11 @@ export function ProcedureEditor() {
     router.push('/procedimientos');
   };
   const update = (next: typeof procedure) => saveProcedure(user.id, next);
+  // The draft changed (title, description or steps): the history shows its new count and title.
+  const changeDraft = (next: typeof procedure) => {
+    update(next);
+    versions.reload();
+  };
   const followDraft = (draft: VersionDetail) => {
     update(withDraftVersion(procedure, draft));
     versions.reload();
@@ -79,7 +84,7 @@ export function ProcedureEditor() {
       </Notice>
 
       {shown === 'DRAFT' ? (
-        <DraftSections procedure={procedure} onChange={update} onGone={leave} />
+        <DraftSections procedure={procedure} onChange={changeDraft} onGone={leave} />
       ) : (
         <VersionReadOnly procedureId={id} versionId={procedure.versionId} />
       )}

@@ -1,11 +1,19 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ProcedureEditor } from '@/components/procedures/ProcedureEditor';
 import { ApiError } from '@/lib/api';
 import { loadProcedures, saveProcedure } from '@/lib/procedures/session-list';
 import { AREAS } from '../../support/procedure-areas';
-import { ADMIN_ID, ANA, PROCEDURE_ID, procedureResponse, stored } from '../../support/procedures';
+import {
+  ADMIN_ID,
+  ANA,
+  PROCEDURE_ID,
+  STEP_A,
+  procedureResponse,
+  stepResponse,
+  stored,
+} from '../../support/procedures';
 import { V1, V2, page, published, versionDetail, versionItem } from '../../support/versions';
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   listVersions: vi.fn(),
   getVersion: vi.fn(),
   createVersionDraft: vi.fn(),
+  addStep: vi.fn(),
+  updateVersion: vi.fn(),
   params: { id: '' } as { id: string },
 }));
 
@@ -29,6 +39,8 @@ vi.mock('@/lib/procedures', async (importOriginal) => ({
   listVersions: mocks.listVersions,
   getVersion: mocks.getVersion,
   createVersionDraft: mocks.createVersionDraft,
+  addStep: mocks.addStep,
+  updateVersion: mocks.updateVersion,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -80,6 +92,63 @@ describe('the versions of the procedure (spec 015, R8)', () => {
     render(<ProcedureEditor />);
 
     expect(mocks.listVersions).not.toHaveBeenCalled();
+  });
+});
+
+describe('when the draft changes, the history follows (spec 015, R8)', () => {
+  const addAStep = async () => {
+    const form = await screen.findByRole('form', { name: 'Agregar un paso' });
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Título del paso' }), 'Contar');
+    await userEvent.click(within(form).getByRole('button', { name: 'Agregar paso' }));
+  };
+
+  beforeEach(() => {
+    mocks.addStep.mockResolvedValue(stepResponse(STEP_A, 1, 'Contar'));
+    mocks.listVersions
+      .mockResolvedValueOnce(page([versionItem({ stepCount: 0 }), published()]))
+      .mockResolvedValue(page([versionItem({ stepCount: 1 }), published()]));
+  });
+
+  test('a step added to the draft is counted in the timeline', async () => {
+    saveProcedure(ADMIN_ID, storedDraft());
+    render(<ProcedureEditor />);
+    expect(await screen.findByText('0 pasos')).toBeInTheDocument();
+
+    await addAStep();
+
+    expect(await screen.findByText('1 paso')).toBeInTheDocument();
+    expect(mocks.listVersions).toHaveBeenCalledTimes(2);
+  });
+
+  test('a title saved in the draft asks the history again', async () => {
+    mocks.updateVersion.mockResolvedValue({ ...procedureResponse().versions[0], title: 'Cierre nuevo' });
+    saveProcedure(ADMIN_ID, storedDraft());
+    render(<ProcedureEditor />);
+    await screen.findByText('0 pasos');
+
+    const title = screen.getByRole('textbox', { name: 'Título' });
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Cierre nuevo');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await screen.findByText('Cambios guardados.');
+    expect(mocks.listVersions).toHaveBeenCalledTimes(2);
+  });
+
+  test('the timeline stays on screen while it is asked again, with no loading flash', async () => {
+    mocks.listVersions
+      .mockReset()
+      .mockResolvedValueOnce(page([versionItem({ stepCount: 0 }), published()]))
+      .mockReturnValue(new Promise(() => {}));
+    saveProcedure(ADMIN_ID, storedDraft());
+    render(<ProcedureEditor />);
+    await screen.findByText('0 pasos');
+
+    await addAStep();
+
+    expect(mocks.listVersions).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('list', { name: 'Versiones' })).toBeInTheDocument();
+    expect(screen.queryByText('Cargando las versiones…')).not.toBeInTheDocument();
   });
 });
 
