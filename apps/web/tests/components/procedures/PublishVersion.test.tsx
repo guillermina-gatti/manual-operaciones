@@ -63,6 +63,74 @@ describe('PublishVersion (spec 015, R2)', () => {
     expect(confirmation).not.toHaveTextContent('reemplazada');
   });
 
+  describe('a critical change (spec 015, R5)', () => {
+    const checkbox = () => screen.getByRole('checkbox', { name: 'Es un cambio crítico' });
+    const summary = () => screen.getByRole('textbox', { name: 'Resumen del cambio' });
+
+    const openConfirmation = async () => {
+      setup();
+      await userEvent.click(publishButton());
+    };
+
+    test('is not marked by default, and then there is no field for the summary', async () => {
+      await openConfirmation();
+
+      expect(checkbox()).not.toBeChecked();
+      expect(screen.queryByRole('textbox', { name: 'Resumen del cambio' })).not.toBeInTheDocument();
+    });
+
+    test('marking it shows the field for the summary, and unmarking it hides the field again', async () => {
+      await openConfirmation();
+
+      await userEvent.click(checkbox());
+      expect(summary()).toBeInTheDocument();
+      await userEvent.click(checkbox());
+
+      expect(screen.queryByRole('textbox', { name: 'Resumen del cambio' })).not.toBeInTheDocument();
+    });
+
+    test.each([
+      ['empty', '', 'Escribí un resumen del cambio.'],
+      ['only spaces', '   ', 'Escribí un resumen del cambio.'],
+      ['of 301 characters', 'a'.repeat(301), 'El resumen puede tener hasta 300 caracteres.'],
+    ])('a summary %s is marked in its field and nothing is sent', async (_case, text, message) => {
+      await openConfirmation();
+      await userEvent.click(checkbox());
+      if (text) await userEvent.click(summary()).then(() => userEvent.paste(text));
+
+      await userEvent.click(confirmButton());
+
+      expect(summary()).toHaveAccessibleDescription(message);
+      expect(summary()).toBeInvalid();
+      expect(mocks.publishVersion).not.toHaveBeenCalled();
+    });
+
+    test('with its summary it publishes as critical, with the summary without the spaces around it', async () => {
+      await openConfirmation();
+      await userEvent.click(checkbox());
+      await userEvent.type(summary(), '  Cambia el límite de caja ');
+
+      await userEvent.click(confirmButton());
+
+      expect(mocks.publishVersion).toHaveBeenCalledWith(PROCEDURE_ID, V2, {
+        isCritical: true,
+        changeSummary: 'Cambia el límite de caja',
+      });
+      expect(onPublished).toHaveBeenCalledTimes(1);
+    });
+
+    test('a summary that was written but not marked as critical is not sent', async () => {
+      await openConfirmation();
+      await userEvent.click(checkbox());
+      await userEvent.type(summary(), 'Algo');
+      await userEvent.click(checkbox());
+
+      await userEvent.click(confirmButton());
+
+      expect(mocks.publishVersion).toHaveBeenCalledWith(PROCEDURE_ID, V2);
+    });
+  });
+
   test('"Cancelar" goes back without publishing', async () => {
     setup();
     await userEvent.click(publishButton());

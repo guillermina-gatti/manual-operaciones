@@ -14,9 +14,11 @@ interface TextFieldProps {
   error?: string;
   // With rows it is a textarea.
   rows?: number;
+  // For the box of the field, if the screen lays it out (for example a width).
+  className?: string;
 }
 
-export function TextField({ label, value, onChange, error, rows }: TextFieldProps) {
+export function TextField({ label, value, onChange, error, rows, className = '' }: TextFieldProps) {
   const id = useId();
   const errorId = `${id}-error`;
   const shared = {
@@ -28,7 +30,7 @@ export function TextField({ label, value, onChange, error, rows }: TextFieldProp
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={`flex flex-col gap-2 ${className}`}>
       <label htmlFor={id} className={`${LABEL} text-base`}>
         {label}
       </label>
