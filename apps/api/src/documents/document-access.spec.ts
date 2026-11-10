@@ -134,4 +134,49 @@ describe('A-SEC.2 - autorizacion con areas inactivas', () => {
       }),
     ).toBe(true);
   });
+
+  it('un usuario inactivo no obtiene permisos por sus areas', async () => {
+    const users = new InMemoryUsersDirectory([
+      {
+        ...FIXTURE_USERS.empleadoVentas,
+        isActive: false,
+        areaIds: [VENTAS],
+      },
+    ]);
+
+    const viewer = await viewerFor(users, authenticatedUser([VENTAS]));
+
+    expect(viewer.areaIds).toEqual([]);
+  });
+
+  it('un usuario inexistente no obtiene permisos', async () => {
+    const users = new InMemoryUsersDirectory([]);
+
+    const viewer = await viewerFor(users, authenticatedUser([VENTAS]));
+
+    expect(viewer.areaIds).toEqual([]);
+  });
+
+  it('si el directorio falla, el error se propaga sin conceder acceso', async () => {
+    const users = historicalDirectory([VENTAS]);
+    const error = new Error('Directorio no disponible');
+
+    jest.spyOn(users, 'findById').mockRejectedValue(error);
+
+    await expect(viewerFor(users, authenticatedUser([VENTAS]))).rejects.toBe(
+      error,
+    );
+  });
+
+  it('conserva las asociaciones historicas sin usarlas como permisos', async () => {
+    const users = historicalDirectory([VENTAS, OPERACIONES]);
+
+    const historical = await users.findById(FIXTURE_USERS.empleadoVentas.id);
+
+    expect(historical?.areaIds).toEqual([VENTAS, OPERACIONES]);
+
+    const viewer = await viewerFor(users, authenticatedUser([VENTAS]));
+
+    expect(viewer.areaIds).toEqual([VENTAS]);
+  });
 });
