@@ -69,4 +69,57 @@ export class PrismaUsersDirectory extends UsersDirectory {
       throw error;
     }
   }
+
+  async findByIds(ids: string[]): Promise<DirectoryUser[]> {
+    // Evita buscar dos veces el mismo ID.
+    const uniqueIds = [...new Set(ids)];
+
+    // Si no hay IDs, no necesitamos consultar PostgreSQL.
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+
+    try {
+      // Una sola consulta para todos los usuarios solicitados.
+      const users = await this.prisma.user.findMany({
+        where: {
+          id: { in: uniqueIds },
+        },
+        include: {
+          areas: {
+            select: { areaId: true },
+          },
+        },
+      });
+
+      // Construimos el mismo tipo de respuesta que findById.
+      const usersById = new Map(
+        users.map((user) => [
+          user.id,
+          {
+            id: user.id,
+            name: user.name,
+            role: user.role,
+            isActive: user.isActive,
+            areaIds: user.areas.map((relation) => relation.areaId),
+          } satisfies DirectoryUser,
+        ]),
+      );
+
+      // Respeta el orden solicitado y omite IDs inexistentes.
+      return uniqueIds.flatMap((id) => {
+        const user = usersById.get(id);
+        return user ? [user] : [];
+      });
+    } catch (error) {
+      // Conservamos el manejo de errores del adaptador.
+      if (isUnavailable(error)) {
+        throw new RepositoryUnavailableError('La base de datos no responde', {
+          cause: error,
+        });
+      }
+
+      throw error;
+    }
+  }
 }

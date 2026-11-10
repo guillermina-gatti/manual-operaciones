@@ -19,4 +19,25 @@ export class InMemoryUsersDirectory extends UsersDirectory {
       user ? { ...user, areaIds: [...user.areaIds] } : null,
     );
   }
+
+  findByIds(ids: string[]): Promise<DirectoryUser[]> {
+    const uniqueIds = [...new Set(ids)];
+
+    const found = uniqueIds.flatMap((id) => {
+      const user = this.users.get(id);
+
+      if (!user) {
+        return [];
+      }
+
+      return [
+        {
+          ...user,
+          areaIds: [...user.areaIds],
+        },
+      ];
+    });
+
+    return Promise.resolve(found);
+  }
 }
