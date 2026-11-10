@@ -88,7 +88,10 @@ test('E1: la ADMIN pasa un documento de Ventas a Operaciones; cambia quién lo v
 
   expect(patch.status()).toBe(200);
   await expect(page.getByRole('status').filter({ hasText: 'Áreas actualizadas' })).toBeVisible();
-  await expect(page.locator('dd').first()).toHaveText('Operaciones');
+  // Las áreas se ven en el encabezado del detalle: ahora solo Operaciones.
+  const detailHeader = page.locator('main header');
+  await expect(detailHeader).toContainText('Operaciones');
+  await expect(detailHeader).not.toContainText('Ventas');
 
   // La EMPLOYEE de Ventas deja de verlo; el EMPLOYEE de Operaciones lo ve.
   expect(await listedTitles(page, 'empleadoVentas')).not.toContain(document.title);

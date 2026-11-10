@@ -7,11 +7,16 @@ import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SEARCH_MAX, SEARCH_MIN, parseSearchParam } from '@/lib/documents/search-rules';
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, ERROR_TEXT, SearchIcon } from './design';
+import { withView } from '@/lib/documents/view';
+import type { DocumentsView } from '@/lib/documents/view';
+import { BUTTON_SECONDARY, ERROR_TEXT, HINT, SearchIcon } from './design';
+import { LIST_BUTTON_PRIMARY } from './list-design';
 
 interface SearchBoxProps {
   // El ?q= de la dirección, tal cual (null si no hay búsqueda).
   query: string | null;
+  // La vista del listado: buscar y borrar la conservan (por defecto, Lista).
+  view?: DocumentsView;
 }
 
 const TOO_SHORT = `Escribí al menos ${SEARCH_MIN} caracteres para buscar.`;
@@ -24,7 +29,7 @@ function warningFor(value: string | null): string | undefined {
   return parsed.kind === 'invalid' && parsed.text.length > SEARCH_MAX ? TOO_LONG : TOO_SHORT;
 }
 
-export function SearchBox({ query }: SearchBoxProps) {
+export function SearchBox({ query, view = 'lista' }: SearchBoxProps) {
   const router = useRouter();
   const errorId = useId();
   const [value, setValue] = useState(query ?? '');
@@ -42,7 +47,7 @@ export function SearchBox({ query }: SearchBoxProps) {
       return;
     }
     // Sin ?pagina=: toda búsqueda nueva empieza en la página 1.
-    router.push(`/documentos?q=${encodeURIComponent(parsed.text)}`);
+    router.push(withView(`/documentos?q=${encodeURIComponent(parsed.text)}`, view));
   }
 
   return (
@@ -53,7 +58,7 @@ export function SearchBox({ query }: SearchBoxProps) {
           <input
             type="search"
             aria-label="Buscar documentos"
-            placeholder="Buscá también adentro de los documentos… (no importan las tildes)"
+            placeholder="Buscá por título o por contenido"
             maxLength={SEARCH_MAX}
             value={value}
             onChange={(event) => {
@@ -62,26 +67,28 @@ export function SearchBox({ query }: SearchBoxProps) {
             }}
             aria-invalid={warning ? true : undefined}
             aria-describedby={warning ? errorId : undefined}
-            className="min-h-14 w-full min-w-0 rounded-xl border border-borde bg-blanco pr-4 pl-12 text-texto placeholder:text-texto-suave aria-[invalid=true]:border-peligro"
+            className="min-h-14 w-full min-w-0 rounded-xl border border-borde bg-blanco pr-4 pl-12 text-texto shadow-sm transition-colors placeholder:text-texto-suave hover:border-bosque/30 focus:border-bosque aria-[invalid=true]:border-peligro motion-reduce:transition-none"
           />
         </div>
-        <button type="submit" className={`${BUTTON_PRIMARY} min-h-14`}>
+        <button type="submit" className={`${LIST_BUTTON_PRIMARY} min-h-14`}>
           Buscar
         </button>
         {hasSearch && (
           <button
             type="button"
             className={`${BUTTON_SECONDARY} min-h-14`}
-            onClick={() => router.push('/documentos')}
+            onClick={() => router.push(withView('/documentos', view))}
           >
             Borrar búsqueda
           </button>
         )}
       </div>
-      {warning && (
+      {warning ? (
         <p id={errorId} role="alert" className={ERROR_TEXT}>
           {warning}
         </p>
+      ) : (
+        <p className={HINT}>Busca también adentro de los archivos. No importan las tildes.</p>
       )}
     </form>
   );

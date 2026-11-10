@@ -47,6 +47,7 @@ vi.mock('@/lib/directory', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ id: '11111111-1111-4111-8111-111111111111' }),
 }));
 

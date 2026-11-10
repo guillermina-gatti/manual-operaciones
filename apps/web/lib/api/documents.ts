@@ -25,6 +25,9 @@ export interface DocumentVersionSummary {
   originalFileName: string;
   mimeType: string;
   processingStatus: ProcessingStatus;
+  // Cuándo se subió la versión vigente ("actualizado hace X"). La API lo manda siempre; es opcional
+  // para los datos de prueba anteriores (sin él, la web usa el createdAt del documento).
+  createdAt?: string;
 }
 
 // Spec 008 (R1): una persona o un área referenciada por un documento, con su nombre y su estado

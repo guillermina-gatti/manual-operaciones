@@ -2,10 +2,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProcessingModule } from '../processing/processing.module';
+import { StorageModule } from '../storage/storage.module';
 import { createChatLlm } from './adapters/gemini-chat-llm';
 import { PrismaChatContextStore } from './adapters/prisma-chat-context-store';
 import { PrismaChatFeedbackRepository } from './adapters/prisma-chat-feedback-repository';
 import { PrismaConflictAlertRecorder } from './adapters/prisma-conflict-alert-recorder';
+import { PrismaContactDirectory } from './adapters/prisma-contact-directory';
+import { ContactDirectory } from './ports/contact-directory';
 import { PrismaChatRepository } from './adapters/prisma-chat-repository';
 import { PrismaChatRetrieval } from './adapters/prisma-chat-retrieval';
 import { ChatController } from './chat.controller';
@@ -22,7 +25,7 @@ import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval } from './ports/chat-retrieval';
 
 @Module({
-    imports: [ProcessingModule],
+    imports: [ProcessingModule, StorageModule], // StorageModule: FileStorage para los enlaces de HU18
     controllers: [ChatController, ChatStreamController, ChatFeedbackController], // spec 009 y HU25
     providers: [
         ChatService,
@@ -33,6 +36,7 @@ import { ChatRetrieval } from './ports/chat-retrieval';
         { provide: ChatFeedbackRepository, useClass: PrismaChatFeedbackRepository }, // HU25
         { provide: ChatContextStore, useClass: PrismaChatContextStore }, // spec 010
         { provide: ConflictAlertRecorder, useClass: PrismaConflictAlertRecorder }, // spec 011
+        { provide: ContactDirectory, useClass: PrismaContactDirectory }, // HU19
         {
             // El modelo de chat sale de GEMINI_CHAT_MODEL (gemini-2.5-flash por defecto).
             provide: ChatLlm,

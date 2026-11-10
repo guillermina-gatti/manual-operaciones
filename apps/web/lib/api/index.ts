@@ -1,11 +1,13 @@
 // Único punto de entrada de lib/api: los componentes importan de '@/lib/api', nunca de un archivo interno.
 import { getAuthHeaders, refreshSession } from '@/lib/session';
 import { createChatApi } from './chat';
+import { createChatFeedbackApi } from './chat-feedback';
 import { createConflictAlertsApi } from './conflict-alerts';
 import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
 import { createExecutionsApi } from './executions';
 import { createMetricsApi } from './metrics';
+import { createMyMetricsApi } from './my-metrics';
 
 // El cliente que usan las pantallas: cada pedido lleva el Bearer de la sesión y, si el token
 // venció (401), se renueva una vez y se repite.
@@ -69,6 +71,7 @@ export type { ExecutionErrorContext, ExecutionErrorDescription } from './executi
 export const { getProcedureMetrics } = createMetricsApi(apiClient);
 export { metricsQuery } from './metrics';
 export type {
+  AreaSummaryResponse,
   ExecutionCounts,
   MetricsFilters,
   ProcedureMetricsResponse,
@@ -79,10 +82,24 @@ export type {
 export { describeMetricsError, METRICS_MESSAGES } from './metrics-errors';
 export type { MetricsErrorDescription } from './metrics-errors';
 
+// The employee's own activity: GET /api/metrics/me, with the same client.
+export const { getMyMetrics } = createMyMetricsApi(apiClient);
+export type {
+  MyMetricsResponse,
+  MyMetricsTotals,
+  MyProcedureMetrics,
+  MyResumeItem,
+} from './my-metrics';
+export { describeMyMetricsError, MY_METRICS_MESSAGES } from './metrics-errors';
+
 // Spec 009 (HU20): POST /api/chat/stream, con el mismo cliente.
 export const { askStream } = createChatApi(apiClient);
 export { ChatStreamError } from './chat';
-export type { ChatRequestBody, ChatResult, ChatResultStatus, ChatSource, ChatStreamDone } from './chat';
+export type { ChatRequestBody, ChatResult, ChatResultStatus, ChatSource, ChatStreamDone, NearestDocument } from './chat';
+
+// HU25: POST /api/chat/messages/:id/feedback, con el mismo cliente.
+export const { recordFeedback } = createChatFeedbackApi(apiClient);
+export type { ChatFeedbackBody } from './chat-feedback';
 
 // Spec 011 (HU39): las alertas de documentos contradictorios, con el mismo cliente.
 export const { listConflictAlerts, resolveConflictAlert } = createConflictAlertsApi(apiClient);

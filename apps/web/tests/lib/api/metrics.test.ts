@@ -10,7 +10,14 @@ const METRICS: ProceduresMetricsResponse = {
   filters: { areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' },
   staleAfterHours: 24,
   areaIds: [VENTAS],
-  totals: { started: 1, completed: 1, inProgress: 0, abandoned: 0, completionRate: 1 },
+  totals: {
+    started: 1,
+    completed: 1,
+    inProgress: 0,
+    abandoned: 0,
+    completionRate: 1,
+    avgCompletionMs: 720000,
+  },
   procedures: [
     {
       procedureId: '1a000000-0000-4000-8000-000000000001',
@@ -21,6 +28,8 @@ const METRICS: ProceduresMetricsResponse = {
       abandoned: 0,
       completionRate: 1,
       avgCompletionMs: 720000,
+      minCompletionMs: 720000,
+      maxCompletionMs: 720000,
       versions: [
         {
           procedureVersionId: '1b000000-0000-4000-8000-000000000002',
@@ -28,6 +37,7 @@ const METRICS: ProceduresMetricsResponse = {
           completed: 1,
           inProgress: 0,
           abandoned: 0,
+          avgCompletionMs: 720000,
           steps: [
             {
               stepId: '1c000000-0000-4000-8000-000000000004',
@@ -44,6 +54,7 @@ const METRICS: ProceduresMetricsResponse = {
       ],
     },
   ],
+  areaSummary: [{ areaId: VENTAS, procedures: 1 }],
 };
 
 describe('metricsQuery', () => {

@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (05/11/2026):** todas hechas. Queda la prueba manual con Gemini real, que hace Matías.
+- **Estado (06/11/2026):** todas hechas, incluida la prueba manual con Gemini real (06/11/2026, ver T15).
   - T01 es la migración, **la hace Matías**.
   - T02 a T07 son el chat, T08 las alertas en documentos y T09 la integración de la API.
   - T10 a T13 son la web y T14 el Playwright.
@@ -380,7 +380,8 @@ Convenciones:
   6. **Avisos:** a Guille (sección 12 de la spec) y a la pareja A (sección 13). Los manda Matías.
 - **Depende de:** T01 a T14.
 - **Commit:** `docs(specs): verificar las contradicciones del asistente`
-- **Estado:** hecha (05/11/2026), sin la prueba manual con Gemini real (la hace Matías). `manual_test` se reseteó con la confirmación de Matías; `manual` no se tocó.
+- **Estado:** hecha (05/11/2026). `manual_test` se reseteó con la confirmación de Matías; `manual` no se tocó.
+- **Prueba manual con Gemini real (06/11/2026): hecha** por Matías. Con una contradicción, el chat muestra el aviso con las dos fuentes; el ADMIN ve la alerta y la puede resolver.
 - **Resultado:**
   1. **Todo en verde:**
      - API: lint (solo el warning de siempre, en `gemini-chat-llm.spec.ts`) y tsc sin errores; `test`: 109 suites, 1609 tests; `test:e2e` completo: 36 de 36 suites, 464 tests (después se sumaron 2 tests de integración, ver el punto 5).

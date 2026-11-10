@@ -3,9 +3,11 @@
 // Las dependencias llegan por parámetro: ChatService sigue siendo el que las recibe por inyección.
 import type { Logger } from '@nestjs/common';
 import type { EmbeddingProvider } from '../processing/ports/embedding-provider';
-import type { ChatResult, ChatResultStatus, ChatSource } from './chat.contract';
+import type { ChatResult, ChatResultStatus, ChatSource, NearestDocument } from './chat.contract';
 import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
+import { platformHelpReply } from './chat-help';
 import { smallTalkReply } from './chat-greeting';
+import type { ContactPerson } from './ports/contact-directory';
 import type { LlmAnswer, Passage } from './ports/chat-llm';
 import type { ChatRepository } from './ports/chat-repository';
 import type { ChatRetrieval, RetrievedChunk } from './ports/chat-retrieval';
@@ -13,6 +15,8 @@ import type { ChatRetrieval, RetrievedChunk } from './ports/chat-retrieval';
 export const TOP_K = 6;
 // Distancia coseno máxima para considerar un fragmento relevante. Ajustar con documentos reales.
 export const MAX_COSINE_DISTANCE = 0.45;
+// HU19: cuántos documentos cercanos se muestran cuando no hay información suficiente.
+export const NEAREST_DOCUMENTS_LIMIT = 3;
 export const NO_INFO_MARKER = 'NO_INFO';
 
 export const NO_INFO_TEXT =
@@ -23,6 +27,8 @@ export const UNAVAILABLE_TEXT =
 export interface ChatUser {
     id: string;
     areaIds: string[];
+    // Rol del usuario. El ADMIN busca en todos los documentos vigentes, no solo en sus áreas (pedido de Mati).
+    role?: string;
 }
 
 export interface Outcome {
@@ -33,6 +39,25 @@ export interface Outcome {
     // Spec 011 (R7): solo con status conflict, los dos fragmentos de la contradicción (first, el de
     // número de pasaje menor). Son también los de chunks.
     conflict?: { first: RetrievedChunk; second: RetrievedChunk };
+    // HU19: solo con no_info. Los documentos más cercanos; no están en chunks, así que no cuentan
+    // como usados ni como fuentes.
+    nearest?: NearestDocument[];
+    // HU19: solo con no_info. Lo pone resolveSuggestion (chat-contact.ts), después de la búsqueda.
+    suggestedContact?: ContactPerson;
+}
+
+// HU19: los documentos distintos de los fragmentos más cercanos, en orden de cercanía. Sin
+// documentos, no hay campo (el resultado queda como antes de HU19).
+export function nearestOf(chunks: RetrievedChunk[]): { nearest?: NearestDocument[] } {
+    const byDocument = new Map<string, NearestDocument>();
+    for (const c of chunks) {
+        if (!byDocument.has(c.documentId)) {
+            byDocument.set(c.documentId, { documentId: c.documentId, documentTitle: c.documentTitle });
+        }
+        if (byDocument.size === NEAREST_DOCUMENTS_LIMIT) break;
+    }
+    const nearest = [...byDocument.values()];
+    return nearest.length > 0 ? { nearest } : {};
 }
 
 // Lo que queda después de preparar: un resultado final (sin llamar al modelo) o los fragmentos
@@ -51,8 +76,10 @@ export async function prepareChat(
     logger: Logger,
     searchText: string = question,
 ): Promise<Prepared> {
+    // Alcance de la búsqueda: null = todos los documentos vigentes (solo ADMIN); si no, sus áreas.
+    const scope: string[] | null = user.role === 'ADMIN' ? null : user.areaIds;
     // Sin áreas asignadas no hay nada que el usuario pueda consultar, ni siquiera un saludo.
-    if (user.areaIds.length === 0) {
+    if (scope !== null && scope.length === 0) {
         return { kind: 'done', outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [] } };
     }
 
@@ -63,6 +90,12 @@ export async function prepareChat(
         return { kind: 'done', outcome: { status: 'answered', answer: reply, chunks: [] } };
     }
 
+    // Ayuda de la plataforma ("¿cómo veo un documento?"): texto fijo, sin buscar ni llamar al modelo.
+    const help = platformHelpReply(question);
+    if (help !== null) {
+        return { kind: 'done', outcome: { status: 'answered', answer: help, chunks: [] } };
+    }
+
     let queryVector: number[];
     try {
         [queryVector] = await embeddings.embedMany([searchText]);
@@ -71,11 +104,14 @@ export async function prepareChat(
         return { kind: 'done', outcome: unavailable() };
     }
 
-    const chunks = (await retrieval.search(queryVector, user.areaIds, TOP_K)).filter(
-        (c) => c.distance <= MAX_COSINE_DISTANCE,
-    );
+    const retrieved = await retrieval.search(queryVector, scope, TOP_K);
+    const chunks = retrieved.filter((c) => c.distance <= MAX_COSINE_DISTANCE);
     if (chunks.length === 0) {
-        return { kind: 'done', outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [] } };
+        // HU19: los más cercanos, aunque estén fuera del umbral, para mostrar dónde buscar.
+        return {
+            kind: 'done',
+            outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], ...nearestOf(retrieved) },
+        };
     }
 
     const passages: Passage[] = chunks.map((c, i) => ({
@@ -93,11 +129,10 @@ export async function prepareChat(
 // logger es opcional (plan 011, PD2): anota una marca inválida, que se trata como answered.
 export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pick<Logger, 'warn'>): Outcome {
     if (llm.text.startsWith(NO_INFO_MARKER)) {
-        return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm };
+        return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
     }
 
-    let text = llm.text;
-    const marker = readConflictMarker(text, chunks);
+    const marker = readConflictMarker(llm.text, chunks);
     if (marker.kind === 'conflict') {
         const { first, second, body } = marker;
         return {
@@ -108,18 +143,40 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
             llm,
         };
     }
+    let text = llm.text;
     if (marker.kind === 'invalid') {
         logger?.warn(`Marca de contradicción inválida, se responde sin ella: ${marker.reason}`);
-        if (!marker.body) return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm };
+        if (!marker.body) return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
         text = marker.body;
+    }
+
+    // Sin ninguna cita válida, no hay respuesta que mostrar: no_info (pedido de Mati).
+    const cleaned = cleanCitations(text, chunks.length);
+    if (cleaned.refs.size === 0) {
+        return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
     }
 
     return {
         status: 'answered',
-        answer: text,
-        chunks: citedChunks(text, chunks),
+        answer: cleaned.text,
+        chunks: citedChunks(cleaned.text, chunks),
         llm,
     };
+}
+
+// Quita las citas que no corresponden a un fragmento recuperado (por ejemplo [S7] con 3 fragmentos),
+// para que el done traiga la respuesta limpia. Devuelve las citas válidas que quedan.
+export function cleanCitations(text: string, count: number): { text: string; refs: Set<number> } {
+    const refs = new Set<number>();
+    const cleaned = text.replace(/\s*\[S(\d+)\]/g, (match, n: string) => {
+        const index = Number(n);
+        if (index >= 1 && index <= count) {
+            refs.add(index);
+            return match;
+        }
+        return '';
+    });
+    return { text: cleaned.trim(), refs };
 }
 
 // Guarda la consulta y arma la respuesta del Contrato 4. La latencia va desde startedAt hasta acá.
@@ -151,6 +208,8 @@ export async function saveResult(
         status: outcome.status,
         answer: outcome.answer,
         sources: toSources(usedChunks),
+        ...(outcome.nearest ? { nearestDocuments: outcome.nearest } : {}),
+        ...(outcome.suggestedContact ? { suggestedContact: outcome.suggestedContact } : {}),
     };
 }
 
@@ -177,7 +236,7 @@ export function toSources(chunks: RetrievedChunk[]): ChatSource[] {
         section: c.section ?? 'Sin sección',
         chunkId: c.chunkId,
         validFrom: c.validFrom,
-        // TODO HU18: reemplazar por el enlace firmado al pasaje.
-        url: '',
+        // HU18: el enlace firmado lo pone withSignedLinks (chat-links.ts); sin él, queda vacío.
+        url: c.url ?? '',
     }));
 }

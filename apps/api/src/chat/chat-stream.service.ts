@@ -8,6 +8,7 @@ import {
     ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Role } from '../common/auth';
+import { FileStorage } from '../storage/file-storage';
 import { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatRequest } from './chat.contract';
 import {
@@ -20,6 +21,8 @@ import {
     saveResult,
     unavailable,
 } from './chat-pipeline';
+import { resolveSuggestion } from './chat-contact';
+import { withSignedLinks } from './chat-links';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
 import { CONFLICT_MARKER, checkMarkerLine, recordConflictAlert, splitMarkerLine, startsWithMarker } from './chat-conflict';
 import { buildSearchUrl } from './chat-search-url';
@@ -29,6 +32,7 @@ import { ChatLlm } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval, type RetrievedChunk } from './ports/chat-retrieval';
 import { ConflictAlertRecorder } from './ports/conflict-alert-recorder';
+import { ContactDirectory } from './ports/contact-directory';
 
 export const OPEN_UNAVAILABLE_MESSAGE = 'El asistente no está disponible en este momento';
 
@@ -60,6 +64,10 @@ export class ChatStreamService {
         @Optional() private readonly contextStore?: ChatContextStore,
         // Spec 011 (R12): registra la alerta de una contradicción. Opcional, como el anterior.
         @Optional() private readonly conflictAlerts?: ConflictAlertRecorder,
+        // HU19: a quién consultar cuando no hay información. Opcional, como el anterior.
+        @Optional() private readonly contacts?: ContactDirectory,
+        // HU18: para firmar el enlace de cada fuente citada. Opcional, como el anterior.
+        @Optional() private readonly storage?: FileStorage,
     ) { }
 
     // Antes de transmitir (R2): resolver la conversación. 404 si no es del usuario; cualquier otro
@@ -102,6 +110,11 @@ export class ChatStreamService {
             return;
         }
         if (clientSignal.aborted) return;
+
+        // HU19: con no_info, a quién consultar. Antes de guardar, para que vaya en el done.
+        outcome = await resolveSuggestion(this.contacts, outcome, stepContext, this.logger);
+        // HU18: el enlace firmado de cada fuente citada, antes del done.
+        outcome = await withSignedLinks(this.storage, outcome, this.logger);
 
         let result;
         try {

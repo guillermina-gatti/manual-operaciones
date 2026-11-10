@@ -11,17 +11,13 @@ import { AreasDirectory } from '../../documents/ports/areas-directory';
 import { UsersDirectory } from '../../documents/ports/users-directory';
 import { toHttpException } from '../http-errors';
 import { Clock } from '../ports/clock';
-import {
-  CatalogProcedureVersion,
-  ProceduresCatalog,
-} from '../ports/procedures-catalog';
+import { ProceduresCatalog } from '../ports/procedures-catalog';
 import { activeAreaIdsOf } from '../viewer-areas';
 import { ExecutionMetricsRepository } from './execution-metrics.repository';
 import {
   filterableAreaIds,
   inScope,
   metricsScope,
-  MetricsScope,
 } from './metrics-access.policy';
 import {
   DEFAULT_TIME_ZONE,
@@ -30,11 +26,14 @@ import {
   toMetricsPeriod,
 } from './metrics-period';
 import {
+  areaSummaryOf,
   buildProcedureMetrics,
   MetricsTotals,
   ProcedureMetrics,
   totalsOf,
 } from './procedure-metrics';
+import type { AreaSummary } from './procedure-metrics';
+import { findVisibleVersions } from './visible-versions';
 
 // Already validated by the DTO: from and to are "YYYY-MM-DD" days that exist.
 export interface ProcedureMetricsQuery {
@@ -49,6 +48,8 @@ export interface ProcedureMetricsView {
   areaIds: string[] | null; // the areas the viewer may filter by; null: any
   totals: MetricsTotals;
   procedures: ProcedureMetrics[];
+  // Procedures per area of everything the viewer may see, whatever areaId says.
+  areaSummary: AreaSummary[];
 }
 
 // The same answer for an area that is not the supervisor's and one that does not
@@ -104,50 +105,42 @@ export class ProcedureMetricsService {
       ...toMetricsPeriod(from, to, this.timeZone),
       staleBefore: staleBefore(this.clock.now()),
     });
-    const versions = await this.visibleVersions(
+    // The versions of everything the viewer may see, without the area filter: the area
+    // summary needs them. The ones of the requested scope come out of them, so the
+    // catalog is asked once per version.
+    const viewerScope = metricsScope(user.role, viewerAreaIds) ?? scope;
+    const viewerVersions = await findVisibleVersions(
+      this.catalog,
+      this.logger,
       aggregates.executions.map((e) => e.procedureVersionId),
-      scope,
+      viewerScope,
+    );
+    const versions = new Map(
+      [...viewerVersions].filter(([, version]) =>
+        inScope(scope, version.areaIds),
+      ),
     );
     const procedures = buildProcedureMetrics(
       aggregates.executions,
       aggregates.steps,
       versions,
     );
+    const filterable = filterableAreaIds(user.role, viewerAreaIds);
 
     return {
       filters: { areaId: areaId ?? null, from: from ?? null, to: to ?? null },
       staleAfterHours: STALE_AFTER_HOURS,
-      areaIds: filterableAreaIds(user.role, viewerAreaIds),
-      totals: totalsOf(procedures),
+      areaIds: filterable,
+      totals: totalsOf(procedures, aggregates.executions),
       procedures,
+      areaSummary: areaSummaryOf(
+        buildProcedureMetrics(
+          aggregates.executions,
+          aggregates.steps,
+          viewerVersions,
+        ),
+        filterable,
+      ),
     };
-  }
-
-  // The versions with executions whose procedure is currently in the scope. A version
-  // the catalog does not know is left out and logged: without it there are no steps
-  // nor areas to check.
-  private async visibleVersions(
-    versionIds: string[],
-    scope: MetricsScope,
-  ): Promise<Map<string, CatalogProcedureVersion>> {
-    const found = await Promise.all(
-      [...new Set(versionIds)].map(async (versionId) => {
-        const version = await this.catalog.findVersion(versionId);
-        if (!version) {
-          this.logger.warn({
-            message:
-              'Versión de procedimiento con ejecuciones que el catálogo no conoce',
-            procedureVersionId: versionId,
-          });
-        }
-        return version;
-      }),
-    );
-    return new Map(
-      found
-        .filter((v): v is CatalogProcedureVersion => v !== null)
-        .filter((v) => inScope(scope, v.areaIds))
-        .map((v) => [v.versionId, v]),
-    );
   }
 }

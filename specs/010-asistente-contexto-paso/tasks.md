@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (04/11/2026):** todas pendientes. T01 a T08 son la API, T09 y T10 la web del chat, T11 el montaje en `ExecutionView` (pareja B), T12 el Playwright y T13 la [verificación](#t13--verificación-de-la-feature).
+- **Estado (06/11/2026):** T01 a T13 **hechas** (04/11/2026) y mergeadas en `develop` (rama `feat/chat-contexto-paso`). T01 a T08 son la API, T09 y T10 la web del chat, T11 el montaje en `ExecutionView` (pareja B), T12 el Playwright y T13 la [verificación](#t13--verificación-de-la-feature). Quedan abiertos los puntos de T13: la prueba manual del panel "¿Dudas con este paso?" con Gemini real (pendiente hasta que exista la pantalla para cargar procedimientos, ver T13) y Swagger a medias (`ChatRequestDto` sin `@ApiProperty`).
 
 ## Antes de empezar
 
@@ -246,7 +246,8 @@ Convenciones:
   5. **Avisos:** a Guille (sección 12 de la spec) y a Mayra (sección 13). Los manda Matías.
 - **Depende de:** T01 a T12.
 - **Commit:** `docs(specs): verificar el contexto del paso en el asistente`
-- **Estado:** hecha (04/11/2026), con dos puntos abiertos y sin la prueba manual con Gemini real (la hace Matías).
+- **Estado:** hecha (04/11/2026), con dos puntos abiertos y sin la prueba manual con Gemini real.
+- **Prueba manual con Gemini real: pendiente** (actualizado el 06/11/2026). Para probar el panel "¿Dudas con este paso?" hace falta un procedimiento con pasos para ejecutar, y todavía no hay pantalla para cargar procedimientos (la hace Mayra, pareja B). Se prueba cuando esté. Las rutas de chat que usa el panel ya se probaron a mano con Gemini real en las specs 009 y 011 (06/11/2026).
 - **Resultado:**
   1. **Todo en verde, salvo una suite de la pareja A:**
      - API: lint y tsc sin errores; `test`: 103 suites, 1515 tests.

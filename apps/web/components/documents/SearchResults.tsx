@@ -2,13 +2,16 @@
 
 // Resultados de una búsqueda (spec 004, F4, F5, F6; plan 004, 5.1 y 5.3). La API ya filtra por rol y
 // áreas y ordena por relevancia (R3, R9): acá no se filtra ni se reordena.
+// Se dibujan en la vista elegida (Lista o Tarjetas), con el fragmento de cada resultado.
 import Link from 'next/link';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { PAGE_SIZE, describeApiError, searchDocuments, useApiResource } from '@/lib/api';
 import { pageCount } from '@/lib/documents/pagination';
-import { DocumentListSkeleton } from './DocumentListSkeleton';
+import { viewQuery, withView } from '@/lib/documents/view';
+import type { DocumentsView } from '@/lib/documents/view';
+import { DocumentCollection } from './DocumentCollection';
+import { DocumentListSkeleton, skeletonFor } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
-import { SearchResultCard } from './SearchResultCard';
 import { TEXT_LINK } from './design';
 
 interface SearchResultsProps {
@@ -17,26 +20,28 @@ interface SearchResultsProps {
   page: number;
   userId: string;
   isAdmin: boolean;
+  // La vista del listado (por defecto, Lista).
+  view?: DocumentsView;
 }
 
 const LINK = TEXT_LINK;
 
-const SEARCHING = (
-  <ScreenState kind="loading" label="Buscando…">
-    <DocumentListSkeleton />
-  </ScreenState>
-);
-
 const firstPageHref = (query: string) => `/documentos?q=${encodeURIComponent(query)}`;
 
-export function SearchResults({ query, page, userId, isAdmin }: SearchResultsProps) {
+export function SearchResults({ query, page, userId, isAdmin, view = 'lista' }: SearchResultsProps) {
   // La clave incluye al usuario: al cambiar de usuario de prueba se vuelve a pedir.
   const results = useApiResource(
     `search?q=${encodeURIComponent(query)}&page=${page}&user=${userId}`,
     (signal) => searchDocuments(query, page, signal),
   );
 
-  if (results.status === 'loading' || results.status === 'idle') return SEARCHING;
+  if (results.status === 'loading' || results.status === 'idle') {
+    return (
+      <ScreenState kind="loading" label="Buscando…">
+        <DocumentListSkeleton variant={skeletonFor(view)} />
+      </ScreenState>
+    );
+  }
 
   if (results.status === 'error') {
     const { message, canRetry } = describeApiError(results.error, 'search');
@@ -54,7 +59,7 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
         kind="empty"
         message={`No encontramos documentos para «${query}»`}
         action={
-          <Link href="/documentos" className={LINK}>
+          <Link href={withView('/documentos', view)} className={LINK}>
             Borrar búsqueda
           </Link>
         }
@@ -69,7 +74,7 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
         kind="empty"
         message="Esta página no existe"
         action={
-          <Link href={firstPageHref(query)} className={LINK}>
+          <Link href={withView(firstPageHref(query), view)} className={LINK}>
             Ir a la primera página
           </Link>
         }
@@ -84,16 +89,16 @@ export function SearchResults({ query, page, userId, isAdmin }: SearchResultsPro
         {total === 1 ? '1 resultado' : `${total} resultados`} para «{query}»
       </p>
 
-      <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {data.map((result) => (
-          <li key={result.id} className="min-w-0">
-            <SearchResultCard result={result} isAdmin={isAdmin} />
-          </li>
-        ))}
-      </ul>
+      <DocumentCollection documents={data} view={view} isAdmin={isAdmin} />
 
       {pageCount(total, PAGE_SIZE) > 1 && (
-        <Pagination currentPage={page} totalItems={total} pageSize={PAGE_SIZE} query={query} />
+        <Pagination
+          currentPage={page}
+          totalItems={total}
+          pageSize={PAGE_SIZE}
+          query={query}
+          extraQuery={viewQuery(view)}
+        />
       )}
     </div>
   );

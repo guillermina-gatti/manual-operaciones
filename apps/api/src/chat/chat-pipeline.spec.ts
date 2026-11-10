@@ -122,9 +122,15 @@ describe('chat-pipeline (spec 009, T01)', () => {
 
             const prepared = await prepareChat(new FakeEmbeddings(), retrieval, USER, 'algo', logger);
 
+            // HU19: el documento más cercano se muestra, aunque esté fuera del umbral.
             expect(prepared).toEqual({
                 kind: 'done',
-                outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [] },
+                outcome: {
+                    status: 'no_info',
+                    answer: NO_INFO_TEXT,
+                    chunks: [],
+                    nearest: [{ documentId: 'doc-1', documentTitle: 'Manual de compras' }],
+                },
             });
         });
 
@@ -158,7 +164,13 @@ describe('chat-pipeline (spec 009, T01)', () => {
         it('la marca NO_INFO da no_info, sin fragmentos y con los datos del modelo', () => {
             const llm = answer('NO_INFO');
 
-            expect(finishChat(llm, chunks)).toEqual({ status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm });
+            expect(finishChat(llm, chunks)).toEqual({
+                status: 'no_info',
+                answer: NO_INFO_TEXT,
+                chunks: [],
+                llm,
+                nearest: [{ documentId: 'doc-1', documentTitle: 'Manual de compras' }],
+            });
         });
 
         it('con [S2] responde el texto y solo el segundo fragmento', () => {
@@ -172,8 +184,8 @@ describe('chat-pipeline (spec 009, T01)', () => {
             });
         });
 
-        it('sin citas devuelve todos los fragmentos', () => {
-            expect(finishChat(answer('Sin marcas.'), chunks).chunks).toEqual(chunks);
+        it('sin citas válidas, responde no_info (regla aprobada por Guille)', () => {
+            expect(finishChat(answer('Sin marcas.'), chunks).status).toBe('no_info');
         });
     });
 
@@ -339,7 +351,16 @@ describe('finishChat: la marca de contradicción (spec 011)', () => {
     it('una marca inválida sin explicación es no_info', () => {
         const llm = answer('CONFLICT [S1] [S3]');
 
-        expect(finishChat(llm, chunks)).toEqual({ status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm });
+        expect(finishChat(llm, chunks)).toEqual({
+            status: 'no_info',
+            answer: NO_INFO_TEXT,
+            chunks: [],
+            llm,
+            nearest: [
+                { documentId: 'doc-compras', documentTitle: 'Manual de compras' },
+                { documentId: 'doc-gastos', documentTitle: 'Política de gastos' },
+            ],
+        });
     });
 
     it('NO_INFO sigue primero', () => {

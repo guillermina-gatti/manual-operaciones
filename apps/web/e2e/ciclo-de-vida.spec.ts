@@ -115,7 +115,10 @@ test.describe('E1 · Cambiar las áreas', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Áreas actualizadas' })).toBeVisible();
     const [patch] = requestsTo(api.requests, 'PATCH', '/areas');
     expect(JSON.parse(patch.body!.toString('utf8'))).toEqual({ areaIds: [AREA_IDS.operaciones] });
-    await expect(page.locator('dd').first()).toHaveText('Operaciones');
+    // Las áreas se ven en el encabezado del detalle: ahora solo Operaciones.
+    const detailHeader = page.locator('main header');
+    await expect(detailHeader).toContainText('Operaciones');
+    await expect(detailHeader).not.toContainText('Ventas');
     await expect(page.getByRole('button', { name: 'Guardar áreas' })).toHaveCount(0);
     expect(api.unhandled).toEqual([]);
   });

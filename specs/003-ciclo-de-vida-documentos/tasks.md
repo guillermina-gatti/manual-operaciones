@@ -2,12 +2,12 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (24/10/2026):** T01 a T28 y T30 **hechas** (T01 a T16 son el backend; T17 a T24, las pantallas; T25 a T28, Playwright; T30, la [verificación](#verificación)). T29 está **bloqueada** por el worker de Guille (Q1).
+- **Estado (24/10/2026):** T01 a T28 y T30 **hechas** (T01 a T16 son el backend; T17 a T24, las pantallas; T25 a T28, Playwright; T30, la [verificación](#verificación)). T29 estaba **bloqueada** por el worker de Guille (Q1). **Actualizado el 06/11/2026:** T29 hecha, sin commit (ver la tarea).
 
 Convenciones:
 
 - Una tarea = un commit. Las rutas de backend son relativas a `apps/api/` y las de frontend a `apps/web/`, salvo que digan otra cosa.
-- R1 a R14 (con R6b y R7b) son reglas de la spec; E1 a E13, sus escenarios (tabla al principio del plan); D1 a D10, las decisiones del plan (sección 9.1); Q1, la pregunta abierta con Guille (sección 9.2). Las reglas y decisiones de otros planes se citan con su plan ("R8b de la spec 001", "T19 del plan 002").
+- R1 a R14 (con R6b y R7b) son reglas de la spec; E1 a E13, sus escenarios (tabla al principio del plan); D1 a D11, las decisiones del plan (sección 9.1); Q1, la pregunta abierta con Guille (sección 9.2). Las reglas y decisiones de otros planes se citan con su plan ("R8b de la spec 001", "T19 del plan 002").
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - **"Avisar al equipo antes de mergear"** marca solo las tareas que tocan archivos que usan otras parejas: `schema.prisma`, `prisma/migrations`, `main.ts`, `layout.tsx`, `ci.yml`, el README y los `.env.example`. Los archivos de las specs 001 y 002 son del mismo responsable y no llevan la nota.
 - **Comandos de Prisma:** `prisma migrate dev`, `prisma migrate deploy` y `prisma generate` los corre el usuario, no el agente. Cuando una tarea cambia `schema.prisma`, el agente hace el cambio, escribe el test y se detiene; el usuario crea la migración con `migrate dev --create-only`, se revisa el SQL juntos, y el usuario la aplica con `migrate deploy` (T01).
@@ -425,6 +425,7 @@ Convenciones:
   - error con "Reintentar".
 - **Depende de:** T17
 - **Commit:** `feat(documents): mostrar el historial de versiones`
+- **Actualizada el 06/11/2026 (D11 del plan):** la sección se llama "Versiones" y tiene una línea que explica qué es. La lista se sigue abriendo con el botón "Historial de versiones" y se pide recién al abrirla. Cada versión es una fila compacta, la misma en el celular, con la descarga como botón de ícono (`DownloadButton` suma `icon`). Con la prop `upload`, la sección muestra "Subir versión nueva" y su formulario adentro.
 
 ### T24 · Acciones en el detalle
 
@@ -445,6 +446,7 @@ Convenciones:
   - los tests del plan 002 siguen pasando.
 - **Depende de:** T20, T21, T22, T23
 - **Commit:** `feat(documents): agregar las acciones del ciclo de vida al detalle`
+- **Actualizada el 06/11/2026 (D11 del plan):** al pie de los datos quedan "Cambiar áreas" y "Archivar". "Subir versión nueva" está en la sección "Versiones", en la columna principal, y sigue cerrando "Cambiar áreas" al abrirse (y al revés). La columna lateral queda solo para "Revisión".
 
 ## Tests en el navegador (Playwright)
 
@@ -504,11 +506,12 @@ Convenciones:
 - **Depende de:** T26, T27
 - **Commit:** `test(documents): probar el ciclo de vida contra la API real`
 
-## Tareas bloqueadas
+## Tareas que estaban bloqueadas
 
-### T29 · Casos borde con el worker real — BLOQUEADA
+### T29 · Casos borde con el worker real — DESBLOQUEADA
 
-- **Bloqueada por:** el worker de Guille todavía no existe, y falta acordar sus garantías (Q1, plan sección 3.4).
+- **Desbloqueada (06/11/2026):** el worker de Guille está en `develop` y cumple Q1 (plan 3.4): `PrismaProcessingRepository.commitLocked` toma `FOR SHARE` sobre `documents`, relee estado, áreas y versión bajo el bloqueo, e inserta los fragmentos y marca `READY` en una sola transacción, después de calcular los embeddings y sin la IA dentro del bloqueo; si la versión ya no existe, devuelve `discarded`. También cumple A3 del plan 001: `ProcessDocumentHandler` reintenta un trabajo cuya versión no existe y, en el último intento, lo descarta sin error. El caso 2 (cambiar áreas) ya lo prueba Guille contra el bloqueo en `test/processing/prisma-processing.repository.e2e-spec.ts` ("cambio de áreas concurrente…"), así que esta tarea hace los casos 1 y 3 y A3. Para pausar el worker no hizo falta nada de Guille: alcanza con un `EmbeddingProvider` falso con compuerta en `test/documents/helpers.ts`, porque el worker pide los embeddings justo antes de su transacción.
+- **Estaba bloqueada por:** el worker de Guille todavía no existía, y faltaba acordar sus garantías (Q1, plan sección 3.4).
 - **Qué hace:** reemplaza `seedProcessedVersion` por el worker real en tres tests de integración, uno por cada caso borde de la sección 8 de la spec:
   1. se sube una versión nueva mientras la anterior se procesa → al terminar, los fragmentos de la anterior quedan **inactivos**;
   2. se cambian las áreas mientras una versión se procesa → los fragmentos nuevos salen con las áreas **nuevas**;
@@ -520,6 +523,12 @@ Convenciones:
 - **Verificación:** test primero, contra el worker real y la base de tests. Los tres casos tienen que pasar en el orden "la operación del ADMIN confirma mientras el worker procesa" y también en el inverso.
 - **Depende de:** T15, T14, T12 y el worker de Guille con las garantías de Q1
 - **Commit:** `test(documents): cubrir el ciclo de vida con el procesamiento real`
+- **Estado:** hecha (06/11/2026), sin commit. `test/documents/lifecycle-worker.e2e-spec.ts`, 8 tests:
+  - **Caso 1 (versión nueva):** la versión nueva confirma mientras el worker está pausado, el worker confirma primero, y los dos a la vez. En el primer orden, la versión anterior queda `REPLACED` y `READY`, y el worker guarda sus fragmentos ya inactivos porque lee `REPLACED` bajo el bloqueo; antes de abrir la compuerta no hay fragmentos. En el segundo, `addVersion` apaga los que el worker guardó activos. En los tres, la versión nueva se procesa después y sus fragmentos son los únicos activos.
+  - **Caso 3 (archivar):** en los mismos tres órdenes, los fragmentos terminan inactivos y la versión vigente sigue `CURRENT`, ahora `READY`.
+  - **A3:** antes del último intento, el worker lanza `VersionNotFoundError` para que la cola reintente; en el último, devuelve `discarded`. En los dos casos no escribe nada.
+  - **Cómo se arma:** el ADMIN opera por HTTP con el `DocumentLifecycleService` real (`createDocumentsTestApp`), y el worker es el de Guille (`ProcessDocumentHandler`, `ProcessingService`, `PrismaProcessingRepository` y `FileStorageBytesReader` sobre el mismo almacenamiento en memoria), sin BullMQ: el test le pasa el trabajo como lo haría la cola. Los embeddings son `GatedEmbeddings` y los PDF salen de `buildPdf` (`src/processing/pdf-fixture.ts`), para que el worker extraiga texto de verdad. No se modificó nada de `src/processing`.
+  - **Corrida:** `pnpm --filter api test:e2e lifecycle-worker`, 8 de 8; `test:e2e test/documents`, 16 suites y 296 tests, todos pasan. Contra `manual_test` reseteada (con la confirmación de Matías); `manual` no se tocó. `pnpm --filter api lint`, `tsc --noEmit` y `pnpm --filter api test documents` (32 suites, 509 tests), en verde.
 
 ## Verificación final
 
@@ -597,7 +606,7 @@ Reglas y decisiones sin escenario propio, para no perderlas de vista:
 
 ### Pendientes
 
-- **T29 · Casos borde con el worker real: bloqueada** por el worker de Guille (Q1). Cuando se desbloquee, se hace T29 y se vuelve a correr esta verificación.
+- ~~**T29 · Casos borde con el worker real: bloqueada** por el worker de Guille (Q1).~~ **Hecha el 06/11/2026** (ver T29); con ella se volvieron a correr las suites de integración de documentos (16 suites, 296 tests).
 - **La descarga no se puede probar sin S3.** Sin `S3_BUCKET`, la API usa el almacenamiento en memoria, que devuelve un enlace `memory://`. Contra la API real solo se comprueba que el enlace se pide y se genera; la descarga real queda para cuando haya bucket, igual que la T22 de la spec 001. Con la API simulada (E13 en Playwright), el navegador sí descarga el archivo.
 - **Pasos de T30 que no se hicieron en esta corrida:**
   - paso 4: los índices se comprobaron con `indexes.e2e-spec.ts` en `manual_test`, no en la base de desarrollo, porque el agente no la usa;
@@ -625,6 +634,6 @@ T24 ◄─ T20, T21, T22, T23
 Playwright
 T25 ◄─ T24 · T26 ◄─ T25 · T27 ◄─ T25 · T28 ◄─ T26, T27
 
-BLOQUEADA: T29 ◄─ T12, T14, T15 y el worker de Guille (Q1)
+T29 ◄─ T12, T14, T15 y el worker de Guille (Q1) (hecha el 06/11/2026)
 T30 ◄─ T01 a T28 (se vuelve a correr cuando se desbloquee T29)
 ```

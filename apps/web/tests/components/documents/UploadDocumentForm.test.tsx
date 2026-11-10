@@ -27,6 +27,7 @@ vi.mock('@/lib/directory', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: mocks.push }),
 }));
 
@@ -66,6 +67,8 @@ async function renderForm() {
 // Completa todos los campos con datos válidos.
 async function fillValid(user: ReturnType<typeof setupUser>, file = fileOf('manual.pdf', 2 * MB)) {
   await user.upload(fileInput(), file);
+  // Al elegir el archivo se sugiere un título ("Manual"): se borra antes de escribir el propio.
+  await user.clear(titleInput());
   await user.type(titleInput(), 'Manual de caja');
   await user.click(screen.getByRole('checkbox', { name: 'Ventas' }));
   await waitFor(() => expect(ownerSelect()).toBeEnabled());

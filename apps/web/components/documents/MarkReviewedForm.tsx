@@ -4,7 +4,7 @@
 // mañana en Buenos Aires (R7), y el botón. Ante un error no se pierde la fecha elegida.
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { BUTTON_PRIMARY } from './design';
+import { LIST_BUTTON_SECONDARY } from './list-design';
 import { describeApiError, markReviewed } from '@/lib/api';
 import type { DocumentResponse } from '@/lib/api';
 import { validateReviewDate } from '@/lib/documents/validate-upload';
@@ -57,8 +57,9 @@ export function MarkReviewedForm({ documentId, onDone }: MarkReviewedFormProps) 
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      {/* F6: en el celular, el campo y el botón uno debajo del otro; desde sm:, en fila. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      {/* F6: en poco ancho, el campo y el botón uno debajo del otro; en fila cuando el panel que lo
+          contiene (@container) mide 28 rem o más. Así en la columna lateral el botón no se parte. */}
+      <div className="flex flex-col gap-3 @md:flex-row @md:items-end">
         <ReviewDateField
           label="Próxima fecha de revisión"
           value={reviewDate}
@@ -68,7 +69,12 @@ export function MarkReviewedForm({ documentId, onDone }: MarkReviewedFormProps) 
             if (attempted) setError(validate(next));
           }}
         />
-        <button type="submit" className={BUTTON_PRIMARY} disabled={submitting} aria-busy={submitting}>
+        <button
+          type="submit"
+          className={LIST_BUTTON_SECONDARY}
+          disabled={submitting}
+          aria-busy={submitting}
+        >
           {submitting ? 'Guardando…' : 'Marcar como revisado'}
         </button>
       </div>

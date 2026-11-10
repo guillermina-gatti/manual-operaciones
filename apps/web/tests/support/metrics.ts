@@ -31,7 +31,14 @@ export function metricsResponse(
     filters: { areaId: null, from: '2026-09-28', to: '2026-10-27' },
     staleAfterHours: 24,
     areaIds: null,
-    totals: { started: 5, completed: 3, inProgress: 1, abandoned: 1, completionRate: 0.6 },
+    totals: {
+      started: 5,
+      completed: 3,
+      inProgress: 1,
+      abandoned: 1,
+      completionRate: 0.6,
+      avgCompletionMs: 580000,
+    },
     procedures: [
       {
         procedureId: CIERRE_DE_CAJA,
@@ -42,6 +49,8 @@ export function metricsResponse(
         abandoned: 1,
         completionRate: 0.5,
         avgCompletionMs: 720000,
+        minCompletionMs: 600000,
+        maxCompletionMs: 840000,
         versions: [
           {
             procedureVersionId: '1b000000-0000-4000-8000-000000000002',
@@ -49,6 +58,7 @@ export function metricsResponse(
             completed: 1,
             inProgress: 1,
             abandoned: 1,
+            avgCompletionMs: 840000,
             steps: [
               step(1, 'Contar el efectivo'),
               step(2, 'Comparar con el reporte', {
@@ -71,6 +81,7 @@ export function metricsResponse(
             completed: 1,
             inProgress: 0,
             abandoned: 0,
+            avgCompletionMs: 600000,
             steps: [step(1, 'Contar el efectivo (v1)', { reached: 1, finished: 1 })],
           },
         ],
@@ -84,6 +95,8 @@ export function metricsResponse(
         abandoned: 0,
         completionRate: 1,
         avgCompletionMs: 300000,
+        minCompletionMs: 300000,
+        maxCompletionMs: 300000,
         versions: [
           {
             procedureVersionId: '1b000000-0000-4000-8000-000000000003',
@@ -91,16 +104,29 @@ export function metricsResponse(
             completed: 1,
             inProgress: 0,
             abandoned: 0,
+            avgCompletionMs: 300000,
             steps: [step(1, 'Revisar el remito', { reached: 1, finished: 1 })],
           },
         ],
       },
+    ],
+    areaSummary: [
+      { areaId: VENTAS, procedures: 1 },
+      { areaId: OPERACIONES, procedures: 1 },
     ],
     ...overrides,
   };
 }
 
 export const EMPTY_METRICS: ProceduresMetricsResponse = metricsResponse({
-  totals: { started: 0, completed: 0, inProgress: 0, abandoned: 0, completionRate: null },
+  totals: {
+    started: 0,
+    completed: 0,
+    inProgress: 0,
+    abandoned: 0,
+    completionRate: null,
+    avgCompletionMs: null,
+  },
   procedures: [],
+  areaSummary: [],
 });

@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (04/11/2026):** T01 a T14 hechas, sin commits; falta T15 (verificación). T01 a T09 son la API, T10 a T14 la web y T15, la [verificación](#t15--verificación-de-la-feature).
+- **Estado (04/11/2026):** T01 a T14 hechas, sin commits; falta T15 (verificación). **Actualizado el 06/11/2026:** la prueba manual con Gemini real (el paso 4 de T15, con la red y los tiempos, y HU36) está hecha; el resto de T15 sigue pendiente. T01 a T09 son la API, T10 a T14 la web y T15, la [verificación](#t15--verificación-de-la-feature).
 
 ## Antes de empezar
 
@@ -333,7 +333,12 @@ Convenciones:
   7. **Avisos:** a Guille, los de la sección 12 de la spec (qué se movió, `searchUrl` en su ruta y lo que queda para corregir); a la pareja A (Camila), el enlace del menú (sección 13). Los manda Matías.
 - **Depende de:** T01 a T14.
 - **Commit:** `docs(specs): verificar el streaming del asistente`
-- **Estado:** pendiente.
+- **Estado:** pendiente, salvo la prueba manual con Gemini real y el paso 4 (transmisión real), hechos el 06/11/2026.
+- **Prueba manual con Gemini real (06/11/2026): hecha** por Matías, con la clave de desarrollo:
+  - **Streaming (paso 4):** en `/asistente`, la respuesta sale de a partes, con la fuente, y la fuente abre el documento.
+  - **HU36:** con una clave inválida, aparece el aviso "El asistente no está disponible" con el enlace a la búsqueda, que abre la búsqueda con la pregunta.
+  - **Red y tiempos (paso 4), 06/11/2026: hecho.** En la pestaña de red, el pedido `/api/chat/stream` muestra `start`, seis `delta` y `done` (con `status: answered`), que llegan de a uno a través del proxy de Next. El primer evento (`start`) llegó a los 35 ms y la respuesta completa, a los 2,25 s. Se midió solo la ruta nueva: no hay una medición de `POST /api/chat` para comparar ni del tiempo hasta el primer `delta`.
+  - **Además:** un documento archivado no se usó como fuente.
 
 ---
 

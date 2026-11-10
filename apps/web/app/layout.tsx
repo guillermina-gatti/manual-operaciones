@@ -1,5 +1,9 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import '@fontsource/plus-jakarta-sans/400.css';
+import '@fontsource/plus-jakarta-sans/500.css';
+import '@fontsource/plus-jakarta-sans/600.css';
+import '@fontsource/plus-jakarta-sans/700.css';
+import '@fontsource/plus-jakarta-sans/800.css';
 import { SessionControls } from '@/components/session/SessionControls';
 import { SessionProvider } from '@/lib/session';
 import './globals.css';
@@ -11,12 +15,6 @@ if (process.env.NODE_ENV !== 'production') {
   DevSessionSwitcher = require('@/components/session/DevSessionSwitcher').DevSessionSwitcher;
 }
 
-const plusJakartaSans = Plus_Jakarta_Sans({
-  variable: '--font-jakarta',
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-});
-
 export const metadata: Metadata = {
   title: 'Manual de operaciones',
   description: 'Manual de operaciones interactivo con asistente de IA',
@@ -24,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="es" className={`${plusJakartaSans.variable} h-full antialiased`}>
+    <html lang="es" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <SessionProvider>
           <SessionControls />
