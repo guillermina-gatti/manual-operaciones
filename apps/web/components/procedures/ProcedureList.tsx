@@ -16,8 +16,8 @@ import {
   BUTTON_SECONDARY,
   CARD_TITLE,
   Card,
-  Notice,
 } from './design';
+import { Notice } from './Notice';
 
 const NOTICE =
   'Esta lista muestra solo los procedimientos que creaste en esta sesión del navegador. Todavía no hay un listado en la API: llega con HU11.';

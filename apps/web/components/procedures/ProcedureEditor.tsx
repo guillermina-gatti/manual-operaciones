@@ -11,7 +11,8 @@ import { removeProcedure, saveProcedure, useStoredProcedures } from '@/lib/proce
 import { useSession } from '@/lib/session';
 import { DraftForm } from './DraftForm';
 import { ProcedureAreasForm } from './ProcedureAreasForm';
-import { BACK_LINK, CARD_TITLE, Card, Notice, PageHeader } from './design';
+import { BACK_LINK, CARD_TITLE, Card, PageHeader } from './design';
+import { Notice } from './Notice';
 import { MAX_STEPS, StepsEditor } from './StepsEditor';
 
 export function ProcedureEditor() {

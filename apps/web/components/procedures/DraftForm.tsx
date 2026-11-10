@@ -1,24 +1,18 @@
 'use client';
 
 // The title and description of the draft (HU09, R5), and the button to discard it (R10). Only what
-// changed is sent. Every answer of the API updates the local copy through onChange.
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+// changed is sent. Every answer of the API updates the local copy through onChange. It has no box of
+// its own: the section that holds it lays its parts out.
+import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { FieldError } from '@/components/ui/FieldError';
-import { describeProcedureError, discardDraft, updateVersion } from '@/lib/procedures';
-import type { UpdateVersionValues } from '@/lib/procedures';
 import type { StoredProcedure } from '@/lib/procedures/session-list';
-import { withDraft } from '@/lib/procedures/snapshot';
 import { validateProcedure } from '@/lib/procedures/validate';
 import type { FormErrors } from '@/lib/procedures/validate';
-import {
-  BUTTON_DANGER,
-  BUTTON_PRIMARY,
-  BUTTON_SECONDARY,
-  INPUT,
-  LABEL,
-  Notice,
-} from './design';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from './design';
+import { DiscardDraft } from './DiscardDraft';
+import { Notice } from './Notice';
+import { TextField } from './TextField';
+import { useDraftActions } from './useDraftActions';
 
 interface DraftFormProps {
   procedure: StoredProcedure;
@@ -28,148 +22,52 @@ interface DraftFormProps {
   onGone: () => void;
 }
 
-interface Failure {
-  message: string;
-  notFound: boolean;
-}
-
 export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
-  const baseId = useId();
-  const titleId = `${baseId}-title`;
-  const descriptionId = `${baseId}-description`;
-
   const [title, setTitle] = useState(procedure.title);
   const [description, setDescription] = useState(procedure.description ?? '');
   const [errors, setErrors] = useState<FormErrors>({});
-  const [busy, setBusy] = useState<'save' | 'discard' | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [failure, setFailure] = useState<Failure | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  // Stops a second click that arrives before React renders the disabled buttons.
-  const busyRef = useRef(false);
-  // Changes each time the screen is hidden, so a late answer from before is ignored.
-  const visitRef = useRef(0);
-
-  // With cacheComponents, Next hides this page with <Activity> when navigating away and shows the
-  // same instance on return. The cleanup runs on hide: coming back starts without old messages.
-  useLayoutEffect(
-    () => () => {
-      visitRef.current += 1;
-      busyRef.current = false;
-      setBusy(null);
-      setNotice(null);
-      setFailure(null);
-      setConfirming(false);
-    },
-    [],
+  const { busy, notice, failure, clearMessages, save, discard } = useDraftActions(
+    procedure,
+    onChange,
+    onGone,
   );
 
-  async function save(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busyRef.current) return;
-    setNotice(null);
-    setFailure(null);
-
+    clearMessages();
     const found = validateProcedure({ title, description });
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
-    // The API asks for at least one field (R5): only what changed is sent.
-    const changes: UpdateVersionValues = {};
-    if (title.trim() !== procedure.title) changes.title = title.trim();
-    if (description.trim() !== (procedure.description ?? '')) {
-      changes.description = description.trim();
-    }
-    if (Object.keys(changes).length === 0) {
-      setNotice('No hay cambios para guardar.');
-      return;
-    }
-
-    busyRef.current = true;
-    const visit = visitRef.current;
-    setBusy('save');
-    try {
-      const updated = await updateVersion(procedure.id, procedure.versionId, changes);
-      onChange(withDraft(procedure, updated));
-      if (visitRef.current !== visit) return;
-      setTitle(updated.title);
-      setDescription(updated.description ?? '');
-      setNotice('Cambios guardados.');
-    } catch (error) {
-      if (visitRef.current !== visit) return;
-      setFailure(describeProcedureError(error, 'draft'));
-    } finally {
-      // After leaving, the hide cleanup already reset these, and a new action may be running.
-      if (visitRef.current === visit) {
-        busyRef.current = false;
-        setBusy(null);
-      }
-    }
-  }
-
-  async function discard() {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    const visit = visitRef.current;
-    setBusy('discard');
-    setNotice(null);
-    setFailure(null);
-    try {
-      await discardDraft(procedure.id, procedure.versionId);
-      onGone();
-    } catch (error) {
-      if (visitRef.current !== visit) return;
-      setFailure(describeProcedureError(error, 'discard'));
-      setConfirming(false);
-    } finally {
-      if (visitRef.current === visit) {
-        busyRef.current = false;
-        setBusy(null);
-      }
+    const saved = await save({ title, description });
+    if (saved) {
+      setTitle(saved.title);
+      setDescription(saved.description);
     }
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <form onSubmit={save} noValidate className="flex flex-col gap-5">
-        <div className="flex flex-col gap-1">
-          <label htmlFor={titleId} className={LABEL}>
-            Título
-          </label>
-          <input
-            id={titleId}
-            type="text"
-            value={title}
-            className={INPUT}
-            aria-invalid={errors.title ? true : undefined}
-            aria-describedby={errors.title ? `${titleId}-error` : undefined}
-            onChange={(event) => {
-              setTitle(event.target.value);
-              if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
-            }}
-          />
-          <FieldError id={`${titleId}-error`} message={errors.title} />
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor={descriptionId} className={LABEL}>
-            Descripción (opcional)
-          </label>
-          <textarea
-            id={descriptionId}
-            rows={3}
-            value={description}
-            className={INPUT}
-            aria-invalid={errors.description ? true : undefined}
-            aria-describedby={errors.description ? `${descriptionId}-error` : undefined}
-            onChange={(event) => {
-              setDescription(event.target.value);
-              if (errors.description) setErrors((prev) => ({ ...prev, description: undefined }));
-            }}
-          />
-          <FieldError id={`${descriptionId}-error`} message={errors.description} />
-        </div>
-
+    <>
+      <form onSubmit={submit} noValidate className="flex flex-col gap-5">
+        <TextField
+          label="Título"
+          value={title}
+          error={errors.title}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
+          }}
+        />
+        <TextField
+          label="Descripción (opcional)"
+          rows={3}
+          value={description}
+          error={errors.description}
+          onChange={(event) => {
+            setDescription(event.target.value);
+            if (errors.description) setErrors((prev) => ({ ...prev, description: undefined }));
+          }}
+        />
         <button
           type="submit"
           className={`${BUTTON_PRIMARY} self-start`}
@@ -197,48 +95,9 @@ export function DraftForm({ procedure, onChange, onGone }: DraftFormProps) {
         </Notice>
       )}
 
-      <div className="border-t border-borde pt-5">
-        {confirming ? (
-          <div role="group" aria-label="Confirmar" className="flex flex-col gap-3">
-            <p className="font-semibold">
-              ¿Descartar el borrador? Se borra el borrador con sus pasos; si es la única versión,
-              se borra el procedimiento con sus áreas.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                className={BUTTON_DANGER}
-                onClick={discard}
-                disabled={busy !== null}
-                aria-busy={busy === 'discard'}
-              >
-                {busy === 'discard' ? 'Descartando…' : 'Sí, descartar'}
-              </button>
-              <button
-                type="button"
-                className={BUTTON_SECONDARY}
-                onClick={() => setConfirming(false)}
-                disabled={busy !== null}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className={BUTTON_DANGER}
-            disabled={busy !== null}
-            onClick={() => {
-              setNotice(null);
-              setFailure(null);
-              setConfirming(true);
-            }}
-          >
-            Descartar borrador
-          </button>
-        )}
-      </div>
-    </div>
+      <footer className="border-t border-borde pt-5">
+        <DiscardDraft busy={busy} onStart={clearMessages} onDiscard={discard} />
+      </footer>
+    </>
   );
 }

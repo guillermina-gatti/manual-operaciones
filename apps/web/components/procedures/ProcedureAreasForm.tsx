@@ -13,7 +13,8 @@ import type { Area } from '@/lib/directory';
 import { describeProcedureError, setAreas } from '@/lib/procedures';
 import type { StoredProcedure } from '@/lib/procedures/session-list';
 import { withAreas } from '@/lib/procedures/snapshot';
-import { BUTTON_PRIMARY, HINT, Notice } from './design';
+import { BUTTON_PRIMARY, HINT } from './design';
+import { Notice } from './Notice';
 
 interface ProcedureAreasFormProps {
   procedure: StoredProcedure;

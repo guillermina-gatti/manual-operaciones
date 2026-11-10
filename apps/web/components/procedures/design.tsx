@@ -68,25 +68,9 @@ export function AreaChip({ children }: { children: ReactNode }) {
   );
 }
 
-const NOTICE_TONES = {
-  info: 'border-borde bg-salvia text-texto',
-  error: 'border-peligro bg-rosa-alerta text-rosa-alerta-texto',
-  success: 'border-transparent bg-chip-area text-chip-area-texto',
-} as const;
-
-// Un aviso con su texto. El role (note, alert o status) lo pone quien lo usa.
-export function Notice({
-  tone,
-  className = '',
-  ...rest
-}: ComponentProps<'div'> & { tone: keyof typeof NOTICE_TONES }) {
-  return (
-    <div className={`rounded-xl border p-4 text-sm ${NOTICE_TONES[tone]} ${className}`} {...rest} />
-  );
-}
-
-// Fila de un paso, el círculo con su número y la caja de "Agregar paso".
-export const STEP_ROW = 'flex min-w-0 flex-col gap-4 rounded-xl bg-salvia p-4 sm:p-5';
+// Fila de un paso (solo la caja: quien la usa pone la distribución), el círculo con su número y la
+// caja de "Agregar paso", que es el propio formulario.
+export const STEP_ROW = 'min-w-0 rounded-xl bg-fondo p-4 sm:p-5';
 export const ADD_BOX = 'flex flex-col gap-4 rounded-2xl border-2 border-dashed border-borde p-5';
 
 export function StepNumber({ children }: { children: ReactNode }) {
