@@ -65,6 +65,14 @@ export function ProcedureEditor() {
     router.push('/procedimientos');
   };
   const update = (next: typeof procedure) => saveProcedure(user.id, next);
+  // What the API looks at to publish (title, description, steps and areas): when it changes, the
+  // actions start again, so an error of an old attempt does not stay on screen.
+  const draftKey = JSON.stringify([
+    procedure.title,
+    procedure.description,
+    procedure.steps,
+    procedure.areaIds,
+  ]);
   // The draft changed (title, description or steps): the history shows its new count and title.
   const changeDraft = (next: typeof procedure) => {
     update(next);
@@ -109,6 +117,7 @@ export function ProcedureEditor() {
         {(items) => (
           <>
             <VersionActions
+              key={draftKey}
               procedureId={id}
               versions={items}
               currentVersionId={procedure.versionId}

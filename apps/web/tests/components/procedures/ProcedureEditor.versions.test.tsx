@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ProcedureEditor } from '@/components/procedures/ProcedureEditor';
 import { ApiError } from '@/lib/api';
+import { PROCEDURE_MESSAGES } from '@/lib/procedures';
 import { loadProcedures, saveProcedure } from '@/lib/procedures/session-list';
 import { AREAS } from '../../support/procedure-areas';
 import {
@@ -10,6 +11,7 @@ import {
   ANA,
   PROCEDURE_ID,
   STEP_A,
+  VENTAS,
   procedureResponse,
   stepResponse,
   stored,
@@ -24,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   createVersionDraft: vi.fn(),
   addStep: vi.fn(),
   updateVersion: vi.fn(),
+  publishVersion: vi.fn(),
+  setAreas: vi.fn(),
   params: { id: '' } as { id: string },
 }));
 
@@ -41,6 +45,8 @@ vi.mock('@/lib/procedures', async (importOriginal) => ({
   createVersionDraft: mocks.createVersionDraft,
   addStep: mocks.addStep,
   updateVersion: mocks.updateVersion,
+  publishVersion: mocks.publishVersion,
+  setAreas: mocks.setAreas,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -179,6 +185,70 @@ describe('when the draft changes, the history follows (spec 015, R8)', () => {
     expect(mocks.listVersions).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('list', { name: 'Versiones' })).toBeInTheDocument();
     expect(screen.queryByText('Cargando las versiones…')).not.toBeInTheDocument();
+  });
+});
+
+describe('an error of publishing does not outlive the change that fixes it (spec 015, R3)', () => {
+  // Publishes the draft and waits for the error that the API answers.
+  const failToPublish = async (reason: string) => {
+    mocks.publishVersion.mockRejectedValue(new ApiError(409, [], undefined, reason));
+    await userEvent.click(await screen.findByRole('button', { name: 'Publicar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, publicar' }));
+    return screen.findByRole('alert');
+  };
+  const publishError = () =>
+    screen.queryByText(PROCEDURE_MESSAGES.noSteps) ?? screen.queryByText(PROCEDURE_MESSAGES.noAreas);
+
+  test('NO_STEPS: it goes away when a step is added', async () => {
+    mocks.addStep.mockResolvedValue(stepResponse(STEP_A, 1, 'Contar'));
+    saveProcedure(ADMIN_ID, storedDraft());
+    render(<ProcedureEditor />);
+    expect(await failToPublish('NO_STEPS')).toHaveTextContent('La versión no tiene pasos.');
+
+    const form = screen.getByRole('form', { name: 'Agregar un paso' });
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Título del paso' }), 'Contar');
+    await userEvent.click(within(form).getByRole('button', { name: 'Agregar paso' }));
+
+    await waitFor(() => expect(publishError()).not.toBeInTheDocument());
+  });
+
+  test('NO_AREAS: it goes away when the areas are saved', async () => {
+    mocks.setAreas.mockResolvedValue({ areaIds: [VENTAS] });
+    saveProcedure(ADMIN_ID, {
+      ...storedDraft(),
+      steps: [{ id: STEP_A, order: 1, title: 'Contar', description: '' }],
+    });
+    render(<ProcedureEditor />);
+    expect(await failToPublish('NO_AREAS')).toHaveTextContent('El procedimiento no tiene áreas.');
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Ventas' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar áreas' }));
+
+    await waitFor(() => expect(publishError()).not.toBeInTheDocument());
+  });
+
+  test('it goes away when the title of the draft is saved', async () => {
+    mocks.updateVersion.mockResolvedValue({ ...procedureResponse().versions[0], title: 'Cierre nuevo' });
+    saveProcedure(ADMIN_ID, storedDraft());
+    render(<ProcedureEditor />);
+    await failToPublish('NO_STEPS');
+
+    const title = screen.getByRole('textbox', { name: 'Título' });
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Cierre nuevo');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(publishError()).not.toBeInTheDocument());
+  });
+
+  test('it stays while nothing changes', async () => {
+    saveProcedure(ADMIN_ID, storedDraft());
+    render(<ProcedureEditor />);
+
+    await failToPublish('NO_STEPS');
+    await screen.findByRole('list', { name: 'Versiones' });
+
+    expect(publishError()).toBeInTheDocument();
   });
 });
 
