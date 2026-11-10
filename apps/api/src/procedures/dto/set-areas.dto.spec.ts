@@ -33,6 +33,31 @@ describe('SetAreasDto (spec 006, R11)', () => {
     expect(failed).toEqual(['areaIds']);
   });
 
+  it('R11: accepts up to 100 areas and rejects 101', async () => {
+    const many = (count: number) =>
+      Array.from(
+        { length: count },
+        (_, i) => `0a000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      );
+
+    await expect(check({ areaIds: many(100) })).resolves.toMatchObject({
+      failed: [],
+    });
+    expect((await check({ areaIds: many(101) })).failed).toEqual(['areaIds']);
+  });
+
+  it('P19: ids that differ only in case are the same area: they are lowercased and a repeat is rejected', async () => {
+    const upper = VENTAS.toUpperCase();
+
+    const single = await check({ areaIds: [upper] });
+    expect(single.failed).toEqual([]);
+    expect(single.dto.areaIds).toEqual([VENTAS]);
+
+    expect((await check({ areaIds: [VENTAS, upper] })).failed).toEqual([
+      'areaIds',
+    ]);
+  });
+
   it.each([
     ['missing', {}],
     ['a single id, not a list', { areaIds: VENTAS }],

@@ -13,6 +13,7 @@ const VERSION_ID = '1b000000-0000-4000-8000-000000000001';
 const NEW_VERSION_ID = '1b000000-0000-4000-8000-000000000002';
 const OWNER_ID = '0b000000-0000-4000-8000-000000000001';
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
+const OPERACIONES = '0a000000-0000-4000-8000-000000000002';
 const T0 = new Date('2026-10-27T10:00:00.000Z');
 
 // A version as Prisma returns it with the step count.
@@ -92,6 +93,11 @@ const clientMock = () => ({
   $queryRaw: jest.fn(),
   $executeRaw: jest.fn(),
   procedure: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
+  procedureArea: {
+    deleteMany: jest.fn(),
+    createMany: jest.fn(),
+    findMany: jest.fn(),
+  },
   procedureVersion: {
     findFirst: jest.fn(),
     aggregate: jest.fn(),
@@ -285,6 +291,43 @@ describe('PrismaProceduresRepository', () => {
         status: 'DRAFT',
         stepCount: 2,
       });
+    });
+
+    it('spec 015, R7: the copied steps keep their step key and get new ids', async () => {
+      const keys = [
+        '1d000000-0000-4000-8000-000000000001',
+        '1d000000-0000-4000-8000-000000000002',
+      ];
+      happyPath();
+      txClient.procedureVersion.findFirst
+        .mockReset()
+        .mockResolvedValueOnce(null) // draft
+        .mockResolvedValueOnce({
+          ...published,
+          steps: published.steps.map((step, index) => ({
+            ...step,
+            id: `old-${index}`,
+            stepKey: keys[index],
+          })),
+        });
+
+      await repository.createDraft(newDraft);
+
+      const data = (
+        txClient.procedureVersion.create.mock.calls[0][0] as {
+          data: { steps: { create: Record<string, unknown>[] } };
+        }
+      ).data;
+      expect(data.steps.create).toEqual([
+        { stepOrder: 1, title: 'Contar', description: '', stepKey: keys[0] },
+        {
+          stepOrder: 2,
+          title: 'Comparar',
+          description: 'Con el reporte',
+          stepKey: keys[1],
+        },
+      ]);
+      expect(data.steps.create.some((step) => 'id' in step)).toBe(false);
     });
 
     it('runs in a transaction with a timeout', async () => {
@@ -728,6 +771,91 @@ describe('PrismaProceduresRepository', () => {
         [STEP_A, 2],
         [STEP_B, 3],
       ]);
+    });
+  });
+
+  describe('setAreas', () => {
+    // The procedure exists (the lock finds it) and the read back returns the new set.
+    const happyPath = (saved: string[]) => {
+      txClient.$queryRaw.mockResolvedValueOnce([{ id: PROCEDURE_ID }]);
+      txClient.procedureArea.findMany.mockResolvedValue(
+        saved.map((areaId) => ({ areaId })),
+      );
+    };
+
+    it('is null when the procedure does not exist, and writes nothing', async () => {
+      txClient.$queryRaw.mockResolvedValueOnce([]);
+
+      await expect(
+        repository.setAreas(PROCEDURE_ID, [VENTAS]),
+      ).resolves.toBeNull();
+      expect(txClient.procedureArea.deleteMany).not.toHaveBeenCalled();
+      expect(txClient.procedureArea.createMany).not.toHaveBeenCalled();
+    });
+
+    it('R11: replaces the whole set: deletes the old areas, then inserts the new ones', async () => {
+      happyPath([OPERACIONES, VENTAS]);
+
+      await expect(
+        repository.setAreas(PROCEDURE_ID, [VENTAS, OPERACIONES]),
+      ).resolves.toEqual([OPERACIONES, VENTAS]);
+
+      expect(txClient.procedureArea.deleteMany).toHaveBeenCalledWith({
+        where: { procedureId: PROCEDURE_ID },
+      });
+      expect(txClient.procedureArea.createMany).toHaveBeenCalledWith({
+        data: [
+          { procedureId: PROCEDURE_ID, areaId: VENTAS },
+          { procedureId: PROCEDURE_ID, areaId: OPERACIONES },
+        ],
+      });
+      expect(
+        txClient.procedureArea.deleteMany.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        txClient.procedureArea.createMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('R11: an empty set removes every area and inserts nothing', async () => {
+      happyPath([]);
+
+      await expect(repository.setAreas(PROCEDURE_ID, [])).resolves.toEqual([]);
+      expect(txClient.procedureArea.deleteMany).toHaveBeenCalledTimes(1);
+      expect(txClient.procedureArea.createMany).not.toHaveBeenCalled();
+    });
+
+    it('R11: touches neither the versions nor the steps', async () => {
+      happyPath([VENTAS]);
+
+      await repository.setAreas(PROCEDURE_ID, [VENTAS]);
+
+      expect(txClient.procedureVersion.update).not.toHaveBeenCalled();
+      expect(txClient.procedureVersion.delete).not.toHaveBeenCalled();
+      expect(txClient.step.create).not.toHaveBeenCalled();
+      expect(txClient.step.update).not.toHaveBeenCalled();
+      expect(txClient.step.delete).not.toHaveBeenCalled();
+    });
+
+    it('D15: runs in a transaction with a timeout, locking the procedure first', async () => {
+      happyPath([VENTAS]);
+
+      await repository.setAreas(PROCEDURE_ID, [VENTAS]);
+
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        timeout: 5000,
+        maxWait: 2000,
+      });
+      expect(txClient.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txClient.procedureArea.deleteMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('translates a database that is down', async () => {
+      prisma.$transaction.mockRejectedValue(knownError('P1001'));
+
+      await expect(
+        repository.setAreas(PROCEDURE_ID, [VENTAS]),
+      ).rejects.toBeInstanceOf(ProceduresRepositoryUnavailableError);
     });
   });
 });
