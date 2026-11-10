@@ -368,6 +368,8 @@ describe('ProcedureMetricsService', () => {
       users = {
         findById: () =>
           Promise.reject(new RepositoryUnavailableError('directorio caído')),
+        findByIds: () =>
+          Promise.reject(new RepositoryUnavailableError('directorio caído')),
       };
 
       await expect(build().procedures(ADMIN, {})).rejects.toBeInstanceOf(
