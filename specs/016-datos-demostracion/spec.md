@@ -2,7 +2,7 @@
 
 - **Responsable:** Micaela Franco (pareja B)
 - **Depende de:** spec 006 (borradores, pasos 1..n y áreas), spec 015 (versiones, `step_key`, cambio crítico) y los fixtures de la pareja A (áreas Ventas y Operaciones, usuario admin).
-- **Estado:** borrador → implementación T01 a T05. Sin migraciones: no cambia el esquema.
+- **Estado:** implementada (T01 a T06). Sin migraciones: no cambia el esquema.
 
 ## 1. Objetivo
 
@@ -32,12 +32,12 @@ El #1 y el #4 reutilizan los UUID de `src/executions/adapters/procedure-fixtures
 - **S4 · No toca lo creado desde la app.** Solo escribe filas con los ids del seed.
 - **S5 · Procedimiento con datos ajenos.** Si un procedimiento demo ya tiene versiones o pasos que no son del seed, se saltea entero con un aviso (no se pisa nada) y el resto sigue.
 - **S6 · Fechas fijas en UTC.** `createdAt` y `publishedAt` son constantes, no `now()`.
-- **S7 · Solo pareja B.** Escribe solo `procedures`, `procedure_versions`, `steps` y `procedure_areas`. No se modifica ningún archivo de otra pareja. La línea que lo engancha en `prisma/seed.ts` (compartido) la agrega la pareja A, o se agrega con el OK de Micaela; hasta entonces se corre por separado.
+- **S7 · Solo pareja B.** Escribe solo `procedures`, `procedure_versions`, `steps` y `procedure_areas`. No se modifica ningún archivo de otra pareja, salvo la línea que lo engancha en `prisma/seed.ts`, agregada con el OK de Magui (Pareja A).
 
 ## 4. Decisiones
 
 - **P1 · Producción (resuelta).** `prisma/seed.ts` bloquea `NODE_ENV=production` y exige que la base esté en `localhost`; el seed de demostración aplica la misma guarda en su punto de entrada, por lo que **no corre en AWS**.
-- **P2 · Cómo se corre solo.** Sin script en `apps/api/package.json` (es compartido): comando directo con `ts-node` y el mismo `-r ./test/resolve-js-to-ts.cjs` (ver el plan).
+- **P2 · Cómo se corre (decidida con el OK de Magui).** `prisma db seed` lo corre junto con los fixtures de la pareja A (línea en `prisma/seed.ts`). Para correrlo solo, sin script en `apps/api/package.json` (es compartido): comando directo con `ts-node` y `-r ./test/resolve-js-to-ts.cjs` (ver el plan).
 - **P3 · Dónde va el código.** En `src/procedures/demo/` con su `.spec.ts` al lado; el punto de entrada en `prisma/seed-demo.ts`.
 - **P4 · Cierre de caja V2.** En los fixtures es `isCritical: false`; en la base de demostración se marca crítica, con el resumen de los fixtures.
 - **P5 · Recepción de mercadería.** Los fixtures tienen 2 pasos; se agrega un tercero (`1c…23`) para cumplir "3 a 6 pasos".

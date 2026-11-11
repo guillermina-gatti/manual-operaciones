@@ -5,4 +5,4 @@
 - [x] **T03** · Verificación previa (S2, S5) y operaciones de escritura (test primero con mocks).
 - [x] **T04** · `seedDemoProcedures` en una transacción y guarda de desarrollo (test primero).
 - [x] **T05** · Punto de entrada `prisma/seed-demo.ts` y comprobaciones: lint, tests y build de api.
-- [ ] **T06** · (con el OK de Micaela) la línea en `prisma/seed.ts`. No se hace sin aprobación.
+- [x] **T06** · La línea en `prisma/seed.ts` (con el OK de Magui, Pareja A).

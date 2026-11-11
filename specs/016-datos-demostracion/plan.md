@@ -24,7 +24,7 @@ Desde `apps/api`, con `DATABASE_URL` apuntando a localhost y las áreas y usuari
 pnpm exec ts-node --transpile-only -r ./test/resolve-js-to-ts.cjs prisma/seed-demo.ts
 ```
 
-(el mismo comando que `migrations.seed` de `prisma.config.ts`, con otro archivo). Correrlo de nuevo no duplica nada.
+También corre con `prisma db seed`, que ahora lo incluye. (El comando es el mismo que `migrations.seed` de `prisma.config.ts`, con otro archivo). Correrlo de nuevo no duplica nada.
 
 ## Pruebas
 
