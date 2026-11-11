@@ -137,6 +137,7 @@ describe('the versions of the procedure (spec 015, R8)', () => {
 
 describe('when the draft changes, the history follows (spec 015, R8)', () => {
   const addAStep = async () => {
+    await userEvent.click(await screen.findByRole('button', { name: '+ Agregar paso' }));
     const form = await screen.findByRole('form', { name: 'Agregar un paso' });
     await userEvent.type(within(form).getByRole('textbox', { name: 'Título del paso' }), 'Contar');
     await userEvent.click(within(form).getByRole('button', { name: 'Agregar paso' }));
@@ -209,6 +210,7 @@ describe('an error of publishing does not outlive the change that fixes it (spec
     render(<ProcedureEditor />);
     expect(await failToPublish('NO_STEPS')).toHaveTextContent('La versión no tiene pasos.');
 
+    await userEvent.click(screen.getByRole('button', { name: '+ Agregar paso' }));
     const form = screen.getByRole('form', { name: 'Agregar un paso' });
     await userEvent.type(within(form).getByRole('textbox', { name: 'Título del paso' }), 'Contar');
     await userEvent.click(within(form).getByRole('button', { name: 'Agregar paso' }));
@@ -226,7 +228,7 @@ describe('an error of publishing does not outlive the change that fixes it (spec
     expect(await failToPublish('NO_AREAS')).toHaveTextContent('El procedimiento no tiene áreas.');
 
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Ventas' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Guardar áreas' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     await waitFor(() => expect(publishError()).not.toBeInTheDocument());
   });

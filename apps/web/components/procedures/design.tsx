@@ -10,8 +10,10 @@ export const SECTION_TITLE = 'text-xl font-bold';
 
 // Fila de un paso (solo la caja: quien la usa pone la distribución) y la caja de "Agregar paso", que
 // es el propio formulario.
-export const STEP_ROW = 'min-w-0 rounded-xl bg-fondo p-4 sm:p-5';
+export const STEP_ROW = 'min-w-0 rounded-xl bg-salvia p-4 sm:p-5';
 export const ADD_BOX = 'flex flex-col gap-4 rounded-2xl border-2 border-dashed border-borde p-5';
+export const ADD_BUTTON =
+  'inline-flex min-h-12 w-full items-center justify-center rounded-2xl border-2 border-dashed border-borde px-5 font-semibold text-bosque transition-colors hover:bg-salvia disabled:cursor-not-allowed disabled:opacity-60';
 
 export function StepNumber({ children }: { children: ReactNode }) {
   return (

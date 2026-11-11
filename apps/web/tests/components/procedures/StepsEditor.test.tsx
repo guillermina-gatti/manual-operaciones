@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Activity } from 'react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { simulateDialogs } from '../../support/dialog';
 import { StepsEditor } from '@/components/procedures/StepsEditor';
 import { ApiError } from '@/lib/api';
 import { PROCEDURE_MESSAGES } from '@/lib/procedures';
@@ -14,6 +15,8 @@ import {
   stepResponse,
   editable,
 } from '../../support/procedures';
+
+simulateDialogs();
 
 const mocks = vi.hoisted(() => ({
   addStep: vi.fn(),
@@ -70,6 +73,9 @@ function setup(procedure = THREE) {
 const items = () => within(screen.getByRole('list', { name: 'Pasos' })).getAllByRole('listitem');
 const stepButton = (verb: string, title: string) =>
   screen.getByRole('button', { name: `${verb} paso: ${title}` });
+const deleteButton = (title: string) => screen.getByRole('button', { name: `Borrar el paso ${title}` });
+const confirmDelete = () => userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
+const openAdd = () => userEvent.click(screen.getByRole('button', { name: '+ Agregar paso' }));
 const addForm = () => screen.getByRole('form', { name: 'Agregar un paso' });
 const addTitle = () => within(addForm()).getByRole('textbox', { name: 'Título del paso' });
 const addDescription = () =>
@@ -77,12 +83,41 @@ const addDescription = () =>
 const addButton = () => within(addForm()).getByRole('button', { name: /Agregar paso|Agregando…/ });
 
 describe('the list', () => {
-  test('without steps it says so, and the form to add one is there', () => {
+  test('without steps it says so, and "+ Agregar paso" is there', () => {
     setup(editable());
 
     expect(screen.getByText('Todavía no tiene pasos.')).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Pasos' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Agregar paso' })).toBeInTheDocument();
+  });
+
+  test('each step row is sage, with its number in the green circle (E28)', () => {
+    setup();
+
+    expect(items()[0]).toHaveClass('bg-salvia');
+    expect(within(items()[0]).getByText('1')).toHaveClass('bg-bosque', 'rounded-full');
+  });
+
+  test('"+ Agregar paso" has a dashed border and opens the form of the step (E28)', async () => {
+    setup();
+
+    const opener = screen.getByRole('button', { name: '+ Agregar paso' });
+    expect(opener).toHaveClass('border-dashed');
+    expect(screen.queryByRole('form', { name: 'Agregar un paso' })).not.toBeInTheDocument();
+
+    await userEvent.click(opener);
+
     expect(addForm()).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Agregar paso' })).not.toBeInTheDocument();
+  });
+
+  test('"Cancelar" in the form of a new step closes it', async () => {
+    setup();
+
+    await openAdd();
+    await userEvent.click(within(addForm()).getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.getByRole('button', { name: '+ Agregar paso' })).toBeInTheDocument();
   });
 
   test('shows the steps in order, with their description', () => {
@@ -112,7 +147,8 @@ describe('the list', () => {
   ])('the "%s" button draws its icon at full size and in its color', (verb, color) => {
     setup();
 
-    const button = stepButton(verb, 'Contar los comprobantes');
+    const title = 'Contar los comprobantes';
+    const button = verb === 'Borrar' ? deleteButton(title) : stepButton(verb, title);
     const icon = button.querySelector('svg');
 
     expect(button).toHaveClass('px-0!', color);
@@ -131,6 +167,7 @@ describe('the list', () => {
 describe('adding a step', () => {
   test('an empty title is marked and nothing is sent', async () => {
     setup(editable());
+    await openAdd();
 
     await userEvent.click(addButton());
 
@@ -140,6 +177,7 @@ describe('adding a step', () => {
 
   test('a description of 2001 characters is marked and nothing is sent', async () => {
     setup(editable());
+    await openAdd();
 
     await userEvent.type(addTitle(), 'Contar el efectivo');
     await userEvent.click(addDescription());
@@ -154,6 +192,7 @@ describe('adding a step', () => {
 
   test('sends the title, without a position (at the end), and gives the new copy to the screen', async () => {
     const { onChange } = setup(editable());
+    await openAdd();
 
     await userEvent.type(addTitle(), '  Contar el efectivo  ');
     await userEvent.click(addButton());
@@ -172,6 +211,7 @@ describe('adding a step', () => {
 
   test('sends the description when there is one, and clears the form', async () => {
     setup(editable());
+    await openAdd();
 
     await userEvent.type(addTitle(), 'Contar el efectivo');
     await userEvent.type(addDescription(), 'Billetes y monedas');
@@ -188,6 +228,7 @@ describe('adding a step', () => {
   test('409 STEP_LIMIT_REACHED → the draft has 50 steps, and what was typed stays', async () => {
     mocks.addStep.mockRejectedValue(new ApiError(409, [], undefined, 'STEP_LIMIT_REACHED'));
     setup(editable());
+    await openAdd();
 
     await userEvent.type(addTitle(), 'Contar el efectivo');
     await userEvent.click(addButton());
@@ -196,12 +237,12 @@ describe('adding a step', () => {
     expect(addTitle()).toHaveValue('Contar el efectivo');
   });
 
-  test('with 50 steps there is no form to add one, and it says why', () => {
+  test('with 50 steps there is no "+ Agregar paso", and it says why', () => {
     const fifty = Array.from({ length: 50 }, (_, i) => step(`1c000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`, i + 1, `Paso ${i + 1}`));
     setup(editable({ steps: fifty }));
 
     expect(screen.getByText('El borrador ya tiene 50 pasos: es el máximo.')).toBeInTheDocument();
-    expect(screen.queryByRole('form', { name: 'Agregar un paso' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Agregar paso' })).not.toBeInTheDocument();
   });
 });
 
@@ -276,10 +317,34 @@ describe('editing a step', () => {
 });
 
 describe('deleting a step', () => {
-  test('deletes it and the following steps move up in the copy', async () => {
+  test('the trash asks first: the dialog names the step and nothing is sent yet (E26)', async () => {
+    setup();
+
+    await userEvent.click(deleteButton('Contar los comprobantes'));
+
+    const dialog = screen.getByRole('dialog', { name: '¿Borrar el paso «Contar los comprobantes»?' });
+    expect(dialog).toHaveAccessibleDescription(
+      'Se quita del borrador y los demás pasos se vuelven a numerar. No se puede deshacer.',
+    );
+    expect(mocks.deleteStep).not.toHaveBeenCalled();
+  });
+
+  test('"Cancelar" closes the dialog and the step stays (E26)', async () => {
+    setup();
+
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mocks.deleteStep).not.toHaveBeenCalled();
+    expect(items()).toHaveLength(3);
+  });
+
+  test('"Sí, borrar" deletes it and the following steps move up in the copy (E26)', async () => {
     const { onChange } = setup();
 
-    await userEvent.click(stepButton('Borrar', 'Contar el efectivo'));
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await confirmDelete();
 
     expect(mocks.deleteStep).toHaveBeenCalledWith(PROCEDURE_ID, VERSION_ID, STEP_A);
     await vi.waitFor(() =>
@@ -299,12 +364,13 @@ describe('deleting a step', () => {
     mocks.deleteStep.mockReturnValue(new Promise((r) => (resolve = r)));
     setup();
 
-    await userEvent.dblClick(stepButton('Borrar', 'Contar el efectivo'));
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Sí, borrar' }));
 
     expect(mocks.deleteStep).toHaveBeenCalledTimes(1);
-    expect(stepButton('Borrar', 'Comparar con el sistema')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Borrando…' })).toBeDisabled();
     expect(stepButton('Bajar', 'Contar el efectivo')).toBeDisabled();
-    expect(addButton()).toBeDisabled();
+    expect(screen.getByRole('button', { name: '+ Agregar paso' })).toBeDisabled();
     resolve(undefined);
   });
 });
@@ -357,7 +423,8 @@ describe('errors', () => {
     mocks.deleteStep.mockRejectedValue(new ApiError(status));
     setup();
 
-    await userEvent.click(stepButton('Borrar', 'Contar el efectivo'));
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await confirmDelete();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(message);
   });
@@ -366,7 +433,8 @@ describe('errors', () => {
     mocks.deleteStep.mockRejectedValue(new ApiError(404));
     const { onGone } = setup();
 
-    await userEvent.click(stepButton('Borrar', 'Contar el efectivo'));
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await confirmDelete();
     expect(await screen.findByRole('alert')).toHaveTextContent(PROCEDURE_MESSAGES.notFound);
 
     await userEvent.click(screen.getByRole('button', { name: 'Quitar de la lista' }));
@@ -377,9 +445,11 @@ describe('errors', () => {
     mocks.deleteStep.mockRejectedValueOnce(new ApiError(503));
     setup();
 
-    await userEvent.click(stepButton('Borrar', 'Contar el efectivo'));
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await confirmDelete();
     await screen.findByRole('alert');
-    await userEvent.click(stepButton('Borrar', 'Contar el efectivo'));
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await confirmDelete();
 
     expect(mocks.deleteStep).toHaveBeenCalledTimes(2);
     await vi.waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
@@ -396,7 +466,8 @@ describe('coming back to the screen (Activity)', () => {
       </Activity>
     );
     const { rerender } = render(screenOf('visible'));
-    await userEvent.click(stepButton('Borrar', 'Contar el efectivo'));
+    await userEvent.click(deleteButton('Contar el efectivo'));
+    await confirmDelete();
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     await userEvent.click(stepButton('Editar', 'Contar el efectivo'));
 
