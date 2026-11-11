@@ -8,7 +8,7 @@
 Convenciones:
 
 - Una tarea = un commit (a veces dos: test y código), con Conventional Commits y alcance `procedures` o `web`. Las rutas de backend son relativas a `apps/api/`, las de front a `apps/web/`.
-- R1 a R14 son las reglas de la spec; E1 a E29, sus escenarios; D1 a D26, sus decisiones; PD1 a PD8, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado (tabla al final).
+- R1 a R14 son las reglas de la spec; E1 a E32, sus escenarios; D1 a D28, sus decisiones; PD1 a PD8, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado (tabla al final).
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa. Un test por criterio, con AAA, `describe` por clase o método y mocks con `jest.fn().mockResolvedValue(...)` limpiados entre tests. En el front, `getByRole` y `getByLabel`, nunca esperas por tiempo fijo.
 - Nunca se modifica un test existente para que pase: si una tarea tiene que cambiar uno, se avisa antes.
 - **"Avisar al equipo antes de mergear"** marca las tareas que tocan `schema.prisma` o `prisma/migrations`.
@@ -235,4 +235,18 @@ Pedido de Matías, boceto aprobado por el equipo. R14, D21 a D26, E24 a E29. La 
 
 ### T27 · Verificación
 - lint, tests y build de web y de api en verde; prueba en el navegador como `admin@fixtures.test`.
-- **Resultado (11/11/2026):** web 1678 tests, lint, `tsc` y build en verde; API 2093 tests unitarios, lint y build en verde. Pendiente: la prueba en el navegador (la hace Micaela). Los e2e de la API no se tocaron. Lo que no cubre esta parte: la lista de abajo se actualiza al crear y al descartar, no en cada cambio del borrador (pedir la lista otra vez la dejaría en "Cargando" a cada tecla guardada).
+- **Resultado (11/11/2026):** web 1678 tests, lint, `tsc` y build en verde; API 2093 tests unitarios, lint y build en verde. Pendiente: la prueba en el navegador (la hace Micaela). Los e2e de la API no se tocaron. Lo que decía esta parte sobre la lista (se actualizaba solo al crear y al descartar) quedó reemplazado por D28 (Parte 4).
+
+## Parte 4 · Dos fallos de la prueba en el navegador (12/11/2026)
+
+R15, D27, D28, E30 a E32. Solo front; la API no se toca.
+
+### T28 · "+ Crear otro procedimiento"
+- **Qué hace:** `ProcedureList` muestra, arriba del borrador, el botón secundario que vuelve al formulario vacío y pide la lista otra vez.
+- **Cubre:** D27; E30. **Archivos:** `ProcedureList.tsx` y `ProcedureList.refresh.test.tsx`.
+- **Verificación, test primero:** el botón está con el borrador a la vista y no con el formulario; tras tocarlo, el título está vacío, no hay "Borrador" y se pidió la lista otra vez.
+
+### T29 · La lista sigue al borrador
+- **Qué hace:** `ProcedureEditorBody` avisa (`onChanged`) al guardar el borrador, publicar y crear una versión; `useProcedureList` conserva las tarjetas mientras llega la respuesta nueva.
+- **Cubre:** D28; E31, E32. **Archivos:** `ProcedureEditorBody.tsx`, `ProcedureEditor.tsx`, `ProcedureList.tsx`, `useProcedureList.ts` y `ProcedureList.refresh.test.tsx`.
+- **Verificación, test primero:** tras guardar el título la lista muestra el título nuevo; mientras la respuesta no llega no hay "Cargando procedimientos…"; tras publicar se pide la lista otra vez.
