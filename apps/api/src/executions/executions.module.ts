@@ -8,9 +8,13 @@ import { InMemoryProceduresCatalog } from './adapters/in-memory-procedures-catal
 import { ExecutionService } from './execution.service';
 import { ExecutionsController } from './executions.controller';
 import { ExecutionsRepository } from './executions.repository';
+import { AssistantMetricsController } from './metrics/assistant-metrics.controller';
+import { AssistantMetricsRepository } from './metrics/assistant-metrics.repository';
+import { AssistantMetricsService } from './metrics/assistant-metrics.service';
 import { ExecutionMetricsRepository } from './metrics/execution-metrics.repository';
 import { MyMetricsController } from './metrics/my-metrics.controller';
 import { MyMetricsService } from './metrics/my-metrics.service';
+import { PrismaAssistantMetricsRepository } from './metrics/prisma-assistant-metrics.repository';
 import { PrismaExecutionMetricsRepository } from './metrics/prisma-execution-metrics.repository';
 import { ProcedureMetricsController } from './metrics/procedure-metrics.controller';
 import { ProcedureMetricsService } from './metrics/procedure-metrics.service';
@@ -27,11 +31,18 @@ import { PrismaExecutionsRepository } from './prisma-executions.repository';
     ExecutionsController,
     ProcedureMetricsController,
     MyMetricsController,
+    // The assistant metrics (HU38) only read the chat tables of pair C.
+    AssistantMetricsController,
   ],
   providers: [
     ExecutionService,
     ProcedureMetricsService,
     MyMetricsService,
+    AssistantMetricsService,
+    {
+      provide: AssistantMetricsRepository,
+      useClass: PrismaAssistantMetricsRepository,
+    },
     {
       provide: ExecutionMetricsRepository,
       useClass: PrismaExecutionMetricsRepository,
