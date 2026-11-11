@@ -22,12 +22,16 @@ import {
 function build(opts: {
     rows?: ReturnType<typeof chunk>[];
     steps?: LlmStep[] | null;
+    later?: Array<LlmStep[] | null>; // spec 011 (ajuste del 11/11/2026): los pasos del segundo pedido
     embeddings?: 'ok' | 'fail' | 'hang';
     owned?: string[];
 }) {
     const embeddings = new FakeEmbeddings(opts.embeddings);
     const retrieval = new FakeRetrieval(opts.rows ?? [chunk()]);
-    const llm = new FakeLlm(opts.steps === undefined ? ['Debe pedir ', 'aprobación [S1].'] : opts.steps);
+    const llm = new FakeLlm(
+        opts.steps === undefined ? ['Debe pedir ', 'aprobación [S1].'] : opts.steps,
+        ...(opts.later ?? []),
+    );
     const repo = new FakeRepository(opts.owned);
     const service = new ChatStreamService(embeddings, retrieval, llm, repo);
     return { service, embeddings, retrieval, llm, repo };
@@ -349,10 +353,12 @@ describe('ChatStreamService: la marca de contradicción (spec 011)', () => {
         expect(repo.saved[0]).toMatchObject({ status: 'conflict', usedChunkIds: ['c1', 'c3'] });
     });
 
+    // Ajuste del 11/11/2026: la marca entre pasajes del mismo documento ya no es este caso (se pide
+    // otra vez; ver el bloque de abajo). Acá, una marca que nombra un pasaje que no existe.
     it('E6: con una marca inválida sale el texto que sigue a la línea, y done llega con answered', async () => {
         const { service } = build({
             rows: ROWS,
-            steps: ['CONFLICT [S1] ', '[S2]\nLo aprueba ', 'el gerente [S2].'],
+            steps: ['CONFLICT [S1] ', '[S9]\nLo aprueba ', 'el gerente [S2].'],
         });
 
         const sink = await ask(service);
@@ -389,6 +395,82 @@ describe('ChatStreamService: la marca de contradicción (spec 011)', () => {
         const sink = await ask(service);
 
         expect(sink.final).toMatchObject({ status: 'answered', answer: 'CONFLICTIVO es el caso [S1].' });
+    });
+});
+
+// Spec 011 (ajuste del 11/11/2026): una marca CONFLICT entre dos pasajes del mismo documento no manda
+// nada y se le pide la respuesta otra vez al modelo, una sola vez, con el aviso de esos dos pasajes.
+describe('ChatStreamService: la marca entre pasajes del mismo documento (spec 011, ajuste del 11/11/2026)', () => {
+    const ROWS = [
+        chunk({ chunkId: 'c1', documentId: 'doc-devoluciones', section: 'Productos electrónicos' }),
+        chunk({ chunkId: 'c2', documentId: 'doc-devoluciones', section: 'Plazo general' }),
+    ];
+    const SAME_DOCUMENT: LlmStep[] = ['CONFLICT [S1] ', '[S2]\n', 'Electrónica, 7 días [S1]; en general, 30 [S2].'];
+    let warn: jest.SpyInstance;
+
+    beforeEach(() => {
+        warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('no manda nada del primer pedido; los delta y done salen del segundo, con el aviso', async () => {
+        const { service, llm, repo } = build({
+            rows: ROWS,
+            steps: SAME_DOCUMENT,
+            later: [['No: la electrónica ', 'tiene 7 días [S1].']],
+        });
+
+        const sink = await ask(service);
+
+        expect(llm.options).toEqual([undefined, { sameDocumentRefs: ['S1', 'S2'] }]);
+        expect(sink.deltas.join('')).toBe('No: la electrónica tiene 7 días [S1].');
+        expect(sink.final).toMatchObject({
+            status: 'answered',
+            answer: 'No: la electrónica tiene 7 días [S1].',
+            sources: [{ chunkId: 'c1' }],
+        });
+        expect(repo.saved[0]).toMatchObject({ status: 'answered', inputTokens: 20, outputTokens: 10 });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('entre S1 y S2, del mismo documento'));
+    });
+
+    it('una sola vez: si el segundo vuelve a marcar, se responde su explicación, sin delta', async () => {
+        const { service, llm } = build({ rows: ROWS, steps: SAME_DOCUMENT });
+
+        const sink = await ask(service);
+
+        expect(llm.options).toHaveLength(2);
+        expect(sink.names).toEqual(['start', 'done']);
+        expect(sink.final).toMatchObject({
+            status: 'answered',
+            answer: 'Electrónica, 7 días [S1]; en general, 30 [S2].',
+        });
+    });
+
+    it('si falla el segundo pedido, queda el primero (R6), con sus tokens', async () => {
+        const { service, repo } = build({ rows: ROWS, steps: SAME_DOCUMENT, later: [[{ fail: 'quota' }]] });
+
+        const sink = await ask(service);
+
+        expect(sink.final).toMatchObject({
+            status: 'answered',
+            answer: 'Electrónica, 7 días [S1]; en general, 30 [S2].',
+        });
+        expect(repo.saved[0]).toMatchObject({ inputTokens: 10, outputTokens: 5 });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Falló el segundo pedido'));
+    });
+
+    it('con una contradicción entre documentos distintos no hay segundo pedido', async () => {
+        const rows = [ROWS[0], chunk({ chunkId: 'c3', documentId: 'doc-gastos' })];
+        const { service, llm } = build({ rows, steps: ['CONFLICT [S1] [S2]\n', 'Uno [S1], otro [S2].'] });
+
+        const sink = await ask(service);
+
+        expect(llm.options).toEqual([undefined]);
+        expect(sink.final?.status).toBe('conflict');
     });
 });
 

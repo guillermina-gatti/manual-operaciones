@@ -119,6 +119,8 @@ export async function prepareChat(
         documentTitle: c.documentTitle,
         section: c.section,
         content: c.content,
+        // Spec 011 (ajuste del 11/11/2026): con un solo documento, el sistema va sin las reglas de CONFLICT.
+        documentId: c.documentId,
     }));
 
     return { kind: 'ready', chunks, passages };

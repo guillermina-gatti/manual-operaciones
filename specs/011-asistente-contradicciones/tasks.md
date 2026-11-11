@@ -118,7 +118,7 @@ Convenciones:
   Falla porque las líneas no están. El diff de `gemini-chat-llm.ts` es solo esas tres líneas.
 - **Depende de:** —
 - **Commit:** `feat(api): pedirle al asistente que marque las contradicciones`
-- **Estado:** hecha (05/11/2026). El diff de `gemini-chat-llm.ts` son las 3 líneas, sin borrar ninguna.
+- **Estado:** hecha (05/11/2026). El diff de `gemini-chat-llm.ts` son las 3 líneas, sin borrar ninguna. **Ajuste del 10/11/2026** (spec, R4): dos líneas más (`CONFLICT` solo entre documentos distintos; una excepción de una regla general no es una contradicción). El test del sistema esperado se actualizó: falló primero y pasa con el cambio. **Ajuste del 11/11/2026** (spec, R4, R6 y R8): las reglas de CONFLICT van solo con pasajes de al menos dos documentos, y una marca entre pasajes del mismo documento lleva a un segundo pedido, en las dos rutas, con los tokens sumados. Hay tests nuevos en `gemini-chat-llm.spec.ts`, `chat-conflict.spec.ts`, `chat-stream.service.spec.ts`, `chat-stream.timeouts.spec.ts`, `chat-routes.parity.spec.ts` y `ports/chat-llm.spec.ts`. E6 de la transmisión pasa a usar una marca con un pasaje que no existe. Cinco mutaciones de control hicieron fallar tests y se restauraron: sin segundo pedido en cada ruta, las reglas siempre, los tokens sin sumar y el retén que se abre con la marca del mismo documento.
 
 ### T05 · El retén de las dos marcas
 

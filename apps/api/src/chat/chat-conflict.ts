@@ -5,7 +5,9 @@
 // así las dos rutas nunca deciden distinto (plan 011, PD1 y PD3).
 import type { Logger } from '@nestjs/common';
 import type { ChatResult } from './chat.contract';
+import type { StepContext } from './chat-context';
 import type { Outcome } from './chat-pipeline';
+import type { ChatLlm, LlmAnswer, LlmRequestOptions, Passage } from './ports/chat-llm';
 import type { ConflictAlertRecorder } from './ports/conflict-alert-recorder';
 import type { RetrievedChunk } from './ports/chat-retrieval';
 
@@ -21,9 +23,11 @@ export type MarkerReading =
     | { kind: 'conflict'; first: RetrievedChunk; second: RetrievedChunk; body: string }
     | { kind: 'invalid'; body: string; reason: string };
 
+// sameDocument: la línea tiene la forma y nombra dos pasajes de esta consulta, pero del mismo
+// documento (ajuste del 11/11/2026: es el caso en que se le pide la respuesta otra vez al modelo).
 export type MarkerLine =
     | { ok: true; first: RetrievedChunk; second: RetrievedChunk }
-    | { ok: false; reason: string };
+    | { ok: false; reason: string; sameDocument?: [number, number] };
 
 // La primera línea sola (R5, sin la explicación): la forma, los dos pasajes y los dos documentos. La
 // usa también el retén de la transmisión, que decide apenas llega el fin de la línea.
@@ -41,7 +45,11 @@ export function checkMarkerLine(line: string, chunks: RetrievedChunk[]): MarkerL
     const first = chunks[x - 1];
     const second = chunks[y - 1];
     if (first.documentId === second.documentId) {
-        return { ok: false, reason: `S${x} y S${y} son del mismo documento (${first.documentId})` };
+        return {
+            ok: false,
+            reason: `S${x} y S${y} son del mismo documento (${first.documentId})`,
+            sameDocument: [x, y],
+        };
     }
     return { ok: true, first, second };
 }
@@ -72,6 +80,62 @@ export function readConflictMarker(text: string, chunks: RetrievedChunk[]): Mark
     if (!body) return { kind: 'invalid', body, reason: 'la marca no trae explicación' };
 
     return { kind: 'conflict', first: checked.first, second: checked.second, body };
+}
+
+// --- Ajuste del 11/11/2026: la marca entre pasajes del mismo documento ------------------------------
+// Probando con Gemini real, el modelo a veces marca CONFLICT entre una regla general y su excepción,
+// del mismo documento. La API descarta esa marca (R5), y lo que quedaba era la explicación, sin
+// conclusión. Ahora se le pide la respuesta otra vez, una sola vez, con un aviso. Lo usan las dos
+// rutas: ChatService con answerChecked y ChatStreamService con las mismas piezas.
+
+// Las dos marcas de pasaje si la respuesta empieza con CONFLICT entre dos pasajes del mismo documento.
+export function sameDocumentRefs(text: string, chunks: RetrievedChunk[]): [number, number] | null {
+    if (!startsWithMarker(text)) return null;
+    const checked = checkMarkerLine(splitMarkerLine(text).line, chunks);
+    return !checked.ok && checked.sameDocument ? checked.sameDocument : null;
+}
+
+export function retryOptions([x, y]: [number, number]): LlmRequestOptions {
+    return { sameDocumentRefs: [`S${x}`, `S${y}`] };
+}
+
+export const retryNotice = ([x, y]: [number, number]) =>
+    `El modelo marcó una contradicción entre S${x} y S${y}, del mismo documento: se le pide la respuesta otra vez`;
+
+export const retryFailedNotice = (error: unknown) =>
+    `Falló el segundo pedido al modelo, se responde con el primero: ${String(error)}`;
+
+// La respuesta del segundo pedido, con los tokens de los dos (se guardan sumados).
+export function bothAnswers(first: LlmAnswer, second: LlmAnswer): LlmAnswer {
+    const sum = (a?: number, b?: number) => (a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0));
+    return {
+        ...second,
+        inputTokens: sum(first.inputTokens, second.inputTokens),
+        outputTokens: sum(first.outputTokens, second.outputTokens),
+    };
+}
+
+// POST /api/chat: la respuesta del modelo y, si marcó CONFLICT entre pasajes del mismo documento, la
+// del segundo pedido. Un error del primero sale como siempre (ai_unavailable); si falla el segundo,
+// queda el primero, que finishChat trata como una marca inválida (R6).
+export async function answerChecked(
+    llm: ChatLlm,
+    question: string,
+    prepared: { chunks: RetrievedChunk[]; passages: Passage[] },
+    logger: Pick<Logger, 'warn'>,
+    context?: StepContext,
+): Promise<LlmAnswer> {
+    const first = await llm.answer(question, prepared.passages, context);
+    const refs = sameDocumentRefs(first.text, prepared.chunks);
+    if (!refs) return first;
+
+    logger.warn(retryNotice(refs));
+    try {
+        return bothAnswers(first, await llm.answer(question, prepared.passages, context, retryOptions(refs)));
+    } catch (error) {
+        logger.warn(retryFailedNotice(error));
+        return first;
+    }
 }
 
 // El número de pasaje de cada fragmento de la contradicción, para keepOnlyRefs.

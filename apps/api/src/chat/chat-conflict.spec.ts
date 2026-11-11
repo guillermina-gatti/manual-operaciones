@@ -1,7 +1,16 @@
 // Spec 011 (T02): la marca de contradicción del asistente, "CONFLICT [Sx] [Sy]" en la primera línea.
-import { CONFLICT_MARKER, keepOnlyRefs, readConflictMarker, recordConflictAlert } from './chat-conflict';
+import {
+    CONFLICT_MARKER,
+    answerChecked,
+    bothAnswers,
+    checkMarkerLine,
+    keepOnlyRefs,
+    readConflictMarker,
+    recordConflictAlert,
+    sameDocumentRefs,
+} from './chat-conflict';
 import type { Outcome } from './chat-pipeline';
-import { FakeConflictAlertRecorder, chunk } from './testing/chat-fakes';
+import { FakeConflictAlertRecorder, FakeLlm, chunk } from './testing/chat-fakes';
 
 // Seis pasajes: S1 y S2 del Manual de compras, S3 de la Política de gastos y S4 a S6 de otros.
 const CHUNKS = [
@@ -70,6 +79,119 @@ describe('readConflictMarker (R5, R6)', () => {
 
     it('la marca es CONFLICT', () => {
         expect(CONFLICT_MARKER).toBe('CONFLICT');
+    });
+});
+
+// Ajuste del 11/11/2026: la marca entre dos pasajes del mismo documento se reconoce aparte, para
+// pedirle la respuesta otra vez al modelo (en las dos rutas).
+describe('la marca entre pasajes del mismo documento (ajuste del 11/11/2026)', () => {
+    it('checkMarkerLine da los dos pasajes en sameDocument, en el orden de su número', () => {
+        expect(checkMarkerLine('CONFLICT [S2] [S1]', CHUNKS)).toEqual({
+            ok: false,
+            reason: expect.stringContaining('mismo documento'),
+            sameDocument: [1, 2],
+        });
+    });
+
+    it('sameDocumentRefs: solo con la marca entre pasajes del mismo documento', () => {
+        expect(sameDocumentRefs(`CONFLICT [S1] [S2]\n${BODY}`, CHUNKS)).toEqual([1, 2]);
+        expect(sameDocumentRefs('CONFLICT [S1] [S2]', CHUNKS)).toEqual([1, 2]);
+        expect(sameDocumentRefs(`CONFLICT [S1] [S3]\n${BODY}`, CHUNKS)).toBeNull();
+        expect(sameDocumentRefs(`CONFLICT [S1] [S9]\n${BODY}`, CHUNKS)).toBeNull();
+        expect(sameDocumentRefs(`CONFLICT [S1] [S1]\n${BODY}`, CHUNKS)).toBeNull();
+        expect(sameDocumentRefs(BODY, CHUNKS)).toBeNull();
+    });
+
+    it('bothAnswers: el texto y el modelo del segundo, con los tokens sumados', () => {
+        const first = { text: 'uno', modelName: 'm', inputTokens: 400, outputTokens: 200 };
+        const second = { text: 'dos', modelName: 'm', inputTokens: 420, outputTokens: 60 };
+
+        expect(bothAnswers(first, second)).toEqual({ text: 'dos', modelName: 'm', inputTokens: 820, outputTokens: 260 });
+        expect(bothAnswers({ text: 'uno', modelName: 'm' }, { text: 'dos', modelName: 'm' })).toEqual({
+            text: 'dos',
+            modelName: 'm',
+            inputTokens: undefined,
+            outputTokens: undefined,
+        });
+    });
+
+    describe('answerChecked (POST /api/chat)', () => {
+        const prepared = {
+            chunks: CHUNKS.slice(0, 3),
+            passages: CHUNKS.slice(0, 3).map((c, i) => ({
+                ref: `S${i + 1}`,
+                documentTitle: c.documentTitle,
+                section: c.section,
+                content: c.content,
+                documentId: c.documentId,
+            })),
+        };
+        const logger = { warn: jest.fn() };
+
+        beforeEach(() => logger.warn.mockClear());
+
+        it('sin la marca del mismo documento, un solo pedido', async () => {
+            const llm = new FakeLlm([`CONFLICT [S1] [S3]\n${BODY}`]);
+
+            const answer = await answerChecked(llm, '¿Quién aprueba?', prepared, logger);
+
+            expect(llm.options).toEqual([undefined]);
+            expect(answer.text).toBe(`CONFLICT [S1] [S3]\n${BODY}`);
+            expect(logger.warn).not.toHaveBeenCalled();
+        });
+
+        it('con la marca del mismo documento, un segundo pedido con el aviso y los tokens sumados', async () => {
+            const llm = new FakeLlm([`CONFLICT [S1] [S2]\n${BODY}`], ['Lo aprueba el gerente [S1].']);
+            const context = {
+                procedureVersionId: 'v',
+                stepId: 's',
+                procedureTitle: 'Compras',
+                stepOrder: 1,
+                stepTitle: 'Aprobar',
+                stepDescription: '',
+            };
+
+            const answer = await answerChecked(llm, '¿Quién aprueba?', prepared, logger, context);
+
+            expect(llm.options).toEqual([undefined, { sameDocumentRefs: ['S1', 'S2'] }]);
+            expect(llm.contexts).toEqual([context, context]);
+            expect(answer).toEqual({
+                text: 'Lo aprueba el gerente [S1].',
+                modelName: 'fake-model',
+                inputTokens: 20,
+                outputTokens: 10,
+            });
+            expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('entre S1 y S2, del mismo documento'));
+        });
+
+        it('una sola vez, aunque el segundo vuelva a marcar', async () => {
+            const llm = new FakeLlm([`CONFLICT [S1] [S2]\n${BODY}`]);
+
+            const answer = await answerChecked(llm, '¿Quién aprueba?', prepared, logger);
+
+            expect(llm.options).toHaveLength(2);
+            expect(answer.text).toBe(`CONFLICT [S1] [S2]\n${BODY}`);
+        });
+
+        it('si falla el segundo, queda el primero, y el error en el log', async () => {
+            const llm = new FakeLlm([`CONFLICT [S1] [S2]\n${BODY}`], [{ fail: 'quota' }]);
+
+            const answer = await answerChecked(llm, '¿Quién aprueba?', prepared, logger);
+
+            expect(answer).toEqual({
+                text: `CONFLICT [S1] [S2]\n${BODY}`,
+                modelName: 'fake-model',
+                inputTokens: 10,
+                outputTokens: 5,
+            });
+            expect(logger.warn).toHaveBeenLastCalledWith(expect.stringContaining('quota'));
+        });
+
+        it('si falla el primero, el error sale (ai_unavailable, como siempre)', async () => {
+            const llm = new FakeLlm(null);
+
+            await expect(answerChecked(llm, '¿Quién aprueba?', prepared, logger)).rejects.toThrow('model down');
+        });
     });
 });
 

@@ -8,7 +8,7 @@ import { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatRequest, ChatResult } from './chat.contract';
 import { resolveSuggestion } from './chat-contact';
 import { withSignedLinks } from './chat-links';
-import { recordConflictAlert } from './chat-conflict';
+import { answerChecked, recordConflictAlert } from './chat-conflict';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
 import {
     type ChatUser,
@@ -86,7 +86,8 @@ export class ChatService {
 
         let llm: LlmAnswer;
         try {
-            llm = await this.llm.answer(question, prepared.passages, stepContext);
+            // Spec 011 (ajuste del 11/11/2026): con una marca CONFLICT del mismo documento, otro pedido.
+            llm = await answerChecked(this.llm, question, prepared, this.logger, stepContext);
         } catch (error) {
             this.logger.warn(`Falló la llamada al modelo: ${String(error)}`);
             return unavailable();

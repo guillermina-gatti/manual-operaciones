@@ -300,13 +300,17 @@ Así los `delta` unidos siguen siendo el `answer` de `done` cuando la respuesta 
 
 ### 2.4 El prompt (`adapters/gemini-chat-llm.ts`, Guille; R4, R21)
 
-`SYSTEM_PROMPT` suma tres líneas después de la de `NO_INFO`:
+`SYSTEM_PROMPT` suma cinco líneas después de la de `NO_INFO`: tres el 05/11/2026 y dos en el ajuste del 10/11/2026.
 
 ```text
 - Si dos pasajes de documentos distintos dicen cosas incompatibles sobre lo que se pregunta, la primera línea de tu respuesta debe ser exactamente: CONFLICT [Sx] [Sy], con las marcas de esos dos pasajes. Después, explicá en pocas líneas qué dice cada uno, citando solo [Sx] y [Sy], sin elegir uno.
+- CONFLICT solo vale entre pasajes de documentos distintos.
 - No es una contradicción que un pasaje sea más detallado que otro, que se complementen o que hablen de casos distintos.
+- Una regla específica que es excepción de una general (por ejemplo, un plazo distinto para una categoría de productos) no es una contradicción: aplicá la regla específica y respondé con una conclusión clara.
 - Si los pasajes no alcanzan para responder, NO_INFO tiene prioridad sobre CONFLICT.
 ```
+
+La segunda y la cuarta línea se sumaron el 10/11/2026 (spec, ajuste de R4). Desde el 11/11/2026, las cinco van solo con pasajes de al menos dos documentos, y una marca entre pasajes del mismo documento lleva a un segundo pedido (spec, ajuste del 11/11/2026 en R4, R6 y R8; aviso 9 para Guille).
 
 `buildPrompt` y el bloque del paso (spec 010) no cambian.
 

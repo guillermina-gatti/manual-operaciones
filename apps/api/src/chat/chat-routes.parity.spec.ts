@@ -23,6 +23,7 @@ interface Case {
     name: string;
     rows?: ReturnType<typeof chunk>[];
     steps: LlmStep[] | null;
+    later?: Array<LlmStep[] | null>; // spec 011 (ajuste del 11/11/2026): los pasos del segundo pedido
     embeddings?: 'ok' | 'fail';
     user?: { id: string; areaIds: string[] };
 }
@@ -43,7 +44,7 @@ function deps(c: Case) {
     return {
         embeddings: new FakeEmbeddings(c.embeddings),
         retrieval: new FakeRetrieval(c.rows ?? [chunk()]),
-        llm: new FakeLlm(c.steps),
+        llm: new FakeLlm(c.steps, ...(c.later ?? [])),
         repo: new FakeRepository(),
     };
 }
@@ -145,6 +146,20 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
     const CONFLICT_CASES: Case[] = [
         { name: 'marca válida', rows: ROWS, steps: ['CONFLICT [S3] [S1]\n', 'Gerente [S1]; director [S3], y [S2].'] },
         { name: 'marca inválida (mismo documento)', rows: ROWS, steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'] },
+        // Ajuste del 11/11/2026: con la marca del mismo documento, un segundo pedido.
+        {
+            name: 'mismo documento: responde el segundo pedido',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [['No: lo aprueba ', 'el gerente [S1].']],
+        },
+        {
+            name: 'mismo documento: falla el segundo pedido',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [[{ fail: 'quota' }]],
+        },
+        { name: 'marca inválida (pasaje que no existe)', rows: ROWS, steps: ['CONFLICT [S1] [S9]\n', 'Gerente [S2].'] },
         { name: 'marca sin explicación', rows: ROWS, steps: ['CONFLICT [S1] [S3]'] },
         { name: 'sin marca', rows: ROWS, steps: ['Lo aprueba ', 'el gerente [S1].'] },
     ];
@@ -190,6 +205,16 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
         const withoutLatency = ({ latencyMs: _latency, ...rest }: { latencyMs: number }) => rest;
         expect(streamed.repo.saved.map(withoutLatency)).toEqual(actual.repo.saved.map(withoutLatency));
         expect(streamedAlerts.recorded).toEqual(actualAlerts.recorded);
+        expect(streamed.llm.options).toEqual(actual.llm.options);
+        if (c.name.startsWith('mismo documento') || c.name === 'marca inválida (mismo documento)') {
+            expect(actual.llm.options).toEqual([undefined, { sameDocumentRefs: ['S1', 'S2'] }]);
+        } else {
+            expect(actual.llm.options).toEqual([undefined]);
+        }
+        if (c.name === 'mismo documento: responde el segundo pedido') {
+            expect(viaPost).toMatchObject({ status: 'answered', answer: 'No: lo aprueba el gerente [S1].' });
+            expect(actual.repo.saved[0]).toMatchObject({ inputTokens: 20, outputTokens: 10 });
+        }
 
         if (c.name === 'marca válida') {
             expect(viaPost).toMatchObject({

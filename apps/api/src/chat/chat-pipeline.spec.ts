@@ -151,8 +151,20 @@ describe('chat-pipeline (spec 009, T01)', () => {
                 kind: 'ready',
                 chunks: [near, limit],
                 passages: [
-                    { ref: 'S1', documentTitle: near.documentTitle, section: null, content: near.content },
-                    { ref: 'S2', documentTitle: 'Plazos', section: limit.section, content: limit.content },
+                    {
+                        ref: 'S1',
+                        documentTitle: near.documentTitle,
+                        section: null,
+                        content: near.content,
+                        documentId: near.documentId,
+                    },
+                    {
+                        ref: 'S2',
+                        documentTitle: 'Plazos',
+                        section: limit.section,
+                        content: limit.content,
+                        documentId: limit.documentId,
+                    },
                 ],
             });
         });

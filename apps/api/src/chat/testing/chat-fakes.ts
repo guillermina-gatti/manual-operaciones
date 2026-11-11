@@ -4,7 +4,7 @@ import { EmbeddingProvider } from '../../processing/ports/embedding-provider';
 import type { ChatStreamDone, ChatStreamErrorBody, ChatEventSink } from '../chat-stream.types';
 import type { StepContext, StepRecord } from '../chat-context';
 import { ChatContextStore, type ConversationStep } from '../ports/chat-context-store';
-import { ChatLlm, type LlmAnswer, type LlmStream, type Passage } from '../ports/chat-llm';
+import { ChatLlm, type LlmAnswer, type LlmRequestOptions, type LlmStream, type Passage } from '../ports/chat-llm';
 import { ChatRepository, type SaveMessageInput } from '../ports/chat-repository';
 import { ChatRetrieval, type RetrievedChunk } from '../ports/chat-retrieval';
 import { ConflictAlertRecorder, type ConflictAlertInput } from '../ports/conflict-alert-recorder';
@@ -57,36 +57,51 @@ export class FakeRetrieval extends ChatRetrieval {
 export type LlmStep = string | { wait: number } | { fail: string } | { hang: true };
 
 // answer responde todo junto; stream entrega cada paso, respetando la señal.
+// Spec 011 (ajuste del 11/11/2026): later son los pasos de los pedidos siguientes (el segundo usa
+// later[0], y así); sin later, cada pedido repite steps, como antes. options anota las de cada pedido.
 export class FakeLlm extends ChatLlm {
     lastPassages: Passage[] = [];
     signals: AbortSignal[] = [];
     contexts: Array<StepContext | undefined> = []; // spec 010: el contexto de cada llamada
-    constructor(private readonly steps: LlmStep[] | null) {
+    options: Array<LlmRequestOptions | undefined> = [];
+    private readonly scripts: Array<LlmStep[] | null>;
+    constructor(steps: LlmStep[] | null, ...later: Array<LlmStep[] | null>) {
         super();
+        this.scripts = [steps, ...later];
     }
 
-    private get text(): string {
-        return (this.steps ?? []).filter((s): s is string => typeof s === 'string').join('').trim();
-    }
-
-    private get failure(): string | undefined {
-        const step = (this.steps ?? []).find((s) => typeof s === 'object' && 'fail' in s);
-        return step && typeof step === 'object' && 'fail' in step ? step.fail : undefined;
-    }
-
-    async answer(_question: string, passages: Passage[], context?: StepContext): Promise<LlmAnswer> {
+    // Los pasos del próximo pedido, anotando sus datos.
+    private next(passages: Passage[], context?: StepContext, options?: LlmRequestOptions): LlmStep[] | null {
+        const call = this.options.length;
         this.lastPassages = passages;
         this.contexts.push(context);
-        if (this.steps === null) throw new Error('model down');
-        if (this.failure) throw new Error(this.failure);
-        return { text: this.text, modelName: 'fake-model', inputTokens: 10, outputTokens: 5 };
+        this.options.push(options);
+        return this.scripts[Math.min(call, this.scripts.length - 1)];
     }
 
-    stream(_question: string, passages: Passage[], signal: AbortSignal, context?: StepContext): LlmStream {
-        this.lastPassages = passages;
-        this.contexts.push(context);
+    async answer(
+        _question: string,
+        passages: Passage[],
+        context?: StepContext,
+        options?: LlmRequestOptions,
+    ): Promise<LlmAnswer> {
+        const steps = this.next(passages, context, options);
+        if (steps === null) throw new Error('model down');
+        const failure = steps.find((s): s is { fail: string } => typeof s === 'object' && 'fail' in s);
+        if (failure) throw new Error(failure.fail);
+        const text = steps.filter((s): s is string => typeof s === 'string').join('').trim();
+        return { text, modelName: 'fake-model', inputTokens: 10, outputTokens: 5 };
+    }
+
+    stream(
+        _question: string,
+        passages: Passage[],
+        signal: AbortSignal,
+        context?: StepContext,
+        options?: LlmRequestOptions,
+    ): LlmStream {
+        const steps = this.next(passages, context, options);
         this.signals.push(signal);
-        const steps = this.steps;
         let text = '';
         let resolveFinal!: (answer: LlmAnswer) => void;
         let rejectFinal!: (error: unknown) => void;
