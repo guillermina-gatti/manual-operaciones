@@ -4,7 +4,7 @@
 // (HU11) but selectable, with "(inactiva)" for an inactive area. An inactive area is shown only if the
 // procedure already has it, so a new inactive one cannot be chosen (the API says 400 anyway).
 // components/documents/ is not changed: the chip classes are imported from there.
-import { CHIP, LABEL } from '@/components/documents/design';
+import { CHIP, HINT, LABEL } from '@/components/documents/design';
 import type { Area } from '@/lib/directory';
 import { displayAreaName } from '@/lib/directory/areas-directory';
 
@@ -46,6 +46,9 @@ export function AreaChipsField({ areas, selected, onChange }: AreaChipsFieldProp
           {displayAreaName(area)}
         </label>
       ))}
+      <p className={`${HINT} basis-full`}>
+        Un procedimiento puede quedar sin áreas, pero no se puede publicar sin al menos una.
+      </p>
     </fieldset>
   );
 }

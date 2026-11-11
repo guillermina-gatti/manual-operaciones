@@ -243,7 +243,7 @@ describe('for an ADMIN', () => {
     await createOne();
     await screen.findByRole('heading', { level: 2, name: 'Borrador' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Descartar borrador' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Descartar borrador' }));
     await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toBeVisible();

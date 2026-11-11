@@ -3,17 +3,15 @@
 // What the ADMIN sees of a procedure that is there (HU09, HU10, HU32): its draft, its steps, its areas
 // and its versions. If the version is no longer a draft, it is shown read-only. It has no box of its
 // own: the main of the page lays its parts out.
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useId } from 'react';
-import { BACK_LINK } from '@/components/documents/design';
-import { PageHeader } from '@/components/documents/list-design';
 import type { VersionDetail } from '@/lib/procedures';
 import type { EditableProcedure } from '@/lib/procedures/editable';
 import { withDraftVersion } from '@/lib/procedures/snapshot';
 import { versionSummary } from '@/lib/procedures/versions';
 import { CompareVersions } from './CompareVersions';
 import { DraftSections } from './DraftSections';
+import { EditorHeader } from './EditorHeader';
 import { SECTION, SECTION_TITLE } from './design';
 import { ProcedureAreasForm } from './ProcedureAreasForm';
 import { useVersions } from './useVersions';
@@ -24,9 +22,13 @@ import { VersionsSection } from './VersionsSection';
 interface ProcedureEditorBodyProps {
   procedure: EditableProcedure;
   onChange: (next: EditableProcedure) => void;
+  // Inside the list screen (spec 015, D21): no back link and no h1.
+  embedded?: boolean;
+  // The draft is gone; the default goes back to the list.
+  onGone?: () => void;
 }
 
-export function ProcedureEditorBody({ procedure, onChange }: ProcedureEditorBodyProps) {
+export function ProcedureEditorBody({ procedure, onChange, embedded = false, onGone }: ProcedureEditorBodyProps) {
   const router = useRouter();
   const versions = useVersions(procedure.id);
   const baseId = useId();
@@ -48,12 +50,8 @@ export function ProcedureEditorBody({ procedure, onChange }: ProcedureEditorBody
 
   return (
     <>
-      <Link href="/procedimientos" className={BACK_LINK}>
-        <span aria-hidden="true">←&nbsp;</span>Volver a procedimientos
-      </Link>
-
-      <PageHeader
-        wrap
+      <EditorHeader
+        embedded={embedded}
         title={procedure.title}
         subtitle={versionSummary(procedure.versionNumber, shown)}
       />
@@ -62,18 +60,19 @@ export function ProcedureEditorBody({ procedure, onChange }: ProcedureEditorBody
         <DraftSections
           procedure={procedure}
           onChange={changeDraft}
-          onGone={() => router.push('/procedimientos')}
+          onGone={onGone ?? (() => router.push('/procedimientos'))}
         />
       ) : (
-        <VersionReadOnly procedureId={procedure.id} versionId={procedure.versionId} />
+        <>
+          <VersionReadOnly procedureId={procedure.id} versionId={procedure.versionId} />
+          <section aria-labelledby={`${baseId}-areas`} className={SECTION}>
+            <h2 id={`${baseId}-areas`} className={SECTION_TITLE}>
+              Áreas
+            </h2>
+            <ProcedureAreasForm procedure={procedure} onChange={onChange} />
+          </section>
+        </>
       )}
-
-      <section aria-labelledby={`${baseId}-areas`} className={SECTION}>
-        <h2 id={`${baseId}-areas`} className={SECTION_TITLE}>
-          Áreas
-        </h2>
-        <ProcedureAreasForm procedure={procedure} onChange={onChange} />
-      </section>
 
       <VersionsSection versions={versions}>
         {(items) => (
