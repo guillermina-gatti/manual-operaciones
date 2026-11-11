@@ -1,9 +1,12 @@
 'use client';
 
-// The button to discard the draft (HU09, R10) and its confirmation. The screen that owns it does the
-// discard: onDiscard says whether the draft is gone; if not, the confirmation closes.
+// The red trash button that discards the draft (HU09, R10; spec 015, D22 and D25) and its dialog. The
+// screen that owns it does the discard: onDiscard says whether the draft is gone; if not, the dialog
+// closes.
 import { useLayoutEffect, useState } from 'react';
-import { LIST_BUTTON_DANGER, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
+import { LIST_BUTTON_DANGER } from '@/components/documents/list-design';
+import { ConfirmDialog } from './ConfirmDialog';
+import { IconTrash } from './design';
 
 interface DiscardDraftProps {
   busy: 'save' | 'discard' | null;
@@ -15,52 +18,38 @@ interface DiscardDraftProps {
 export function DiscardDraft({ busy, onStart, onDiscard }: DiscardDraftProps) {
   const [confirming, setConfirming] = useState(false);
 
-  // Coming back to a hidden screen starts without the confirmation open.
+  // Coming back to a hidden screen starts without the dialog open.
   useLayoutEffect(() => () => setConfirming(false), []);
 
   async function confirm() {
     if (!(await onDiscard())) setConfirming(false);
   }
 
-  if (!confirming) {
-    return (
+  return (
+    <>
       <button
         type="button"
-        className={LIST_BUTTON_DANGER}
+        className={`${LIST_BUTTON_DANGER} size-12 px-0!`}
+        aria-label="Descartar borrador"
         disabled={busy !== null}
         onClick={() => {
           onStart();
           setConfirming(true);
         }}
       >
-        Descartar borrador
+        <IconTrash />
       </button>
-    );
-  }
-
-  return (
-    <fieldset aria-label="Confirmar" className="flex min-w-0 flex-wrap gap-3">
-      <p className="basis-full font-semibold">
-        ¿Descartar el borrador? Se borra el borrador con sus pasos; si es la única versión, se borra el
-        procedimiento con sus áreas.
-      </p>
-      <button
-        type="button"
-        className={LIST_BUTTON_DANGER}
-        onClick={confirm}
-        disabled={busy !== null}
-        aria-busy={busy === 'discard'}
-      >
-        {busy === 'discard' ? 'Descartando…' : 'Sí, descartar'}
-      </button>
-      <button
-        type="button"
-        className={LIST_BUTTON_SECONDARY}
-        onClick={() => setConfirming(false)}
-        disabled={busy !== null}
-      >
-        Cancelar
-      </button>
-    </fieldset>
+      {confirming && (
+        <ConfirmDialog
+          title="¿Descartar el borrador?"
+          busy={busy === 'discard'}
+          onConfirm={confirm}
+          onCancel={() => setConfirming(false)}
+        >
+          Se borra el borrador con sus pasos; si es la única versión, se borra el procedimiento con sus
+          áreas. No se puede deshacer.
+        </ConfirmDialog>
+      )}
+    </>
   );
 }
