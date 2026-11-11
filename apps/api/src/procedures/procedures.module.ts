@@ -9,7 +9,11 @@ import { ProcedureDraftService } from './procedure-draft.service';
 import { ProcedureCompareService } from './procedure-compare.service';
 import { ProcedureHistoryService } from './procedure-history.service';
 import { ProcedurePublishService } from './procedure-publish.service';
+import { ProcedureListRepository } from './procedure-list.repository';
+import { ProcedureViewController } from './procedure-view.controller';
+import { ProcedureViewService } from './procedure-view.service';
 import { ProcedureVersionsController } from './procedure-versions.controller';
+import { PrismaProcedureListRepository } from './prisma-procedure-list.repository';
 import { PrismaProceduresRepository } from './prisma-procedures.repository';
 import { PrismaPublishRepository } from './prisma-publish.repository';
 import { PrismaVersionsRepository } from './prisma-versions.repository';
@@ -21,8 +25,10 @@ import { VersionsRepository } from './versions.repository';
 // PrismaService comes from the global PrismaModule. AreasDirectory and UsersDirectory are the ones
 // of Pareja A and documents, used as they are: areas (D17) and the name of who published (spec 015, D6).
 @Module({
-  controllers: [ProceduresController, ProcedureVersionsController],
+  controllers: [ProceduresController, ProcedureVersionsController, ProcedureViewController],
   providers: [
+    ProcedureViewService,
+    { provide: ProcedureListRepository, useClass: PrismaProcedureListRepository },
     ProcedureDraftService,
     ProcedureAreasService,
     ProcedurePublishService,
