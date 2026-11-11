@@ -4,7 +4,7 @@
 - **Responsable:** Micaela Franco (pareja B)
 - **Depende de:** spec 005 de Mayra (ejecuciones; el puerto está en `apps/api/src/executions/ports/procedures-catalog.ts`), `docs/contracts/` (usuarios, áreas y matriz de permisos), `UsersDirectory` y `AreasDirectory` de la pareja A y, para los adjuntos, `StorageModule` e `inspectFile` de la pareja C (se usan sin modificarlos).
 - **Habilita:** HU32 (publicar, historial, comparar y cambio crítico), que es lo que desbloquea el catálogo real de Mayra, y más adelante HU28, HU33 y HU38.
-- **Estado:** borrador para revisión (27/10/2026). Las decisiones de la etapa de aclaración están en la sección 10; no quedan preguntas que bloqueen (sección 11). No hay código ni cambios de esquema todavía.
+- **Estado (11/11/2026):** HU11 completa en esta rama: la API (R13 a R17) y las pantallas de la web (W1 a W10, T26 a T33). Lo siguiente en esta línea es la verificación final (T18). Texto original del estado: borrador para revisión (27/10/2026). Las decisiones de la etapa de aclaración están en la sección 10; no quedan preguntas que bloqueen (sección 11). No hay código ni cambios de esquema todavía.
 
 ## 1. Problema y objetivo
 
@@ -176,7 +176,7 @@ Tomadas en la etapa de aclaración (clarify) el 27/10/2026.
 | P22 · ¿Qué trae el detalle? | ADMIN: el borrador abierto con sus pasos (o la vigente si no hay borrador), las áreas y `hasOpenDraft`, sin repetir el historial (es de `GET /versions`, HU32). SUPERVISOR y EMPLOYEE: solo la vigente con sus pasos y las áreas, sin `ownerId` ni datos internos | R13, R14 |
 | P23 · ¿Cómo se ven las áreas desactivadas? | Solo el ADMIN las ve, marcadas "desactivada" (R11). Para los demás rige P20: solo áreas activas | R11, R13 |
 | P24 · ¿Un procedimiento que solo tiene borrador? | El ADMIN lo ve en el listado como "borrador"; los demás roles, no | R13, R16 |
-| P25 · ¿Qué pasa con la copia en `sessionStorage` de la web? | Desde HU11 la web lee del servidor; el código de la copia que deje de usarse se elimina y los datos viejos no se migran | R16 |
+| P25 · ¿Qué pasa con la copia en `sessionStorage` de la web? | Desde HU11 la web lee del servidor; el código de la copia que deje de usarse se elimina y los datos viejos no se migran. **Hecho el 11/11/2026** (T32): ya no existe `session-list.ts` | R16 |
 
 ## 11. Preguntas abiertas
 

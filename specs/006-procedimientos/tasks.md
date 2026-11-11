@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado (04/11/2026):** T-WEB (pantallas de prueba de HU09 y HU10 en la web) hecha. HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. HU10 terminada: T12, T13 y T13b hechas, con los e2e de procedimientos en verde (6 suites, 83 tests) y todos los e2e en verde (27 suites, 397 tests). Siguen T14 en adelante (visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
+- **Estado (04/11/2026):** T-WEB (pantallas de prueba de HU09 y HU10 en la web) hecha. HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. HU10 terminada: T12, T13 y T13b hechas, con los e2e de procedimientos en verde (6 suites, 83 tests) y todos los e2e en verde (27 suites, 397 tests). HU11 (11/11/2026): la API (T14 a T17, con sus commits en esta rama) y las pantallas de la web (T26 a T33) están hechas; los e2e los corre Micaela antes del PR. Sigue T18 (verificación final). Los adjuntos siguen como pregunta abierta para el equipo.
 
 Convenciones:
 
@@ -249,6 +249,7 @@ Convenciones:
   - **D-web-3:** cada procedimiento de la lista muestra un chip con el conteo ("N pasos · N áreas"), sin nombres de área: los nombres llegan con HU11.
   - **D-web-4:** se vuelve con `BACK_LINK` ("← Volver a procedimientos").
   - **D-web-5:** las pantallas importan botones, campos y encabezado de `components/documents/design.tsx` y `list-design.tsx` (DESIGN.md 1 y 9); `components/procedures/design.tsx` queda solo con la fila de un paso, su número, la caja de agregar y los íconos.
+  - **Actualizada el 11/11/2026 (HU11):** la copia en `sessionStorage` y su aviso desaparecen (P25): la lista y el editor leen de la API (T26 a T32). Cambian `ProcedureList`, `ProcedureCard` y `ProcedureEditor` (que se parte en `ProcedureEditorBody`); desaparece "Quitar de la lista" y el texto "No tenemos los datos de este procedimiento en esta sesión" pasa a "No se encontró el procedimiento". D-web-3 queda superada: la tarjeta muestra los nombres de las áreas como chips.
   - **Pendiente:** llevar el foco al primer campo con error después de enviar un formulario con errores (DESIGN.md 8). Es comportamiento nuevo: va con su criterio y su test primero, y no se hizo en este rediseño.
 
 ---
@@ -257,16 +258,17 @@ Convenciones:
 
 Trazabilidad: regla → escenario → tarea → test → resultado. Cada tarea es test primero y un commit chico. Todas son solo del front; `GET /api/procedures` y `GET /api/procedures/:id` ya existen (T16).
 
-| Tarea | Qué hace | Regla | Escenario | Test |
-| --- | --- | --- | --- | --- |
-| T26 | Cliente de `GET /procedures` y `GET /procedures/:id` (`lib/api/procedure-view.ts`) | W1, W5 | E41, E45 | `tests/lib/api/procedure-view.test.ts` |
-| T27 | Hooks que piden la lista y el detalle (`useProcedureList`, `useProcedureDetail`) | W1, W6, W7 | E41, E46, E47 | `tests/components/procedures/useProcedureDetail.test.tsx` |
-| T28 | Tarjeta de la lista con título, versión, pasos y áreas como chips | W4 | E44 | `tests/components/procedures/ProcedureCard.test.tsx` |
-| T29 | Lista paginada desde la API, por rol; formulario solo para ADMIN; vacía, carga y error | W1, W2, W3, W8, W9 | E41, E42, E43, E48 | `tests/components/procedures/ProcedureList.test.tsx` |
-| T30 | Ficha de solo lectura y estado 404 | W5, W7 | E45, E47 | `tests/components/procedures/ProcedureReadView.test.tsx` |
-| T31 | Páginas `/procedimientos` y `/procedimientos/[id]` por rol | W2, W3, W5, W6 | E42, E43, E45 | `tests/app/procedimientos-pages.test.tsx` |
-| T32 | El editor del ADMIN lee de la API y se elimina la copia de `sessionStorage` (P25) | W1, W6 | E41, E46 | `ProcedureEditor.test.tsx` y los de `components/procedures/` |
-| T33 | Tarjeta "Procedimientos" en el inicio | W10 | E49 | `tests/components/home/HomeView.test.tsx` |
+| Tarea | Qué hace | Regla | Escenario | Test | Estado |
+| --- | --- | --- | --- | --- | --- |
+| T26 | Cliente de `GET /procedures` y `GET /procedures/:id` (`lib/api/procedure-view.ts`) | W1, W5 | E41, E45 | `tests/lib/api/procedure-view.test.ts` | hecha (11/11/2026) |
+| T27 | Hooks que piden la lista y el detalle (`useProcedureList`, `useProcedureDetail`) | W1, W6, W7 | E41, E46, E47 | `tests/components/procedures/useProcedureDetail.test.tsx` | hecha (11/11/2026) |
+| T28 | Tarjeta de la lista con título, versión, pasos y áreas como chips | W4 | E44 | `tests/components/procedures/ProcedureCard.test.tsx` | hecha (11/11/2026) |
+| T29 | Lista paginada desde la API, por rol; formulario solo para ADMIN; vacía, carga y error | W1, W2, W3, W8, W9 | E41, E42, E43, E48 | `tests/components/procedures/ProcedureList.test.tsx` | hecha (11/11/2026) |
+| T30 | Ficha de solo lectura y estado 404 | W5, W7 | E45, E47 | `tests/components/procedures/ProcedureReadView.test.tsx` | hecha (11/11/2026) |
+| T31 | Páginas `/procedimientos` y `/procedimientos/[id]` por rol | W2, W3, W5, W6 | E42, E43, E45 | `tests/app/procedimientos-pages.test.tsx` | hecha (11/11/2026) |
+| T32 | El editor del ADMIN lee de la API y se elimina la copia de `sessionStorage` (P25) | W1, W6 | E41, E46 | `ProcedureEditor.test.tsx` y los de `components/procedures/` | hecha (11/11/2026) |
+| T33 | Tarjeta "Procedimientos" en el inicio | W10 | E49 | `tests/components/home/HomeView.test.tsx` | hecha (11/11/2026) |
 
+- **Resultado (11/11/2026):** `pnpm --filter web lint`, `pnpm --filter web test` (149 archivos, 1646 tests) y `pnpm --filter web build` (con `API_URL=http://localhost:3000`) en verde; en la API, lint, test (144 suites, 2092 tests) y build en verde, sin cambios en la API.
 - **Verificación:** `pnpm --filter web lint`, `pnpm --filter web test` y `pnpm --filter web build` (con `API_URL=http://localhost:3000`) en verde. La prueba manual con login real la hace Micaela.
 - **Fuera de alcance:** el adaptador de `ProceduresCatalog` no llena los campos opcionales que Mayra dejó como `TODO(HU11)` (`title`, `versionNumber`, `description`); se coordina con ella en otro PR.
