@@ -4,7 +4,7 @@ import { PrismaAreasDirectory } from '../documents/adapters/prisma-areas-directo
 import { PrismaUsersDirectory } from '../documents/adapters/prisma-users-directory';
 import { AreasDirectory } from '../documents/ports/areas-directory';
 import { UsersDirectory } from '../documents/ports/users-directory';
-import { InMemoryProceduresCatalog } from './adapters/in-memory-procedures-catalog';
+import { PrismaProceduresCatalog } from '../procedures/adapters/prisma-procedures-catalog';
 import { ExecutionService } from './execution.service';
 import { ExecutionsController } from './executions.controller';
 import { ExecutionsRepository } from './executions.repository';
@@ -47,7 +47,9 @@ import { PrismaExecutionsRepository } from './prisma-executions.repository';
       provide: ExecutionMetricsRepository,
       useClass: PrismaExecutionMetricsRepository,
     },
-    { provide: ProceduresCatalog, useClass: InMemoryProceduresCatalog }, // until Mica's catalog
+    // The published procedures of Mica (HU11). It only needs the global PrismaService, so
+    // ProceduresModule does not have to export it. The e2e tests swap in the in-memory one.
+    { provide: ProceduresCatalog, useClass: PrismaProceduresCatalog },
     { provide: UsersDirectory, useClass: PrismaUsersDirectory },
     { provide: AreasDirectory, useClass: PrismaAreasDirectory },
     { provide: ExecutionsRepository, useClass: PrismaExecutionsRepository },

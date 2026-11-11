@@ -6,7 +6,7 @@ import { PrismaAreasDirectory } from '../documents/adapters/prisma-areas-directo
 import { PrismaUsersDirectory } from '../documents/adapters/prisma-users-directory';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
-import { InMemoryProceduresCatalog } from './adapters/in-memory-procedures-catalog';
+import { PrismaProceduresCatalog } from '../procedures/adapters/prisma-procedures-catalog';
 import { ExecutionService } from './execution.service';
 import { ExecutionsController } from './executions.controller';
 import { ExecutionsModule } from './executions.module';
@@ -41,7 +41,7 @@ describe('ExecutionsModule', () => {
     const moduleRef = await compileModule();
 
     expect(moduleRef.get(ProceduresCatalog)).toBeInstanceOf(
-      InMemoryProceduresCatalog,
+      PrismaProceduresCatalog,
     );
     expect(moduleRef.get(UsersDirectory)).toBeInstanceOf(PrismaUsersDirectory);
     expect(moduleRef.get(AreasDirectory)).toBeInstanceOf(PrismaAreasDirectory);
