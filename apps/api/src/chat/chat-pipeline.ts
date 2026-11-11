@@ -190,6 +190,20 @@ export function cleanCitations(text: string, count: number): { text: string; ref
     return { text: cleaned.trim(), refs };
 }
 
+// Si el modelo dijo que no hay información pero la pregunta es de ayuda de la plataforma ("¿dónde veo las
+// métricas?"), se responde el texto fijo de ayuda en lugar de "No encontré información". Sin cuota extra.
+export function finishWithHelp(
+    llm: LlmAnswer,
+    chunks: RetrievedChunk[],
+    question: string,
+    logger?: Pick<Logger, 'warn'>,
+): Outcome {
+    const outcome = finishChat(llm, chunks, logger);
+    if (outcome.status !== 'no_info') return outcome;
+    const help = platformHelpReply(question);
+    return help !== null ? { status: 'answered', answer: help, chunks: [] } : outcome;
+}
+
 // Guarda la consulta y arma la respuesta del Contrato 4. La latencia va desde startedAt hasta acá.
 export async function saveResult(
     repository: ChatRepository,

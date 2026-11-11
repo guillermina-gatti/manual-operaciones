@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChatStreamError, askStream, type ChatStreamDone } from '@/lib/api';
 import { type AssistantMessage, type ChatMessageItem, withoutMarkers } from './chat-state';
+import { asksFeedback } from '@/lib/chat/feedback';
 import { CONFLICT_TITLE } from './ConflictNotice';
 
 const CUT_NOTICE = 'Se cortó la respuesta.';
@@ -29,6 +30,8 @@ export function useChatConversation(context?: ChatContext) {
   const [announcement, setAnnouncement] = useState('');
   const conversationRef = useRef<string | undefined>(undefined);
   const nextId = useRef(1);
+  // Cuántas preguntas se hicieron en la conversación (para no pedir valoración en la primera).
+  const questions = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
 
   // Al salir de la pantalla se corta el pedido en curso (R11 de la spec 009).
@@ -50,6 +53,8 @@ export function useChatConversation(context?: ChatContext) {
   }
 
   async function ask(question: string) {
+    const isFirstQuestion = questions.current === 0;
+    questions.current++;
     const userId = nextId.current++;
     const answerId = nextId.current++;
     setAnnouncement('');
@@ -80,7 +85,7 @@ export function useChatConversation(context?: ChatContext) {
           update(answerId, { text });
         },
       });
-      finish(answerId, done);
+      finish(answerId, done, isFirstQuestion);
     } catch (error) {
       if (controller.signal.aborted) return;
       fail(answerId, error);
@@ -90,7 +95,7 @@ export function useChatConversation(context?: ChatContext) {
     }
   }
 
-  function finish(id: number, done: ChatStreamDone) {
+  function finish(id: number, done: ChatStreamDone, isFirstQuestion: boolean) {
     conversationRef.current = done.conversationId;
     update(id, {
       status: done.status,
@@ -98,8 +103,8 @@ export function useChatConversation(context?: ChatContext) {
       // Spec 011 (F1): con conflict, las dos fuentes de la contradicción.
       sources: done.status === 'answered' || done.status === 'conflict' ? done.sources : [],
       searchUrl: done.searchUrl,
-      // HU25: el mensaje que se va a valorar.
-      messageId: done.messageId,
+      // HU25: solo se valora cuando corresponde (ver asksFeedback).
+      messageId: asksFeedback(done.status, done.sources, done.answer, isFirstQuestion) ? done.messageId : undefined,
       // HU19: con no_info, los documentos cercanos.
       nearestDocuments: done.nearestDocuments,
       suggestedContact: done.suggestedContact,
@@ -144,6 +149,7 @@ export function useChatConversation(context?: ChatContext) {
     setMessages([]);
     setAnnouncement('');
     setBusy(false);
+    questions.current = 0;
   }
 
   return {

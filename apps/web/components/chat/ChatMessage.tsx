@@ -7,6 +7,7 @@
 // HU19: con no_info, los documentos cercanos y a quién consultar.
 import Link from 'next/link';
 import { linkCitations } from '@/lib/chat/citations';
+import { splitRoutes } from '@/lib/chat/routes';
 import { buildSearchUrl, searchTextOf } from '@/lib/chat/search-url';
 import { ChatFeedback } from './ChatFeedback';
 import { ChatNearestDocuments } from './ChatNearestDocuments';
@@ -160,7 +161,7 @@ function Answer({ message }: { message: AssistantMessage }) {
   return (
     <p className={TEXT}>
       {segments.map((segment, index) => {
-        if (segment.type === 'text') return <span key={index}>{segment.text}</span>;
+        if (segment.type === 'text') return <TextWithRoutes key={index} text={segment.text} />;
         const source = message.sources[segment.number - 1];
         return (
           <Link
@@ -174,6 +175,23 @@ function Answer({ message }: { message: AssistantMessage }) {
         );
       })}
     </p>
+  );
+}
+
+// Las rutas de la plataforma ("/documentos", "/metricas"...) que menciona la ayuda van como enlace azul.
+function TextWithRoutes({ text }: { text: string }) {
+  return (
+    <>
+      {splitRoutes(text).map((part, index) =>
+        part.route ? (
+          <Link key={index} href={part.route} className={TEXT_LINK}>
+            {part.route}
+          </Link>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}
+    </>
   );
 }
 

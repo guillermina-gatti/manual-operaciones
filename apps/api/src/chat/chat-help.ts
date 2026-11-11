@@ -94,6 +94,12 @@ const TOPICS: Topic[] = [
             'Cada respuesta del asistente muestra al final de qué documento sacó la información: el título, la sección y desde cuándo está vigente, con un enlace al archivo. Si no encuentra nada en tus documentos, te lo dice en lugar de inventar una respuesta.',
     },
     {
+        name: 'origen-respuesta',
+        all: [['respuesta', 'contest'], ['sale', 'vien', 'origen', 'donde', 'de']],
+        reply:
+            'Cada respuesta del asistente muestra al final de qué documento sacó la información: el título, la sección y desde cuándo está vigente, con un enlace al archivo. Si no encuentra nada en tus documentos, te lo dice en lugar de inventar una respuesta.',
+    },
+    {
         name: 'cargar-documento',
         all: [DOCUMENT, ['carg', 'subo', 'subir', 'subi', 'agreg']],
         reply:
