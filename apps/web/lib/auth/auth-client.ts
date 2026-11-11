@@ -16,6 +16,12 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export interface ValidateInvitationResponse {
+  valid: boolean;
+  email: string;
+  role: Role;
+}
+
 // Contrato A-06.5 implementado: refresh devuelve accessToken y user.
 export interface RefreshResponse {
   accessToken: string;
@@ -26,7 +32,12 @@ export interface LogoutResponse {
   revoked: boolean;
 }
 
-type AuthAction = 'login' | 'refresh' | 'logout';
+type AuthAction =
+  | 'login'
+  | 'refresh'
+  | 'logout'
+  | 'invitations/validate'
+  | 'register';
 
 export class AuthClientError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -40,11 +51,22 @@ function safeMessage(status: number, action: AuthAction): string {
     case 0:
       return 'No pudimos conectarnos. Revisá tu conexión e intentá nuevamente.';
     case 400:
+      if (action === 'invitations/validate') {
+        return 'El token de invitación no es válido.';
+      }
       return 'Revisá los datos ingresados.';
     case 401:
       return action === 'login'
         ? 'Correo o contraseña incorrectos.'
         : 'La sesión venció. Volvé a iniciar sesión.';
+    case 404:
+      return action === 'invitations/validate' || action === 'register'
+        ? 'La invitación no existe o el enlace es incorrecto.'
+        : 'No pudimos completar la operación. Intentá nuevamente.';
+    case 409:
+      return 'El correo ya se encuentra registrado o la invitación fue utilizada simultáneamente.';
+    case 410:
+      return 'Esta invitación ya fue utilizada, expiró o fue revocada.';
     case 429:
       return 'Demasiados intentos. Probá nuevamente más tarde.';
     case 503:
@@ -73,9 +95,21 @@ function isAuthUser(value: unknown): value is AuthUser {
   );
 }
 
+function isValidateInvitationResponse(
+  value: unknown,
+): value is ValidateInvitationResponse {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.valid === 'boolean' &&
+    isNonEmptyString(value.email) &&
+    typeof value.role === 'string' &&
+    ROLES.includes(value.role as Role)
+  );
+}
+
 async function postAuth(
   action: AuthAction,
-  body?: { email: string; password: string },
+  body?: Record<string, unknown>,
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -107,6 +141,34 @@ async function postAuth(
 /** Inicia sesión y devuelve los datos auténticos del usuario; no almacena el JWT. */
 export async function login(email: string, password: string): Promise<LoginResponse> {
   const response = await postAuth('login', { email, password });
+  if (
+    !isRecord(response) ||
+    !isNonEmptyString(response.accessToken) ||
+    !isAuthUser(response.user)
+  ) {
+    throw new AuthClientError(0, 'La respuesta del servidor no es válida.');
+  }
+  return { accessToken: response.accessToken, user: response.user };
+}
+
+/** Valida públicamente un token de invitación sin requerir sesión previa. */
+export async function validateInvitation(
+  token: string,
+): Promise<ValidateInvitationResponse> {
+  const response = await postAuth('invitations/validate', { token });
+  if (!isValidateInvitationResponse(response)) {
+    throw new AuthClientError(0, 'La respuesta del servidor no es válida.');
+  }
+  return response;
+}
+
+/** Registra un nuevo usuario mediante token de invitación; no almacena el JWT. */
+export async function registerWithInvitation(
+  token: string,
+  name: string,
+  password: string,
+): Promise<LoginResponse> {
+  const response = await postAuth('register', { token, name, password });
   if (
     !isRecord(response) ||
     !isNonEmptyString(response.accessToken) ||

@@ -57,3 +57,35 @@ export function hashRefreshToken(token: string): string {
 
   return createHash('sha256').update(token).digest('hex');
 }
+
+/**
+ * Constantes y utilidades para tokens de invitación (HU29).
+ * Utilizan la misma entropía criptográfica de 256 bits y codificación base64url sin relleno.
+ */
+export const INVITATION_TOKEN_BYTE_LENGTH = REFRESH_TOKEN_BYTE_LENGTH;
+export const INVITATION_TOKEN_BASE64URL_LENGTH = REFRESH_TOKEN_BASE64URL_LENGTH;
+export const INVITATION_TOKEN_BASE64URL_REGEX = REFRESH_TOKEN_BASE64URL_REGEX;
+export const INVITATION_TOKEN_HASH_HEX_LENGTH = REFRESH_TOKEN_HASH_HEX_LENGTH;
+export const INVITATION_TOKEN_HASH_HEX_REGEX = REFRESH_TOKEN_HASH_HEX_REGEX;
+
+/**
+ * Genera un token de invitación criptográficamente seguro de 256 bits (32 bytes)
+ * codificado en base64url (43 caracteres).
+ */
+export function generateInvitationToken(): string {
+  return generateRefreshToken();
+}
+
+/**
+ * Calcula el hash SHA-256 en formato hexadecimal de un token de invitación.
+ *
+ * @param token Token de invitación en texto plano.
+ * @returns Hash SHA-256 de 64 caracteres en minúscula.
+ */
+export function hashInvitationToken(token: string): string {
+  if (typeof token !== 'string' || token.trim().length === 0) {
+    throw new Error('El token de invitación no puede estar vacío');
+  }
+
+  return createHash('sha256').update(token).digest('hex');
+}

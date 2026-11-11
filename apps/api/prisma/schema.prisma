@@ -294,6 +294,9 @@ enum Role {
 //
 // Representa una cuenta registrada.
 //
+// Los correos se almacenan y consultan siempre normalizados
+// (sin espacios en extremos y en minúsculas).
+//
 // En el MVP, la cuenta se crea al aceptar una invitación
 // válida y definir una contraseña.
 //
@@ -311,8 +314,9 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  areas    UserArea[]
-  sessions Session[]
+  areas              UserArea[]
+  sessions           Session[]
+  createdInvitations UserInvitation[] @relation("CreatedInvitations")
 
   @@index([role])
   @@index([isActive])
@@ -341,7 +345,8 @@ model Area {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  users UserArea[]
+  users           UserArea[]
+  invitationAreas UserInvitationArea[]
 
   @@index([isActive])
   @@map("areas")
@@ -402,11 +407,55 @@ model Session {
 }
 
 // ============================================================
-// FUTURAS ENTIDADES DEL EQUIPO A
+// USER INVITATION (HU29)
 // ============================================================
 //
-// Invitation:
-// Invitaciones de un solo uso, con vencimiento de 48 horas.
+// Invitación de un solo uso emitida por un ADMIN para que una
+// persona se registre con correo, rol y áreas predefinidas.
+//
+// Los correos se almacenan normalizados (trim y minúsculas).
+// Solo se almacena el hash criptográfico SHA-256 del token opaco.
+// Unicidad: a lo sumo una invitación pendiente (no aceptada ni revocada) por correo.
+// Reemisión: si está vigente rechaza con 409; si venció se revoca atómicamente al reemitir.
+// ============================================================
+
+model UserInvitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @db.VarChar(255)
+  role        Role
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User                 @relation("CreatedInvitations", fields: [createdById], references: [id], onDelete: Restrict)
+  areas     UserInvitationArea[]
+
+  @@unique([email], map: "user_invitations_one_pending_per_email_idx", where: { acceptedAt: null, revokedAt: null })
+  @@index([email])
+  @@index([expiresAt])
+  @@index([createdById])
+  @@map("user_invitations")
+}
+
+model UserInvitationArea {
+  invitationId String @map("invitation_id") @db.Uuid
+  areaId       String @map("area_id") @db.Uuid
+
+  invitation UserInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  area       Area           @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@id([invitationId, areaId])
+  @@index([areaId])
+  @@map("user_invitation_areas")
+}
+
+// ============================================================
+// FUTURAS ENTIDADES DEL EQUIPO A
+// ============================================================
 //
 // AuditLog:
 // Registro de cambios administrativos y operaciones sensibles.
