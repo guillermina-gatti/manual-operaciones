@@ -33,7 +33,7 @@ import {
 // Same limits as the documents and executions repositories, so a frozen database never hangs a request.
 const TRANSACTION_TIMEOUT_MS = 5000;
 const TRANSACTION_MAX_WAIT_MS = 2000;
-const TRANSACTION_OPTIONS = {
+export const TRANSACTION_OPTIONS = {
   timeout: TRANSACTION_TIMEOUT_MS,
   maxWait: TRANSACTION_MAX_WAIT_MS,
 };
@@ -111,6 +111,27 @@ export class PrismaProceduresRepository extends ProceduresRepository {
     });
   }
 
+  setAreas(procedureId: string, areaIds: string[]): Promise<string[] | null> {
+    return this.translate(() =>
+      this.prisma.$transaction(async (tx) => {
+        if (!(await lockProcedure(tx, procedureId))) return null;
+
+        await tx.procedureArea.deleteMany({ where: { procedureId } });
+        if (areaIds.length > 0) {
+          await tx.procedureArea.createMany({
+            data: areaIds.map((areaId) => ({ procedureId, areaId })),
+          });
+        }
+        const saved = await tx.procedureArea.findMany({
+          where: { procedureId },
+          select: { areaId: true },
+          orderBy: { areaId: 'asc' },
+        });
+        return saved.map((row) => row.areaId);
+      }, TRANSACTION_OPTIONS),
+    );
+  }
+
   async createDraft(data: NewDraft): Promise<VersionRecord | null> {
     try {
       return await this.translate(() =>
@@ -151,12 +172,14 @@ export class PrismaProceduresRepository extends ProceduresRepository {
               title: current.title,
               description: current.description,
               createdById: data.createdById,
-              // The steps get new ids: Prisma generates them (@default(uuid())).
+              // The steps get new ids (Prisma generates them, @default(uuid())) and keep their step
+              // key, which joins "the same step" across versions (spec 015, R7).
               steps: {
                 create: current.steps.map((step) => ({
                   stepOrder: step.stepOrder,
                   title: step.title,
                   description: step.description,
+                  stepKey: step.stepKey,
                 })),
               },
             },
@@ -363,7 +386,8 @@ export class PrismaProceduresRepository extends ProceduresRepository {
 }
 
 // SELECT … FOR UPDATE: the row stays locked until the transaction ends. true if it exists.
-async function lockProcedure(
+// Exported so the versions repository locks the procedure the same way (spec 015, PD2).
+export async function lockProcedure(
   tx: Prisma.TransactionClient,
   procedureId: string,
 ): Promise<boolean> {
@@ -439,7 +463,7 @@ function toStepRecord(row: StepRow): StepRecord {
   };
 }
 
-function isUnavailable(error: unknown): boolean {
+export function isUnavailable(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) return true;
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -456,7 +480,7 @@ function isUnavailable(error: unknown): boolean {
 
 // With the pg adapter, a P2002 carries the name of the index that clashed in
 // meta.driverAdapterError.cause.constraint.index (reported by PostgreSQL).
-function isUniqueViolationOn(error: unknown, index: string): boolean {
+export function isUniqueViolationOn(error: unknown, index: string): boolean {
   if (
     !(error instanceof Prisma.PrismaClientKnownRequestError) ||
     error.code !== 'P2002'

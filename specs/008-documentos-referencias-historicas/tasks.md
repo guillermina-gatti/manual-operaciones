@@ -2,9 +2,11 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (04/11/2026):** T01 a T14 **hechas**, sin commits (los hace el usuario). T05 y T06 usan la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) mientras `UsersDirectory.findByIds` no está en develop. Falta solo reemplazarla cuando llegue, y mandar los [avisos a la pareja A](#avisos-a-la-pareja-a-pd13). T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
+- **Estado (04/11/2026):** T01 a T14 **hechas**, sin commits (los hace el usuario). **10/11/2026:** la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) se reemplazó por `UsersDirectory.findByIds` (PR #55 de la pareja A). Falta solo mandar los [avisos a la pareja A](#avisos-a-la-pareja-a-pd13). **11/11/2026:** D3 se actualizó por A-SEC: las áreas inactivas no dan acceso, y E22 se reescribió (T03). Además, D6 (era Q2): el responsable tiene que compartir un área **activa**. `assertAreasCanBeAssigned` devuelve las activas y `assertOwnerCanSeeDocument` valida con esas. Hay 6 tests nuevos en `assignments.e2e-spec.ts` › "el responsable tiene que compartir un área activa (D6)", y los de `assertAreasCanBeAssigned` esperan las activas. T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
 
 ## Función temporal `findUsersByIds`
+
+> **Reemplazada el 10/11/2026.** `UsersDirectory.findByIds` llegó a develop con el PR #55 (A-16), con el comportamiento acordado: sin repetidos, activos e inactivos, omite los IDs que no existen y `PrismaUsersDirectory` traduce las fallas de conexión a `RepositoryUnavailableError`. `DocumentReferences.lookup` y `ConflictAlertsService` llaman a `this.users.findByIds(...)`; se borró `find-users-by-ids.ts` con su bloque de tests, y los mocks de usuarios de los specs de servicios suman `findByIds`. Lo que sigue queda como registro.
 
 `UsersDirectory.findByIds(ids)` todavía no está en develop. Para no frenar T05 y T06 (la web se rompía porque la API no mandaba `owner`, `areas`, `lastReviewedBy` ni `uploadedBy`), está `src/documents/find-users-by-ids.ts`, sin tocar los puertos ni los adaptadores de la pareja A:
 
@@ -24,7 +26,7 @@ Diferencia con el plan (sección 9 de la spec, "en lote"): mientras dure, una p�
 | T02 · Validar el responsable nuevo inactivo | **Sí** | Usa `UsersDirectory.findById`, que ya trae `isActive` |
 | T03 · Integración de las validaciones | **Sí** | Depende de T01 y T02 |
 | T04 · Referencias: tipos y búsqueda en memoria | **Sí** | Es puro: no llama a los directorios |
-| T05 · Buscar las referencias en lote | **Hecha, con `findUsersByIds`** | Cambia a `UsersDirectory.findByIds` cuando esté |
+| T05 · Buscar las referencias en lote | **Hecha** | Con `UsersDirectory.findByIds` desde el 10/11/2026 |
 | T06 · Respuestas con nombres | **Hecha** | Depende de T05 |
 | T07 · Integración de las respuestas | **Hecha** | Depende de T06 |
 | T08 · Web: tipos y formatos | **Sí** | Solo tipos y funciones puras |
@@ -33,7 +35,7 @@ Diferencia con el plan (sección 9 de la spec, "en lote"): mientras dure, una p�
 | T11 · Web: `OwnerField` y cambio de áreas | **Sí, con respuestas simuladas** | Se mergea con T06 o después (PD11) |
 | T12 · Web: mensajes de los errores nuevos | **Sí** | Se puede mergear después de T03 |
 | T13 · Playwright contra la API real | **Hecha** | Con la API levantada contra `manual_test` |
-| T14 · Verificación | **Hecha** | Salvo el reemplazo por `findByIds`, que espera a la pareja A |
+| T14 · Verificación | **Hecha** | El reemplazo por `findByIds`, hecho el 10/11/2026 |
 
 Convenciones:
 
@@ -102,7 +104,9 @@ Convenciones:
   - **E16:** el mismo responsable inactivo; cambio a Operaciones sin `ownerId` → 400 de acceso;
   - **E17:** cambio con `ownerId` de otro usuario inactivo → 400 de R5; el responsable no cambia;
   - **E18:** se desactivan el responsable y Compras → `ownerId` y `areaIds` del documento no cambian;
-  - **E22:** un EMPLOYEE de Compras (creado en el test, activo), con Compras inactiva → el listado y el detalle incluyen el documento;
+  - **E22:** un EMPLOYEE de Compras (creado en el test, activo), con Compras inactiva → el listado y el detalle incluyen el documento. **11/11/2026 (D3 actualizada, A-SEC):** pasa a probar lo contrario, en dos tests:
+    - con Compras como única área, el EMPLOYEE no lo ve en el listado ni en la búsqueda, y el detalle da 404; el ADMIN sí, con `areas` `[{ id: Compras, isActive: false }]`;
+    - con Ventas y Compras, Ana (Ventas) lo ve con Compras inactiva, y Bruno (solo Compras) recibe 404;
   - los 400 de E11, E14 y E17 quedan en la auditoría como `FAILURE` con detalle `400`;
   - las suites `upload`, `lifecycle` y `query` pasan sin cambios.
 
@@ -139,7 +143,7 @@ Convenciones:
   - un directorio que lanza `RepositoryUnavailableError` → `lookup` la lanza.
 - **Depende de:** T04 y **`UsersDirectory.findByIds` de la pareja A** (en el puerto, en `PrismaUsersDirectory` y en `InMemoryUsersDirectory`). Antes de empezar, confirmar Q1 (plan 8.2).
 - **Commit:** `feat(api): buscar en lote los nombres de las referencias`
-- **Estado:** hecha, con la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) en vez de `users.findByIds`. Fallaron primero (no existían `DocumentReferences` ni `find-users-by-ids.ts`); 8 tests nuevos (3 de la función temporal, 5 de `DocumentReferences`). Además de la tarea, `ReferenceLookup` suma `missing(ids)` y `merge(other)`, y `DocumentReferences` suma `complete(lookup, ids)`, para PD5 (lo que aparece recién en el resultado de una escritura).
+- **Estado:** hecha, primero con la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) y, desde el 10/11/2026, con `users.findByIds`. Fallaron primero (no existían `DocumentReferences` ni `find-users-by-ids.ts`); 8 tests nuevos (3 de la función temporal, 5 de `DocumentReferences`). Además de la tarea, `ReferenceLookup` suma `missing(ids)` y `merge(other)`, y `DocumentReferences` suma `complete(lookup, ids)`, para PD5 (lo que aparece recién en el resultado de una escritura).
 
 ### T06 · Respuestas con nombres
 
@@ -284,7 +288,7 @@ Convenciones:
   6. **Avisos a la pareja A** (PD13): que `getNames` y sus fixtures quedaron sin uso en Documentos (P8); los campos de R1 y R2 como contrato; y, si Q1 sigue abierta, la respuesta de `findByIds` con un ID que no existe. Los manda Matías.
 - **Depende de:** T01 a T13
 - **Commit:** `docs(specs): verificar referencias históricas en documentos`
-- **Estado:** hecha el 04/11/2026, salvo el reemplazo de `findUsersByIds`: cuando `findByIds` esté en develop, reemplazarla (ver [la función temporal](#función-temporal-findusersbyids)) y volver a correr todo.
+- **Estado:** hecha el 04/11/2026. El reemplazo de `findUsersByIds` por `UsersDirectory.findByIds` se hizo el 10/11/2026 (ver [la función temporal](#función-temporal-findusersbyids)).
   1. **Todo en verde:**
      - API: `lint` y `tsc` sin errores; `test`, 85 suites y 1324 tests; `test:e2e` completo, 27 suites y 403 tests. Para correrlo hubo que resetear `manual_test`, con la confirmación del usuario.
      - Web: `lint` y `tsc` sin errores; `test`, 63 archivos y 775 tests; Playwright simulado (escritorio y celular), 108 tests; `e2e/integracion`, 13 tests.
@@ -311,7 +315,7 @@ Para mandar (Matías):
 
 1. **`getNames` quedó sin uso en Documentos (P8).** Las pantallas toman los nombres de la respuesta de la API. `usersDirectory.getNames` y sus fixtures ya no se llaman desde `components/documents`; si nadie más los usa, se pueden sacar.
 2. **El contrato de las respuestas (R1, R2).** Todas las respuestas de documentos traen `owner`, `areas` (en el orden de `areaIds`), `review.lastReviewedBy` (solo cuando va `review`) y, en el historial, `uploadedBy`. Cada referencia trae solo `{ id, name, isActive }`; `name` es `null` si el directorio no la encontró. Los IDs siguen (`ownerId`, `areaIds`, `lastReviewedById`, `uploadedById`).
-3. **`UsersDirectory.findByIds` (Q1).** Mientras no esté en develop, Documentos usa una función temporal: un `findById` por cada ID distinto. Cuando lo agreguen al puerto, a `PrismaUsersDirectory` y a `InMemoryUsersDirectory`, con el comportamiento acordado (sin repetidos, activos e inactivos, omitiendo los que no existen), avísennos para reemplazarla.
+3. ~~**`UsersDirectory.findByIds` (Q1).**~~ Ya no hace falta: llegó con el PR #55 y se reemplazó el 10/11/2026. Mientras no estaba en develop, Documentos usa una función temporal: un `findById` por cada ID distinto. Cuando lo agreguen al puerto, a `PrismaUsersDirectory` y a `InMemoryUsersDirectory`, con el comportamiento acordado (sin repetidos, activos e inactivos, omitiendo los que no existen), avísennos para reemplazarla.
 
 ---
 
@@ -325,7 +329,7 @@ Se pueden hacer ya:
   T10 ◄─ T08          (se mergea con T06 o después)
   T11 ◄─ T08          (se mergea con T06 o después)
 
-Con la función temporal findUsersByIds, hasta UsersDirectory.findByIds (pareja A):
+Con la función temporal findUsersByIds (reemplazada por UsersDirectory.findByIds el 10/11/2026):
   T05 ◄─ T04          (hecha)
   T06 ◄─ T05          (hecha)
   T07 ◄─ T06

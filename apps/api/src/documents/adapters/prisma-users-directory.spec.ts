@@ -9,10 +9,14 @@ describe('PrismaUsersDirectory', () => {
   let mockPrisma: {
     user: {
       findUnique: jest.Mock;
+      findMany: jest.Mock;
     };
   };
 
-  const createPrismaRequestError = (code: string, message = 'Prisma request error') =>
+  const createPrismaRequestError = (
+    code: string,
+    message = 'Prisma request error',
+  ) =>
     new Prisma.PrismaClientKnownRequestError(message, {
       code,
       clientVersion: '7.10.0',
@@ -22,9 +26,13 @@ describe('PrismaUsersDirectory', () => {
     mockPrisma = {
       user: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
       },
     };
-    directory = new PrismaUsersDirectory(mockPrisma as unknown as PrismaService);
+
+    directory = new PrismaUsersDirectory(
+      mockPrisma as unknown as PrismaService,
+    );
   });
 
   it('devuelve el usuario mapeado con sus áreas cuando existe', async () => {
@@ -157,7 +165,82 @@ describe('PrismaUsersDirectory', () => {
     }).compile();
 
     const resolved = moduleRef.get<PrismaUsersDirectory>(PrismaUsersDirectory);
+
     expect(resolved).toBeDefined();
     expect(resolved).toBeInstanceOf(PrismaUsersDirectory);
+  });
+
+  it('findByIds consulta una sola vez, elimina duplicados y conserva usuarios inactivos', async () => {
+    mockPrisma.user.findMany.mockResolvedValue([
+      {
+        id: 'inactivo',
+        name: 'Usuario histórico',
+        role: 'SUPERVISOR',
+        isActive: false,
+        areas: [{ areaId: 'area-2' }],
+      },
+      {
+        id: 'activo',
+        name: 'Usuario actual',
+        role: 'EMPLOYEE',
+        isActive: true,
+        areas: [{ areaId: 'area-1' }],
+      },
+    ]);
+
+    const result = await directory.findByIds([
+      'activo',
+      'inactivo',
+      'activo',
+      'inexistente',
+    ]);
+
+    expect(mockPrisma.user.findMany).toHaveBeenCalledTimes(1);
+
+    expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['activo', 'inactivo', 'inexistente'],
+        },
+      },
+      include: {
+        areas: {
+          select: { areaId: true },
+        },
+      },
+    });
+
+    expect(result).toEqual([
+      {
+        id: 'activo',
+        name: 'Usuario actual',
+        role: 'EMPLOYEE',
+        isActive: true,
+        areaIds: ['area-1'],
+      },
+      {
+        id: 'inactivo',
+        name: 'Usuario histórico',
+        role: 'SUPERVISOR',
+        isActive: false,
+        areaIds: ['area-2'],
+      },
+    ]);
+  });
+
+  it('findByIds no consulta Prisma cuando la lista está vacía', async () => {
+    await expect(directory.findByIds([])).resolves.toEqual([]);
+
+    expect(mockPrisma.user.findMany).not.toHaveBeenCalled();
+  });
+
+  it('findByIds propaga errores de conexión como RepositoryUnavailableError', async () => {
+    mockPrisma.user.findMany.mockRejectedValue(
+      createPrismaRequestError('P1001'),
+    );
+
+    await expect(directory.findByIds(['activo'])).rejects.toThrow(
+      RepositoryUnavailableError,
+    );
   });
 });

@@ -20,6 +20,10 @@ export class LoggerAuditLog extends AuditLog {
         previousReviewDate: entry.previousReviewDate,
       }),
       ...(entry.newReviewDate && { newReviewDate: entry.newReviewDate }),
+      ...(entry.conflictAlertId && { conflictAlertId: entry.conflictAlertId }),
+      ...(entry.relatedDocumentId && {
+        relatedDocumentId: entry.relatedDocumentId,
+      }),
       at: entry.at.toISOString(),
     });
     return Promise.resolve();

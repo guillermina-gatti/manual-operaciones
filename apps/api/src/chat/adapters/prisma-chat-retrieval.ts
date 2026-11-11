@@ -15,6 +15,8 @@ interface ChunkRow {
   content: string;
   validFrom: Date;
   distance: number;
+  storageKey: string;
+  fileName: string;
 }
 
 @Injectable()
@@ -23,9 +25,11 @@ export class PrismaChatRetrieval extends ChatRetrieval {
     super();
   }
 
-  async search(queryVector: number[], areaIds: string[], limit: number): Promise<RetrievedChunk[]> {
-    if (areaIds.length === 0) return [];
+  async search(queryVector: number[], areaIds: string[] | null, limit: number): Promise<RetrievedChunk[]> {
+    if (areaIds !== null && areaIds.length === 0) return [];
     const vector = `[${queryVector.join(',')}]`;
+    // null = sin filtro por área (solo ADMIN). Los demás roles siempre filtran en SQL.
+    const areaFilter = areaIds === null ? Prisma.empty : Prisma.sql`AND c.area_ids && ${areaIds}::uuid[]`;
 
     const rows = await this.prisma.$queryRaw<ChunkRow[]>(Prisma.sql`
       SELECT c.id AS "chunkId",
@@ -35,7 +39,9 @@ export class PrismaChatRetrieval extends ChatRetrieval {
              v.version_number AS "versionNumber",
              c.section,
              c.content,
-             d.review_date AS "validFrom",
+             v.created_at AS "validFrom",
+             v.storage_key AS "storageKey",
+             v.original_file_name AS "fileName",
              c.embedding <=> ${vector}::vector AS distance
       FROM chunks c
       JOIN document_versions v ON v.id = c.document_version_id
@@ -44,7 +50,7 @@ export class PrismaChatRetrieval extends ChatRetrieval {
         AND d.status = 'ACTIVE'
         AND v.status = 'CURRENT'
         AND v.processing_status = 'READY'
-        AND c.area_ids && ${areaIds}::uuid[]
+        ${areaFilter}
       ORDER BY c.embedding <=> ${vector}::vector
       LIMIT ${limit}
     `);

@@ -23,6 +23,7 @@ import {
   ExecutionMetricsRepository,
   MetricsAggregates,
   MetricsWindow,
+  MyAggregates,
 } from './execution-metrics.repository';
 import type { ExecutionAggregate } from './procedure-metrics';
 import { ProcedureMetricsService } from './procedure-metrics.service';
@@ -50,6 +51,13 @@ class FakeMetricsRepository extends ExecutionMetricsRepository {
       ? Promise.reject(this.failure)
       : Promise.resolve(this.aggregates);
   }
+
+  // The procedures metrics never read one user's executions.
+  mine(): Promise<MyAggregates> {
+    return Promise.reject(
+      new Error('the procedures metrics must not call mine'),
+    );
+  }
 }
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -71,6 +79,8 @@ const executions = (
   completed: started,
   inProgress: 0,
   completedDurationMs: started * 600_000,
+  minCompletionMs: 600_000,
+  maxCompletionMs: 600_000,
   lastStartedAt: new Date('2026-10-20T13:00:00.000Z'),
 });
 
@@ -157,6 +167,7 @@ describe('ProcedureMetricsService', () => {
         inProgress: 0,
         abandoned: 0,
         completionRate: 1,
+        avgCompletionMs: 600_000,
       });
     });
 
@@ -167,6 +178,35 @@ describe('ProcedureMetricsService', () => {
 
       expect(procedureIds(view)).toEqual([PROCEDURE_IDS.recepcionMercaderia]);
       expect(view.totals.started).toBe(1);
+    });
+
+    it('the area summary ignores the area filter and asks the catalog once per version', async () => {
+      const findVersion = jest.spyOn(catalog, 'findVersion');
+
+      const view = await build().procedures(ADMIN, {
+        areaId: AREA_IDS.operaciones,
+      });
+
+      expect(view.areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+        { areaId: AREA_IDS.operaciones, procedures: 1 },
+      ]);
+      expect(findVersion).toHaveBeenCalledTimes(2);
+    });
+
+    it('a supervisor of Ventas: the summary has only Ventas, also for a shared procedure', async () => {
+      catalog.assignAreas(PROCEDURE_IDS.cierreDeCaja, [
+        AREA_IDS.ventas,
+        AREA_IDS.operaciones,
+      ]);
+
+      const view = await build().procedures(SUPERVISOR_VENTAS, {
+        areaId: AREA_IDS.ventas,
+      });
+
+      expect(view.areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+      ]);
     });
 
     it('a supervisor of Ventas does not see the procedures of Operaciones', async () => {
@@ -327,6 +367,8 @@ describe('ProcedureMetricsService', () => {
     it('a users directory that is down is a 503', async () => {
       users = {
         findById: () =>
+          Promise.reject(new RepositoryUnavailableError('directorio caído')),
+        findByIds: () =>
           Promise.reject(new RepositoryUnavailableError('directorio caído')),
       };
 

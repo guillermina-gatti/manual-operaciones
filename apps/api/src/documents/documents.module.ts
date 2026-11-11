@@ -7,6 +7,10 @@ import { StorageModule } from '../storage/storage.module';
 import { LoggerAuditLog } from './adapters/logger-audit-log';
 import { PrismaAreasDirectory } from './adapters/prisma-areas-directory';
 import { PrismaUsersDirectory } from './adapters/prisma-users-directory';
+import { ConflictAlertsController } from './conflict-alerts/conflict-alerts.controller';
+import { ConflictAlertsRepository } from './conflict-alerts/conflict-alerts.repository';
+import { ConflictAlertsService } from './conflict-alerts/conflict-alerts.service';
+import { PrismaConflictAlertsRepository } from './conflict-alerts/prisma-conflict-alerts.repository';
 import { DocumentLifecycleService } from './document-lifecycle.service';
 import { DocumentQueryService } from './document-query.service';
 import { DocumentUploadService } from './document-upload.service';
@@ -26,12 +30,21 @@ import { PrismaDocumentsRepository } from './prisma-documents.repository';
 // Las simulaciones se cambian acá, una línea cada una, cuando llegue la real.
 @Module({
   imports: [StorageModule, ProcessingModule],
-  controllers: [DocumentsController, DocumentMetricsController], // GET /metrics/documents (spec 007)
+  controllers: [
+    DocumentsController,
+    DocumentMetricsController, // GET /metrics/documents (spec 007)
+    ConflictAlertsController, // GET /conflict-alerts y POST /conflict-alerts/:id/resolve (spec 011)
+  ],
   providers: [
     DocumentUploadService,
     DocumentQueryService,
     DocumentLifecycleService,
     DocumentMetricsService, // spec 007
+    ConflictAlertsService, // spec 011
+    {
+      provide: ConflictAlertsRepository,
+      useClass: PrismaConflictAlertsRepository,
+    },
     {
       provide: DocumentMetricsRepository,
       useClass: PrismaDocumentMetricsRepository,

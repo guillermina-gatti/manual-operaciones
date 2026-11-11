@@ -4,12 +4,15 @@ import { Activity } from 'react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ExecutionView } from '@/components/executions/ExecutionView';
 import { ApiError } from '@/lib/api';
+import type { ExecutionResponse } from '@/lib/api';
 import type { SessionState } from '@/lib/session';
 import { EXECUTION_ID, STEPS, execution } from '../../support/executions';
 
 const mocks = vi.hoisted(() => ({
   getExecution: vi.fn(),
   completeStep: vi.fn(),
+  restartExecution: vi.fn(),
+  push: vi.fn(),
   useSession: vi.fn(),
   params: { id: '' } as { id: string },
 }));
@@ -18,6 +21,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getExecution: mocks.getExecution,
   completeStep: mocks.completeStep,
+  restartExecution: mocks.restartExecution,
 }));
 
 vi.mock('@/lib/session', async (importOriginal) => ({
@@ -27,6 +31,7 @@ vi.mock('@/lib/session', async (importOriginal) => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => mocks.params,
+  useRouter: () => ({ push: mocks.push }),
 }));
 
 const ELENA: SessionState = {
@@ -47,7 +52,9 @@ beforeEach(() => {
 
 const heading = () => screen.findByRole('heading', { level: 1, name: 'Cierre de caja' });
 const stepItem = (n: number) =>
-  within(screen.getByRole('list', { name: 'Pasos' })).getAllByRole('listitem')[n - 1];
+  within(screen.getByRole('list', { name: 'Pasos del procedimiento' })).getAllByRole('listitem')[
+    n - 1
+  ];
 const finishButton = () => screen.getByRole('button', { name: 'Terminé este paso' });
 
 describe('loading and session', () => {
@@ -111,6 +118,43 @@ describe('errors when loading', () => {
 });
 
 describe('an execution in progress', () => {
+  test('the header says the procedure, what the screen is for and its area', async () => {
+    render(<ExecutionView />);
+
+    await heading();
+    expect(
+      screen.getByText('Seguí los pasos en orden y marcá cada uno cuando lo termines.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Ventas')).toBeInTheDocument();
+  });
+
+  test('the title of the API and the instruction of each step, when the catalog gives them', async () => {
+    const base = execution(1);
+    mocks.getExecution.mockResolvedValue({
+      ...base,
+      procedureTitle: 'Arqueo de caja',
+      steps: base.steps.map((step, i) => ({
+        ...step,
+        description: i === 1 ? 'Contá los comprobantes de tarjeta del día.' : null,
+      })),
+    });
+    render(<ExecutionView />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Arqueo de caja' }),
+    ).toBeInTheDocument();
+    expect(within(stepItem(2)).getByText('Contá los comprobantes de tarjeta del día.')).toBeInTheDocument();
+    // Without an instruction, only the title.
+    expect(stepItem(1).querySelectorAll('p')).toHaveLength(1);
+  });
+
+  test('a blank title falls back to the name of the sample procedure', async () => {
+    mocks.getExecution.mockResolvedValue({ ...execution(0), procedureTitle: '  ' });
+    render(<ExecutionView />);
+
+    expect(await heading()).toBeInTheDocument();
+  });
+
   test('shows the progress and every step in order', async () => {
     render(<ExecutionView />);
 
@@ -139,7 +183,7 @@ describe('an execution in progress', () => {
     render(<ExecutionView />);
 
     await heading();
-    expect(screen.getByText('Retomaste donde quedaste.')).toBeInTheDocument();
+    expect(screen.getByText('Retomaste donde quedaste')).toBeInTheDocument();
     expect(screen.getByText('Paso 3 de 4')).toBeInTheDocument();
     expect(stepItem(1)).toHaveTextContent('Terminado');
     expect(stepItem(1)).toHaveTextContent('3 min');
@@ -147,11 +191,37 @@ describe('an execution in progress', () => {
     expect(within(stepItem(3)).getByRole('button', { name: 'Terminé este paso' })).toBeInTheDocument();
   });
 
+  test('each step says its state and its times, the current one marked as the step', async () => {
+    mocks.getExecution.mockResolvedValue(execution(2));
+    render(<ExecutionView />);
+    await heading();
+
+    expect(stepItem(1)).toHaveTextContent('TerminadoTerminó a las 10:03 · duró 3 min');
+    expect(stepItem(3)).toHaveTextContent('En cursoEmpezó a las 10:06');
+    expect(stepItem(3)).toHaveAttribute('aria-current', 'step');
+    expect(stepItem(4)).toHaveTextContent('Pendiente');
+    expect(stepItem(4)).not.toHaveAttribute('aria-current');
+    expect(within(stepItem(4)).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Paso 4: Guardar el efectivo en la caja fuerte',
+    );
+  });
+
+  test('the last step says so on its button', async () => {
+    mocks.getExecution.mockResolvedValue(execution(3));
+    render(<ExecutionView />);
+    await heading();
+
+    expect(
+      within(stepItem(4)).getByRole('button', { name: 'Terminé el último paso' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
+  });
+
   test('a new execution does not say it was resumed', async () => {
     render(<ExecutionView />);
 
     await heading();
-    expect(screen.queryByText('Retomaste donde quedaste.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Retomaste donde quedaste')).not.toBeInTheDocument();
   });
 });
 
@@ -212,7 +282,7 @@ describe('completing a step', () => {
     await userEvent.click(finishButton());
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se encontró la ejecución.');
-    expect(screen.queryByRole('list', { name: 'Pasos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Pasos del procedimiento' })).not.toBeInTheDocument();
   });
 
   test('503 → a notice above the steps, and the button can be pressed again', async () => {
@@ -240,29 +310,55 @@ describe('a completed execution', () => {
     render(<ExecutionView />);
     await heading();
 
-    await userEvent.click(finishButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Terminé el último paso' }));
 
-    expect(await screen.findByText('Completaste el procedimiento')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '¡Procedimiento completado!' })).toBeInTheDocument();
   });
 
-  test('shows the total time, every duration, no button, and a link to choose another', async () => {
+  test('shows the completed panel, every duration and no button', async () => {
     mocks.getExecution.mockResolvedValue(execution(4));
     render(<ExecutionView />);
     await heading();
 
-    expect(screen.getByText('Completaste el procedimiento')).toBeInTheDocument();
-    expect(screen.getByText('Tiempo total: 12 min')).toBeInTheDocument();
+    const panel = screen.getByRole('status');
+    expect(within(panel).getByRole('heading', { level: 2 })).toHaveTextContent(
+      '¡Procedimiento completado!',
+    );
+    expect(panel).toHaveTextContent('Terminaste Cierre de caja en 12 min. Quedó registrado.');
     expect(screen.getByRole('progressbar', { name: 'Pasos terminados' })).toHaveAttribute(
       'aria-valuenow',
       '4',
     );
     STEPS.forEach((_, i) => expect(stepItem(i + 1)).toHaveTextContent('3 min'));
     expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Retomaste donde quedaste.')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Elegir otro procedimiento' })).toHaveAttribute(
+    expect(screen.queryByText('Retomaste donde quedaste')).not.toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'Ver otro procedimiento' })).toHaveAttribute(
       'href',
       '/ejecuciones',
     );
+    expect(within(panel).getByRole('link', { name: 'Volver al inicio' })).toHaveAttribute(
+      'href',
+      '/',
+    );
+  });
+
+  test('the completed panel goes between the progress and the steps', async () => {
+    mocks.getExecution.mockResolvedValue(execution(4));
+    render(<ExecutionView />);
+    await heading();
+
+    const progress = screen.getByRole('progressbar', { name: 'Pasos terminados' });
+    const panel = screen.getByRole('status');
+    const steps = screen.getByRole('list', { name: 'Pasos del procedimiento' });
+    expect(progress.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('an execution in progress has no completed panel', async () => {
+    render(<ExecutionView />);
+    await heading();
+
+    expect(screen.queryByRole('heading', { name: '¡Procedimiento completado!' })).not.toBeInTheDocument();
   });
 });
 
@@ -313,4 +409,229 @@ test('keeps a place for the assistant next to the steps', async () => {
 
   await heading();
   expect(document.querySelector('[data-slot="chat-panel"]')).not.toBeNull();
+});
+
+test('the side column has the summary above the assistant', async () => {
+  render(<ExecutionView />);
+  await heading();
+
+  const summary = screen.getByRole('region', { name: 'Resumen' });
+  const assistant = screen.getByRole('complementary', { name: 'Asistente' });
+  expect(summary.parentElement).toBe(assistant.parentElement);
+  expect(summary.compareDocumentPosition(assistant) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(summary).toHaveTextContent('Pasos terminados0 de 4');
+});
+
+
+// ── HU33: the procedure changed while it runs ────────────────────────────────
+
+const NEW_ID = '1e000000-0000-4000-8000-000000000002';
+
+// The execution after `finished` steps, with v3 published since it started.
+const changed = (critical: boolean, finished = 1): ExecutionResponse => ({
+  ...execution(finished),
+  versionChange: {
+    changed: true,
+    critical,
+    currentVersionId: '1b000000-0000-4000-8000-000000000009',
+    currentVersionNumber: 3,
+    changes: [
+      {
+        versionNumber: 3,
+        isCritical: critical,
+        changeSummary: 'Cambia el límite de caja',
+        publishedAt: '2026-11-10T12:00:00.000Z',
+      },
+    ],
+  },
+});
+
+const notice = () => screen.findByRole('alert', { name: /El procedimiento/ });
+
+describe('HU33: a change that is not critical', () => {
+  test('says so with what changed, and offers both ways', async () => {
+    mocks.getExecution.mockResolvedValue(changed(false));
+    render(<ExecutionView />);
+
+    const box = await notice();
+    expect(box).toHaveAccessibleName('El procedimiento cambió');
+    expect(box).toHaveTextContent('Mientras lo ejecutabas se publicó la versión 3.');
+    expect(within(box).getByRole('list', { name: 'Qué cambió' })).toHaveTextContent(
+      'Versión 3 · Cambia el límite de caja',
+    );
+    expect(within(box).getByRole('button', { name: 'Reiniciar con la nueva' })).toBeEnabled();
+    expect(within(box).getByRole('button', { name: 'Terminar con esta versión' })).toBeEnabled();
+    // The steps go on as usual.
+    expect(finishButton()).toBeEnabled();
+  });
+
+  test('"Terminar con esta versión" hides the notice and keeps the steps', async () => {
+    const user = userEvent.setup();
+    mocks.getExecution.mockResolvedValue(changed(false));
+    render(<ExecutionView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Terminar con esta versión' }));
+
+    expect(screen.queryByRole('alert', { name: /El procedimiento/ })).not.toBeInTheDocument();
+    expect(finishButton()).toBeEnabled();
+    expect(mocks.restartExecution).not.toHaveBeenCalled();
+  });
+
+  test('loading the execution again shows the notice again while it is pending', async () => {
+    const user = userEvent.setup();
+    mocks.getExecution.mockResolvedValue(changed(false));
+    const { unmount } = render(<ExecutionView />);
+    await user.click(await screen.findByRole('button', { name: 'Terminar con esta versión' }));
+    unmount();
+
+    render(<ExecutionView />);
+
+    expect(await notice()).toBeInTheDocument();
+  });
+
+  test('a version without a summary says so', async () => {
+    const withoutSummary = changed(false);
+    withoutSummary.versionChange!.changes[0].changeSummary = null;
+    mocks.getExecution.mockResolvedValue(withoutSummary);
+    render(<ExecutionView />);
+
+    expect(await notice()).toHaveTextContent('Versión 3 · Sin resumen del cambio');
+  });
+});
+
+describe('HU33: a critical change', () => {
+  test('only offers to restart, and the current step cannot be finished', async () => {
+    mocks.getExecution.mockResolvedValue(changed(true));
+    render(<ExecutionView />);
+
+    const box = await notice();
+    expect(box).toHaveAccessibleName('El procedimiento tuvo un cambio crítico');
+    expect(box).toHaveTextContent('Para seguir, reiniciá con la versión nueva: empieza desde el paso 1.');
+    expect(box).toHaveTextContent('Versión 3 · Cambio crítico · Cambia el límite de caja');
+    expect(within(box).getByRole('button', { name: 'Reiniciar con la nueva' })).toBeInTheDocument();
+    expect(
+      within(box).queryByRole('button', { name: 'Terminar con esta versión' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Terminé este paso' })).not.toBeInTheDocument();
+    expect(within(stepItem(2)).getByText('Para seguir, reiniciá con la versión nueva.')).toBeInTheDocument();
+  });
+
+  test('a 409 PROCEDURE_CHANGED_CRITICAL when finishing a step shows the notice it asks again for', async () => {
+    const user = userEvent.setup();
+    mocks.getExecution.mockResolvedValueOnce(execution(1)).mockResolvedValueOnce(changed(true));
+    mocks.completeStep.mockRejectedValue(
+      new ApiError(409, [], undefined, 'PROCEDURE_CHANGED_CRITICAL'),
+    );
+    render(<ExecutionView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Terminé este paso' }));
+
+    expect(
+      await screen.findByText(
+        'El procedimiento tuvo un cambio crítico. Para seguir, reiniciá con la versión nueva.',
+      ),
+    ).toBeInTheDocument();
+    expect(await notice()).toHaveAccessibleName('El procedimiento tuvo un cambio crítico');
+  });
+});
+
+describe('HU33: restarting', () => {
+  test('restarts once and opens the new execution', async () => {
+    const user = userEvent.setup();
+    mocks.getExecution.mockResolvedValue(changed(true));
+    let answer: (value: ExecutionResponse) => void = () => {};
+    mocks.restartExecution.mockReturnValue(
+      new Promise<ExecutionResponse>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    render(<ExecutionView />);
+
+    const button = await screen.findByRole('button', { name: 'Reiniciar con la nueva' });
+    await user.click(button);
+    await user.click(button);
+
+    expect(screen.getByRole('button', { name: 'Reiniciando…' })).toBeDisabled();
+    answer({ ...execution(0), id: NEW_ID });
+    await vi.waitFor(() => expect(mocks.push).toHaveBeenCalledWith(`/ejecuciones/${NEW_ID}`));
+    expect(mocks.restartExecution).toHaveBeenCalledTimes(1);
+    expect(mocks.restartExecution).toHaveBeenCalledWith(EXECUTION_ID);
+  });
+
+  test.each([
+    ['EXECUTION_RESTARTED', 'Esta ejecución ya se reinició con la versión nueva.'],
+    ['PROCEDURE_NOT_CHANGED', 'El procedimiento no cambió: podés seguir con esta ejecución.'],
+  ])('409 %s → a friendly notice, and the execution is asked again', async (reason, message) => {
+    const user = userEvent.setup();
+    mocks.getExecution.mockResolvedValueOnce(changed(false)).mockResolvedValueOnce(execution(1));
+    mocks.restartExecution.mockRejectedValue(new ApiError(409, [], undefined, reason));
+    render(<ExecutionView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Reiniciar con la nueva' }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(mocks.getExecution).toHaveBeenCalledTimes(2);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  test('404 → the whole screen says the execution was not found', async () => {
+    const user = userEvent.setup();
+    mocks.getExecution.mockResolvedValue(changed(true));
+    mocks.restartExecution.mockRejectedValue(new ApiError(404));
+    render(<ExecutionView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Reiniciar con la nueva' }));
+
+    expect(await screen.findByText('No se encontró la ejecución.')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Pasos del procedimiento' })).not.toBeInTheDocument();
+  });
+
+  test('503 → a notice, and "Reiniciar con la nueva" can be pressed again', async () => {
+    const user = userEvent.setup();
+    mocks.getExecution.mockResolvedValue(changed(true));
+    mocks.restartExecution.mockRejectedValue(new ApiError(503));
+    render(<ExecutionView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Reiniciar con la nueva' }));
+
+    expect(await screen.findByText(/no está disponible|Intentá de nuevo/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reiniciar con la nueva' })).toBeEnabled();
+  });
+});
+
+describe('HU33: a restarted or completed execution', () => {
+  test('a restarted one says so, with a way back, no button and no assistant', async () => {
+    mocks.getExecution.mockResolvedValue({
+      ...execution(1),
+      status: 'RESTARTED',
+      finishedAt: '2026-10-27T13:05:00.000Z',
+      currentStepId: null,
+    });
+    render(<ExecutionView />);
+
+    expect(
+      await screen.findByText('Esta ejecución se reinició con la versión nueva del procedimiento.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Elegí el procedimiento otra vez' })).toHaveAttribute(
+      'href',
+      '/ejecuciones',
+    );
+    expect(screen.queryByRole('button', { name: /Terminé/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Asistente' })).not.toBeInTheDocument();
+  });
+
+  test('a completed one shows no notice, whatever the API says', async () => {
+    mocks.getExecution.mockResolvedValue({ ...changed(true, STEPS.length), status: 'COMPLETED' });
+    render(<ExecutionView />);
+
+    await heading();
+    expect(screen.queryByRole('alert', { name: /El procedimiento/ })).not.toBeInTheDocument();
+  });
+
+  test('without versionChange in the answer there is no notice', async () => {
+    render(<ExecutionView />);
+
+    await heading();
+    expect(screen.queryByRole('alert', { name: /El procedimiento/ })).not.toBeInTheDocument();
+  });
 });

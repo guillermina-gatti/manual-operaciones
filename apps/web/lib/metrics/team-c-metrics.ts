@@ -1,25 +1,46 @@
-// Port to the metrics of pair C (contract 5): GET /api/metrics/assistant and
+// Port to the assistant and documents metrics (contract 5): GET /api/metrics/assistant and
 // GET /api/metrics/documents. The panel shows them next to the procedures metrics.
-// TODO(HU38): the shapes below are a proposal; agree them with pair C before the real adapter.
 import type { MetricsFilters } from '@/lib/api';
 
+// GET /api/metrics/assistant, copied from
+// apps/api/src/executions/metrics/dto/assistant-metrics.response.ts; keep them in sync.
+// Small talk (greetings and platform help) only counts in smallTalk: it is left out of every
+// other number. With an area, the questions of the people who belong to it today.
 export interface AssistantMetrics {
-  questions: number;
-  unanswered: number;
-  latencyP50Ms: number;
-  latencyP95Ms: number;
-  tokens: number;
-  costUsd: number;
+  filters: { areaId: string | null; from: string | null; to: string | null };
+  totals: {
+    questions: number; // = answered + noInfo + conflict + aiUnavailable
+    answered: number;
+    noInfo: number;
+    conflict: number;
+    aiUnavailable: number;
+    smallTalk: number;
+    latencyP50Ms: number | null; // null without any timed question
+    latencyP95Ms: number | null;
+    inputTokens: number;
+    outputTokens: number;
+    feedback: { useful: number; notUseful: number };
+  };
 }
 
+// GET /api/metrics/documents, copied from
+// apps/api/src/documents/metrics/dto/document-metrics.response.ts; keep them in sync.
+// Every total except uploaded is the current state: the dates only filter uploaded.
 export interface DocumentMetrics {
-  active: number;
-  consulted: number;
-  processingFailed: number;
+  filters: { areaId: string | null; from: string | null; to: string | null };
+  totals: {
+    active: number; // = upToDate + dueSoon + overdue
+    upToDate: number;
+    dueSoon: number;
+    overdue: number;
+    processingFailed: number; // the current version failed processing
+    uploaded: number; // uploaded between from and to
+  };
 }
 
-// null: pair C does not provide these metrics yet. The panel says so, without numbers.
+// Documents may still answer null: not available, and the panel says so, without numbers.
+// Errors are ApiError, like any other call to the API.
 export interface TeamCMetricsSource {
-  getAssistant(filters: MetricsFilters, signal?: AbortSignal): Promise<AssistantMetrics | null>;
+  getAssistant(filters: MetricsFilters, signal?: AbortSignal): Promise<AssistantMetrics>;
   getDocuments(filters: MetricsFilters, signal?: AbortSignal): Promise<DocumentMetrics | null>;
 }

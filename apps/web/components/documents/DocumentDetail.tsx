@@ -3,7 +3,9 @@
 // Detalle de un documento (F6, F8, F9; plan 002, sección 1). La API ya decide si el usuario puede verlo:
 // si no, responde 404, igual que si no existiera.
 // Spec 003 (plan 003, 6.1): solo el ADMIN ve las acciones del ciclo de vida, si el documento está
-// activo, y el historial de versiones, también si está archivado.
+// activo, y la sección "Versiones", también si está archivado. La sección va en la columna principal,
+// con "Subir versión nueva" adentro; la columna lateral queda solo para "Revisión" (plan 003, D11).
+// Arriba de todo, la ruta "Documentos › título" (plan 002, D9).
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -20,22 +22,22 @@ import {
 import { useSession } from '@/lib/session';
 import { ArchiveDialog } from './ArchiveDialog';
 import { ChangeAreasForm } from './ChangeAreasForm';
+import { DetailProcessingStatus } from './DetailProcessingStatus';
+import { DocumentDetailHeader } from './DocumentDetailHeader';
+import { DocumentsBreadcrumb } from './DocumentsBreadcrumb';
 import { DownloadButton } from './DownloadButton';
 import { MarkReviewedForm } from './MarkReviewedForm';
 import { NewVersionForm } from './NewVersionForm';
-import { ProcessingStatusBadge } from './ProcessingStatusBadge';
-import { ReviewStatusBadge } from './ReviewStatusBadge';
+import { ReviewCountdown } from './ReviewCountdown';
 import { VersionHistory } from './VersionHistory';
+import { CARD } from './design';
 import {
-  AreaChips,
-  BUTTON_DANGER,
-  BUTTON_SECONDARY,
-  CARD,
-  Card,
-  FileBadge,
-  FreshnessBar,
-  StatusDot,
-} from './design';
+  AttachmentStrip,
+  LIST_BUTTON_DANGER,
+  LIST_BUTTON_SECONDARY,
+  LIST_PANEL,
+  META_LABEL,
+} from './list-design';
 
 type Panel = 'areas' | 'version';
 
@@ -44,11 +46,24 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NOT_FOUND = describeApiError(new ApiError(404), 'detail').message;
 
+// Mientras carga, o si falla, la ruta tiene solo "Documentos": se puede volver igual.
 const LOADING = (
-  <ScreenState kind="loading" label="Cargando el documento…">
-    <DocumentDetailSkeleton />
-  </ScreenState>
+  <>
+    <DocumentsBreadcrumb />
+    <ScreenState kind="loading" label="Cargando el documento…">
+      <DocumentDetailSkeleton />
+    </ScreenState>
+  </>
 );
+
+function withBreadcrumb(state: ReactNode) {
+  return (
+    <>
+      <DocumentsBreadcrumb />
+      {state}
+    </>
+  );
+}
 
 export function DocumentDetail() {
   const { user, status } = useSession();
@@ -67,17 +82,19 @@ export function DocumentDetail() {
 
   if (status === 'loading') return LOADING;
   if (status === 'disabled') {
-    return <ScreenState kind="error" message={describeApiError(new ApiError(401), 'detail').message} />;
+    return withBreadcrumb(
+      <ScreenState kind="error" message={describeApiError(new ApiError(401), 'detail').message} />,
+    );
   }
-  if (!user) return <ScreenState kind="empty" message="Elegí un usuario de prueba" />;
-  if (!validId) return <ScreenState kind="error" message={NOT_FOUND} />;
+  if (!user) return withBreadcrumb(<ScreenState kind="empty" message="Elegí un usuario de prueba" />);
+  if (!validId) return withBreadcrumb(<ScreenState kind="error" message={NOT_FOUND} />);
 
   if (document.status === 'loading' || document.status === 'idle') return LOADING;
 
   if (document.status === 'error') {
     const { message, canRetry } = describeApiError(document.error, 'detail');
-    return (
-      <ScreenState kind="error" message={message} onRetry={canRetry ? document.reload : undefined} />
+    return withBreadcrumb(
+      <ScreenState kind="error" message={message} onRetry={canRetry ? document.reload : undefined} />,
     );
   }
 
@@ -92,7 +109,8 @@ export function DocumentDetail() {
   const canModify = isAdmin && !archived;
   // Spec 005 (R6, R9): la revisión, para quien recibe `review` y si está activo.
   const canReview = doc.review !== undefined && !archived;
-  const hasSideColumn = canReview || isAdmin;
+  // La columna lateral es solo "Revisión" (plan 003, D11).
+  const hasSideColumn = canReview;
 
   // Después de una acción correcta: se cierra lo abierto, se avisa y se vuelve a pedir el detalle.
   function finish(message: string) {
@@ -108,6 +126,8 @@ export function DocumentDetail() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <DocumentsBreadcrumb current={doc.title} />
+
       {notice && (
         <p
           role="status"
@@ -117,6 +137,15 @@ export function DocumentDetail() {
         </p>
       )}
 
+      {/* El encabezado, como la tarjeta del listado: la hoja del tipo, el título, la versión, las
+          marcas, "Actualizado hace X" y las áreas; "Descargar" (un único botón) alineado con el título.
+          El enlace se pide en cada clic, nunca al cargar el detalle (F8). */}
+      <DocumentDetailHeader
+        document={doc}
+        isAdmin={isAdmin}
+        action={<DownloadButton documentId={doc.id} />}
+      />
+
       {/* Dos columnas desde 1024 px; debajo se apilan (skill pispiar-design, responsive). Sin nada
           para la columna lateral, el documento ocupa todo el ancho. */}
       <div
@@ -125,32 +154,22 @@ export function DocumentDetail() {
         }`}
       >
         <article className="flex min-w-0 flex-col gap-6">
-          <Card className="flex min-w-0 flex-col gap-6">
-            <header className="flex min-w-0 flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <h1 className="min-w-0 break-words text-3xl font-extrabold tracking-[-0.02em] text-bosque sm:text-[40px] sm:leading-tight">
-                  {doc.title}
-                </h1>
-                {isAdmin && archived && <StatusDot tone="gris">Archivado</StatusDot>}
-                {/* Spec 005 (F1): solo llega `review` al ADMIN y al responsable (R4). */}
-                <ReviewStatusBadge status={doc.review?.status} />
-              </div>
-              {isAdmin && archived && doc.archivedAt && (
-                <p className="text-sm text-texto-suave">
-                  Archivado desde {formatDay(doc.archivedAt)}
-                </p>
-              )}
-              {doc.description && (
-                <p className="break-words text-lg text-texto-suave">{doc.description}</p>
-              )}
-            </header>
+          <div className={`${LIST_PANEL} flex min-w-0 flex-col gap-6`}>
+            {/* El archivo vigente como un adjunto: nombre (completo en title) y tamaño. */}
+            <AttachmentStrip
+              fileName={version.originalFileName}
+              size={formatSize(version.sizeBytes)}
+            />
 
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[auto_1fr] sm:items-baseline">
-              <Field label="Áreas">
-                <AreaChips areas={doc.areas} />
-              </Field>
+            {/* Los datos como en la tarjeta del listado: etiqueta chica sobre el valor. Las áreas van
+                en el encabezado. */}
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Responsable">{formatPerson(doc.owner)}</Field>
-              <Field label="Fecha de revisión">{formatReviewDate(doc.reviewDate)}</Field>
+              {/* La fecha de revisión va en el panel "Revisión" cuando está; quien no lo ve (no recibe
+                  `review`, o el documento está archivado) la sigue viendo acá. */}
+              {!canReview && (
+                <Field label="Fecha de revisión">{formatReviewDate(doc.reviewDate)}</Field>
+              )}
               {/* R11: cuándo y quién hizo la última revisión; nunca revisado, no se muestra. */}
               {lastReview && (
                 <Field label="Última revisión">
@@ -158,56 +177,39 @@ export function DocumentDetail() {
                 </Field>
               )}
               <Field label="Cargado">{formatCreatedAt(doc.createdAt)}</Field>
-              <Field label="Archivo">
-                <span className="inline-flex min-w-0 items-center gap-2">
-                  <FileBadge fileName={version.originalFileName} />
-                  <span className="break-all">{version.originalFileName}</span>
-                </span>
-              </Field>
-              <Field label="Tamaño">{formatSize(version.sizeBytes)}</Field>
               {/* Solo el ADMIN ve el estado del procesamiento (F6, P4). */}
               {isAdmin && (
                 <Field label="Procesamiento">
-                  <ProcessingStatusBadge status={version.processingStatus} />
+                  <DetailProcessingStatus status={version.processingStatus} />
                 </Field>
               )}
             </dl>
 
-            {/* El enlace se pide en cada clic, nunca al cargar el detalle (F8). */}
-            <div className="flex flex-wrap items-start gap-3">
-              <DownloadButton documentId={doc.id} />
-              {canModify && (
-                <>
-                  <button
-                    type="button"
-                    className={BUTTON_SECONDARY}
-                    aria-expanded={panel === 'areas'}
-                    onClick={() => togglePanel('areas')}
-                  >
-                    Cambiar áreas
-                  </button>
-                  <button
-                    type="button"
-                    className={BUTTON_SECONDARY}
-                    aria-expanded={panel === 'version'}
-                    onClick={() => togglePanel('version')}
-                  >
-                    Subir versión nueva
-                  </button>
-                  <button
-                    type="button"
-                    className={BUTTON_DANGER}
-                    onClick={() => {
-                      setNotice(null);
-                      setArchiveOpen(true);
-                    }}
-                  >
-                    Archivar
-                  </button>
-                </>
-              )}
-            </div>
-          </Card>
+            {/* Las acciones del ADMIN al pie; "Archivar" aparte, lejos de las de uso común. "Subir
+                versión nueva" está en la sección "Versiones". */}
+            {canModify && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-borde pt-6">
+                <button
+                  type="button"
+                  className={LIST_BUTTON_SECONDARY}
+                  aria-expanded={panel === 'areas'}
+                  onClick={() => togglePanel('areas')}
+                >
+                  Cambiar áreas
+                </button>
+                <button
+                  type="button"
+                  className={`${LIST_BUTTON_DANGER} sm:ml-auto`}
+                  onClick={() => {
+                    setNotice(null);
+                    setArchiveOpen(true);
+                  }}
+                >
+                  Archivar
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* D8: los paneles van dentro del detalle, de a uno, y ante un error quedan abiertos. */}
           {canModify && panel === 'areas' && (
@@ -219,41 +221,50 @@ export function DocumentDetail() {
               />
             </ActionPanel>
           )}
-          {canModify && panel === 'version' && (
-            <ActionPanel title="Subir versión nueva">
-              <NewVersionForm
-                document={doc}
-                onDone={(updated: DocumentResponse) =>
-                  finish(`Versión ${updated.currentVersion.versionNumber} cargada`)
-                }
-                onCancel={() => setPanel(null)}
-              />
-            </ActionPanel>
+          {/* R12: "Versiones" solo para el ADMIN; los demás roles no la ven ni piden el historial.
+              Con el documento activo, "Subir versión nueva" abre su formulario adentro (D8: sigue
+              siendo uno de los paneles, de a uno por vez). */}
+          {isAdmin && (
+            <VersionHistory
+              documentId={doc.id}
+              refreshKey={`${version.id}:${doc.status}`}
+              upload={
+                canModify
+                  ? {
+                      open: panel === 'version',
+                      onToggle: () => togglePanel('version'),
+                      form: (
+                        <NewVersionForm
+                          document={doc}
+                          onDone={(updated: DocumentResponse) =>
+                            finish(`Versión ${updated.currentVersion.versionNumber} cargada`)
+                          }
+                          onCancel={() => setPanel(null)}
+                        />
+                      ),
+                    }
+                  : undefined
+              }
+            />
           )}
         </article>
 
-        {/* La columna lateral: revisión e historial. */}
+        {/* La columna lateral: solo la revisión. */}
         {hasSideColumn && (
           <div className="flex min-w-0 flex-col gap-6">
             {/* Spec 005 (F4, D17): "Marcar como revisado", siempre visible, para quien recibe `review`
                 (ADMIN o responsable, R6) y solo si el documento está activo (R9). */}
             {canReview && doc.review && (
               <ActionPanel title="Revisión">
-                {/* El color sale del estado que decide la API; no se recalcula. */}
-                {doc.review.status && (
-                  <FreshnessBar
-                    status={doc.review.status}
-                    reviewDate={doc.reviewDate}
-                    since={doc.review.lastReviewedAt ?? doc.createdAt}
-                  />
-                )}
+                {/* La revisión en un solo lugar: la próxima fecha, cuánto falta y la barra. El color
+                    sale del estado que decide la API; no se recalcula. */}
+                <ReviewCountdown
+                  status={doc.review.status}
+                  reviewDate={doc.reviewDate}
+                  since={doc.review.lastReviewedAt ?? doc.createdAt}
+                />
                 <MarkReviewedForm documentId={doc.id} onDone={() => finish('Revisión registrada')} />
               </ActionPanel>
-            )}
-
-            {/* R12: el historial solo para el ADMIN; los demás roles no lo ven ni lo piden. */}
-            {isAdmin && (
-              <VersionHistory documentId={doc.id} refreshKey={`${version.id}:${doc.status}`} />
             )}
           </div>
         )}
@@ -271,33 +282,53 @@ export function DocumentDetail() {
   );
 }
 
-// Un panel de acción como tarjeta; en el celular ocupa todo el ancho (F10).
+// Un panel de acción como tarjeta; en el celular ocupa todo el ancho (F10). Es un contenedor
+// (@container): lo de adentro se acomoda según el ancho del panel, no el de la ventana.
 function ActionPanel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card as="section" aria-label={title} className="flex min-w-0 flex-col gap-6">
+    <section aria-label={title} className={`${LIST_PANEL} @container flex min-w-0 flex-col gap-6`}>
       <h2 className="text-xl font-bold">{title}</h2>
       {children}
-    </Card>
+    </section>
   );
 }
 
+// Un dato: la etiqueta chica arriba y el valor debajo.
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <>
-      <dt className="text-sm text-texto-suave">{label}</dt>
+    <div className="flex min-w-0 flex-col gap-1">
+      <dt className={META_LABEL}>{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
-    </>
+    </div>
   );
 }
 
+// Copia la forma del detalle (la hoja y el título arriba, el adjunto y los datos en grilla), así no
+// salta.
 export function DocumentDetailSkeleton() {
   return (
-    <div aria-hidden="true" className={`${CARD} flex animate-pulse flex-col gap-4 p-8`}>
-      <div className="h-10 w-2/3 rounded-lg bg-borde" />
-      <div className="h-4 w-full rounded-lg bg-borde" />
-      <div className="h-4 w-1/2 rounded-lg bg-borde" />
-      <div className="h-4 w-1/3 rounded-lg bg-borde" />
-      <div className="h-12 w-36 rounded-xl bg-borde" />
+    <div aria-hidden="true" className="flex animate-pulse flex-col gap-6 motion-reduce:animate-none">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-1 items-start gap-4">
+          <div className="h-16 w-14 shrink-0 rounded-lg bg-borde" />
+          <div className="flex flex-1 flex-col gap-3">
+            <div className="h-10 w-2/3 rounded-lg bg-borde" />
+            <div className="h-5 w-1/2 rounded-lg bg-borde" />
+          </div>
+        </div>
+        <div className="h-12 w-36 rounded-xl bg-borde" />
+      </div>
+      <div className={`${CARD} flex flex-col gap-6 p-6`}>
+        <div className="h-12 w-full rounded-xl bg-borde" />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index} className="flex flex-col gap-2">
+              <div className="h-3 w-1/3 rounded bg-borde" />
+              <div className="h-4 w-2/3 rounded-lg bg-borde" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

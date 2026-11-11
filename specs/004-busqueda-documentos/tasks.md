@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (25/10/2026):** T01 a T18 y T20 **hechas** (T01 a T08 son el backend; T09 a T15, las pantallas; T16 a T18, Playwright; T20, la [verificación](#verificación)). T19 está **bloqueada** por el worker de Guille.
+- **Estado (25/10/2026):** T01 a T18 y T20 **hechas** (T01 a T08 son el backend; T09 a T15, las pantallas; T16 a T18, Playwright; T20, la [verificación](#verificación)). T19 estaba **bloqueada** por el worker de Guille. **Actualizado el 06/11/2026:** T19 está desbloqueada, con condiciones (embeddings reales de Gemini, un PDF real y el caso de la tilde; ver la tarea).
 
 Convenciones:
 
@@ -363,11 +363,15 @@ Convenciones:
 - **Commit:** `test(web): probar la búsqueda por título contra la API real`
 - **Estado:** hecha. Los 10 tests de integración (2 de esta spec, 8 de las specs 002 y 003) pasan con la API levantada contra `manual_test`. Los documentos se cargan por la API a través del rewrite, como en T28 de la spec 003, y se buscan desde la caja. La marca de la corrida va sin guiones (`<ms>x<hex>`). Con la ruta renombrada a `buscar` en el controlador (el pedido cae en `:id` y da 400), fallan los dos tests; restaurada, pasan.
 
-## Tareas bloqueadas
+## Tareas que estaban bloqueadas
 
-### T19 · Búsqueda por contenido de punta a punta — BLOQUEADA
+### T19 · Búsqueda por contenido de punta a punta — DESBLOQUEADA, con condiciones
 
-- **Bloqueada por:** el worker de Guille todavía no existe (Q1 del plan 003). Sin worker no hay fragmentos, y la web no tiene acceso a la base para insertarlos.
+- **Desbloqueada (06/11/2026):** el worker de Guille está en `develop` (corre en el mismo proceso de la API y se apaga con `PROCESSING_WORKER_ENABLED=false`) y cumple Q1 del plan 003. Quedan tres condiciones para hacerla:
+  1. **Embeddings reales:** el worker usa Gemini (`processing.module.ts`) y no hay un proveedor falso que se pueda elegir por configuración, así que la prueba necesita `GOOGLE_GENERATIVE_AI_API_KEY` en el `.env` local, gasta cuota y no puede correr en CI sin la clave.
+  2. **Un PDF real:** los de `e2e/support/files.ts` son falsos (el worker los marca `FAILED` con "Invalid PDF structure"). Hay un generador de PDF con texto por página en `apps/api/src/processing/pdf-fixture.ts`, pero es solo ASCII.
+  3. **E3 con tilde:** por eso, "Instrucción" no se puede escribir en ese PDF; E3 tiene que ir con un `.txt` o `.md`, o hay que cambiar el escenario.
+- **Estaba bloqueada por:** el worker de Guille todavía no existía (Q1 del plan 003). Sin worker no hay fragmentos, y la web no tiene acceso a la base para insertarlos.
 - **Qué hace:** prueba de Playwright contra la API real **con el worker real**: el ADMIN carga un PDF cuyo contenido incluye "cierre de caja diario" en la página 4, espera a que el procesamiento termine (`READY`) y lo busca desde la caja. Además, sube una versión nueva sin esa frase y comprueba que deja de encontrarse.
 - **Cubre:** E1, E3 y E6 de punta a punta; R2, R5, R8.
 - **Archivos:** `e2e/integracion/busqueda.spec.ts`, `e2e/support/files.ts` (un PDF con texto en una página conocida).
@@ -377,6 +381,21 @@ Convenciones:
   - **E6:** después de la versión nueva, la frase vieja ya no se encuentra.
 - **Depende de:** T18 y el worker de Guille
 - **Commit:** `test(web): probar la búsqueda por contenido con el procesamiento real`
+
+## Ajuste del 11/11/2026
+
+### T21 · Resultados aproximados (R13, F8; plan 3.5, D17)
+
+- **Qué hace:** si ningún documento tiene todas las palabras, una segunda consulta con cualquiera de ellas, ordenada por cuántas cubren, con `approximate: true`; la pantalla lo avisa en una línea.
+- **Archivos:**
+  - API: `src/documents/prisma-documents.repository.ts` (`searchRankingSql(params, mode)` y `search`), `documents.repository.ts` (`SearchPage.approximate`), `document-query.service.ts` (`DocumentSearchResponse.approximate`), `documents.controller.ts` (Swagger) y sus tests;
+  - web: `lib/api/documents.ts`, `components/documents/SearchResults.tsx`, `e2e/support/mock-api.ts` (`searchResponse` suma `approximate`) y sus tests.
+- **Verificación:**
+  - **API, unitarios:** `document-query.service.spec.ts`, el servicio pasa `approximate` y el orden del repositorio.
+  - **API, integración:** `search.repository.e2e-spec.ts` › "resultados aproximados (R13)" (13 tests nuevos, más el `EXPLAIN` del OR en "índice"); D16, "de la para" y R10 suman `approximate`. `search.e2e-spec.ts` › R13 (los auriculares y `/api/docs`) y E6 ajustado.
+  - **Web:** `SearchResults.test.tsx` › F8 (3 tests).
+  - **Prueba de que no cambió la búsqueda normal:** el SQL de `searchRankingSql` con `'all'` se comparó byte por byte con el de antes del cambio, con sus valores, y es idéntico.
+- **Estado:** hecha (11/11/2026). API: lint y `tsc` sin errores; unitarios de documentos, 33 suites y 522 tests; integración de documentos, 16 suites y 312 tests, con `manual_test` reseteada con la confirmación del usuario. Falla 1, `assignments.e2e-spec.ts` › E22 (spec 008, el listado): también falla en `HEAD` sin estos cambios, así que no es de esta tarea. Web: lint y `tsc` sin errores; tests de documentos, 48 archivos y 579 tests. **Mutación de control:** sin el orden por palabras cubiertas, falla "cubrir más palabras pesa más que una palabra en el título o una palabra muy repetida". Ese test se sumó porque los demás no la detectaban. Playwright no se corrió (el aviso está cubierto en Vitest).
 
 ## Verificación final
 
@@ -463,7 +482,7 @@ Además, en T17 se rompió una regla por escenario de Playwright y en T18 se ren
 
 ### Pendientes
 
-- **T19 · Búsqueda por contenido de punta a punta: bloqueada** por el worker de Guille. Cuando se desbloquee, se hace T19 y se vuelve a correr esta verificación.
+- **T19 · Búsqueda por contenido de punta a punta: desbloqueada el 06/11/2026, con condiciones** (ver T19). Cuando se haga, se vuelve a correr esta verificación.
 - **Avisar a Guille del índice nuevo** (D15, nota de T01), y al equipo antes de mergear (T01 toca las migraciones y `schema.prisma`).
 - **Paso 6 de T20 no hecho a mano:** el ancho de 375 px no se revisó. `busqueda.spec.ts` › F7 comprueba que no haya desplazamiento horizontal en escritorio y en el celular de Playwright (Pixel 7, 412 px).
 - **Q3 del plan** (permiso para `CREATE EXTENSION unaccent` en producción): sigue abierta; es para el deploy y no bloquea.
@@ -490,6 +509,6 @@ T15 ◄─ T13, T14
 Playwright
 T16 ◄─ T15 · T17 ◄─ T16 · T18 ◄─ T17
 
-BLOQUEADA: T19 ◄─ T18 y el worker de Guille
+T19 ◄─ T18 y el worker de Guille (desbloqueada el 06/11/2026, con condiciones)
 T20 ◄─ T01 a T18 (se vuelve a correr cuando se desbloquee T19)
 ```

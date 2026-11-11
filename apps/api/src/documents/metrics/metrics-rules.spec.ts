@@ -1,6 +1,10 @@
 /* Contrato con las reglas de métricas de la pareja B (spec 007, D3; T02). Importa solo de
 ./metrics-rules: si la pareja B cambia una de estas reglas, falla acá y no en producción. */
+import { InMemoryAreasDirectory } from '../adapters/in-memory-areas-directory';
+import { InMemoryUsersDirectory } from '../adapters/in-memory-users-directory';
+import type { DirectoryUser } from '../ports/users-directory';
 import {
+  activeAreaIdsOf,
   documentMetricsAreaIds,
   isCalendarDate,
   metricsScope,
@@ -9,6 +13,7 @@ import {
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
 const OPERACIONES = '0a000000-0000-4000-8000-000000000002';
+const INACTIVA = '0a000000-0000-4000-8000-000000000003';
 const BUENOS_AIRES = 'America/Argentina/Buenos_Aires';
 
 describe('metricsScope (R2, R3)', () => {
@@ -102,5 +107,44 @@ describe('documentMetricsAreaIds (R2)', () => {
       VENTAS,
     ]);
     expect(documentMetricsAreaIds({ all: false, areaIds: [] })).toEqual([]);
+  });
+});
+
+describe('activeAreaIdsOf (R2, R3)', () => {
+  const areas = new InMemoryAreasDirectory([
+    { id: VENTAS, name: 'Ventas', isActive: true },
+    { id: INACTIVA, name: 'Inactiva', isActive: false },
+  ]);
+  const supervisor = (
+    overrides: Partial<DirectoryUser> = {},
+  ): DirectoryUser => ({
+    id: '0b000000-0000-4000-8000-000000000010',
+    name: 'Supervisor',
+    role: 'SUPERVISOR',
+    areaIds: [VENTAS, INACTIVA],
+    isActive: true,
+    ...overrides,
+  });
+  const areasOf = (user: DirectoryUser) =>
+    activeAreaIdsOf(new InMemoryUsersDirectory([user]), areas, user.id);
+
+  it('solo las áreas activas del usuario', async () => {
+    await expect(areasOf(supervisor())).resolves.toEqual([VENTAS]);
+  });
+
+  it('un área que el directorio de áreas no conoce no cuenta', async () => {
+    await expect(
+      areasOf(supervisor({ areaIds: [VENTAS, OPERACIONES] })),
+    ).resolves.toEqual([VENTAS]);
+  });
+
+  it('un usuario inactivo no tiene áreas', async () => {
+    await expect(areasOf(supervisor({ isActive: false }))).resolves.toEqual([]);
+  });
+
+  it('un usuario que el directorio no conoce no tiene áreas', async () => {
+    await expect(
+      activeAreaIdsOf(new InMemoryUsersDirectory([]), areas, VENTAS),
+    ).resolves.toEqual([]);
   });
 });

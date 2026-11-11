@@ -120,6 +120,13 @@ export abstract class ProceduresRepository {
   // The procedure with its areas and versions, or null.
   abstract findById(id: string): Promise<ProcedureRecord | null>;
 
+  // Replaces the whole set of areas of the procedure (R11), in one transaction with the procedure
+  // row locked (D15). Returns the areas that remain, by id, or null if the procedure does not exist.
+  abstract setAreas(
+    procedureId: string,
+    areaIds: string[],
+  ): Promise<string[] | null>;
+
   // Creates the next version as a DRAFT, copying title, description and steps (with new ids) from the
   // current PUBLISHED one. The procedure row is locked, so two requests run one after the other.
   // null if the procedure does not exist. Throws DraftAlreadyExistsError or NoPublishedVersionError.

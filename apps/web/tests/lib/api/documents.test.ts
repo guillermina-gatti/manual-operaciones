@@ -285,6 +285,7 @@ describe('searchDocuments', () => {
       total: 1,
       page: 1,
       limit: 20,
+      approximate: false,
     };
     const { api } = fakeClient(response);
 

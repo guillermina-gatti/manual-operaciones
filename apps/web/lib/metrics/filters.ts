@@ -1,9 +1,9 @@
 // Filters of the metrics panel (HU38). They live in the address (?area=…&desde=…&hasta=…), so
-// a filtered view can be shared and "back" works. Without dates, the last 30 days.
+// a filtered view can be shared and "back" works. Without dates, this month up to today.
 import { COMPANY_TIME_ZONE } from '@/lib/documents/format';
+import { displayAreaName } from '@/lib/directory/areas-directory';
 import type { Area } from '@/lib/directory';
 
-export const DEFAULT_PERIOD_DAYS = 30;
 export const METRICS_PATH = '/metricas';
 
 export interface PanelFilters {
@@ -15,6 +15,9 @@ export interface PanelFilters {
 export interface AreaOption {
   value: string; // '' means no area filter
   label: string;
+  // Gray text on the right: "12 áreas" for the first option, "3 procedimientos" or "Sin datos"
+  // for an area. Missing when it is not known.
+  hint?: string;
 }
 
 interface SearchParamsLike {
@@ -23,7 +26,6 @@ interface SearchParamsLike {
 
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // en-CA formats dates as YYYY-MM-DD.
 const dayFormat = new Intl.DateTimeFormat('en-CA', {
@@ -49,14 +51,53 @@ export function todayInCompany(now: Date = new Date()): string {
   return dayFormat.format(now);
 }
 
-export function addDays(day: string, days: number): string {
-  const [year, month, date] = day.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, date) + days * DAY_MS).toISOString().slice(0, 10);
+export interface Period {
+  from: string;
+  to: string;
 }
 
-// The last 30 days, today included.
-export function defaultPeriod(today: string): { from: string; to: string } {
-  return { from: addDays(today, -(DEFAULT_PERIOD_DAYS - 1)), to: today };
+// The same day n months before or after; a day the month does not have becomes its last one
+// (31/05 minus 3 months is 28/02).
+export function addMonths(day: string, months: number): string {
+  const [year, month, date] = day.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  target.setUTCDate(Math.min(date, lastDay));
+  return target.toISOString().slice(0, 10);
+}
+
+// The quick periods of the panel, always up to today.
+export type QuickPeriod = 'today' | 'month' | 'quarter';
+
+export const QUICK_PERIODS: readonly { id: QuickPeriod; label: string }[] = [
+  { id: 'today', label: 'Hoy' },
+  { id: 'month', label: 'Este mes' },
+  { id: 'quarter', label: 'Últimos 3 meses' },
+];
+
+export function quickPeriodRange(period: QuickPeriod, today: string): Period {
+  if (period === 'today') return { from: today, to: today };
+  if (period === 'month') return { from: `${today.slice(0, 8)}01`, to: today };
+  return { from: addMonths(today, -3), to: today };
+}
+
+// The quick period that gives exactly these dates, or null if they were changed by hand. On
+// the 1st of the month "Este mes" and "Hoy" are the same range: "Este mes" wins, as the default.
+export function matchingQuickPeriod(from: string, to: string, today: string): QuickPeriod | null {
+  const order: QuickPeriod[] = ['month', 'today', 'quarter'];
+  return (
+    order.find((period) => {
+      const range = quickPeriodRange(period, today);
+      return range.from === from && range.to === to;
+    }) ?? null
+  );
+}
+
+// Without dates in the address: this month, today included.
+export function defaultPeriod(today: string): Period {
+  return quickPeriodRange('month', today);
 }
 
 // A value written by hand that is not valid is ignored: the default takes its place.
@@ -72,17 +113,22 @@ export function parseMetricsFilters(params: SearchParamsLike, today: string): Pa
   };
 }
 
-export function metricsHref({ areaId, from, to }: PanelFilters): string {
+// The same filters serve another page (the employee's own activity): `path` is where they go.
+export function metricsHref(
+  { areaId, from, to }: PanelFilters,
+  path: string = METRICS_PATH,
+): string {
   const params = new URLSearchParams();
   if (areaId) params.set('area', areaId);
   params.set('desde', from);
   params.set('hasta', to);
-  return `${METRICS_PATH}?${params.toString()}`;
+  return `${path}?${params.toString()}`;
 }
 
-// ADMIN: "Todas" and every area. SUPERVISOR: "Todas mis áreas" and only theirs (filterable,
+// ADMIN: "Todas las áreas" and every area. SUPERVISOR: "Todas mis áreas" and only theirs (filterable,
 // from the last answer of the API; unknown while it loads). The selected area always stays
-// in the list, so the selector never shows a value it does not have.
+// in the list, so the selector never shows a value it does not have. An inactive area keeps
+// its "(inactiva)" label, as everywhere else.
 export function areaOptions(
   isAdmin: boolean,
   areas: Area[],
@@ -92,9 +138,44 @@ export function areaOptions(
   const visible = isAdmin
     ? areas
     : areas.filter((area) => filterable?.includes(area.id) || area.id === selected);
-  const options = visible.map((area) => ({ value: area.id, label: area.name }));
+  const options = visible.map((area) => ({ value: area.id, label: displayAreaName(area) }));
   if (selected && !options.some((option) => option.value === selected)) {
     options.push({ value: selected, label: 'Área elegida' });
   }
-  return [{ value: '', label: isAdmin ? 'Todas' : 'Todas mis áreas' }, ...options];
+  return [{ value: '', label: isAdmin ? 'Todas las áreas' : 'Todas mis áreas' }, ...options];
+}
+
+const plural = (count: number, one: string, many: string) =>
+  count === 1 ? `1 ${one}` : `${count} ${many}`;
+
+// The gray hints of the selector. The first option says how many areas there are (nothing if
+// none is known yet); each area, how many procedures it has in the period, or nothing while that
+// is not known (counts null).
+export function withAreaHints(
+  options: AreaOption[],
+  counts: ReadonlyMap<string, number> | null,
+): AreaOption[] {
+  const areaCount = options.filter((option) => option.value !== '').length;
+  return options.map((option) => {
+    if (option.value === '') {
+      return areaCount === 0 ? option : { ...option, hint: plural(areaCount, 'área', 'áreas') };
+    }
+    if (!counts) return option;
+    const count = counts.get(option.value) ?? 0;
+    return {
+      ...option,
+      hint: count === 0 ? 'Sin datos' : plural(count, 'procedimiento', 'procedimientos'),
+    };
+  });
+}
+
+// Without case or accents, by any part of the name: "operac" and "OPERACIÓN" find "Operaciones".
+const fold = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+export function matchesAreaSearch(label: string, search: string): boolean {
+  return fold(label).includes(fold(search.trim()));
 }

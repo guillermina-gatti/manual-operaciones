@@ -25,6 +25,9 @@ export interface DocumentVersionSummary {
   originalFileName: string;
   mimeType: string;
   processingStatus: ProcessingStatus;
+  // Cuándo se subió la versión vigente ("actualizado hace X"). La API lo manda siempre; es opcional
+  // para los datos de prueba anteriores (sin él, la web usa el createdAt del documento).
+  createdAt?: string;
 }
 
 // Spec 008 (R1): una persona o un área referenciada por un documento, con su nombre y su estado
@@ -149,6 +152,9 @@ export interface DocumentSearchResponse {
   total: number;
   page: number;
   limit: number;
+  // Spec 004 (R13, 11/11/2026): true si ningún documento tenía todas las palabras y estos tienen
+  // alguna, primero los que cubren más. La pantalla lo avisa (F8).
+  approximate: boolean;
 }
 
 // Documentos por página del listado (F7) y de la búsqueda (R10).

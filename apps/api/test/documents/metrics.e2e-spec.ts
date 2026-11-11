@@ -301,6 +301,50 @@ describe('Métricas de documentos (integración)', () => {
     });
   });
 
+  // Un área desactivada en la base de tests, borrada al terminar junto con sus documentos.
+  const withInactiveArea = async (run: (areaId: string) => Promise<void>) => {
+    const areaId = randomUUID();
+    await t.prisma.area.create({
+      data: { id: areaId, name: `Inactiva ${areaId}`, isActive: false },
+    });
+    try {
+      await run(areaId);
+    } finally {
+      await cleanDocuments(t.prisma);
+      await t.prisma.userArea.deleteMany({ where: { areaId } });
+      await t.prisma.area.delete({ where: { id: areaId } });
+    }
+  };
+
+  it('R2, R3: el SUPERVISOR no cuenta ni puede pedir un área suya inactiva', async () => {
+    await withInactiveArea(async (inactiveArea) => {
+      await seedDocument(t.prisma, { areaIds: [VENTAS] });
+      await seedDocument(t.prisma, { areaIds: [inactiveArea] });
+
+      await withSupervisor([VENTAS, inactiveArea], async (_id, headers) => {
+        expect((await metrics(headers)).totals.active).toBe(1);
+
+        const response = await get(`?areaId=${inactiveArea}`)
+          .set(headers)
+          .expect(404);
+        expect(response.body.message).toBe('No se encontró el área');
+      });
+    });
+  });
+
+  it('R2: un SUPERVISOR desactivado ya no ve métricas (el guard responde 401)', async () => {
+    await seedE1();
+
+    await withSupervisor([VENTAS], async (id, headers) => {
+      expect((await metrics(headers)).totals.active).toBe(2);
+
+      // Con el mismo token, se lo desactiva en la base.
+      await t.prisma.user.update({ where: { id }, data: { isActive: false } });
+
+      await get().set(headers).expect(401);
+    });
+  });
+
   it('R5: los bordes de "por vencer", con hoy en hora de Argentina', async () => {
     for (const reviewDate of [
       '2026-11-04',

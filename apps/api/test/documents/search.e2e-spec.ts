@@ -24,6 +24,7 @@ interface SearchBody {
   total: number;
   page: number;
   limit: number;
+  approximate: boolean;
 }
 
 const uniquePdf = () =>
@@ -92,7 +93,7 @@ describe('GET /api/documents/search (integración)', () => {
     const res = await search(admin, { q: 'caja' });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20 });
+    expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20, approximate: false });
   });
 
   it('E1: encuentra por contenido, con las palabras marcadas y la página', async () => {
@@ -184,8 +185,15 @@ describe('GET /api/documents/search (integración)', () => {
       contents: ['La tarifa nueva del servicio'],
     });
 
-    expect((await found(admin, 'tarifa vieja')).total).toBe(0);
-    expect(ids(await found(admin, 'tarifa nueva'))).toEqual([document.id]);
+    // R13 (11/11/2026): sin la frase vieja, el documento aparece como aproximado por "tarifa", con el
+    // fragmento de la versión nueva: el texto reemplazado nunca llega.
+    const vieja = await found(admin, 'tarifa vieja');
+    expect(vieja.approximate).toBe(true);
+    expect(fullText(vieja)).toBe('La tarifa nueva del servicio');
+    expect(JSON.stringify(vieja)).not.toContain('vieja del servicio');
+    const nueva = await found(admin, 'tarifa nueva');
+    expect(ids(nueva)).toEqual([document.id]);
+    expect(nueva.approximate).toBe(false);
   });
 
   it('E7: un documento archivado no se encuentra, ni por contenido ni por título', async () => {
@@ -255,7 +263,7 @@ describe('GET /api/documents/search (integración)', () => {
     const res = await search(empleadoVentas, { q: 'xyzxyz' });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20 });
+    expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20, approximate: false });
   });
 
   it('E12: el HTML del fragmento llega como texto, sin etiquetas agregadas', async () => {
@@ -276,5 +284,33 @@ describe('GET /api/documents/search (integración)', () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({ total: 3, page: 2, limit: 2 });
     expect(body.data).toHaveLength(1);
+  });
+
+  // Spec 004 (R13, 11/11/2026): la búsqueda aproximada, de punta a punta.
+  it('R13: sin documentos con todas las palabras, los que tienen alguna, con approximate: true', async () => {
+    const politica = await documentWith(
+      ['Los productos electrónicos (celulares, auriculares) tienen 7 días corridos para devolverse.'],
+      { title: 'Política de devoluciones' },
+    );
+    await documentWith(['Control de inventario'], { areaIds: [AREA_IDS.operaciones], title: 'Inventario' });
+
+    const body = await found(empleadoVentas, '¿Puedo devolver unos auriculares que compré hace 10 días?');
+
+    expect(body).toMatchObject({ total: 1, page: 1, limit: 20, approximate: true });
+    expect(ids(body)).toEqual([politica.id]);
+    expect(body.data[0].fragment?.parts.filter((part) => part.match).map((part) => part.text)).toEqual(
+      expect.arrayContaining(['auriculares']),
+    );
+  });
+
+  it('R13: approximate figura en la respuesta de /api/docs', async () => {
+    const res = await http().get('/api/docs-json').expect(200);
+
+    const schemas = (res.body as { components: { schemas: Record<string, { properties?: Record<string, unknown> }> } })
+      .components.schemas;
+    const body = Object.values(schemas).find(
+      (schema) => schema.properties?.approximate !== undefined && schema.properties?.data !== undefined,
+    );
+    expect(body?.properties?.approximate).toMatchObject({ type: 'boolean' });
   });
 });

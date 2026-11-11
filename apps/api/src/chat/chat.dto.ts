@@ -1,6 +1,8 @@
 // Validación de POST /api/chat según el Contrato 4.
-import { IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 import type { ChatRequest } from './chat.contract';
+import { ChatContextDto } from './chat-context.dto';
 
 export class ChatRequestDto implements ChatRequest {
     @IsOptional()
@@ -12,8 +14,9 @@ export class ChatRequestDto implements ChatRequest {
     @MaxLength(2000)
     message!: string;
 
-    // Contexto de procedimiento (HU21): se acepta y se valida en esa historia.
+    // Contexto de procedimiento (HU21, spec 010): los dos campos, cada uno un UUID.
     @IsOptional()
-    @IsObject()
-    context?: { procedureVersionId: string; stepId: string };
+    @ValidateNested()
+    @Type(() => ChatContextDto)
+    context?: ChatContextDto;
 }

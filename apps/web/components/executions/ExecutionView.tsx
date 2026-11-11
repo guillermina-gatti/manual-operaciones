@@ -1,10 +1,12 @@
 'use client';
 
-// Step-by-step execution of a procedure (HU12, spec 005). The API decides who can see it: for
+// Step-by-step execution of a procedure (HU12, spec 012). The API decides who can see it: for
 // another employee, a missing execution or a lost area it answers the same 404.
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { ExecutionChatPanel } from '@/components/chat/ExecutionChatPanel';
+import { CHIP, ERROR_BOX, PageHeader, TEXT_LINK } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import {
   ApiError,
@@ -12,15 +14,18 @@ import {
   describeExecutionError,
   EXECUTION_MESSAGES,
   getExecution,
+  restartExecution,
   useApiResource,
 } from '@/lib/api';
 import type { ExecutionResponse } from '@/lib/api';
-import { formatDuration } from '@/lib/executions/format';
-import { procedureName } from '@/lib/executions/sample-procedures';
+import { SAMPLE_PROCEDURES, procedureName } from '@/lib/executions/sample-procedures';
 import { summarizeExecution } from '@/lib/executions/summary';
 import { useSession } from '@/lib/session';
+import { CompletedPanel } from './CompletedPanel';
 import { ExecutionProgress } from './ExecutionProgress';
+import { ExecutionSummaryCard } from './ExecutionSummaryCard';
 import { StepList } from './StepList';
+import { VersionChangeNotice } from './VersionChangeNotice';
 
 // The same format the API accepts (ParseUUIDPipe). Any other id cannot exist.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -68,6 +73,7 @@ export function ExecutionView() {
 }
 
 function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
+  const router = useRouter();
   // Each completed step replaces the loaded execution with the API response, but only while the
   // loaded one is the same: a newer load (coming back to the screen) wins.
   const [latest, setLatest] = useState<{
@@ -82,6 +88,11 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
   const [completedHere, setCompletedHere] = useState(false);
   // Stops a second click that arrives before React renders the disabled button.
   const completingRef = useRef(false);
+  // HU33: "Terminar con esta versión" hides the notice of a change that is not critical, only
+  // for this visit: the next load shows it again while it is pending.
+  const [kept, setKept] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const restartingRef = useRef(false);
   // Changes each time the screen is hidden, so a late answer from before is ignored.
   const visitRef = useRef(0);
 
@@ -93,6 +104,9 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
       visitRef.current += 1;
       completingRef.current = false;
       setCompleting(false);
+      restartingRef.current = false;
+      setRestarting(false);
+      setKept(false);
       setLatest(null);
       setNotice(null);
       setNotFound(false);
@@ -107,6 +121,15 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
   const summary = summarizeExecution(execution);
   const completed = execution.status === 'COMPLETED';
+  const restarted = execution.status === 'RESTARTED';
+  const inProgress = execution.status === 'IN_PROGRESS';
+  // The API only reports a change while the execution is in progress.
+  const change = inProgress && execution.versionChange?.changed ? execution.versionChange : null;
+  const critical = change?.critical === true;
+  const showChange = change !== null && (critical || !kept);
+  // The execution only brings the procedure id; its area comes from the sample procedures.
+  const areaName = SAMPLE_PROCEDURES.find((p) => p.id === execution.procedureId)?.areaName;
+  const resumed = summary.resumed && !completedHere;
 
   async function complete(stepId: string) {
     if (completingRef.current) return;
@@ -139,6 +162,34 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
     }
   }
 
+  // HU33: the new execution, on the current version and from step 1, opens in its own screen.
+  async function restart() {
+    if (restartingRef.current) return;
+    restartingRef.current = true;
+    const visit = visitRef.current;
+    const left = () => visitRef.current !== visit;
+    setRestarting(true);
+    setNotice(null);
+    try {
+      const fresh = await restartExecution(execution.id);
+      if (left()) return;
+      // The buttons stay disabled until the new screen replaces this one.
+      router.push(`/ejecuciones/${fresh.id}`);
+    } catch (failure) {
+      if (left()) return;
+      restartingRef.current = false;
+      setRestarting(false);
+      const { message, notFound: missing } = describeExecutionError(failure, 'restart');
+      if (missing) {
+        setNotFound(true);
+        return;
+      }
+      setNotice(message);
+      // 409: restarted or completed somewhere else, or no change any more. Show it as it is now.
+      if (failure instanceof ApiError && failure.status === 409) await refresh(left);
+    }
+  }
+
   async function refresh(left: () => boolean) {
     try {
       const current = await getExecution(execution.id);
@@ -152,42 +203,58 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
   return (
     <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
-        <header className="flex min-w-0 flex-col gap-3">
-          <h1 className="break-words text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl dark:text-zinc-50">
-            {procedureName(execution.procedureId)}
-          </h1>
-          {summary.resumed && !completedHere && (
-            <p className="self-start rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-800 ring-1 ring-inset ring-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800">
-              Retomaste donde quedaste.
-            </p>
-          )}
-        </header>
-
-        {completed && (
-          <div
-            role="status"
-            className="flex items-start gap-4 rounded-xl border border-green-200 border-l-4 border-l-green-600 bg-green-50 p-5 text-green-900 shadow-sm dark:border-green-900 dark:border-l-green-500 dark:bg-green-950/60 dark:text-green-100"
-          >
-            <span
-              aria-hidden="true"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-700 text-lg font-bold text-white dark:bg-green-500 dark:text-zinc-950"
-            >
-              ✓
-            </span>
-            <div className="flex flex-col gap-1 pt-1">
-              <p className="text-lg font-semibold">Completaste el procedimiento</p>
-              <p>Tiempo total: {formatDuration(summary.totalDurationMs)}</p>
+        <div className="flex min-w-0 flex-col gap-3">
+          <PageHeader
+            title={procedureName(execution.procedureId, execution.procedureTitle)}
+            subtitle="Seguí los pasos en orden y marcá cada uno cuando lo termines."
+          />
+          {(areaName || resumed) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {areaName && (
+                <span className={`${CHIP} bg-chip-area text-chip-area-texto`}>{areaName}</span>
+              )}
+              {/* Salvia, not celeste: in the design, celeste is only for the assistant. */}
+              {resumed && (
+                <p className={`${CHIP} bg-salvia text-texto`}>Retomaste donde quedaste</p>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <ExecutionProgress summary={summary} />
 
+        {showChange && change && (
+          <VersionChangeNotice
+            change={change}
+            restarting={restarting}
+            onKeep={() => setKept(true)}
+            onRestart={restart}
+          />
+        )}
+
+        {restarted && (
+          <div role="status" className="flex flex-col gap-2 rounded-2xl border border-borde bg-salvia p-5">
+            <p className="font-semibold text-texto">
+              Esta ejecución se reinició con la versión nueva del procedimiento.
+            </p>
+            <p className="text-texto">
+              <Link href="/ejecuciones" className={TEXT_LINK}>
+                Elegí el procedimiento otra vez
+              </Link>{' '}
+              para seguir con la ejecución nueva.
+            </p>
+          </div>
+        )}
+
+        {completed && (
+          <CompletedPanel
+            procedureName={procedureName(execution.procedureId, execution.procedureTitle)}
+            totalDurationMs={summary.totalDurationMs}
+          />
+        )}
+
         {notice && (
-          <p
-            role="alert"
-            className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-          >
+          <p role="alert" className={ERROR_BOX}>
             {notice}
           </p>
         )}
@@ -197,22 +264,20 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
           completing={completing}
           onComplete={complete}
           focusCurrent={completedHere}
+          blocked={critical}
         />
-
-        {completed && (
-          <Link
-            href="/ejecuciones"
-            className="inline-flex min-h-12 items-center self-start rounded-lg border border-blue-200 bg-white px-6 font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300 dark:hover:bg-blue-950"
-          >
-            Elegir otro procedimiento
-          </Link>
-        )}
       </article>
 
-      {/* Reserved for the assistant of pair C: <ChatPanel procedureId={…} stepId={…} />.
-          Hidden while empty, so screen readers do not announce an empty region. On a phone it
-          goes below the steps; from lg on, in the right column. */}
-      <aside data-slot="chat-panel" aria-label="Asistente" hidden className="min-w-0" />
+      {/* The side column: our summary and, below it, the assistant of pair C for the current step
+          (spec 010), untouched. The assistant is hidden once the execution is no longer in
+          progress (completed or restarted), so screen readers do not announce an empty region. On
+          a phone the column goes below the steps; from lg on, it is on the right. */}
+      <div className="flex min-w-0 flex-col gap-6">
+        <ExecutionSummaryCard execution={execution} summary={summary} />
+        <aside data-slot="chat-panel" aria-label="Asistente" hidden={!inProgress} className="min-w-0">
+          <ExecutionChatPanel execution={execution} />
+        </aside>
+      </div>
     </div>
   );
 }
@@ -220,11 +285,11 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 export function ExecutionSkeleton() {
   return (
     <div aria-hidden="true" className="flex animate-pulse flex-col gap-6">
-      <div className="h-10 w-2/3 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-28 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-20 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-12 w-2/3 rounded-xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
+      <div className="h-32 w-full rounded-2xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
+      <div className="h-24 w-full rounded-2xl bg-borde" />
     </div>
   );
 }

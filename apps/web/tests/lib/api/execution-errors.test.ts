@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ApiError, describeExecutionError, EXECUTION_MESSAGES } from '@/lib/api';
 import type { ExecutionErrorContext } from '@/lib/api';
 
-const CONTEXTS: ExecutionErrorContext[] = ['start', 'detail', 'complete'];
+const CONTEXTS: ExecutionErrorContext[] = ['start', 'detail', 'complete', 'restart'];
 
 describe('errors shared by every context', () => {
   test.each(CONTEXTS)('%s: no connection can be retried', (context) => {
@@ -59,7 +59,7 @@ describe('not found', () => {
     });
   });
 
-  test.each(['detail', 'complete'] as const)('%s: 404 means the execution is not found', (context) => {
+  test.each(['detail', 'complete', 'restart'] as const)('%s: 404 means the execution is not found', (context) => {
     expect(describeExecutionError(new ApiError(404), context)).toEqual({
       message: EXECUTION_MESSAGES.executionNotFound,
       canRetry: false,
@@ -79,6 +79,8 @@ describe('409 when completing a step, by reason', () => {
     ['STEP_ALREADY_FINISHED', EXECUTION_MESSAGES.stepAlreadyFinished],
     ['STEP_OUT_OF_ORDER', EXECUTION_MESSAGES.stepOutOfOrder],
     ['EXECUTION_COMPLETED', EXECUTION_MESSAGES.executionCompleted],
+    ['PROCEDURE_CHANGED_CRITICAL', EXECUTION_MESSAGES.procedureChangedCritical],
+    ['EXECUTION_RESTARTED', EXECUTION_MESSAGES.executionRestarted],
     [undefined, EXECUTION_MESSAGES.executionChanged],
   ])('%s', (reason, message) => {
     expect(describeExecutionError(new ApiError(409, [], undefined, reason), 'complete')).toEqual({
@@ -86,6 +88,32 @@ describe('409 when completing a step, by reason', () => {
       canRetry: false,
       notFound: false,
     });
+  });
+});
+
+describe('409 when restarting, by reason (HU33)', () => {
+  test.each([
+    ['EXECUTION_RESTARTED', EXECUTION_MESSAGES.executionRestarted],
+    ['PROCEDURE_NOT_CHANGED', EXECUTION_MESSAGES.procedureNotChanged],
+    ['EXECUTION_COMPLETED', EXECUTION_MESSAGES.executionCompleted],
+  ])('%s', (reason, message) => {
+    expect(describeExecutionError(new ApiError(409, [], undefined, reason), 'restart')).toEqual({
+      message,
+      canRetry: false,
+      notFound: false,
+    });
+  });
+
+  test('the messages say what to do, in voseo', () => {
+    expect(EXECUTION_MESSAGES.procedureChangedCritical).toBe(
+      'El procedimiento tuvo un cambio crítico. Para seguir, reiniciá con la versión nueva.',
+    );
+    expect(EXECUTION_MESSAGES.executionRestarted).toBe(
+      'Esta ejecución ya se reinició con la versión nueva.',
+    );
+    expect(EXECUTION_MESSAGES.procedureNotChanged).toBe(
+      'El procedimiento no cambió: podés seguir con esta ejecución.',
+    );
   });
 });
 

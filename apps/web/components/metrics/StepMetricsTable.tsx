@@ -1,28 +1,37 @@
-// The steps of one version: how many reached and finished each one, its average time and its
-// abandonment. The abandonment bar is a single-hue meter next to its written value, so it is
-// never read from color alone; the table is the accessible view.
-import type { StepMetricsResponse } from '@/lib/api';
+// The steps of one version: how many executions reached, finished and abandoned each step, and
+// how long each one takes, with "Mayor tiempo" on the slowest. The last row is the whole
+// procedure, from start to end. The bars are decorative: every value is written next to them.
+import type { ReactNode } from 'react';
+import type { VersionMetricsResponse } from '@/lib/api';
 import { formatDuration } from '@/lib/executions/format';
-import { formatCount, formatPercent } from '@/lib/metrics/format';
+import { formatCount, formatPercent, formatShare } from '@/lib/metrics/format';
+import { stepRows } from '@/lib/metrics/steps';
+import { TimeBar } from './FeatherBar';
+import { TimerIcon } from './icons';
 
 interface StepMetricsTableProps {
-  steps: StepMetricsResponse[];
+  version: VersionMetricsResponse;
   caption: string;
 }
 
-const HEAD = 'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300';
+const HEAD = 'px-4 py-3 text-left text-sm font-semibold text-texto-suave';
 const NUMBER = 'px-4 py-3 text-right tabular-nums';
 
-export function StepMetricsTable({ steps, caption }: StepMetricsTableProps) {
+export function StepMetricsTable({ version, caption }: StepMetricsTableProps) {
+  const rows = stepRows(version.steps);
+
   return (
     // Wide tables scroll inside the card on a phone; the page itself never scrolls sideways.
-    <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full min-w-[40rem] border-collapse text-left text-sm text-zinc-800 dark:text-zinc-200">
+    <div className="overflow-x-auto rounded-xl border border-borde">
+      <table className="w-full min-w-[48rem] border-collapse text-texto">
         <caption className="sr-only">{caption}</caption>
-        <thead className="bg-zinc-50 dark:bg-zinc-800/60">
+        <thead className="bg-fondo">
           <tr>
             <th scope="col" className={HEAD}>
               Paso
+            </th>
+            <th scope="col" className={HEAD}>
+              Descripción
             </th>
             <th scope="col" className={`${HEAD} text-right`}>
               Llegaron
@@ -31,57 +40,84 @@ export function StepMetricsTable({ steps, caption }: StepMetricsTableProps) {
               Terminaron
             </th>
             <th scope="col" className={`${HEAD} text-right`}>
-              Tiempo medio
-            </th>
-            <th scope="col" className={`${HEAD} text-right`}>
-              Abandonos
+              Abandonaron
             </th>
             <th scope="col" className={HEAD}>
-              Abandono
+              Tiempo medio del paso
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-          {steps.map((step) => (
+        <tbody className="divide-y divide-borde">
+          {rows.map((step) => (
             <tr key={step.stepId}>
-              <th scope="row" className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-50">
-                <span className="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+              <td className="px-4 py-3">
+                <span className="inline-flex size-8 items-center justify-center rounded-full bg-chip-area text-sm font-bold text-chip-area-texto">
                   {step.order}
                 </span>
-                {step.title}
+              </td>
+              <th scope="row" className="px-4 py-3 text-left font-semibold">
+                <span className="flex flex-wrap items-center gap-2">
+                  {step.title}
+                  {step.slowest && <SlowestBadge />}
+                </span>
               </th>
               <td className={NUMBER}>{formatCount(step.reached)}</td>
-              <td className={NUMBER}>{formatCount(step.finished)}</td>
-              <td className={NUMBER}>{formatDuration(step.avgDurationMs)}</td>
-              <td className={NUMBER}>{formatCount(step.abandoned)}</td>
+              <td className={`${NUMBER} font-bold`}>{formatCount(step.finished)}</td>
+              <td className={NUMBER}>
+                {formatCount(step.abandoned)}
+                {step.abandoned > 0 && (
+                  <span className="text-texto-suave"> ({formatPercent(step.abandonRate)})</span>
+                )}
+              </td>
               <td className="px-4 py-3">
-                <AbandonMeter rate={step.abandonRate} />
+                <TimeCell ratio={step.timeRatio}>
+                  <span className="font-semibold">{formatDuration(step.avgDurationMs)}</span>
+                  {step.timeShare !== null && (
+                    <span className="text-sm text-texto-suave">
+                      {formatShare(step.timeShare)} del total
+                    </span>
+                  )}
+                </TimeCell>
               </td>
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-texto-suave/40 bg-fondo font-bold">
+            <td className="px-4 py-3">
+              <TimerIcon className="text-bosque" />
+            </td>
+            <th scope="row" className="px-4 py-3 text-left">
+              Procedimiento completo
+              <span className="font-normal text-texto-suave"> · de inicio a fin</span>
+            </th>
+            <td className={NUMBER}>{formatCount(version.started)}</td>
+            <td className={NUMBER}>{formatCount(version.completed)}</td>
+            <td className={NUMBER}>{formatCount(version.abandoned)}</td>
+            {/* The average of the completed executions of this version, from start to end. */}
+            <td className="px-4 py-3 text-bosque">{formatDuration(version.avgCompletionMs)}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
 }
 
-function AbandonMeter({ rate }: { rate: number | null }) {
-  const percent = rate === null ? 0 : Math.round(rate * 100);
+function TimeCell({ ratio, children }: { ratio: number; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-12 shrink-0 text-right font-medium tabular-nums">{formatPercent(rate)}</span>
-      {rate !== null && (
-        <span
-          aria-hidden="true"
-          className="h-2 w-24 shrink-0 overflow-hidden rounded-full bg-amber-100 dark:bg-amber-950"
-        >
-          <span
-            className="block h-full rounded-full bg-amber-600 dark:bg-amber-400"
-            // At least a sliver when there is any abandonment, so it never looks like zero.
-            style={{ width: percent === 0 ? 0 : `max(4px, ${percent}%)` }}
-          />
-        </span>
-      )}
-    </div>
+    <span className="flex items-center gap-3">
+      <TimeBar ratio={ratio} />
+      <span className="flex flex-col whitespace-nowrap tabular-nums">{children}</span>
+    </span>
+  );
+}
+
+// The slowest step of the procedure: icon and text, never the color alone.
+function SlowestBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-lg bg-durazno px-2 py-0.5 text-xs font-semibold text-durazno-texto">
+      <TimerIcon className="size-3.5" />
+      Mayor tiempo
+    </span>
   );
 }

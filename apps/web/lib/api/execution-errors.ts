@@ -4,7 +4,8 @@ import { ApiError } from './api-error';
 import { MESSAGES } from './error-messages';
 
 // 'start': choosing a procedure. 'detail': loading the execution. 'complete': finishing a step.
-export type ExecutionErrorContext = 'start' | 'detail' | 'complete';
+// 'restart': restarting it on the current version (HU33).
+export type ExecutionErrorContext = 'start' | 'detail' | 'complete' | 'restart';
 
 export interface ExecutionErrorDescription {
   message: string;
@@ -23,6 +24,11 @@ export const EXECUTION_MESSAGES = {
   stepOutOfOrder: 'Ese no es el paso actual.',
   executionCompleted: 'La ejecución ya estaba completa.',
   executionChanged: 'La ejecución cambió. Revisá el paso actual.',
+  // HU33
+  procedureChangedCritical:
+    'El procedimiento tuvo un cambio crítico. Para seguir, reiniciá con la versión nueva.',
+  executionRestarted: 'Esta ejecución ya se reinició con la versión nueva.',
+  procedureNotChanged: 'El procedimiento no cambió: podés seguir con esta ejecución.',
 } as const;
 
 export function describeExecutionError(
@@ -71,6 +77,12 @@ function conflictMessage(reason: string | undefined): string {
       return EXECUTION_MESSAGES.stepOutOfOrder;
     case 'EXECUTION_COMPLETED':
       return EXECUTION_MESSAGES.executionCompleted;
+    case 'PROCEDURE_CHANGED_CRITICAL':
+      return EXECUTION_MESSAGES.procedureChangedCritical;
+    case 'EXECUTION_RESTARTED':
+      return EXECUTION_MESSAGES.executionRestarted;
+    case 'PROCEDURE_NOT_CHANGED':
+      return EXECUTION_MESSAGES.procedureNotChanged;
     default:
       return EXECUTION_MESSAGES.executionChanged;
   }

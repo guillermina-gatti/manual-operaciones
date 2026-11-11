@@ -33,6 +33,7 @@ vi.mock('@/lib/directory', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => mocks.params,
 }));
 
@@ -130,7 +131,8 @@ describe('estado del procesamiento (F6)', () => {
   test.each([
     ['PENDING', 'Pendiente'],
     ['PROCESSING', 'Procesando'],
-    ['READY', 'Listo'],
+    // Plan 002, D8: en el detalle, "Listo para el asistente" (el historial sigue diciendo "Listo").
+    ['READY', 'Listo para el asistente'],
     ['FAILED', 'Con error'],
   ] as const)('%s se muestra como "%s"', async (status, text) => {
     mocks.getDocument.mockResolvedValue(documentWith({}, status));

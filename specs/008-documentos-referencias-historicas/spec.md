@@ -35,7 +35,7 @@ Esta feature hace que las respuestas de Documentos traigan los nombres y el esta
 
 ## 4. Fuera de alcance
 
-- Cambiar la visibilidad de los documentos: siguen valiendo `canView`, `listWhere`, `searchScope` y `pendingReviewWhere` como están (decisión D3).
+- Cambiar la visibilidad de los documentos: siguen valiendo `canView`, `listWhere`, `searchScope` y `pendingReviewWhere` como están (decisión D3). **11/11/2026:** la visibilidad la cambió la pareja A con A-SEC: un área inactiva ya no da acceso (D3 actualizada). Esta spec no toca las políticas; solo se alinea.
 - Un endpoint público para resolver nombres de usuarios (`GET /api/users/names`): descartado en A-06.4.
 - Modificar los puertos y adaptadores de los directorios internos (`ports/users-directory.ts`, `ports/areas-directory.ts` y sus adaptadores): son de la pareja A.
 - Modificar `GET /api/areas`, `GET /api/users` y los archivos de `apps/web/lib/directory`. `getNames` queda sin uso en Documentos y lo quita la pareja A en un PR suyo (decisión P8).
@@ -78,14 +78,14 @@ Esta feature hace que las respuestas de Documentos traigan los nombres y el esta
   - todas las escrituras que responden un documento: la carga (`POST /documents`), el cambio de áreas (`PATCH /documents/:id/areas`), la versión nueva (`POST /documents/:id/versions`), "Marcar como revisado" (`POST /documents/:id/review`) y archivar (`POST /documents/:id/archive`), con la misma forma que el detalle (decisiones P3 y P4).
 
   Además, cada versión del historial (`GET /documents/:id/versions`) lleva `uploadedBy: { id, name, isActive }`, sin sacar `uploadedById` (decisión P3).
-- **R3 · Visibilidad.** Las referencias salen solo dentro de documentos que el usuario ya puede ver, con las políticas actuales (D3). `review.lastReviewedBy` sale solo dentro de `review`, que solo reciben el ADMIN y el responsable (spec 005, R4). El historial lo ve solo el ADMIN (spec 003, R12). No se agrega ningún dato de personas fuera de `id`, `name` e `isActive`: ni email, ni rol, ni áreas.
-- **R4 · Inactivos en las respuestas.** Un responsable, un área, un revisor o quien subió una versión, inactivos, se devuelven igual, con `isActive: false`. Desactivar a alguien no cambia qué documentos se ven ni quién recibe `review`.
+- **R3 · Visibilidad.** Las referencias salen solo dentro de documentos que el usuario ya puede ver, con las políticas actuales (D3). Desde A-SEC (11/11/2026), para EMPLOYEE y SUPERVISOR solo cuentan sus áreas activas; el ADMIN ve todos. `review.lastReviewedBy` sale solo dentro de `review`, que solo reciben el ADMIN y el responsable (spec 005, R4). El historial lo ve solo el ADMIN (spec 003, R12). No se agrega ningún dato de personas fuera de `id`, `name` e `isActive`: ni email, ni rol, ni áreas.
+- **R4 · Inactivos en las respuestas.** Un responsable, un área, un revisor o quien subió una versión, inactivos, se devuelven igual, con `isActive: false`. Desactivar a una persona no cambia qué documentos ven los demás ni quién recibe `review`. **11/11/2026 (D3, A-SEC):** desactivar un **área** sí cambia quién ve el documento: esa área deja de dar acceso a sus EMPLOYEE y SUPERVISOR. La referencia al área se conserva igual, con `isActive: false`, para quien todavía lo ve.
 - **R5 · Responsable inactivo en una asignación nueva.** En la carga (`POST /documents`) y en el cambio de áreas cuando viene un `ownerId` distinto del actual (`PATCH /documents/:id/areas`), si el responsable existe pero está inactivo: 400 `ownerId: el responsable está inactivo`. No se guarda nada.
 - **R6 · El responsable se valida como inactivo solo cuando cambia.** Si el cambio de áreas no trae `ownerId`, o trae el mismo que el actual, no se mira si el responsable actual está activo: se conserva aunque esté inactivo. Lo que sí se sigue aplicando, cambie o no, es la R4 de la spec 003: el responsable tiene que compartir un área con las áreas nuevas o ser ADMIN; si no, 400 (decisión P5).
 - **R7 · Áreas inactivas agregadas.** En la carga, todas las áreas son agregadas. En el cambio de áreas, son agregadas las de `areaIds` que el documento no tiene hoy. Si alguna agregada existe pero está inactiva: 400 `areaIds: están inactivas las áreas <ids>`. No se guarda nada.
 - **R8 · Áreas históricas.** En el cambio de áreas, las áreas inactivas que el documento ya tiene y que siguen en `areaIds` se conservan sin error. Las que no vienen en `areaIds` se quitan, como hoy: una vez quitada, un área inactiva no se puede volver a agregar (R7).
 - **R9 · Nada se borra solo.** Desactivar un usuario o un área no cambia el responsable ni las áreas de ningún documento. Solo cambian cuando un ADMIN los cambia.
-- **R10 · Orden de las validaciones.** Se mantienen las actuales y se agregan las nuevas en este orden: las áreas existen (spec 001, R5) → las áreas agregadas están activas (R7) → el responsable existe (spec 001, R5) → si es un responsable nuevo, está activo (R5) → el responsable comparte un área con el documento o es ADMIN (spec 001, R5; spec 003, R4). Para ese último paso cuenta cualquier área del documento, activa o inactiva, igual que hoy, porque la visibilidad no cambia (D3).
+- **R10 · Orden de las validaciones.** Se mantienen las actuales y se agregan las nuevas en este orden: las áreas existen (spec 001, R5) → las áreas agregadas están activas (R7) → el responsable existe (spec 001, R5) → si es un responsable nuevo, está activo (R5) → el responsable comparte un área con el documento o es ADMIN (spec 001, R5; spec 003, R4). Para ese último paso cuentan **solo las áreas activas** del documento (D6, 11/11/2026). Con A-SEC un área inactiva no da acceso, así que no alcanza para ser responsable. Vale en la carga y en el cambio de áreas, también cuando el responsable no cambia (P5). Si no comparte ninguna activa y no es ADMIN: el 400 de siempre, `ownerId: el responsable no comparte ningún área con el documento`. En la carga, un área inactiva ya se rechaza antes (R7), así que no puede ser la única compartida. Hasta el 11/11/2026 contaba cualquier área del documento, activa o inactiva.
 - **R11 · Sin cambios reales.** El cambio de áreas con las mismas áreas y el mismo responsable sigue respondiendo el documento sin escribir ni validar (spec 003), aunque tenga áreas o responsable inactivos.
 - **R12 · Referencia que no se encuentra.** Si el directorio no encuentra un usuario o un área referenciados (por ejemplo, por un dato viejo), la referencia se devuelve igual, con `name: null` e `isActive: false`. No es un error (decisión P6).
 - **R13 · Errores.** Si un directorio interno no responde al armar una respuesta o al validar: 503, con el mismo mensaje que hoy tiene cada operación. En las escrituras, un 503 quiere decir que no se guardó nada. Las 400 nuevas se auditan como fallo, igual que las demás 400 de la carga y del cambio de áreas.
@@ -108,13 +108,16 @@ Esta feature no agrega estados. Usa el `isActive` de usuarios y áreas, que admi
 ## 8. Casos borde
 
 - Un documento cuyo responsable se desactivó: todos los que ven el documento ven "Ana Pérez (inactivo)". El documento sigue en "Por revisar" del ADMIN. El responsable no lo ve porque un usuario inactivo no puede iniciar sesión ni seguir usando una sesión abierta; eso lo controla la pareja A (login, renovación de la sesión y `JwtAuthGuard`), no esta spec.
-- Un documento con las áreas Ventas (activa) y Compras (inactiva): un EMPLOYEE de Compras lo sigue viendo (D3) y ve "Ventas, Compras (inactiva)".
-- Un documento cuya única área, Compras, está inactiva: se sigue viendo con las políticas actuales. Al editarlo, `OwnerField` no pide candidatos hasta que el ADMIN marque un área activa (F6).
+- Un documento con las áreas Ventas (activa) y Compras (inactiva): un EMPLOYEE de Ventas lo ve, con "Ventas, Compras (inactiva)". Un EMPLOYEE que solo es de Compras ya no lo ve: el detalle responde 404 y no aparece en el listado ni en la búsqueda (D3, actualizada el 11/11/2026).
+- Un documento cuya única área, Compras, está inactiva: solo lo ve el ADMIN, con "Compras (inactiva)" (D3, 11/11/2026). Al editarlo, `OwnerField` no pide candidatos hasta que el ADMIN marque un área activa (F6).
 - Cambio de áreas que deja Compras (inactiva) y agrega Operaciones (activa): se acepta (R8). Los candidatos se piden solo con Operaciones (F6).
 - Cambio de áreas que saca Compras (inactiva) y la vuelve a mandar en el mismo pedido: no es agregada, porque el documento todavía la tiene; se acepta.
 - Cambio de áreas que agrega Logística (inactiva): 400 aunque el documento conserve otras áreas activas (R7).
 - Cambio de áreas sin `ownerId`, con el responsable actual inactivo y que sigue compartiendo un área con las áreas nuevas: se acepta (R6).
 - Cambio de áreas sin `ownerId`, con el responsable actual (activo o inactivo) que deja de compartir un área con las áreas nuevas: 400, como hoy (R6; spec 003, R4).
+- Un documento con Ventas y Compras, y Compras se desactiva. Su responsable es Bruno, que solo es de Compras. Un cambio de áreas sin `ownerId` da 400 de acceso, aunque se conserve Compras: el área inactiva no cuenta (D6, 11/11/2026). El ADMIN tiene que elegir otro responsable en el mismo cambio.
+- El mismo documento, con un `ownerId` nuevo que solo comparte Compras (inactiva): 400 de acceso (D6). Con uno que comparte Ventas, se acepta, aunque también sea de Compras.
+- Carga con un responsable que solo es de Compras (inactiva): no se puede elegir Compras, porque R7 la rechaza; con otras áreas, no comparte ninguna y da 400 de acceso.
 - El ADMIN elige como responsable nuevo a alguien inactivo (por ejemplo, con un pedido armado a mano): 400 (R5).
 - El ADMIN vuelve a elegir al mismo responsable actual inactivo: no es un cambio; se acepta (R6).
 - Quien hizo la última revisión se desactivó: el ADMIN y el responsable ven "Revisado por Juan Gómez (inactivo)".
@@ -140,9 +143,15 @@ Acordadas con la pareja A (A-06.4, 31/10/2026 y 01/11/2026) antes de escribir es
 | --- | --- |
 | D1 · Las respuestas de Documentos traen `{ id, name, isActive }` del responsable, las áreas y quien hizo la última revisión, en lugar de un endpoint de nombres | R1 a R4, F1 |
 | D2 · Se rechazan con 400 el responsable inactivo y las áreas inactivas agregadas; las asociaciones históricas se conservan y el responsable se valida solo cuando cambia | R5 a R9 |
-| D3 · La visibilidad de los documentos no cambia | R3, R10, sección 4 |
+| D3 · La visibilidad de los documentos no cambia. **Actualizada el 11/11/2026:** con A-SEC (pareja A) y la matriz de permisos A-02, las áreas inactivas no dan acceso. EMPLOYEE y SUPERVISOR ven solo los documentos de sus áreas activas (`viewerFor` usa las áreas activas de la sesión); el ADMIN sigue viendo todos. Las referencias históricas se conservan (R4). Esta spec no cambia las políticas; se alinea con la pareja A | R3, R4, R10, sección 4 |
 | D4 · `OwnerField` conserva el responsable actual al editar y lo muestra con "(inactivo)" | F4 |
 | D5 · La web deja de usar `getNames` (fixtures) para los nombres de Documentos | F1 |
+
+Tomada el 11/11/2026, después de A-SEC (era Q2):
+
+| Decisión | Regla |
+| --- | --- |
+| D6 · Para validar al responsable, tiene que compartir al menos un área **activa** con el documento, o ser ADMIN. Las áreas inactivas no cuentan, porque con A-SEC no dan acceso: un responsable que solo compartía un área inactiva pasaba la validación pero no veía su documento. Vale para la carga y para el cambio de áreas, también si el responsable no cambia (P5). Si no cumple, 400 con el mismo mensaje que hoy | R10; R4 de la spec 003 |
 
 Tomadas en la etapa de aclaración (clarify) el 02/11/2026:
 
@@ -287,8 +296,17 @@ Escenario: candidatos solo con las áreas activas
   Entonces la web pide los candidatos solo con Ventas
   Y si desmarca Ventas, no pide candidatos, ofrece solo al responsable actual y avisa que marque un área activa
 
-Escenario: la visibilidad no cambia
+Escenario: el responsable tiene que compartir un área activa (D6, 11/11/2026)
+  Dado un documento de Ventas y Compras cuyo responsable, Bruno, solo es de Compras
+  Y Compras está inactiva
+  Cuando el ADMIN cambia las áreas sin elegir otro responsable
+  Entonces la respuesta es 400 "ownerId: el responsable no comparte ningún área con el documento"
+  Y si elige como responsable a Carla, de Ventas y Compras, el cambio se acepta
+
+Escenario: un área inactiva no da acceso (D3, actualizado el 11/11/2026)
   Dado un documento cuya única área, Compras, está inactiva
-  Cuando un EMPLOYEE de Compras abre el listado
-  Entonces ve el documento, igual que antes de esta spec
+  Cuando un EMPLOYEE de Compras abre el listado, el detalle o la búsqueda
+  Entonces no ve el documento: no está en el listado ni en la búsqueda, y el detalle responde 404
+  Y el ADMIN sí lo ve, con "Compras (inactiva)"
+  Y si el documento también tiene Ventas (activa), un EMPLOYEE de Ventas lo ve, con "Ventas, Compras (inactiva)"
 ```

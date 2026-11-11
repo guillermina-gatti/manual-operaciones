@@ -61,6 +61,8 @@ const inactiveArea = () => `${seeded.areaName} (inactiva)`;
 // El valor (dd) de una etiqueta (dt) del detalle.
 const detailValue = (page: Page, label: string) =>
   page.locator('dt', { hasText: new RegExp(`^${label}$`) }).locator('xpath=following-sibling::dd[1]');
+// Las áreas del detalle van en su encabezado, como chips (no en el cuadro de datos).
+const detailAreas = (page: Page) => page.locator('main header');
 
 test('E3, E4, E19, E15, E13: el responsable y el área inactivos se ven, y el cambio de áreas los conserva', async ({
   page,
@@ -78,7 +80,7 @@ test('E3, E4, E19, E15, E13: el responsable y el área inactivos se ven, y el ca
   await page.goto(`/documentos/${seeded.documentId}`);
   await expect(page.getByRole('heading', { level: 1, name: seeded.title })).toBeVisible();
   await expect(detailValue(page, 'Responsable')).toHaveText(inactiveOwner());
-  await expect(detailValue(page, 'Áreas')).toContainText(inactiveArea());
+  await expect(detailAreas(page)).toContainText(inactiveArea());
 
   // E19: al abrir el cambio de áreas, el responsable inactivo está elegido.
   await page.getByRole('button', { name: 'Cambiar áreas' }).click();
@@ -106,7 +108,7 @@ test('E3, E4, E19, E15, E13: el responsable y el área inactivos se ven, y el ca
   // El detalle sigue con el mismo responsable, con Compras (inactiva) y con Operaciones.
   await expect(page.getByRole('status').filter({ hasText: 'Áreas actualizadas' })).toBeVisible();
   await expect(detailValue(page, 'Responsable')).toHaveText(inactiveOwner());
-  const areas = detailValue(page, 'Áreas');
+  const areas = detailAreas(page);
   await expect(areas).toContainText(inactiveArea());
   await expect(areas).toContainText('Operaciones');
   await expect(areas).toContainText('Ventas');

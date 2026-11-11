@@ -37,12 +37,13 @@ El panel de la pareja B pide `GET /api/metrics/documents` con los filtros que el
 ## 6. Reglas de negocio
 
 - **R1 · Quién.** ADMIN y SUPERVISOR. Sin sesión: 401. EMPLOYEE: 403.
-- **R2 · Alcance de áreas.** Las áreas del usuario se leen del directorio de usuarios en cada pedido, nunca de la sesión.
+- **R2 · Alcance de áreas.** Las áreas del usuario se leen de los directorios de usuarios y de áreas en cada pedido, nunca de la sesión. Solo cuentan sus áreas activas, y un usuario inactivo no tiene ninguna (todos los totales en 0), como en las métricas de procedimientos (`activeAreaIdsOf`) y como el `JwtAuthGuard` (actualizado el 05/11/2026).
   - ADMIN sin `areaId`: todas las áreas. Con `areaId`: solo esa.
   - SUPERVISOR sin `areaId`: sus áreas. Con `areaId` de una de sus áreas: solo esa.
 - **R3 · Área ajena o inexistente.** Como en las métricas de procedimientos:
-  - SUPERVISOR con un `areaId` que no es de sus áreas, exista o no: 404 "No se encontró el área".
+  - SUPERVISOR con un `areaId` que no es de sus áreas, exista o no: 404 "No se encontró el área". Un área suya que está inactiva recibe el mismo 404 (actualizado el 05/11/2026).
   - ADMIN con un `areaId` que no existe: no es un error. Responde 200 con todos los totales en 0, porque ningún documento tiene esa área.
+  - ADMIN con un `areaId` de un área inactiva: tampoco es un error. Responde 200 con los totales de los documentos activos que siguen vinculados a esa área, igual que en las métricas de procedimientos (decisión del 05/11/2026).
 - **R4 · Qué documentos cuentan.** Solo documentos `ACTIVE` que tienen al menos un área dentro del alcance. Un documento con varias áreas cuenta una sola vez en cada total. Los archivados no cuentan en ningún total.
 - **R5 · Foto de hoy.** `active`, `upToDate`, `dueSoon`, `overdue` y `processingFailed` describen el estado de hoy, en hora de Argentina; el período no los cambia (decisión P1).
   - `active`: documentos activos del alcance.

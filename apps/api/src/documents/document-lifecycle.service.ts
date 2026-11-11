@@ -147,9 +147,13 @@ export class DocumentLifecycleService {
         }
 
         // Spec 008 (R7, R8): las agregadas tienen que estar activas; las que ya tenía se conservan
-        await this.steps.assertAreasCanBeAssigned(dto.areaIds, current.areaIds);
-        // Spec 008 (R6, P5): el actual no se rechaza por inactivo, pero tiene que seguir teniendo acceso
-        await this.steps.assertOwnerCanSeeDocument(ownerId, dto.areaIds, {
+        const activeAreaIds = await this.steps.assertAreasCanBeAssigned(
+          dto.areaIds,
+          current.areaIds,
+        );
+        // Spec 008 (R6, P5): el actual no se rechaza por inactivo, pero tiene que seguir teniendo acceso,
+        // con un área activa (R10, D6 del 11/11/2026)
+        await this.steps.assertOwnerCanSeeDocument(ownerId, activeAreaIds, {
           isNew: ownerId !== current.ownerId,
         });
 

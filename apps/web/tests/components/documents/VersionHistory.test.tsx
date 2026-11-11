@@ -182,3 +182,61 @@ describe('VersionHistory (spec 003, R12; plan 003, 6.5)', () => {
     expect(mocks.listVersions).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('la sección "Versiones" (plan 003, D11)', () => {
+  test('título "Versiones", una línea que explica qué es, y la lista cerrada', () => {
+    render(<VersionHistory documentId={ID} />);
+
+    const section = screen.getByRole('region', { name: 'Versiones' });
+    expect(within(section).getByRole('heading', { level: 2, name: 'Versiones' })).toBeInTheDocument();
+    expect(within(section).getByText(/el anterior queda guardado acá/)).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: 'Historial de versiones' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  test('sin upload (archivado, D10) no está "Subir versión nueva", y el historial sigue', () => {
+    render(<VersionHistory documentId={ID} />);
+
+    expect(screen.queryByRole('button', { name: 'Subir versión nueva' })).not.toBeInTheDocument();
+    expect(toggle()).toBeInTheDocument();
+  });
+
+  test('"Subir versión nueva" va adentro de la sección y abre el formulario adentro', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    const { rerender } = render(
+      <VersionHistory
+        documentId={ID}
+        upload={{ open: false, onToggle, form: <p>el formulario</p> }}
+      />,
+    );
+
+    const section = screen.getByRole('region', { name: 'Versiones' });
+    const button = within(section).getByRole('button', { name: 'Subir versión nueva' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('el formulario')).not.toBeInTheDocument();
+
+    await user.click(button);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <VersionHistory documentId={ID} upload={{ open: true, onToggle, form: <p>el formulario</p> }} />,
+    );
+    const panel = within(section).getByRole('region', { name: 'Subir versión nueva' });
+    expect(within(panel).getByText('el formulario')).toBeInTheDocument();
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    // Abrir el formulario no pide el historial.
+    expect(mocks.listVersions).not.toHaveBeenCalled();
+  });
+
+  test('cada fila descarga con un botón de ícono', async () => {
+    const user = userEvent.setup();
+    await openHistory(user);
+
+    const download = screen.getByRole('button', { name: 'Descargar la versión 2' });
+    expect(download.querySelector('svg[data-icon="download"]')).not.toBeNull();
+    expect(download).toHaveTextContent('');
+  });
+});

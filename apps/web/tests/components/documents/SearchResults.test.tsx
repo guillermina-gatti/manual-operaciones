@@ -64,7 +64,8 @@ const response = (
   data: DocumentSearchResult[],
   total = data.length,
   page = 1,
-): DocumentSearchResponse => ({ data, total, page, limit: 20 });
+  approximate = false,
+): DocumentSearchResponse => ({ data, total, page, limit: 20, approximate });
 
 function renderResults(query = 'caja', page = 1) {
   return render(<SearchResults query={query} page={page} userId={USER_ID} isAdmin={false} />);
@@ -149,6 +150,38 @@ describe('SearchResults (spec 004, F4, F5)', () => {
 
     const summary = await screen.findByText('3 resultados para «caja»');
     expect(summary).toHaveAttribute('aria-live', 'polite');
+  });
+
+  // Spec 004 (F8, R13, 11/11/2026): los resultados aproximados se avisan en una línea.
+  const APPROXIMATE = 'No encontramos documentos con todas las palabras; te mostramos los más parecidos.';
+
+  test('F8: con resultados aproximados, avisa en una línea, después del total y antes de los resultados', async () => {
+    mocks.searchDocuments.mockResolvedValue(response([result(2), result(1)], 2, 1, true));
+
+    renderResults('devolver auriculares');
+
+    const notice = await screen.findByText(APPROXIMATE);
+    const summary = screen.getByText('2 resultados para «devolver auriculares»');
+    const [firstCard] = screen.getAllByRole('article');
+    expect(summary.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(notice.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(await cardTitles()).toEqual(['Documento 2', 'Documento 1']);
+  });
+
+  test('F8: con todas las palabras no hay aviso', async () => {
+    renderResults('caja');
+
+    await screen.findAllByRole('article');
+    expect(screen.queryByText(APPROXIMATE)).not.toBeInTheDocument();
+  });
+
+  test('F8: sin resultados, el mensaje de siempre y sin aviso', async () => {
+    mocks.searchDocuments.mockResolvedValue(response([]));
+
+    renderResults('inventario mensual');
+
+    expect(await screen.findByText('No encontramos documentos para «inventario mensual»')).toBeInTheDocument();
+    expect(screen.queryByText(APPROXIMATE)).not.toBeInTheDocument();
   });
 
   test('con un solo resultado dice "1 resultado"', async () => {

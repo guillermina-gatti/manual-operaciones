@@ -168,7 +168,7 @@ describe('DocumentWriteSteps', () => {
     it('con todas las áreas existentes y activas pasa', async () => {
       await expect(
         steps.assertAreasCanBeAssigned([AREA_IDS.ventas, AREA_IDS.operaciones]),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual([AREA_IDS.ventas, AREA_IDS.operaciones]);
     });
 
     it('un área inexistente da 400 que la nombra', async () => {
@@ -210,7 +210,8 @@ describe('DocumentWriteSteps', () => {
           [COMPRAS, AREA_IDS.operaciones],
           [AREA_IDS.ventas, COMPRAS],
         ),
-      ).resolves.toBeUndefined();
+        // D6 (11/11/2026): devuelve solo las activas, para validar al responsable (R10).
+      ).resolves.toEqual([AREA_IDS.operaciones]);
     });
 
     it('R10: con un área inexistente y una inactiva, gana la inexistente', async () => {

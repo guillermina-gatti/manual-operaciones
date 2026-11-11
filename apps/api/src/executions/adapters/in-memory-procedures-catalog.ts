@@ -1,6 +1,7 @@
 /* In-memory procedures catalog */
 import {
   CatalogProcedureVersion,
+  CatalogPublication,
   ProceduresCatalog,
 } from '../ports/procedures-catalog';
 import {
@@ -44,16 +45,54 @@ export class InMemoryProceduresCatalog extends ProceduresCatalog {
     return Promise.resolve(version ? this.toCatalogVersion(version) : null);
   }
 
-  // Test helper: publishes a version and unpublishes the others of the same
-  // procedure, as publishing a new version would.
+  // Published at some point means published now or superseded; a draft never counts.
+  findPublishedAfter(versionId: string): Promise<CatalogPublication[]> {
+    const base = this.versions.get(versionId);
+    const baseNumber = base?.versionNumber;
+    if (!base || baseNumber === undefined) return Promise.resolve([]);
+    const after = [...this.versions.values()]
+      .filter(
+        (v) =>
+          v.procedureId === base.procedureId &&
+          (v.published || v.superseded === true) &&
+          v.versionNumber !== undefined &&
+          v.versionNumber > baseNumber,
+      )
+      .map((v): CatalogPublication => ({
+        versionId: v.versionId,
+        versionNumber: v.versionNumber ?? 0,
+        isCritical: v.isCritical ?? false,
+        changeSummary: v.changeSummary ?? null,
+        publishedAt: v.publishedAt ? new Date(v.publishedAt) : null,
+      }))
+      .sort((a, b) => a.versionNumber - b.versionNumber);
+    return Promise.resolve(after);
+  }
+
+  // Test helper: publishes a version; the one published before becomes superseded, as
+  // publishing a new version would.
   publish(versionId: string): void {
     const target = this.versions.get(versionId);
     if (!target) throw new Error(`Unknown procedure version ${versionId}`);
     for (const version of this.versions.values()) {
-      if (version.procedureId === target.procedureId) {
-        version.published = version.versionId === versionId;
+      if (version.procedureId !== target.procedureId) continue;
+      if (version.versionId === versionId) {
+        version.published = true;
+        version.superseded = false;
+      } else if (version.published) {
+        version.published = false;
+        version.superseded = true;
       }
     }
+  }
+
+  // Test helper: adds a version as given (a draft unless it says published), for
+  // example a new critical one to publish while an execution is running.
+  addVersion(version: FixtureProcedureVersion): void {
+    this.versions.set(version.versionId, {
+      ...version,
+      steps: version.steps.map((step) => ({ ...step })),
+    });
   }
 
   // Test helper: assigns the procedure to other areas, for all its versions.
@@ -61,7 +100,7 @@ export class InMemoryProceduresCatalog extends ProceduresCatalog {
     this.areas.set(procedureId, [...areaIds]);
   }
 
-  // A copy without the published flag, with the current areas and the steps sorted
+  // A copy without the published flags, with the current areas and the steps sorted
   // by order, so callers cannot change the catalog.
   private toCatalogVersion(
     version: FixtureProcedureVersion,
@@ -71,8 +110,18 @@ export class InMemoryProceduresCatalog extends ProceduresCatalog {
       versionId: version.versionId,
       areaIds: [...(this.areas.get(version.procedureId) ?? [])],
       steps: version.steps
-        .map((step) => ({ id: step.id, order: step.order, title: step.title }))
+        .map((step) => ({
+          id: step.id,
+          order: step.order,
+          title: step.title,
+          description: step.description,
+          stepKey: step.stepKey,
+        }))
         .sort((a, b) => a.order - b.order),
+      title: version.title,
+      versionNumber: version.versionNumber,
+      isCritical: version.isCritical,
+      changeSummary: version.changeSummary,
     };
   }
 }

@@ -405,3 +405,18 @@ describe('revisión (spec 005)', () => {
     );
   });
 });
+
+// Spec 011 (T11): los errores de las alertas de contradicción, sin el texto de la API.
+describe('las alertas de contradicción (spec 011)', () => {
+  test.each([
+    [400, 'Revisá la nota: puede tener hasta 500 caracteres.', false],
+    [403, 'No tenés permiso para ver esta información.', false],
+    [404, 'La alerta ya no existe.', false],
+    [409, 'Otra persona ya la marcó como resuelta.', false],
+    [503, 'El servicio no está disponible. Probá de nuevo en unos minutos.', true],
+  ])('%i: %s', (status, message, canRetry) => {
+    const error = new ApiError(status, ['La alerta ya está resuelta']);
+
+    expect(describeApiError(error, 'conflict-alert')).toMatchObject({ message, canRetry });
+  });
+});

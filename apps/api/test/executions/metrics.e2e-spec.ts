@@ -14,6 +14,7 @@ import {
   OTRO_EMPLEADO_VENTAS,
   authHeaders,
   cleanExecutions,
+  closeExecutionsTestApp,
   createExecutionsTestApp,
 } from './helpers';
 
@@ -34,7 +35,13 @@ interface ProcedureBody {
   abandoned: number;
   completionRate: number | null;
   avgCompletionMs: number | null;
-  versions: { procedureVersionId: string; steps: StepBody[] }[];
+  minCompletionMs: number | null;
+  maxCompletionMs: number | null;
+  versions: {
+    procedureVersionId: string;
+    avgCompletionMs: number | null;
+    steps: StepBody[];
+  }[];
 }
 
 interface MetricsBody {
@@ -45,8 +52,10 @@ interface MetricsBody {
     inProgress: number;
     abandoned: number;
     completionRate: number | null;
+    avgCompletionMs: number | null;
   };
   procedures: ProcedureBody[];
+  areaSummary: { areaId: string; procedures: number }[];
 }
 
 const CIERRE = PROCEDURE_IDS.cierreDeCaja;
@@ -141,7 +150,7 @@ describe('Procedures metrics (integration)', () => {
   });
 
   afterAll(async () => {
-    await t.app.close();
+    await closeExecutionsTestApp(t);
     if (previousTimeZone === undefined) delete process.env.APP_TIMEZONE;
     else process.env.APP_TIMEZONE = previousTimeZone;
   });
@@ -173,6 +182,10 @@ describe('Procedures metrics (integration)', () => {
         inProgress: 1,
         abandoned: 0,
         completionRate: 2 / 3,
+        // One completed Cierre de caja and one completed Recepción.
+        avgCompletionMs: Math.round(
+          ((CIERRE_V2.steps.length + RECEPCION_V1.steps.length) * STEP_MS) / 2,
+        ),
       });
 
       const cierre = procedure(result, CIERRE)!;
@@ -182,7 +195,11 @@ describe('Procedures metrics (integration)', () => {
         inProgress: 1,
         abandoned: 0,
         completionRate: 0.5,
+        title: 'Cierre de caja', // from the in-memory catalog
         avgCompletionMs: CIERRE_V2.steps.length * STEP_MS,
+        // A single completed execution: the fastest and the slowest.
+        minCompletionMs: CIERRE_V2.steps.length * STEP_MS,
+        maxCompletionMs: CIERRE_V2.steps.length * STEP_MS,
       });
       const [first, second, third] = cierre.versions[0].steps;
       expect(first).toMatchObject({
@@ -215,6 +232,11 @@ describe('Procedures metrics (integration)', () => {
 
       expect(procedureIds(body as MetricsBody)).toEqual([RECEPCION]);
       expect((body as MetricsBody).totals.started).toBe(1);
+      // The summary for the selector still counts every area.
+      expect((body as MetricsBody).areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+        { areaId: AREA_IDS.operaciones, procedures: 1 },
+      ]);
     });
 
     it('a supervisor of Ventas sees only Ventas, with or without the area in the filter', async () => {
@@ -226,6 +248,9 @@ describe('Procedures metrics (integration)', () => {
 
       expect(procedureIds(all.body as MetricsBody)).toEqual([CIERRE]);
       expect((all.body as MetricsBody).areaIds).toEqual([AREA_IDS.ventas]);
+      expect((all.body as MetricsBody).areaSummary).toEqual([
+        { areaId: AREA_IDS.ventas, procedures: 1 },
+      ]);
       expect(filtered.body).toEqual(
         expect.objectContaining({
           procedures: (all.body as MetricsBody).procedures,
@@ -271,6 +296,9 @@ describe('Procedures metrics (integration)', () => {
     const cierre = procedure(body as MetricsBody, CIERRE)!;
 
     expect(cierre.started).toBe(2);
+    // The fastest and the slowest come from different versions.
+    expect(cierre.minCompletionMs).toBe(CIERRE_V1.steps.length * STEP_MS);
+    expect(cierre.maxCompletionMs).toBe(CIERRE_V2.steps.length * STEP_MS);
     expect(cierre.versions.map((v) => v.procedureVersionId)).toEqual([
       CIERRE_V2.versionId,
       CIERRE_V1.versionId,
@@ -278,6 +306,11 @@ describe('Procedures metrics (integration)', () => {
     expect(cierre.versions.map((v) => v.steps.length)).toEqual([
       CIERRE_V2.steps.length,
       CIERRE_V1.steps.length,
+    ]);
+    // Each version with the time of its own completed execution.
+    expect(cierre.versions.map((v) => v.avgCompletionMs)).toEqual([
+      CIERRE_V2.steps.length * STEP_MS,
+      CIERRE_V1.steps.length * STEP_MS,
     ]);
   });
 
@@ -321,10 +354,48 @@ describe('Procedures metrics (integration)', () => {
           inProgress: 0,
           abandoned: 0,
           completionRate: null,
+          avgCompletionMs: null,
         },
         procedures: [],
       });
     });
+  });
+
+  it('HU33: a RESTARTED execution counts nowhere, and the totals still add up', async () => {
+    // Elena had Cierre de caja at step 2 for 30 hours (it would be abandoned) and
+    // restarted it on the current version, which she then completed.
+    await seed(CIERRE_V2, hoursAgo(30), 1);
+    await t.prisma.execution.updateMany({
+      where: { procedureId: CIERRE, status: 'IN_PROGRESS' },
+      data: { status: 'RESTARTED', finishedAt: hoursAgo(2) },
+    });
+    await seed(CIERRE_V2, hoursAgo(2), CIERRE_V2.steps.length);
+
+    const { body } = await metrics(admin).expect(200);
+    const result = body as MetricsBody;
+    const cierre = procedure(result, CIERRE)!;
+
+    expect(cierre).toMatchObject({
+      started: 1,
+      completed: 1,
+      inProgress: 0,
+      abandoned: 0,
+    });
+    // Its steps are not reached either.
+    expect(cierre.versions[0].steps[0]).toMatchObject({
+      reached: 1,
+      finished: 1,
+      abandoned: 0,
+    });
+    expect(cierre.versions[0].steps[1]).toMatchObject({
+      reached: 1,
+      abandoned: 0,
+    });
+    const { totals } = result;
+    expect(totals.started).toBe(
+      totals.completed + totals.inProgress + totals.abandoned,
+    );
+    expect(totals).toMatchObject({ started: 1, abandoned: 0 });
   });
 
   it('with no executions at all the answer is empty, not an error', async () => {

@@ -2,7 +2,8 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (23/10/2026):** T01 a T26 y T31 **hechas** (resultado de la verificación en T31). T27 a T30 siguen **bloqueadas** por piezas de la pareja A:
+- **Estado (06/11/2026):** T01 a T31 **resueltas**. T27 a T30 ya no están bloqueadas: las resolvieron la spec 008 (T27) y la pareja A (T28 a T30). El detalle de cada una está en su tarea, en [Tareas que estaban bloqueadas](#tareas-que-estaban-bloqueadas).
+- **Estado anterior (23/10/2026):** T01 a T26 y T31 **hechas** (resultado de la verificación en T31). T27 a T30 seguían **bloqueadas** por piezas de la pareja A:
   - **T27** (nombres en la respuesta): la API devuelve solo `areaIds` y `ownerId`; para agregar `areas` y `owner` con nombres, sus directorios reales de áreas y usuarios tienen que exponer los nombres (Q1).
   - **T28** (áreas reales): nadie expone todavía `GET /api/areas` (Q2).
   - **T29** (responsables reales): la pareja A todavía no expone `GET /api/users?areaIds=` (spec P1).
@@ -11,7 +12,7 @@
 Convenciones:
 
 - Una tarea = un commit. Las rutas son relativas a `apps/web/`, salvo que digan otra cosa.
-- F1 a F14 son reglas de la spec; E1 a E12, sus escenarios (tabla al principio del plan); D1 a D7, las decisiones del plan; Q1, Q2 y Q6, las preguntas que siguen abiertas con la pareja A (plan, sección 9).
+- F1 a F14 son reglas de la spec; E1 a E12, sus escenarios (tabla al principio del plan); D1 a D9, las decisiones del plan; Q1, Q2 y Q6, las preguntas que siguen abiertas con la pareja A (plan, sección 9).
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - Tests de componentes: `pnpm --filter web test <patrón>`. Tests de Playwright: `pnpm --filter web test:e2e <patrón>`.
 - Antes de escribir código que use una API de Next, leer la guía correspondiente en `node_modules/next/dist/docs/` (`AGENTS.md`).
@@ -351,13 +352,14 @@ Convenciones:
 - **Depende de:** T24, T25
 - **Commit:** `test(documents): probar las pantallas contra la API real`
 
-## Tareas bloqueadas
+## Tareas que estaban bloqueadas
 
-Necesitan piezas de la pareja A que todavía no existen. Se hacen cuando lleguen; ninguna cambia los componentes, solo los `index.ts` de la sección 3 del plan o el origen de los nombres.
+Necesitaban piezas de la pareja A que no existían el 23/10/2026. **Actualizado el 06/11/2026:** las cuatro están resueltas; cada una dice cómo y dónde. Se deja el texto original debajo para ver qué se pedía.
 
-### T27 · Nombres de áreas y responsable desde la respuesta — BLOQUEADA
+### T27 · Nombres de áreas y responsable desde la respuesta — RESUELTA
 
-- **Bloqueada por:** la API de documentos todavía devuelve solo `areaIds` y `ownerId` (Q1). Para agregar `areas: [{ id, name }]` y `owner: { id, name }`, los `AreasDirectory` y `UsersDirectory` reales del backend tienen que exponer los nombres, y eso depende de la pareja A.
+- **Resuelta (spec 008):** la API devuelve `areas` y `owner` (`DocumentReference`, con nombre y estado), y la web los tipa en `lib/api/documents.ts`. `DocumentList` y `DocumentDetail` ya no llaman a `getNames` ni a `listAreas` para mostrar nombres. Fue la opción acordada en A-06.4 (`docs/contracts/A-06.4-nombres-historicos.md`): los nombres vienen en las respuestas de Documentos, sin un servicio de nombres aparte. Queda una limpieza menor: `lib/directory/index.ts` conserva `legacyNamesDirectory` para `getNames`, que ya no se usa en las pantallas.
+- **Estaba bloqueada por:** la API de documentos todavía devuelve solo `areaIds` y `ownerId` (Q1). Para agregar `areas: [{ id, name }]` y `owner: { id, name }`, los `AreasDirectory` y `UsersDirectory` reales del backend tienen que exponer los nombres, y eso depende de la pareja A.
 - **Qué hace:** actualiza los tipos de `lib/api/documents.ts`; `DocumentList` y `DocumentDetail` dejan de usar `getNames` y `listAreas` para mostrar nombres.
 - **Cubre:** F7; Q1.
 - **Archivos:** `lib/api/documents.ts`, `components/documents/DocumentList.tsx`, `components/documents/DocumentDetail.tsx`, sus tests, `e2e/support/mock-api.ts`.
@@ -365,9 +367,10 @@ Necesitan piezas de la pareja A que todavía no existen. Se hacen cuando lleguen
 - **Depende de:** T15, T17
 - **Commit:** `feat(documents): mostrar los nombres que devuelve la API`
 
-### T28 · Áreas reales: `GET /api/areas` — BLOQUEADA
+### T28 · Áreas reales: `GET /api/areas` — RESUELTA
 
-- **Bloqueada por:** nadie expone todavía la lista de áreas (Q2).
+- **Resuelta (pareja A, Magali, 31/10/2026, `04dd70f`):** `lib/directory/http-areas-directory.ts` con su test (`tests/lib/directory/http-areas-directory.test.ts`), exportado desde `lib/directory/index.ts`.
+- **Estaba bloqueada por:** nadie expone todavía la lista de áreas (Q2).
 - **Qué hace:** crea `HttpAreasDirectory`, que llama a `GET /api/areas` con `apiClient`, y lo exporta desde `lib/directory/index.ts` en lugar de la simulación.
 - **Cubre:** F2 (al menos un área); Q2.
 - **Archivos:** `lib/directory/http-areas-directory.ts`, `lib/directory/index.ts`.
@@ -375,9 +378,10 @@ Necesitan piezas de la pareja A que todavía no existen. Se hacen cuando lleguen
 - **Depende de:** T07
 - **Commit:** `feat(web): leer las áreas desde la API`
 
-### T29 · Responsables reales: `GET /api/users?areaIds=` — BLOQUEADA
+### T29 · Responsables reales: `GET /api/users?areaIds=` — RESUELTA
 
-- **Bloqueada por:** la pareja A todavía no expone la lista de usuarios filtrable por área (spec sección 10, P1).
+- **Resuelta (pareja A, Magali, 31/10/2026, `2f3f7c7`):** `lib/directory/http-users-directory.ts` con su test (`tests/lib/directory/http-users-directory.test.ts`), exportado desde `lib/directory/index.ts`.
+- **Estaba bloqueada por:** la pareja A todavía no expone la lista de usuarios filtrable por área (spec sección 10, P1).
 - **Qué hace:** crea `HttpUsersDirectory`, que llama a `GET /api/users?areaIds=…` (un parámetro por área) con `apiClient`, y lo exporta desde `lib/directory/index.ts`. Se confirma con la pareja A que la respuesta incluye a los ADMIN; si no, se completa con `filterOwnerCandidates`.
 - **Cubre:** F11; P1.
 - **Archivos:** `lib/directory/http-users-directory.ts`, `lib/directory/index.ts`.
@@ -385,9 +389,10 @@ Necesitan piezas de la pareja A que todavía no existen. Se hacen cuando lleguen
 - **Depende de:** T07
 - **Commit:** `feat(web): leer los responsables desde la API`
 
-### T30 · Sesión real — BLOQUEADA
+### T30 · Sesión real — RESUELTA
 
-- **Bloqueada por:** el login, la sesión y la renovación del token de la pareja A todavía no existen.
+- **Resuelta (pareja A: A-09, Magali, 30/10/2026; A-10a, Camila, 03/11/2026):** login real y controles de sesión; la sesión real queda activa por defecto (`lib/session/index.ts`, `REAL_AUTH_ENABLED`). **Diferencia con lo planeado:** la sesión simulada no se borró. Queda aislada en `lib/session/simulated-session.tsx`, junto con `DevSessionSwitcher`, y solo se usa fuera de producción si se pide con `NEXT_PUBLIC_REAL_AUTH='false'`; es la única que todavía manda `x-user-id`. No hay `proxy.ts`, y `next.config.ts` tiene `experimental.proxyClientMaxBodySize: '11mb'` (Q6).
+- **Estaba bloqueada por:** el login, la sesión y la renovación del token de la pareja A todavía no existen.
 - **Qué hace:** `lib/session/index.ts` reexporta la sesión real; se borran `simulated-session.tsx` y `DevSessionSwitcher` (y se saca de `layout.tsx`). Si la pareja A entrega su propio cliente HTTP, `lib/api/index.ts` lo reexporta (plan 3.2). El 401 redirige al login. Si la pareja A agrega `proxy.ts`, se confirma que su `matcher` excluye `/api/:path*` o que `experimental.proxyClientMaxBodySize` es `'11mb'` (Q6).
 - **Cubre:** F1, F6 (rol real); plan secciones 3.1 y 3.2; Q6.
 - **Archivos:** `lib/session/index.ts`, `lib/api/index.ts`, `app/layout.tsx`, `e2e/support/session.ts`, y se borran `lib/session/simulated-session.tsx`, `components/session/DevSessionSwitcher.tsx` y sus tests.
@@ -490,6 +495,6 @@ T22 ◄─ T04, T21
 
 T23 ◄─ T15 · T24 ◄─ T17, T23 · T25 ◄─ T22, T23 · T26 ◄─ T24, T25
 
-BLOQUEADAS: T27 ◄─ T15, T17 · T28 ◄─ T07 · T29 ◄─ T07 · T30 ◄─ T05, T06, T26
+RESUELTAS (antes bloqueadas): T27 ◄─ T15, T17 · T28 ◄─ T07 · T29 ◄─ T07 · T30 ◄─ T05, T06, T26
 T31 ◄─ T01 a T26 (se vuelve a correr con cada bloqueada que se cierre)
 ```

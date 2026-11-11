@@ -1,20 +1,56 @@
 'use client';
 
-// Choosing a procedure to execute (HU12). The same button starts a new execution or resumes the
-// one in progress: the API decides (201 or 200) and either way the screen opens it.
+// Choosing a procedure to execute (HU12). The procedures come from GET /api/procedures (HU11),
+// which only gives the ones of the user's areas; only a published version with steps can be
+// executed. The same button starts a new execution or resumes the one in progress: the API
+// decides (201 or 200) and either way the screen opens it.
 import { useRouter } from 'next/navigation';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/Button';
+import { AreaChips, BUTTON_PRIMARY, CARD, ERROR_BOX } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
-import { describeExecutionError, startExecution } from '@/lib/api';
-import { SAMPLE_PROCEDURES } from '@/lib/executions/sample-procedures';
-import type { ProcedureOption } from '@/lib/executions/sample-procedures';
+import { describeExecutionError, startExecution, useApiResource } from '@/lib/api';
+import {
+  describeListError,
+  executableProcedures,
+} from '@/lib/executions/executable-procedures';
+import type { ExecutableProcedure } from '@/lib/executions/executable-procedures';
+import { listProcedures } from '@/lib/procedures';
+import { useSession } from '@/lib/session';
+
+// The API gives up to 100 per page; for the MVP the first page is enough.
+const PAGE_LIMIT = 100;
 
 interface ProcedurePickerProps {
-  procedures?: readonly ProcedureOption[];
+  // Given, the list is not asked to the API (tests).
+  procedures?: readonly ExecutableProcedure[];
 }
 
-export function ProcedurePicker({ procedures = SAMPLE_PROCEDURES }: ProcedurePickerProps) {
+export function ProcedurePicker({ procedures }: ProcedurePickerProps) {
+  return procedures ? (
+    <ProcedureCards procedures={procedures} />
+  ) : (
+    <PublishedProcedures />
+  );
+}
+
+function PublishedProcedures() {
+  const { user } = useSession();
+  // The user is part of the key: switching users asks again.
+  const list = useApiResource(user ? `executable-procedures:${user.id}` : null, (signal) =>
+    listProcedures({ limit: PAGE_LIMIT }, signal),
+  );
+
+  if (list.status === 'idle' || list.status === 'loading') {
+    return <ScreenState kind="loading" label="Cargando los procedimientos…" />;
+  }
+  if (list.status === 'error') {
+    const { message, canRetry } = describeListError(list.error);
+    return <ScreenState kind="error" message={message} onRetry={canRetry ? list.reload : undefined} />;
+  }
+  return <ProcedureCards procedures={executableProcedures(list.data.data)} />;
+}
+
+function ProcedureCards({ procedures }: { procedures: readonly ExecutableProcedure[] }) {
   const router = useRouter();
   const baseId = useId();
   const [startingId, setStartingId] = useState<string | null>(null);
@@ -63,10 +99,7 @@ export function ProcedurePicker({ procedures = SAMPLE_PROCEDURES }: ProcedurePic
   return (
     <div className="flex flex-col gap-6">
       {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 shadow-sm dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
+        <p role="alert" className={ERROR_BOX}>
           {error}
         </p>
       )}
@@ -74,30 +107,31 @@ export function ProcedurePicker({ procedures = SAMPLE_PROCEDURES }: ProcedurePic
         {procedures.map((procedure) => (
           <li
             key={procedure.id}
-            className="flex min-w-0 flex-col justify-between gap-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-200 focus-within:border-blue-400 focus-within:shadow-md hover:border-blue-300 hover:shadow-md motion-safe:hover:-translate-y-0.5 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-blue-500 dark:hover:border-blue-500/70"
+            className={`${CARD} flex min-w-0 flex-col justify-between gap-6 p-6 transition-shadow focus-within:shadow-md hover:shadow-md sm:p-8`}
           >
             <div className="flex min-w-0 flex-col gap-3">
               <h2
                 id={`${baseId}-${procedure.id}`}
-                className="break-words text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+                className="break-words text-[22px] font-bold text-texto"
               >
-                {procedure.name}
+                {procedure.title}
               </h2>
-              {/* The area as a chip. */}
-              <p className="inline-flex items-center gap-1 self-start rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-800 ring-1 ring-inset ring-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800">
-                Área: <span className="font-semibold">{procedure.areaName}</span>
-              </p>
+              {/* One chip per area; "Áreas:" only for screen readers. */}
+              <div className="self-start">
+                <span className="sr-only">Áreas: </span>
+                <AreaChips areas={procedure.areas} />
+              </div>
             </div>
-            <Button
-              // `!` wins over Button's own size classes without editing it; still at least 44 px.
-              className="min-h-12! w-full rounded-lg! px-6! text-base shadow-sm sm:w-auto sm:self-start"
+            <button
+              type="button"
+              className={`${BUTTON_PRIMARY} w-full sm:w-auto sm:self-start`}
               // Every button says the same; the description tells which procedure it opens.
               aria-describedby={`${baseId}-${procedure.id}`}
               disabled={startingId !== null}
               onClick={() => start(procedure.id)}
             >
               {startingId === procedure.id ? 'Abriendo…' : 'Comenzar o continuar'}
-            </Button>
+            </button>
           </li>
         ))}
       </ul>

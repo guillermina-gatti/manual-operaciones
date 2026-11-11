@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Capturas de pantalla de antes y después de un cambio visual (ver DESIGN.md): no se suben al repo
+capturas/

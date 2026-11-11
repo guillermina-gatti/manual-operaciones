@@ -1,6 +1,9 @@
 // The steps of the execution, in order. Each one is finished, current or pending; only the current
-// one has the button to finish it.
-import { Button } from '@/components/ui/Button';
+// one has the button to finish it. The state never depends on color alone: a check or a number in
+// the circle, the state written next to a dot, and a thicker border on the current step.
+import { BUTTON_PRIMARY, StatusDot } from '@/components/documents/design';
+import type { DotTone } from '@/components/documents/design';
+import { CheckIcon } from '@/components/metrics/icons';
 import type { ExecutionResponse, ExecutionStepResponse } from '@/lib/api';
 import { formatDuration, formatTime } from '@/lib/executions/format';
 
@@ -13,86 +16,99 @@ interface StepListProps {
   onComplete: (stepId: string) => void;
   // After finishing a step in this screen, the focus moves to the button of the next one.
   focusCurrent: boolean;
+  // HU33: a critical change is pending; the current step cannot be finished until it restarts.
+  blocked?: boolean;
 }
 
-const STATE_LABELS: Record<StepState, string> = {
-  finished: 'Terminado',
-  current: 'En curso',
-  pending: 'Pendiente',
+const STATE: Record<StepState, { label: string; tone: DotTone }> = {
+  finished: { label: 'Terminado', tone: 'exito' },
+  current: { label: 'En curso', tone: 'azul' },
+  pending: { label: 'Pendiente', tone: 'gris' },
 };
 
 const ITEM_STYLES: Record<StepState, string> = {
-  finished:
-    'border-green-200 bg-white shadow-sm dark:border-green-900 dark:bg-zinc-900',
-  current:
-    'border-blue-600 bg-blue-50 shadow-md ring-4 ring-blue-600/10 dark:border-blue-400 dark:bg-blue-950/70 dark:ring-blue-400/15',
-  pending:
-    'border-zinc-200 bg-zinc-100/70 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400',
+  finished: 'border border-borde p-5',
+  current: 'border-2 border-bosque p-5 shadow-md sm:p-6',
+  pending: 'border border-borde p-5',
 };
 
-// The numbered circle: a check when finished.
+// The circle: a check when finished, the number otherwise.
 const CIRCLE_STYLES: Record<StepState, string> = {
-  finished: 'bg-green-700 text-white dark:bg-green-500 dark:text-zinc-950',
-  current: 'bg-blue-700 text-white shadow-sm dark:bg-blue-400 dark:text-zinc-950',
-  pending: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200',
+  finished: 'bg-exito text-blanco',
+  current: 'bg-bosque text-blanco',
+  pending: 'border border-borde bg-fondo text-texto-suave',
 };
 
-// The small state label next to the times.
-const LABEL_STYLES: Record<StepState, string> = {
-  finished: 'bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-200',
-  current: 'bg-blue-100 text-blue-800 dark:bg-blue-900/70 dark:text-blue-100',
-  pending: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-};
+export function StepList({
+  execution,
+  completing,
+  onComplete,
+  focusCurrent,
+  blocked = false,
+}: StepListProps) {
+  const last = execution.steps.at(-1);
 
-const TITLE_STYLES: Record<StepState, string> = {
-  finished: 'text-zinc-900 dark:text-zinc-50',
-  current: 'text-zinc-900 dark:text-zinc-50',
-  pending: 'text-zinc-700 dark:text-zinc-300',
-};
-
-export function StepList({ execution, completing, onComplete, focusCurrent }: StepListProps) {
   return (
-    <ol aria-label="Pasos" className="flex flex-col gap-4">
+    <ol aria-label="Pasos del procedimiento" className="flex flex-col gap-3">
       {execution.steps.map((step) => {
         const state = stateOf(step, execution.currentStepId);
         return (
           <li
             key={step.stepId}
             aria-current={state === 'current' ? 'step' : undefined}
-            className={`flex min-w-0 flex-col gap-4 rounded-xl border p-5 transition-colors sm:p-6 ${ITEM_STYLES[state]}`}
+            className={`flex min-w-0 flex-col gap-4 rounded-2xl bg-blanco ${ITEM_STYLES[state]}`}
           >
             <div className="flex min-w-0 items-start gap-4">
               <span
                 aria-hidden="true"
-                className={`flex size-10 shrink-0 items-center justify-center rounded-full text-base font-bold ${CIRCLE_STYLES[state]}`}
+                className={`flex size-12 shrink-0 items-center justify-center rounded-full text-lg font-bold ${CIRCLE_STYLES[state]}`}
               >
-                {state === 'finished' ? '✓' : step.order}
+                {state === 'finished' ? <CheckIcon className="size-6" /> : step.order}
               </span>
-              <div className="flex min-w-0 flex-col gap-2 pt-1.5">
-                <h2 className={`break-words text-lg font-semibold leading-snug ${TITLE_STYLES[state]}`}>
+              <div className="flex min-w-0 flex-col gap-2 pt-1">
+                <h3
+                  className={`break-words text-lg font-bold leading-snug ${
+                    state === 'pending' ? 'text-texto-suave' : 'text-texto'
+                  }`}
+                >
                   <span className="sr-only">Paso {step.order}: </span>
                   {step.title}
-                </h2>
-                <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                  <span
-                    className={`mr-1 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${LABEL_STYLES[state]}`}
+                </h3>
+                {/* The instruction, when the catalog gives it; without one the title is enough. */}
+                {step.description?.trim() && (
+                  <p
+                    className={`whitespace-pre-line break-words ${
+                      state === 'pending' ? 'text-texto-suave' : 'text-texto'
+                    }`}
                   >
-                    {STATE_LABELS[state]}
-                  </span>
+                    {step.description.trim()}
+                  </p>
+                )}
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-texto-suave">
+                  <StatusDot tone={STATE[state].tone}>{STATE[state].label}</StatusDot>
                   <StepTimes step={step} state={state} />
                 </p>
               </div>
             </div>
-            {state === 'current' && (
-              <Button
-                // `!` wins over Button's own size classes without editing it; still at least 44 px.
-                className="min-h-12! w-full rounded-lg! px-6! text-base shadow-sm sm:ml-14 sm:w-auto sm:self-start"
+            {state === 'current' && blocked && (
+              <p className="text-texto sm:ml-16">
+                Para seguir, reiniciá con la versión nueva.
+              </p>
+            )}
+            {state === 'current' && !blocked && (
+              <button
+                type="button"
+                className={`${BUTTON_PRIMARY} min-h-14 w-full text-lg sm:ml-16 sm:w-auto sm:self-start`}
                 disabled={completing}
                 autoFocus={focusCurrent}
                 onClick={() => onComplete(step.stepId)}
               >
-                {completing ? 'Guardando…' : 'Terminé este paso'}
-              </Button>
+                {completing
+                  ? 'Guardando…'
+                  : step.stepId === last?.stepId
+                    ? 'Terminé el último paso'
+                    : 'Terminé este paso'}
+              </button>
             )}
           </li>
         );
@@ -104,15 +120,13 @@ export function StepList({ execution, completing, onComplete, focusCurrent }: St
 function StepTimes({ step, state }: { step: ExecutionStepResponse; state: StepState }) {
   if (state === 'finished' && step.finishedAt) {
     return (
-      <>
-        {' · '}
-        {formatDuration(step.durationMs)}
-        {' · '}Terminó a las {formatTime(step.finishedAt)}
-      </>
+      <span>
+        Terminó a las {formatTime(step.finishedAt)} · duró {formatDuration(step.durationMs)}
+      </span>
     );
   }
   if (state === 'current' && step.startedAt) {
-    return <> · Empezó a las {formatTime(step.startedAt)}</>;
+    return <span>Empezó a las {formatTime(step.startedAt)}</span>;
   }
   return null;
 }
