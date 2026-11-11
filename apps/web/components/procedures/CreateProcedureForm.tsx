@@ -16,7 +16,8 @@ import { useSession } from '@/lib/session';
 import { Notice } from './Notice';
 import { TextField } from './TextField';
 
-export function CreateProcedureForm() {
+// onCreated: the list asks again, so the new procedure shows up in it.
+export function CreateProcedureForm({ onCreated }: { onCreated?: () => void }) {
   const { user } = useSession();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -63,6 +64,7 @@ export function CreateProcedureForm() {
       });
       // It is saved even if the user already left: the procedure exists in the API.
       saveProcedure(user.id, fromCreated(response));
+      onCreated?.();
       if (visitRef.current !== visit) return;
       setTitle('');
       setDescription('');
