@@ -4,14 +4,14 @@
 // shown while the version the screen works on is a draft.
 import { useId } from 'react';
 import { HINT } from '@/components/documents/design';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import { DraftForm } from './DraftForm';
 import { SECTION, SECTION_TITLE } from './design';
 import { MAX_STEPS, StepsEditor } from './StepsEditor';
 
 interface DraftSectionsProps {
-  procedure: StoredProcedure;
-  onChange: (next: StoredProcedure) => void;
+  procedure: EditableProcedure;
+  onChange: (next: EditableProcedure) => void;
   // The draft is gone: leave the screen.
   onGone: () => void;
 }

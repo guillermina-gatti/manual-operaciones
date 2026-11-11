@@ -4,7 +4,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { describeProcedureError, discardDraft, updateVersion } from '@/lib/procedures';
 import type { UpdateVersionValues } from '@/lib/procedures';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import { withDraft } from '@/lib/procedures/snapshot';
 import type { FormValues } from '@/lib/procedures/validate';
 
@@ -14,8 +14,8 @@ export interface DraftFailure {
 }
 
 export function useDraftActions(
-  procedure: StoredProcedure,
-  onChange: (next: StoredProcedure) => void,
+  procedure: EditableProcedure,
+  onChange: (next: EditableProcedure) => void,
   onGone: () => void,
 ) {
   const [busy, setBusy] = useState<'save' | 'discard' | null>(null);

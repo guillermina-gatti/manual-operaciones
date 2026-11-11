@@ -5,7 +5,7 @@
 // of the API updates the local copy through onChange. It has no box of its own: the section that
 // holds it lays its parts out.
 import { LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import { ADD_BOX } from './design';
 import { Notice } from './Notice';
 import { StepForm } from './StepForm';
@@ -16,9 +16,9 @@ import { useStepActions } from './useStepActions';
 export const MAX_STEPS = 50;
 
 interface StepsEditorProps {
-  procedure: StoredProcedure;
+  procedure: EditableProcedure;
   // The new copy of the procedure after the API accepted a change.
-  onChange: (next: StoredProcedure) => void;
+  onChange: (next: EditableProcedure) => void;
   // The procedure is not in the API anymore: leave the screen.
   onGone: () => void;
 }

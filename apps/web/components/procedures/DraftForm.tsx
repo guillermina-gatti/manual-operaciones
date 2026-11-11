@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { LIST_BUTTON_PRIMARY, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import { validateProcedure } from '@/lib/procedures/validate';
 import type { FormErrors } from '@/lib/procedures/validate';
 import { DiscardDraft } from './DiscardDraft';
@@ -15,9 +15,9 @@ import { TextField } from './TextField';
 import { useDraftActions } from './useDraftActions';
 
 interface DraftFormProps {
-  procedure: StoredProcedure;
+  procedure: EditableProcedure;
   // The new copy of the procedure after the API accepted a change.
-  onChange: (next: StoredProcedure) => void;
+  onChange: (next: EditableProcedure) => void;
   // The draft is gone (discarded, or the API does not know it): leave the screen.
   onGone: () => void;
 }

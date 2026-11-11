@@ -3,7 +3,7 @@
 // One step of the draft (HU09, R6 to R8): its number, title and description, and the buttons to
 // move, edit and delete it. While it is being edited, the form takes its place.
 import { LIST_BUTTON_DANGER, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
-import type { StoredStep } from '@/lib/procedures/session-list';
+import type { EditableStep } from '@/lib/procedures/editable';
 import type { Direction } from '@/lib/procedures/steps';
 import type { FormValues } from '@/lib/procedures/validate';
 import { IconDown, IconTrash, IconUp, STEP_ROW, StepNumber } from './design';
@@ -15,7 +15,7 @@ import type { Busy } from './useStepActions';
 const ICON_ONLY = 'size-12 px-0!';
 
 interface StepItemProps {
-  step: StoredStep;
+  step: EditableStep;
   isFirst: boolean;
   isLast: boolean;
   editing: boolean;

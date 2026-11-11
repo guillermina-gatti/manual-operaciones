@@ -278,9 +278,11 @@ describe('a version that is no longer a draft (spec 015, R6 and R7)', () => {
     );
     serve(storedPublished());
     render(<ProcedureEditor />);
+    const create = await screen.findByRole('button', { name: 'Crear nueva versión' });
+    // From now on the history has the new draft too.
     mocks.listVersions.mockResolvedValue(page([versionItem(), published()]));
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Crear nueva versión' }));
+    await userEvent.click(create);
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Borrador' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Publicar' })).toBeInTheDocument();

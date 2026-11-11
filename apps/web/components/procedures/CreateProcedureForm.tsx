@@ -1,24 +1,20 @@
 'use client';
 
 // Creating a procedure (HU09, R2): a title and an optional description. The API answers with the
-// procedure and its version 1 as a draft; the screens keep it in the list of this session.
+// procedure and its version 1 as a draft; the list asks the API again to show it.
 import Link from 'next/link';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { TEXT_LINK } from '@/components/documents/design';
 import { LIST_BUTTON_PRIMARY } from '@/components/documents/list-design';
 import { createProcedure, describeProcedureError } from '@/lib/procedures';
-import { saveProcedure } from '@/lib/procedures/session-list';
-import { fromCreated } from '@/lib/procedures/snapshot';
 import { validateProcedure } from '@/lib/procedures/validate';
 import type { FormErrors } from '@/lib/procedures/validate';
-import { useSession } from '@/lib/session';
 import { Notice } from './Notice';
 import { TextField } from './TextField';
 
 // onCreated: the list asks again, so the new procedure shows up in it.
 export function CreateProcedureForm({ onCreated }: { onCreated?: () => void }) {
-  const { user } = useSession();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
@@ -45,7 +41,7 @@ export function CreateProcedureForm({ onCreated }: { onCreated?: () => void }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingRef.current || !user) return;
+    if (submittingRef.current) return;
 
     const found = validateProcedure({ title, description });
     setErrors(found);
@@ -62,8 +58,7 @@ export function CreateProcedureForm({ onCreated }: { onCreated?: () => void }) {
         title: title.trim(),
         ...(trimmedDescription !== '' && { description: trimmedDescription }),
       });
-      // It is saved even if the user already left: the procedure exists in the API.
-      saveProcedure(user.id, fromCreated(response));
+      // The list is told even if the user already left: the procedure exists in the API.
       onCreated?.();
       if (visitRef.current !== visit) return;
       setTitle('');
