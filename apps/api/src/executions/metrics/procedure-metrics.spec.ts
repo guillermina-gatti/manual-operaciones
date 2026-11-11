@@ -81,6 +81,38 @@ describe('ratio', () => {
 });
 
 describe('buildProcedureMetrics', () => {
+  it('the title is the one of the latest version with executions; blank or missing is null', () => {
+    const titled = new Map([
+      [V1.versionId, { ...V1, title: 'Cierre de caja (v1)' }],
+      [V2.versionId, { ...V2, title: 'Cierre de caja' }],
+      [R1.versionId, { ...R1, title: '   ' }],
+    ]);
+
+    const procedures = buildProcedureMetrics(
+      [
+        executions(V1, {
+          started: 1,
+          lastStartedAt: new Date('2026-10-01T10:00:00.000Z'),
+        }),
+        executions(V2, {
+          started: 1,
+          lastStartedAt: new Date('2026-10-20T10:00:00.000Z'),
+        }),
+        executions(R1, { started: 1 }),
+      ],
+      [],
+      titled,
+    );
+
+    expect(procedures.map((p) => [p.procedureId, p.title])).toEqual([
+      [CIERRE, 'Cierre de caja'],
+      [RECEPCION, null],
+    ]);
+    expect(
+      buildProcedureMetrics([executions(V2, { started: 1 })], [], ALL)[0].title,
+    ).toBeNull();
+  });
+
   it('the fastest and the slowest completed execution, of any version', () => {
     const [cierre] = buildProcedureMetrics(
       [

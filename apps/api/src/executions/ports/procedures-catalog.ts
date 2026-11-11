@@ -5,6 +5,12 @@ export interface CatalogStep {
   id: string;
   order: number; // 1..n within the version
   title: string;
+  // Optional: what an adapter may give. The instruction of the step, and the key that
+  // copies of the step keep across versions (spec 015, R7).
+  // TODO(HU11): only the in-memory catalog fills them; Mica's PrismaProceduresCatalog does
+  // not yet (its tests fix the old shape). Connect them when she finishes HU11.
+  description?: string;
+  stepKey?: string;
 }
 
 // One version of a procedure and its steps sorted by order. Versions are immutable:
@@ -17,6 +23,25 @@ export interface CatalogProcedureVersion {
   // moving a procedure to another area takes effect on executions in progress too.
   areaIds: string[];
   steps: CatalogStep[];
+  // Optional: what an adapter may give. The title of this version of the procedure, its
+  // number (1..n within the procedure) and whether it was published as a critical change,
+  // with its summary.
+  // TODO(HU11): only the in-memory catalog fills them; Mica's PrismaProceduresCatalog does
+  // not yet (its tests fix the old shape). Connect them when she finishes HU11. HU33 does not
+  // need them: findPublishedAfter gives the number and the critical change.
+  title?: string;
+  versionNumber?: number;
+  isCritical?: boolean;
+  changeSummary?: string | null;
+}
+
+// A version published at some point (now PUBLISHED or SUPERSEDED), with what it changed.
+export interface CatalogPublication {
+  versionId: string;
+  versionNumber: number;
+  isCritical: boolean;
+  changeSummary: string | null;
+  publishedAt: Date | null;
 }
 
 // The catalog did not answer (timeout, connection). The service turns it into a 503.
@@ -41,4 +66,10 @@ export abstract class ProceduresCatalog {
   abstract findVersion(
     versionId: string,
   ): Promise<CatalogProcedureVersion | null>;
+
+  // The versions of the same procedure published after versionId (a higher version
+  // number, now PUBLISHED or SUPERSEDED; never a draft), the oldest first. An execution
+  // uses it to know whether its procedure changed and whether any change was critical
+  // (HU33). [] when there are none or the version does not exist.
+  abstract findPublishedAfter(versionId: string): Promise<CatalogPublication[]>;
 }

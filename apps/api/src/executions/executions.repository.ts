@@ -59,6 +59,14 @@ export interface StepCompletion {
   next: { stepId: string; stepOrder: number } | null;
 }
 
+// HU33: closes an execution in progress as RESTARTED at closedAt and creates the new one,
+// on the current version, in the same transaction.
+export interface ExecutionRestart {
+  executionId: string;
+  closedAt: Date;
+  next: NewExecution;
+}
+
 export abstract class ExecutionsRepository {
   // All or nothing: if the callback fails, the transaction is rolled back.
   abstract runInTransaction<T>(
@@ -86,5 +94,12 @@ export abstract class ExecutionsRepository {
   abstract completeStep(
     tx: RepositoryTransaction,
     data: StepCompletion,
+  ): Promise<ExecutionRecord>;
+
+  // Applies an ExecutionRestart inside the received transaction, with the old row already
+  // locked, and returns the new execution.
+  abstract restart(
+    tx: RepositoryTransaction,
+    data: ExecutionRestart,
   ): Promise<ExecutionRecord>;
 }

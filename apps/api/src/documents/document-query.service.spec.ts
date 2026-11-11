@@ -65,7 +65,7 @@ const record: DocumentRecord = {
 };
 
 describe('DocumentQueryService.list', () => {
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: { list: jest.Mock };
   let service: DocumentQueryService;
 
@@ -74,6 +74,11 @@ describe('DocumentQueryService.list', () => {
       findById: jest.fn((id: string) =>
         Promise.resolve(
           Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
         ),
       ),
     };
@@ -203,7 +208,7 @@ describe('DocumentQueryService: detalle y descarga', () => {
     }),
   };
 
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: { findByIdWithAreas: jest.Mock };
   let storage: { getDownloadUrl: jest.Mock };
   let service: DocumentQueryService;
@@ -213,6 +218,11 @@ describe('DocumentQueryService: detalle y descarga', () => {
       findById: jest.fn((id: string) =>
         Promise.resolve(
           Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
         ),
       ),
     };
@@ -353,7 +363,7 @@ describe('DocumentQueryService: detalle y descarga', () => {
 });
 
 describe('DocumentQueryService: dependencias no disponibles (D13)', () => {
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: { list: jest.Mock; findByIdWithAreas: jest.Mock };
   let storage: { getDownloadUrl: jest.Mock };
   let loggerError: jest.SpyInstance;
@@ -365,6 +375,7 @@ describe('DocumentQueryService: dependencias no disponibles (D13)', () => {
       .mockImplementation(() => {});
     users = {
       findById: jest.fn().mockResolvedValue(FIXTURE_USERS.empleadoVentas),
+      findByIds: jest.fn().mockResolvedValue([FIXTURE_USERS.empleadoVentas]),
     };
     repository = {
       list: jest.fn().mockResolvedValue({ data: [record], total: 1 }),
@@ -650,7 +661,7 @@ describe('DocumentQueryService: historial y descarga de una versión (spec 003, 
 describe('DocumentQueryService.search', () => {
   const START = '\uE000';
   const END = '\uE001';
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: { search: jest.Mock };
   let service: DocumentQueryService;
 
@@ -659,6 +670,11 @@ describe('DocumentQueryService.search', () => {
       findById: jest.fn((id: string) =>
         Promise.resolve(
           Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
         ),
       ),
     };
@@ -833,7 +849,7 @@ describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
   };
   const searchQuery = { q: 'caja', page: 1, limit: 20 };
 
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: {
     list: jest.Mock;
     findByIdWithAreas: jest.Mock;
@@ -848,6 +864,11 @@ describe('DocumentQueryService: avisos de vencimiento (spec 005)', () => {
       findById: jest.fn((id: string) =>
         Promise.resolve(
           Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
         ),
       ),
     };
@@ -1186,7 +1207,7 @@ describe('DocumentQueryService: referencias con nombre (spec 008)', () => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     // El ADMIN no necesita el directorio para ver: falla solo al pedir los nombres.
     jest
-      .spyOn(users, 'findById')
+      .spyOn(users, 'findByIds')
       .mockRejectedValue(new RepositoryUnavailableError('caído'));
 
     await expect(service.findOne(admin, record.id)).rejects.toBeInstanceOf(

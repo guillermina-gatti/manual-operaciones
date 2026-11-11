@@ -271,6 +271,20 @@ describe('buildResume', () => {
     };
   };
 
+  it('the title of the version when the catalog gives it', () => {
+    const titled = new Map([
+      [CIERRE_V2, { ...V_CIERRE_V2, title: 'Cierre de caja' }],
+    ]);
+
+    const [item] = buildResume(
+      [inProgress(CIERRE_V2, new Date('2026-11-06T12:00:00.000Z'), 2)],
+      titled,
+      STALE_BEFORE,
+    );
+
+    expect(item.procedureTitle).toBe('Cierre de caja');
+  });
+
   it('the current step with its title, the total of steps and the last activity', () => {
     const moved = new Date('2026-11-06T12:00:00.000Z');
 
@@ -280,6 +294,8 @@ describe('buildResume', () => {
       {
         executionId: '1e000000-0000-4000-8000-000000000002',
         procedureId: CIERRE,
+        // These versions have no title.
+        procedureTitle: null,
         procedureVersionId: CIERRE_V2,
         currentStep: {
           stepId: V_CIERRE_V2.steps[1].id,

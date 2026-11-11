@@ -73,7 +73,7 @@ export function ProcedureTimeTable({ procedures, areaNames }: ProcedureTimeTable
                     <tr key={row.procedureId}>
                       <th scope="row" className={`${CELL} text-left font-normal`}>
                         <span className="block font-bold">
-                          {metricsProcedureName(row.procedureId)}
+                          {metricsProcedureName(row.procedureId, row.title)}
                         </span>
                         {areas.length > 0 && (
                           <span className="block text-sm text-texto-suave">

@@ -1,6 +1,6 @@
 /* Spec 008 (T07): los nombres de las referencias en las respuestas, de punta a punta (R1 a R4, R12;
-E1 a E8 y E10). Los usuarios salen de UsersDirectory a través de findUsersByIds (temporal, hasta
-UsersDirectory.findByIds). */
+E1 a E8 y E10). Los usuarios salen de UsersDirectory.findByIds, en una sola
+búsqueda por respuesta. */
 
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';

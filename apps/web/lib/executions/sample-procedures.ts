@@ -23,7 +23,9 @@ export const SAMPLE_PROCEDURES: readonly ProcedureOption[] = [
   },
 ];
 
-// The execution only brings the procedure id; the name comes from here for now.
-export function procedureName(procedureId: string): string {
+// The title the API gives when the catalog has it; otherwise the name of the sample procedure,
+// or "Procedimiento".
+export function procedureName(procedureId: string, title?: string | null): string {
+  if (title?.trim()) return title.trim();
   return SAMPLE_PROCEDURES.find((p) => p.id === procedureId)?.name ?? 'Procedimiento';
 }

@@ -37,6 +37,7 @@ const view: MyMetricsView = {
     {
       executionId: '1e000000-0000-4000-8000-000000000001',
       procedureId: '1a000000-0000-4000-8000-000000000001',
+      procedureTitle: 'Cierre de caja',
       procedureVersionId: '1b000000-0000-4000-8000-000000000002',
       currentStep: {
         stepId: '1c000000-0000-4000-8000-000000000012',

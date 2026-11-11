@@ -34,6 +34,9 @@ jobs:
       - name: Lint Web
         run: pnpm --filter web lint
 
+      - name: Test Web
+        run: pnpm --filter web test
+
       - name: Build Web
         run: pnpm --filter web build
         env:

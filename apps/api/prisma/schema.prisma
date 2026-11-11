@@ -429,6 +429,7 @@ model Session {
 enum ExecutionStatus {
   IN_PROGRESS
   COMPLETED
+  RESTARTED // HU33: closed without finishing, to restart on the current version
 }
 
 model Execution {

@@ -3,6 +3,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ExecutionStatus } from '../../generated/prisma/enums';
 import type { ExecutionStepView, ExecutionView } from '../execution.service';
+import type { PublishedChange, VersionChange } from '../version-change';
 
 export class ExecutionStepResponse {
   @ApiProperty({ format: 'uuid' })
@@ -13,6 +14,15 @@ export class ExecutionStepResponse {
 
   @ApiProperty({ example: 'Contar el efectivo' })
   title: string;
+
+  @ApiProperty({
+    example: 'Contá los billetes y las monedas de la caja.',
+    type: String,
+    nullable: true,
+    description:
+      'The instruction of the step; null when the catalog does not give it',
+  })
+  description: string | null;
 
   @ApiProperty({
     format: 'date-time',
@@ -34,12 +44,66 @@ export class ExecutionStepResponse {
   durationMs: number | null;
 }
 
+export class PublishedChangeResponse {
+  @ApiProperty({ example: 3 })
+  versionNumber: number;
+
+  @ApiProperty({ description: 'Published as a critical change' })
+  isCritical: boolean;
+
+  @ApiProperty({
+    example: 'Cambia el límite de caja',
+    type: String,
+    nullable: true,
+  })
+  changeSummary: string | null;
+
+  @ApiProperty({ format: 'date-time', type: String, nullable: true })
+  publishedAt: string | null;
+}
+
+export class VersionChangeResponse {
+  @ApiProperty({
+    description:
+      'A newer version of the procedure is the current one (only while in progress)',
+  })
+  changed: boolean;
+
+  @ApiProperty({
+    description:
+      'Some version published since the one of the execution is a critical change: it has to restart',
+  })
+  critical: boolean;
+
+  @ApiProperty({ format: 'uuid', type: String, nullable: true })
+  currentVersionId: string | null;
+
+  @ApiProperty({ example: 3, type: Number, nullable: true })
+  currentVersionNumber: number | null;
+
+  @ApiProperty({
+    type: [PublishedChangeResponse],
+    description:
+      'The versions published since the one of the execution, up to the current one, oldest first',
+  })
+  changes: PublishedChangeResponse[];
+}
+
 export class ExecutionResponse {
   @ApiProperty({ format: 'uuid' })
   id: string;
 
   @ApiProperty({ format: 'uuid' })
   procedureId: string;
+
+  @ApiProperty({
+    example: 'Cierre de caja',
+    type: String,
+    nullable: true,
+    description:
+      'The title of the version the execution runs; null when the catalog does not give it',
+  })
+  procedureTitle: string | null;
 
   @ApiProperty({
     format: 'uuid',
@@ -67,6 +131,9 @@ export class ExecutionResponse {
 
   @ApiProperty({ type: [ExecutionStepResponse] })
   steps: ExecutionStepResponse[];
+
+  @ApiProperty({ type: VersionChangeResponse })
+  versionChange: VersionChangeResponse;
 }
 
 const toIso = (date: Date | null) => (date ? date.toISOString() : null);
@@ -75,9 +142,29 @@ const toStepResponse = (step: ExecutionStepView): ExecutionStepResponse => ({
   stepId: step.stepId,
   order: step.order,
   title: step.title,
+  description: step.description,
   startedAt: toIso(step.startedAt),
   finishedAt: toIso(step.finishedAt),
   durationMs: step.durationMs,
+});
+
+const toChangeResponse = (
+  change: PublishedChange,
+): PublishedChangeResponse => ({
+  versionNumber: change.versionNumber,
+  isCritical: change.isCritical,
+  changeSummary: change.changeSummary,
+  publishedAt: toIso(change.publishedAt),
+});
+
+const toVersionChangeResponse = (
+  change: VersionChange,
+): VersionChangeResponse => ({
+  changed: change.changed,
+  critical: change.critical,
+  currentVersionId: change.currentVersionId,
+  currentVersionNumber: change.currentVersionNumber,
+  changes: change.changes.map(toChangeResponse),
 });
 
 export const toExecutionResponse = (
@@ -85,10 +172,12 @@ export const toExecutionResponse = (
 ): ExecutionResponse => ({
   id: execution.id,
   procedureId: execution.procedureId,
+  procedureTitle: execution.procedureTitle,
   procedureVersionId: execution.procedureVersionId,
   status: execution.status,
   startedAt: execution.startedAt.toISOString(),
   finishedAt: toIso(execution.finishedAt),
   currentStepId: execution.currentStepId,
   steps: execution.steps.map(toStepResponse),
+  versionChange: toVersionChangeResponse(execution.versionChange),
 });

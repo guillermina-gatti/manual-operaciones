@@ -10,13 +10,15 @@ import { errorMessage } from '../documents/http-errors';
 import { ExecutionsRepositoryUnavailableError } from './executions.repository';
 import { CatalogUnavailableError } from './ports/procedures-catalog';
 
-export type ExecutionOperation = 'start' | 'find' | 'complete' | 'metrics';
+export type ExecutionOperation =
+  'start' | 'find' | 'complete' | 'restart' | 'metrics';
 
 // How each operation is named in the messages, with its article.
 const PHRASES: Record<ExecutionOperation, string> = {
   start: 'el inicio de la ejecución',
   find: 'la consulta de la ejecución',
   complete: 'el registro del paso',
+  restart: 'el reinicio de la ejecución', // HU33
   metrics: 'la consulta de las métricas', // HU38
 };
 

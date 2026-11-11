@@ -14,6 +14,7 @@ import {
   OTRO_EMPLEADO_VENTAS,
   authHeaders,
   cleanExecutions,
+  closeExecutionsTestApp,
   createExecutionsTestApp,
 } from './helpers';
 
@@ -149,7 +150,7 @@ describe('Procedures metrics (integration)', () => {
   });
 
   afterAll(async () => {
-    await t.app.close();
+    await closeExecutionsTestApp(t);
     if (previousTimeZone === undefined) delete process.env.APP_TIMEZONE;
     else process.env.APP_TIMEZONE = previousTimeZone;
   });
@@ -194,6 +195,7 @@ describe('Procedures metrics (integration)', () => {
         inProgress: 1,
         abandoned: 0,
         completionRate: 0.5,
+        title: 'Cierre de caja', // from the in-memory catalog
         avgCompletionMs: CIERRE_V2.steps.length * STEP_MS,
         // A single completed execution: the fastest and the slowest.
         minCompletionMs: CIERRE_V2.steps.length * STEP_MS,
@@ -357,6 +359,43 @@ describe('Procedures metrics (integration)', () => {
         procedures: [],
       });
     });
+  });
+
+  it('HU33: a RESTARTED execution counts nowhere, and the totals still add up', async () => {
+    // Elena had Cierre de caja at step 2 for 30 hours (it would be abandoned) and
+    // restarted it on the current version, which she then completed.
+    await seed(CIERRE_V2, hoursAgo(30), 1);
+    await t.prisma.execution.updateMany({
+      where: { procedureId: CIERRE, status: 'IN_PROGRESS' },
+      data: { status: 'RESTARTED', finishedAt: hoursAgo(2) },
+    });
+    await seed(CIERRE_V2, hoursAgo(2), CIERRE_V2.steps.length);
+
+    const { body } = await metrics(admin).expect(200);
+    const result = body as MetricsBody;
+    const cierre = procedure(result, CIERRE)!;
+
+    expect(cierre).toMatchObject({
+      started: 1,
+      completed: 1,
+      inProgress: 0,
+      abandoned: 0,
+    });
+    // Its steps are not reached either.
+    expect(cierre.versions[0].steps[0]).toMatchObject({
+      reached: 1,
+      finished: 1,
+      abandoned: 0,
+    });
+    expect(cierre.versions[0].steps[1]).toMatchObject({
+      reached: 1,
+      abandoned: 0,
+    });
+    const { totals } = result;
+    expect(totals.started).toBe(
+      totals.completed + totals.inProgress + totals.abandoned,
+    );
+    expect(totals).toMatchObject({ started: 1, abandoned: 0 });
   });
 
   it('with no executions at all the answer is empty, not an error', async () => {

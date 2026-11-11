@@ -186,6 +186,7 @@ describe('MyMetricsService', () => {
         {
           executionId: '1e000000-0000-4000-8000-000000000001',
           procedureId: PROCEDURE_IDS.cierreDeCaja,
+          procedureTitle: 'Cierre de caja',
           procedureVersionId: CIERRE_V2,
           currentStep: {
             stepId: stepsOf(CIERRE_V2)[1].id,
@@ -314,6 +315,7 @@ describe('MyMetricsService', () => {
     it('the users directory down is a 503, without reading their executions', async () => {
       users = {
         findById: () => Promise.reject(new RepositoryUnavailableError('down')),
+        findByIds: () => Promise.reject(new RepositoryUnavailableError('down')),
       };
 
       await expect(build().mine(ELENA, {})).rejects.toThrow(
