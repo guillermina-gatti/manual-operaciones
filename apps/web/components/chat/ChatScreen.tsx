@@ -30,8 +30,8 @@ export function ChatScreen() {
 
   return (
     <section aria-label="Asistente" className={`${CARD} flex min-w-0 flex-col`}>
-      <ChatHeader />
-      <ol aria-label="Conversación" className="flex min-h-64 flex-col gap-4 px-6 py-5">
+      <ChatHeader onNewConversation={chat.newConversation} />
+      <ol aria-label="Conversación" className="flex min-h-64 flex-col gap-5 px-6 py-6">
         {chat.messages.length === 0 && (
           <li>
             <ChatEmpty onPick={chat.setDraft} />
@@ -49,7 +49,6 @@ export function ChatScreen() {
         busy={chat.busy}
         onChange={chat.setDraft}
         onSend={chat.send}
-        onNewConversation={chat.newConversation}
       />
     </section>
   );

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="El hornero">
+  <rect width="96" height="96" rx="24" fill="#ffffff"/>
+  <!-- cuerpo -->
+  <circle cx="45" cy="49" r="30" fill="#bf5a2b"/>
+  <!-- cara clara -->
+  <circle cx="50" cy="52" r="19" fill="#fff0d6"/>
+  <!-- ojo -->
+  <circle cx="55" cy="46" r="3.6" fill="#0b4233"/>
+  <!-- pico -->
+  <path d="M68 44 L88 51 L68 58 Z" fill="#e85114"/>
+</svg>

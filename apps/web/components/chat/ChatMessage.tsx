@@ -29,7 +29,7 @@ export function ChatMessage({ message, onRetry, busy }: ChatMessageProps) {
   if (message.role === 'user') {
     return (
       <li className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl rounded-br-md bg-bosque px-4 py-3 text-blanco">
+        <p className="max-w-[85%] whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl rounded-br-md bg-barro-puerta px-4 py-3 text-blanco">
           {message.text}
         </p>
       </li>
@@ -41,11 +41,12 @@ export function ChatMessage({ message, onRetry, busy }: ChatMessageProps) {
   return (
     <li className="flex items-start gap-3">
       <span aria-hidden="true" className={`${AVATAR} mt-1`}>
-        ✦
+        {/* eslint-disable-next-line @next/next/no-img-element -- SVG chico y estático */}
+        <img src="/logo-hornero.svg" alt="" width={32} height={32} className="size-8" />
       </span>
       <div
         aria-busy={streaming || undefined}
-        className="flex min-w-0 max-w-[85%] flex-col gap-3 rounded-2xl rounded-tl-md border border-borde bg-blanco px-4 py-3 text-texto shadow-sm"
+        className="flex min-w-0 max-w-[85%] flex-col gap-3 rounded-2xl rounded-tl-md bg-salvia px-4 py-3 text-texto"
       >
         <AssistantBody message={message} onRetry={onRetry} busy={busy} />
       </div>
@@ -82,7 +83,7 @@ function AssistantBody({ message, onRetry, busy }: { message: AssistantMessage }
     case 'no_info':
       return (
         <>
-          <p className={`${TEXT} rounded-xl border-2 border-dashed border-borde px-4 py-3 text-texto-suave`}>
+          <p className={`${TEXT} rounded-xl border-2 border-dashed border-texto-suave/40 px-4 py-3 text-texto-suave`}>
             {message.text}
           </p>
           <ChatNearestDocuments documents={message.nearestDocuments} />

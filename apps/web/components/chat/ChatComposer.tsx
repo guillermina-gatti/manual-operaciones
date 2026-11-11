@@ -5,7 +5,7 @@
 // cambia de color cerca del límite, para que se note antes de cortarse.
 import { useId } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
-import { BUTTON_AI, BUTTON_SECONDARY } from './design';
+import { BUTTON_SECONDARY, SEND_BUTTON } from './design';
 
 export const MESSAGE_MAX = 2000;
 const NEAR_LIMIT = MESSAGE_MAX * 0.9;
@@ -15,7 +15,8 @@ interface ChatComposerProps {
   busy: boolean;
   onChange: (value: string) => void;
   onSend: () => void;
-  onNewConversation: () => void;
+  // Solo el panel de un paso lo pasa: en /asistente el botón vive en la cabecera.
+  onNewConversation?: () => void;
 }
 
 export function ChatComposer({ value, busy, onChange, onSend, onNewConversation }: ChatComposerProps) {
@@ -35,33 +36,39 @@ export function ChatComposer({ value, busy, onChange, onSend, onNewConversation 
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3 rounded-b-2xl border-t border-borde bg-salvia/50 px-6 py-4">
-      <label htmlFor={`${id}-pregunta`} className="font-semibold text-bosque">
+    <form onSubmit={submit} className="flex flex-col gap-2 rounded-b-2xl bg-blanco px-6 pb-4 pt-2">
+      <label htmlFor={`${id}-pregunta`} className="sr-only">
         Tu pregunta
       </label>
-      <textarea
-        id={`${id}-pregunta`}
-        rows={3}
-        maxLength={MESSAGE_MAX}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={keyDown}
-        aria-describedby={`${id}-contador`}
-        placeholder="Escribí tu pregunta…"
-        className="w-full resize-y rounded-xl border border-borde bg-blanco px-4 py-3 text-texto placeholder:text-texto-suave"
-      />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p id={`${id}-contador`} className={`text-sm ${value.length >= NEAR_LIMIT ? 'font-semibold text-durazno-texto' : 'text-texto-suave'}`}>
+      <div className="flex items-end gap-3">
+        <textarea
+          id={`${id}-pregunta`}
+          rows={1}
+          maxLength={MESSAGE_MAX}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={keyDown}
+          aria-describedby={`${id}-contador`}
+          placeholder="Escribí tu pregunta…"
+          className="max-h-40 min-h-12 w-full resize-none rounded-3xl border border-borde bg-salvia/60 px-5 py-3 text-texto [field-sizing:content] placeholder:text-texto-suave focus:border-bosque"
+        />
+        <button type="submit" className={SEND_BUTTON} disabled={!canSend} aria-busy={busy}>
+          <span className="sr-only">Preguntar</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 2 11 13" />
+            <path d="M22 2 15 22l-4-9-9-4z" />
+          </svg>
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-2">
+        <p id={`${id}-contador`} className={`text-xs ${value.length >= NEAR_LIMIT ? 'font-semibold text-durazno-texto' : 'text-texto-suave'}`}>
           {value.length}/{MESSAGE_MAX}
         </p>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" className={BUTTON_SECONDARY} onClick={onNewConversation}>
+        {onNewConversation && (
+          <button type="button" className={`${BUTTON_SECONDARY} min-h-10 px-4 text-sm`} onClick={onNewConversation}>
             Nueva conversación
           </button>
-          <button type="submit" className={BUTTON_AI} disabled={!canSend} aria-busy={busy}>
-            Preguntar <span aria-hidden="true">✦</span>
-          </button>
-        </div>
+        )}
       </div>
     </form>
   );
