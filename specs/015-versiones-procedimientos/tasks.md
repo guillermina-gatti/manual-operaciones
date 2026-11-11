@@ -203,7 +203,7 @@ Se completa la columna "Resultado" a medida que cada test pasa.
 | R11 · Qué no cambia al publicar | E19 | T06, T09, T14 | `procedure-publish.service.spec.ts`, `versions.e2e-spec.ts`, `catalog.e2e-spec.ts` | unitarios ✔ (10/11); e2e escrito |
 | R12 · Catálogo de ejecuciones | E19, E21, E22, E23 | T14 | `prisma-procedures-catalog.spec.ts`, `catalog.e2e-spec.ts` | unitario ✔ (10/11, 12 tests); e2e escrito; `title` pendiente de Mayra |
 | R13 · Formato y errores | E16, E17, E20 | T04, T08, T09 | `http-errors.spec.ts`, `procedure-versions.controller.spec.ts`, `versions.e2e-spec.ts` | unitarios ✔ (10/11); e2e escrito |
-| R14 · Pantalla del ADMIN | E24 a E29 | T22 a T27 | `ConfirmDialog.test.tsx`, `AreaChipsField.test.tsx`, `StepsEditor.test.tsx`, `DraftForm.test.tsx`, `ProcedureList.test.tsx`, `ProcedureEditor.test.tsx` | se completa en T27 |
+| R14 · Pantalla del ADMIN | E24 a E29 | T22 a T27 | `ConfirmDialog.test.tsx`, `AreaChipsField.test.tsx`, `StepsEditor.test.tsx`, `DraftForm.test.tsx`, `ProcedureList.test.tsx`, `ProcedureEditor.test.tsx` | web ✔ (11/11); prueba en el navegador pendiente |
 
 ---
 
@@ -235,3 +235,4 @@ Pedido de Matías, boceto aprobado por el equipo. R14, D21 a D26, E24 a E29. La 
 
 ### T27 · Verificación
 - lint, tests y build de web y de api en verde; prueba en el navegador como `admin@fixtures.test`.
+- **Resultado (11/11/2026):** web 1678 tests, lint, `tsc` y build en verde; API 2093 tests unitarios, lint y build en verde. Pendiente: la prueba en el navegador (la hace Micaela). Los e2e de la API no se tocaron. Lo que no cubre esta parte: la lista de abajo se actualiza al crear y al descartar, no en cada cambio del borrador (pedir la lista otra vez la dejaría en "Cargando" a cada tecla guardada).
