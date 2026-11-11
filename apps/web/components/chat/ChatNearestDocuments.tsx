@@ -11,8 +11,8 @@ export function ChatNearestDocuments({ documents }: { documents?: NearestDocumen
             <p className="text-sm font-semibold text-texto">Estos documentos pueden ayudarte</p>
             <ul aria-label="Documentos cercanos" className="flex flex-col gap-1">
                 {documents.map((document) => (
-                    <li key={document.documentId}>
-                        <Link href={`/documentos/${document.documentId}`} className={TEXT_LINK}>
+                    <li key={document.documentId} className="min-w-0">
+                        <Link href={`/documentos/${document.documentId}`} className={`${TEXT_LINK} break-words`}>
                             {document.documentTitle}
                         </Link>
                     </li>

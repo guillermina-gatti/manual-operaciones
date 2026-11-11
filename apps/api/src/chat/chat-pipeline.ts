@@ -5,7 +5,7 @@ import type { Logger } from '@nestjs/common';
 import type { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatResult, ChatResultStatus, ChatSource, NearestDocument } from './chat.contract';
 import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
-import { platformHelpReply } from './chat-help';
+import { platformHelpReply, platformMenuReply } from './chat-help';
 import { smallTalkReply } from './chat-greeting';
 import type { ContactPerson } from './ports/contact-directory';
 import type { LlmAnswer, Passage } from './ports/chat-llm';
@@ -90,10 +90,10 @@ export async function prepareChat(
         return { kind: 'done', outcome: { status: 'answered', answer: reply, chunks: [] } };
     }
 
-    // Ayuda de la plataforma ("¿cómo veo un documento?"): texto fijo, sin buscar ni llamar al modelo.
-    const help = platformHelpReply(question);
-    if (help !== null) {
-        return { kind: 'done', outcome: { status: 'answered', answer: help, chunks: [] } };
+    // "ayuda" sola: el menú de temas, sin buscar. La ayuda por tema va después de la búsqueda.
+    const menu = platformMenuReply(question);
+    if (menu !== null) {
+        return { kind: 'done', outcome: { status: 'answered', answer: menu, chunks: [] } };
     }
 
     let queryVector: number[];
@@ -101,12 +101,23 @@ export async function prepareChat(
         [queryVector] = await embeddings.embedMany([searchText]);
     } catch (error) {
         logger.warn(`Falló el embedding de la consulta: ${String(error)}`);
-        return { kind: 'done', outcome: unavailable() };
+        // Sin el asistente, la ayuda fija sigue disponible; si no es una pregunta de ayuda, no hay respuesta.
+        const fallback = platformHelpReply(question);
+        return {
+            kind: 'done',
+            outcome: fallback !== null ? { status: 'answered', answer: fallback, chunks: [] } : unavailable(),
+        };
     }
 
     const retrieved = await retrieval.search(queryVector, scope, TOP_K);
     const chunks = retrieved.filter((c) => c.distance <= MAX_COSINE_DISTANCE);
     if (chunks.length === 0) {
+        // Ayuda de la plataforma ("¿cómo veo un documento?"): solo cuando los documentos no responden, así una
+        // pregunta que sí está en los documentos nunca se toma como ayuda. Texto fijo, sin modelo.
+        const help = platformHelpReply(question);
+        if (help !== null) {
+            return { kind: 'done', outcome: { status: 'answered', answer: help, chunks: [] } };
+        }
         // HU19: los más cercanos, aunque estén fuera del umbral, para mostrar dónde buscar.
         return {
             kind: 'done',

@@ -14,7 +14,7 @@ function normalize(text: string): string {
         .trim();
 }
 
-// Distancia de edición con transposición (Damerau), para perdonar errores de tipeo como "busoc".
+// Distancia de edición con transposición (Damerau), para perdonar errores de tipeo en palabras largas.
 function distance(a: string, b: string): number {
     const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
     for (let j = 0; j <= b.length; j++) d[0][j] = j;
@@ -30,13 +30,14 @@ function distance(a: string, b: string): number {
     return d[a.length][b.length];
 }
 
-// Un token coincide con una palabra clave si es igual (raíces de menos de 4 letras, para que "ver" no
-// coincida con "versión"), si empieza igual (raíz: "docu" -> "documento") o si, a partir de 4 letras,
-// difiere en un solo error de tipeo ("busoc" -> "busc").
+// Un token coincide con una raíz si es igual, o si empieza igual desde 4 letras ("docu" -> "documento").
+// Los errores de tipeo solo se perdonan en raíces de 7 letras o más ("procedimeinto"). En las cortas el
+// margen de una letra confunde palabras reales: "pago" con "paso", "original" con "origen".
 function matches(token: string, stem: string): boolean {
-    if (stem.length < 4) return token === stem;
+    if (token === stem) return true;
+    if (stem.length < 4) return false;
     if (token.startsWith(stem)) return true;
-    return token.length >= 4 && distance(token.slice(0, stem.length), stem) <= 1;
+    return stem.length >= 7 && distance(token.slice(0, stem.length), stem) <= 1;
 }
 
 const has = (tokens: string[], stems: string[]) => tokens.some((t) => stems.some((s) => matches(t, s)));
@@ -46,7 +47,7 @@ const INTENT = [
     'como', 'donde', 'puedo', 'quiero', 'necesito', 'hago', 'ayuda', 'veo', 'busc', 'encuentr',
     'carg', 'subo', 'subir', 'abr', 'ver', 'descarg', 'uso', 'ubic', 'acced', 'entr',
     'tengo', 'aparec', 'falta', 'signif', 'quiere', 'decir', 'demora', 'tard', 'cuando', 'sacas',
-    'sacaste', 'verific', 'confi', 'no',
+    'sacaste', 'verific', 'confi',
 ];
 
 const DOCUMENT = ['docu', 'manual', 'archivo', 'pdf', 'instructivo'];
@@ -86,7 +87,7 @@ const TOPICS: Topic[] = [
     {
         name: 'citas',
         all: [
-            ['fuente', 'cita', 'confiable', 'verific', 'sacas', 'sacaste', 'origen', 'respald'],
+            ['fuente', 'cita', 'respald'],
             [...INTENT, 'se', 'saber', 'confio'],
         ],
         reply:
@@ -94,7 +95,7 @@ const TOPICS: Topic[] = [
     },
     {
         name: 'cargar-documento',
-        all: [DOCUMENT, ['carg', 'subo', 'subir', 'subi', 'agreg', 'nuevo', 'publ']],
+        all: [DOCUMENT, ['carg', 'subo', 'subir', 'subi', 'agreg']],
         reply:
             'Para cargar un documento tenés que ser administrador. Entrá a Documentos (/documentos) y elegí "Nuevo documento" (/documentos/nuevo): indicá el archivo (PDF, .txt o .md, hasta 10 MB), las áreas que pueden verlo, el responsable y la fecha de revisión. Cuando el estado diga "Listo", el asistente ya puede usarlo.',
     },
@@ -112,19 +113,19 @@ const TOPICS: Topic[] = [
     },
     {
         name: 'ejecutar-procedimiento',
-        all: [['procedimiento', 'paso', 'tarea', 'ejecuc', 'ejecut'], ['como', 'donde', 'hago', 'empez', 'inici', 'marc', 'complet', 'veo', 'ver', 'abr', 'uso']],
+        all: [['procedimiento', 'ejecuc', 'ejecut'], ['como', 'donde', 'hago', 'empez', 'inici', 'marc', 'complet', 'veo', 'ver', 'abr', 'uso']],
         reply:
             'Los procedimientos de tus áreas están en Ejecuciones (/ejecuciones). Abrí uno para recorrerlo paso a paso y marcá cada paso al completarlo: si te interrumpen, retomás donde quedaste. Si tenés una duda en un paso, usá "¿Dudas con este paso?" y el asistente te responde con ese paso como contexto.',
     },
     {
         name: 'metricas',
-        all: [['metric', 'estadistic', 'panel', 'reporte', 'indicador'], INTENT],
+        all: [['metric', 'estadistic'], INTENT],
         reply:
             'El panel de métricas está en Métricas (/metricas) y lo ven administradores y supervisores. Muestra el uso de los procedimientos, de los documentos y del asistente, y se puede filtrar por área y por fechas.',
     },
     {
         name: 'usar-asistente',
-        all: [['asistente', 'chat', 'ia', 'fuente', 'cita', 'respuesta'], ['como', 'donde', 'funciona', 'uso', 'usar', 'preguntar', 'consult', 'sirve']],
+        all: [['asistente', 'chat', 'fuente', 'cita'], ['como', 'donde', 'funciona', 'uso', 'usar', 'preguntar', 'consult', 'sirve']],
         reply:
             'Escribí tu pregunta en Asistente (/asistente), o usá "¿Dudas con este paso?" dentro de un procedimiento. El asistente responde solo con los documentos vigentes de tus áreas y muestra al final de qué documento sacó cada dato. Si no encuentra información, te lo dice, te muestra los documentos más cercanos y te sugiere a quién consultar.',
     },
@@ -150,12 +151,19 @@ const MENU_REPLY =
 const MAX_TOKENS = 10;
 const MAX_PRONOUN_TOKENS = 4;
 
+// "ayuda" sola (o "ayudame"): el menú de temas. Es seguro antes de buscar: no tiene palabras de contenido.
+export function platformMenuReply(question: string): string | null {
+    const tokens = normalize(question).split(' ').filter(Boolean);
+    return tokens.length > 0 && tokens.length <= 2 && has(tokens, ['ayud']) ? MENU_REPLY : null;
+}
+
 // Devuelve el texto de ayuda para la pregunta, o null si es una consulta que hay que buscar en los documentos.
+// Se usa solo cuando la búsqueda no encuentra nada (prepareChat): lo que los documentos responden no es ayuda.
 export function platformHelpReply(question: string): string | null {
+    const menu = platformMenuReply(question);
+    if (menu !== null) return menu;
     const tokens = normalize(question).split(' ').filter(Boolean);
     if (tokens.length === 0 || tokens.length > MAX_TOKENS) return null;
-    // "ayuda" o "ayudame" solos: el menú. Con más palabras, es una consulta como cualquier otra.
-    if (tokens.length <= 2 && has(tokens, ['ayud'])) return MENU_REPLY;
     if (!has(tokens, INTENT)) return null;
 
     for (const topic of TOPICS) {

@@ -14,12 +14,12 @@ export function ChatSources({ sources, title }: { sources: ChatSource[]; title?:
         <li key={source.chunkId}>
           <Link
             href={`/documentos/${source.documentId}`}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-borde bg-blanco px-3 py-1 text-sm font-semibold text-bosque hover:bg-salvia"
+            className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-xl border border-borde bg-blanco px-3 py-1 text-sm font-semibold text-bosque hover:bg-salvia"
           >
             <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-bosque text-xs text-blanco">
               {index + 1}
             </span>{' '}
-            <span className="flex flex-col">
+            <span className="flex min-w-0 flex-col break-words">
               <span>
                 {source.documentTitle} · v{source.versionNumber} · {source.section}
               </span>

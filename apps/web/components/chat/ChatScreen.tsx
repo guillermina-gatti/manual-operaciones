@@ -6,6 +6,7 @@
 import { ScreenState } from '@/components/ui/ScreenState';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { ChatComposer } from './ChatComposer';
+import { ChatEmpty } from './ChatEmpty';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessage } from './ChatMessage';
 import { CARD } from './design';
@@ -32,7 +33,9 @@ export function ChatScreen() {
       <ChatHeader />
       <ol aria-label="Conversación" className="flex min-h-64 flex-col gap-4 px-6 py-5">
         {chat.messages.length === 0 && (
-          <li className="text-texto-suave">Preguntá sobre los documentos vigentes de tus áreas.</li>
+          <li>
+            <ChatEmpty onPick={chat.setDraft} />
+          </li>
         )}
         {chat.messages.map((message) => (
           <ChatMessage key={message.id} message={message} onRetry={chat.retry} busy={chat.busy} />

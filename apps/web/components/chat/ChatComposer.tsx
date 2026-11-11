@@ -1,12 +1,14 @@
 'use client';
 
 // Dónde se escribe la pregunta (spec 009, F6): hasta 2.000 caracteres, Enter envía y Shift+Enter
-// agrega una línea. Mientras llega una respuesta se puede escribir, pero no enviar.
+// agrega una línea. Mientras llega una respuesta se puede escribir, pero no enviar. El contador
+// cambia de color cerca del límite, para que se note antes de cortarse.
 import { useId } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { BUTTON_AI, BUTTON_SECONDARY } from './design';
 
 export const MESSAGE_MAX = 2000;
+const NEAR_LIMIT = MESSAGE_MAX * 0.9;
 
 interface ChatComposerProps {
   value: string;
@@ -33,8 +35,8 @@ export function ChatComposer({ value, busy, onChange, onSend, onNewConversation 
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2 border-t border-borde px-6 py-4">
-      <label htmlFor={`${id}-pregunta`} className="font-semibold">
+    <form onSubmit={submit} className="flex flex-col gap-3 rounded-b-2xl border-t border-borde bg-salvia/50 px-6 py-4">
+      <label htmlFor={`${id}-pregunta`} className="font-semibold text-bosque">
         Tu pregunta
       </label>
       <textarea
@@ -45,10 +47,11 @@ export function ChatComposer({ value, busy, onChange, onSend, onNewConversation 
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={keyDown}
         aria-describedby={`${id}-contador`}
-        className="w-full resize-y rounded-xl border border-borde bg-blanco px-4 py-3 text-texto"
+        placeholder="Escribí tu pregunta…"
+        className="w-full resize-y rounded-xl border border-borde bg-blanco px-4 py-3 text-texto placeholder:text-texto-suave"
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p id={`${id}-contador`} className="text-sm text-texto-suave">
+        <p id={`${id}-contador`} className={`text-sm ${value.length >= NEAR_LIMIT ? 'font-semibold text-durazno-texto' : 'text-texto-suave'}`}>
           {value.length}/{MESSAGE_MAX}
         </p>
         <div className="flex flex-wrap gap-3">
