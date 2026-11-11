@@ -65,6 +65,15 @@ export class MyResumeItemResponse {
   @ApiProperty({ format: 'uuid' })
   procedureId: string;
 
+  @ApiProperty({
+    example: 'Cierre de caja',
+    type: String,
+    nullable: true,
+    description:
+      'The title of the version it runs; null when the catalog does not give it',
+  })
+  procedureTitle: string | null;
+
   @ApiProperty({ format: 'uuid' })
   procedureVersionId: string;
 
@@ -107,6 +116,15 @@ export class MySlowestStepResponse {
 export class MyProcedureResponse {
   @ApiProperty({ format: 'uuid' })
   procedureId: string;
+
+  @ApiProperty({
+    example: 'Cierre de caja',
+    type: String,
+    nullable: true,
+    description:
+      'The title of the latest version with executions; null when the catalog does not give it',
+  })
+  title: string | null;
 
   @ApiProperty({
     type: [String],
@@ -179,6 +197,7 @@ const toTotals = (totals: MyTotals): MyMetricsTotalsResponse => ({
 const toResumeItem = (item: MyResumeItem): MyResumeItemResponse => ({
   executionId: item.executionId,
   procedureId: item.procedureId,
+  procedureTitle: item.procedureTitle,
   procedureVersionId: item.procedureVersionId,
   currentStep: {
     stepId: item.currentStep.stepId,
@@ -200,6 +219,7 @@ const toSlowestStep = (step: MySlowestStep): MySlowestStepResponse => ({
 
 const toProcedure = (procedure: MyProcedure): MyProcedureResponse => ({
   procedureId: procedure.procedureId,
+  title: procedure.title,
   areaIds: [...procedure.areaIds],
   started: procedure.started,
   completed: procedure.completed,

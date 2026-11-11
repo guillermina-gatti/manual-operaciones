@@ -54,6 +54,9 @@ export interface VersionMetrics extends ExecutionCounts {
 
 export interface ProcedureMetrics extends ExecutionCounts {
   procedureId: string;
+  // The title of the latest version with executions, when the catalog gives it
+  // (TODO(HU11): not the real catalog yet).
+  title: string | null;
   areaIds: string[];
   completionRate: number | null; // completed / started
   avgCompletionMs: number | null;
@@ -111,10 +114,12 @@ export function buildProcedureMetrics(
       );
       const counts = sumCounts(versionMetrics);
       const completedDurationMs = sum(aggregates, (a) => a.completedDurationMs);
+      const latest = versions.get(sorted[0].procedureVersionId)!;
       return {
         procedureId,
+        title: latest.title?.trim() ? latest.title : null,
         // Every version reports the procedure's current areas.
-        areaIds: versions.get(sorted[0].procedureVersionId)!.areaIds,
+        areaIds: latest.areaIds,
         ...counts,
         completionRate: ratio(counts.completed, counts.started),
         avgCompletionMs: average(completedDurationMs, counts.completed),

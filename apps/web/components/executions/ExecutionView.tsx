@@ -2,10 +2,11 @@
 
 // Step-by-step execution of a procedure (HU12, spec 012). The API decides who can see it: for
 // another employee, a missing execution or a lost area it answers the same 404.
-import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ExecutionChatPanel } from '@/components/chat/ExecutionChatPanel';
-import { CHIP, ERROR_BOX, PageHeader } from '@/components/documents/design';
+import { CHIP, ERROR_BOX, PageHeader, TEXT_LINK } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import {
   ApiError,
@@ -13,6 +14,7 @@ import {
   describeExecutionError,
   EXECUTION_MESSAGES,
   getExecution,
+  restartExecution,
   useApiResource,
 } from '@/lib/api';
 import type { ExecutionResponse } from '@/lib/api';
@@ -23,6 +25,7 @@ import { CompletedPanel } from './CompletedPanel';
 import { ExecutionProgress } from './ExecutionProgress';
 import { ExecutionSummaryCard } from './ExecutionSummaryCard';
 import { StepList } from './StepList';
+import { VersionChangeNotice } from './VersionChangeNotice';
 
 // The same format the API accepts (ParseUUIDPipe). Any other id cannot exist.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,6 +73,7 @@ export function ExecutionView() {
 }
 
 function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
+  const router = useRouter();
   // Each completed step replaces the loaded execution with the API response, but only while the
   // loaded one is the same: a newer load (coming back to the screen) wins.
   const [latest, setLatest] = useState<{
@@ -84,6 +88,11 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
   const [completedHere, setCompletedHere] = useState(false);
   // Stops a second click that arrives before React renders the disabled button.
   const completingRef = useRef(false);
+  // HU33: "Terminar con esta versión" hides the notice of a change that is not critical, only
+  // for this visit: the next load shows it again while it is pending.
+  const [kept, setKept] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const restartingRef = useRef(false);
   // Changes each time the screen is hidden, so a late answer from before is ignored.
   const visitRef = useRef(0);
 
@@ -95,6 +104,9 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
       visitRef.current += 1;
       completingRef.current = false;
       setCompleting(false);
+      restartingRef.current = false;
+      setRestarting(false);
+      setKept(false);
       setLatest(null);
       setNotice(null);
       setNotFound(false);
@@ -109,6 +121,12 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
   const summary = summarizeExecution(execution);
   const completed = execution.status === 'COMPLETED';
+  const restarted = execution.status === 'RESTARTED';
+  const inProgress = execution.status === 'IN_PROGRESS';
+  // The API only reports a change while the execution is in progress.
+  const change = inProgress && execution.versionChange?.changed ? execution.versionChange : null;
+  const critical = change?.critical === true;
+  const showChange = change !== null && (critical || !kept);
   // The execution only brings the procedure id; its area comes from the sample procedures.
   const areaName = SAMPLE_PROCEDURES.find((p) => p.id === execution.procedureId)?.areaName;
   const resumed = summary.resumed && !completedHere;
@@ -144,6 +162,34 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
     }
   }
 
+  // HU33: the new execution, on the current version and from step 1, opens in its own screen.
+  async function restart() {
+    if (restartingRef.current) return;
+    restartingRef.current = true;
+    const visit = visitRef.current;
+    const left = () => visitRef.current !== visit;
+    setRestarting(true);
+    setNotice(null);
+    try {
+      const fresh = await restartExecution(execution.id);
+      if (left()) return;
+      // The buttons stay disabled until the new screen replaces this one.
+      router.push(`/ejecuciones/${fresh.id}`);
+    } catch (failure) {
+      if (left()) return;
+      restartingRef.current = false;
+      setRestarting(false);
+      const { message, notFound: missing } = describeExecutionError(failure, 'restart');
+      if (missing) {
+        setNotFound(true);
+        return;
+      }
+      setNotice(message);
+      // 409: restarted or completed somewhere else, or no change any more. Show it as it is now.
+      if (failure instanceof ApiError && failure.status === 409) await refresh(left);
+    }
+  }
+
   async function refresh(left: () => boolean) {
     try {
       const current = await getExecution(execution.id);
@@ -159,7 +205,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
       <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
         <div className="flex min-w-0 flex-col gap-3">
           <PageHeader
-            title={procedureName(execution.procedureId)}
+            title={procedureName(execution.procedureId, execution.procedureTitle)}
             subtitle="Seguí los pasos en orden y marcá cada uno cuando lo termines."
           />
           {(areaName || resumed) && (
@@ -177,9 +223,32 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
         <ExecutionProgress summary={summary} />
 
+        {showChange && change && (
+          <VersionChangeNotice
+            change={change}
+            restarting={restarting}
+            onKeep={() => setKept(true)}
+            onRestart={restart}
+          />
+        )}
+
+        {restarted && (
+          <div role="status" className="flex flex-col gap-2 rounded-2xl border border-borde bg-salvia p-5">
+            <p className="font-semibold text-texto">
+              Esta ejecución se reinició con la versión nueva del procedimiento.
+            </p>
+            <p className="text-texto">
+              <Link href="/ejecuciones" className={TEXT_LINK}>
+                Elegí el procedimiento otra vez
+              </Link>{' '}
+              para seguir con la ejecución nueva.
+            </p>
+          </div>
+        )}
+
         {completed && (
           <CompletedPanel
-            procedureName={procedureName(execution.procedureId)}
+            procedureName={procedureName(execution.procedureId, execution.procedureTitle)}
             totalDurationMs={summary.totalDurationMs}
           />
         )}
@@ -195,16 +264,17 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
           completing={completing}
           onComplete={complete}
           focusCurrent={completedHere}
+          blocked={critical}
         />
       </article>
 
       {/* The side column: our summary and, below it, the assistant of pair C for the current step
-          (spec 010), untouched. The assistant is hidden once the execution is completed, so screen
-          readers do not announce an empty region. On a phone the column goes below the steps;
-          from lg on, it is on the right. */}
+          (spec 010), untouched. The assistant is hidden once the execution is no longer in
+          progress (completed or restarted), so screen readers do not announce an empty region. On
+          a phone the column goes below the steps; from lg on, it is on the right. */}
       <div className="flex min-w-0 flex-col gap-6">
         <ExecutionSummaryCard execution={execution} summary={summary} />
-        <aside data-slot="chat-panel" aria-label="Asistente" hidden={completed} className="min-w-0">
+        <aside data-slot="chat-panel" aria-label="Asistente" hidden={!inProgress} className="min-w-0">
           <ExecutionChatPanel execution={execution} />
         </aside>
       </div>

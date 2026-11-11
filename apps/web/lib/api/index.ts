@@ -66,6 +66,9 @@ export const { startExecution, getExecution, completeStep } = createExecutionsAp
 export type { ExecutionResponse, ExecutionStatus, ExecutionStepResponse } from './executions';
 export { describeExecutionError, EXECUTION_MESSAGES } from './execution-errors';
 export type { ExecutionErrorContext, ExecutionErrorDescription } from './execution-errors';
+// HU33: restarting an execution on the current version of its procedure.
+export const { restartExecution } = createExecutionsApi(apiClient);
+export type { PublishedChangeResponse, VersionChangeResponse } from './executions';
 
 // HU38: the calls to /api/metrics/procedures, with the same client.
 export const { getProcedureMetrics } = createMetricsApi(apiClient);

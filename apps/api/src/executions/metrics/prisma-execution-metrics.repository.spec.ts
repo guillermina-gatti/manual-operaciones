@@ -34,7 +34,7 @@ describe('executionAggregatesSql', () => {
     const sql = executionAggregatesSql(WINDOW);
 
     expect(oneLine(sql)).toContain(
-      'WHERE e.started_at >= ? AND e.started_at < ? GROUP BY e.procedure_id, e.procedure_version_id',
+      "WHERE e.status <> 'RESTARTED' AND e.started_at >= ? AND e.started_at < ? GROUP BY e.procedure_id, e.procedure_version_id",
     );
     expect(sql.values).toEqual([FROM, TO]);
   });
@@ -54,14 +54,14 @@ describe('executionAggregatesSql', () => {
     );
   });
 
-  it('without limits filters nothing', () => {
+  it('without limits filters only the restarted ones', () => {
     const sql = executionAggregatesSql({
       from: null,
       to: null,
       staleBefore: STALE,
     });
 
-    expect(oneLine(sql)).toContain('WHERE TRUE GROUP BY');
+    expect(oneLine(sql)).toContain("WHERE e.status <> 'RESTARTED' GROUP BY");
     expect(sql.values).toEqual([]);
   });
 
@@ -72,7 +72,9 @@ describe('executionAggregatesSql', () => {
       staleBefore: STALE,
     });
 
-    expect(oneLine(sql)).toContain('WHERE e.started_at < ? GROUP BY');
+    expect(oneLine(sql)).toContain(
+      "WHERE e.status <> 'RESTARTED' AND e.started_at < ? GROUP BY",
+    );
     expect(sql.values).toEqual([TO]);
   });
 });
@@ -95,11 +97,20 @@ describe('stepAggregatesSql', () => {
 });
 
 describe('personal metrics: only the executions of one user', () => {
+  it('HU33: neither query counts a RESTARTED execution nor its steps', () => {
+    expect(oneLine(executionAggregatesSql(WINDOW))).toContain(
+      "WHERE e.status <> 'RESTARTED'",
+    );
+    expect(oneLine(stepAggregatesSql(WINDOW))).toContain(
+      "WHERE e.status <> 'RESTARTED'",
+    );
+  });
+
   it('the aggregates of executions filter by user before the period', () => {
     const sql = executionAggregatesSql(WINDOW, USER_ID);
 
     expect(oneLine(sql)).toContain(
-      'WHERE e.user_id = ?::uuid AND e.started_at >= ? AND e.started_at < ? GROUP BY',
+      "WHERE e.status <> 'RESTARTED' AND e.user_id = ?::uuid AND e.started_at >= ? AND e.started_at < ? GROUP BY",
     );
     expect(sql.values).toEqual([USER_ID, FROM, TO]);
   });
@@ -108,7 +119,7 @@ describe('personal metrics: only the executions of one user', () => {
     const sql = stepAggregatesSql(WINDOW, USER_ID);
 
     expect(oneLine(sql)).toContain(
-      'WHERE e.user_id = ?::uuid AND e.started_at >= ? AND e.started_at < ? GROUP BY',
+      "WHERE e.status <> 'RESTARTED' AND e.user_id = ?::uuid AND e.started_at >= ? AND e.started_at < ? GROUP BY",
     );
     expect(sql.values).toEqual([STALE, USER_ID, FROM, TO]);
   });
@@ -119,7 +130,9 @@ describe('personal metrics: only the executions of one user', () => {
       USER_ID,
     );
 
-    expect(oneLine(sql)).toContain('WHERE e.user_id = ?::uuid GROUP BY');
+    expect(oneLine(sql)).toContain(
+      "WHERE e.status <> 'RESTARTED' AND e.user_id = ?::uuid GROUP BY",
+    );
     expect(sql.values).toEqual([USER_ID]);
   });
 

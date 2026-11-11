@@ -186,6 +186,7 @@ describe('MyMetricsService', () => {
         {
           executionId: '1e000000-0000-4000-8000-000000000001',
           procedureId: PROCEDURE_IDS.cierreDeCaja,
+          procedureTitle: 'Cierre de caja',
           procedureVersionId: CIERRE_V2,
           currentStep: {
             stepId: stepsOf(CIERRE_V2)[1].id,

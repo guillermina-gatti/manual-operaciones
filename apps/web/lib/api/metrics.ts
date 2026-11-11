@@ -34,6 +34,8 @@ export interface VersionMetricsResponse extends ExecutionCounts {
 
 export interface ProcedureMetricsResponse extends ExecutionCounts {
   procedureId: string;
+  // The title of the latest version with executions; null when the catalog does not give it.
+  title?: string | null;
   areaIds: string[];
   completionRate: number | null;
   avgCompletionMs: number | null;

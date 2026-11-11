@@ -33,6 +33,7 @@ export interface MySlowestStep {
 
 export interface MyProcedure extends ExecutionCounts {
   procedureId: string;
+  title: string | null; // as in the procedures metrics
   areaIds: string[];
   avgCompletionMs: number | null;
   lastStartedAt: Date;
@@ -43,6 +44,8 @@ export interface MyProcedure extends ExecutionCounts {
 export interface MyResumeItem {
   executionId: string;
   procedureId: string;
+  // The title of the version it runs, when the catalog gives it.
+  procedureTitle: string | null;
   procedureVersionId: string;
   currentStep: { stepId: string; order: number; title: string };
   totalSteps: number;
@@ -85,6 +88,7 @@ export function buildMyProcedures(
   return buildProcedureMetrics(executions, steps, versions)
     .map((procedure): MyProcedure => ({
       procedureId: procedure.procedureId,
+      title: procedure.title,
       areaIds: procedure.areaIds,
       started: procedure.started,
       completed: procedure.completed,
@@ -164,6 +168,7 @@ export function buildResume(
       {
         executionId: execution.executionId,
         procedureId: execution.procedureId,
+        procedureTitle: version.title?.trim() ? version.title : null,
         procedureVersionId: execution.procedureVersionId,
         currentStep: {
           stepId: execution.currentStepId,

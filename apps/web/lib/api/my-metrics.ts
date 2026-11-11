@@ -15,6 +15,8 @@ export interface MyMetricsTotals extends ExecutionCounts {
 export interface MyResumeItem {
   executionId: string;
   procedureId: string;
+  // The title of the version it runs; null when the catalog does not give it.
+  procedureTitle?: string | null;
   procedureVersionId: string;
   currentStep: { stepId: string; order: number; title: string };
   totalSteps: number;
@@ -27,6 +29,7 @@ export interface MyResumeItem {
 
 export interface MyProcedureMetrics extends ExecutionCounts {
   procedureId: string;
+  title?: string | null; // as in the procedures metrics
   areaIds: string[];
   avgCompletionMs: number | null;
   lastStartedAt: string;

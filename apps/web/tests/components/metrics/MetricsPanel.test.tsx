@@ -384,6 +384,19 @@ describe('with data', () => {
     ).toBeInTheDocument();
   });
 
+  test('a procedure with a title from the API shows it instead of the sample name', async () => {
+    const answer = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...answer,
+      procedures: answer.procedures.map((p, i) => (i === 0 ? { ...p, title: 'Arqueo de caja' } : p)),
+    });
+    render(<MetricsPanel />);
+
+    expect(await screen.findByRole('article', { name: 'Arqueo de caja' })).toBeInTheDocument();
+    const table = screen.getByRole('table', { name: 'Tiempo por procedimiento' });
+    expect(within(table).getAllByRole('rowheader')[0]).toHaveTextContent('Arqueo de caja');
+  });
+
   test('the average time of the summary is the one of the totals, not one computed here', async () => {
     const answer = metricsResponse();
     mocks.getProcedureMetrics.mockResolvedValue({

@@ -111,4 +111,25 @@ describe('metricsProcedureName', () => {
       'Procedimiento 00000A',
     );
   });
+
+  test('the title of the API wins, trimmed', () => {
+    expect(metricsProcedureName('5d2f6a10-8c3e-4f3a-9c2b-4f3a9c2b81de', '  Arqueo  ')).toBe(
+      'Arqueo',
+    );
+  });
+
+  test('a blank or missing title falls back to the sample name or the short code', () => {
+    expect(metricsProcedureName('1a000000-0000-4000-8000-000000000001', '   ')).toBe(
+      'Cierre de caja',
+    );
+    expect(metricsProcedureName('5d2f6a10-8c3e-4f3a-9c2b-4f3a9c2b81de', null)).toBe(
+      'Procedimiento 2B81DE',
+    );
+  });
+
+  test('a row of the time table keeps the title', () => {
+    const row = procedureTimeRows([{ ...procedure('a', 60000), title: 'Arqueo' }])[0];
+
+    expect(row.title).toBe('Arqueo');
+  });
 });

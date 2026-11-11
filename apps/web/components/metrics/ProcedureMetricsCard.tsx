@@ -11,7 +11,7 @@ import { StepMetricsTable } from './StepMetricsTable';
 
 export function ProcedureMetricsCard({ procedure }: { procedure: ProcedureMetricsResponse }) {
   const headingId = useId();
-  const name = metricsProcedureName(procedure.procedureId);
+  const name = metricsProcedureName(procedure.procedureId, procedure.title);
   const [latest, ...older] = procedure.versions;
   const shares = outcomeShares(procedure);
 

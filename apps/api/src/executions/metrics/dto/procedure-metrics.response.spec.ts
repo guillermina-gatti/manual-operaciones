@@ -24,6 +24,7 @@ const VIEW: ProcedureMetricsView = {
   procedures: [
     {
       procedureId: '1a000000-0000-4000-8000-000000000001',
+      title: 'Cierre de caja',
       areaIds: [VENTAS],
       ...counts,
       completionRate: 0.5,

@@ -22,6 +22,7 @@ describe('toMyMetricsResponse', () => {
         {
           executionId: 'e',
           procedureId: 'p',
+          procedureTitle: 'Cierre de caja',
           procedureVersionId: 'v',
           currentStep: {
             stepId: 's',
@@ -39,6 +40,7 @@ describe('toMyMetricsResponse', () => {
       procedures: [
         {
           procedureId: 'p',
+          title: 'Cierre de caja',
           areaIds: ['a'],
           started: 2,
           completed: 1,
@@ -72,6 +74,7 @@ describe('toMyMetricsResponse', () => {
         {
           executionId: 'e',
           procedureId: 'p',
+          procedureTitle: 'Cierre de caja',
           procedureVersionId: 'v',
           currentStep: { stepId: 's', order: 2, title: 'Comparar' },
           totalSteps: 4,
@@ -83,6 +86,7 @@ describe('toMyMetricsResponse', () => {
       procedures: [
         {
           procedureId: 'p',
+          title: 'Cierre de caja',
           areaIds: ['a'],
           started: 2,
           completed: 1,
@@ -117,6 +121,7 @@ describe('toMyMetricsResponse', () => {
       procedures: [
         {
           procedureId: 'p',
+          title: 'Cierre de caja',
           areaIds: [],
           started: 1,
           completed: 0,

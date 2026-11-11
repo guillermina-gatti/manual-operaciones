@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   ExecutionInProgressError,
   ExecutionRecord,
+  ExecutionRestart,
   ExecutionsRepository,
   ExecutionsRepositoryUnavailableError,
   NewExecution,
@@ -173,6 +174,41 @@ export class PrismaExecutionsRepository extends ExecutionsRepository {
         include: stepsInclude,
       });
       if (!row) throw new Error(`Execution ${data.executionId} disappeared`);
+      return toRecord(row);
+    });
+  }
+
+  // The old one stops being IN_PROGRESS first, so the new one does not clash with the
+  // partial unique index; both writes are in the received transaction (HU33).
+  restart(
+    tx: RepositoryTransaction,
+    data: ExecutionRestart,
+  ): Promise<ExecutionRecord> {
+    const client = tx as unknown as Prisma.TransactionClient;
+    return this.translate(async () => {
+      await client.execution.update({
+        where: { id: data.executionId },
+        data: { status: 'RESTARTED', finishedAt: data.closedAt },
+      });
+      const { next } = data;
+      const row = await client.execution.create({
+        data: {
+          id: next.id,
+          userId: next.userId,
+          procedureId: next.procedureId,
+          procedureVersionId: next.procedureVersionId,
+          status: 'IN_PROGRESS',
+          startedAt: next.startedAt,
+          steps: {
+            create: {
+              stepId: next.firstStep.stepId,
+              stepOrder: next.firstStep.stepOrder,
+              startedAt: next.startedAt,
+            },
+          },
+        },
+        include: stepsInclude,
+      });
       return toRecord(row);
     });
   }
