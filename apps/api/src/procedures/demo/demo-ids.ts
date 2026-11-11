@@ -1,7 +1,20 @@
 /* Ids fijos y armado de versiones de la demostración (spec 016). Prefijos como los de
 procedure-fixtures: 1a procedimientos, 1b versiones, 1c pasos, 1d claves de paso. */
 import { AREA_IDS, FIXTURE_USERS } from '../../documents/adapters/fixtures';
+import type { CatalogStep } from '../../executions/ports/procedures-catalog';
 import type { DemoStatus, DemoStep, DemoVersion } from './demo-types';
+
+// Los pasos de los fixtures de ejecuciones, que siempre traen su clave de paso.
+export function fromCatalog(steps: CatalogStep[]): DemoStep[] {
+  return steps.map((step) => {
+    if (!step.stepKey) throw new Error(`El paso ${step.id} no tiene stepKey`);
+    return {
+      ...step,
+      description: step.description ?? '',
+      stepKey: step.stepKey,
+    };
+  });
+}
 
 export const DEMO_ADMIN_ID = FIXTURE_USERS.admin.id;
 export const DEMO_AREA_IDS = AREA_IDS;

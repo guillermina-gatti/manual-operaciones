@@ -21,7 +21,7 @@ describe('buildOperations', () => {
     // Arrange
     const { db, prisma } = fakePrisma();
     // Act
-    buildOperations(prisma, cierre);
+    void buildOperations(prisma, cierre);
     // Assert
     expect(db.procedure.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -33,7 +33,7 @@ describe('buildOperations', () => {
 
   it('replaces the areas with the ones of the procedure, in both areas for reclamos', () => {
     const { db, prisma } = fakePrisma();
-    buildOperations(prisma, reclamos);
+    void buildOperations(prisma, reclamos);
     expect(db.procedureArea.deleteMany).toHaveBeenCalledWith({
       where: { procedureId: reclamos.id },
     });
@@ -47,7 +47,7 @@ describe('buildOperations', () => {
 
   it('upserts each version by its fixed id, published by the admin with fixed dates', () => {
     const { db, prisma } = fakePrisma();
-    buildOperations(prisma, cierre);
+    void buildOperations(prisma, cierre);
     const [first, second] = db.procedureVersion.upsert.mock.calls.map(
       ([arg]: [{ create: Record<string, unknown>; where: unknown }]) => arg,
     );
@@ -63,7 +63,7 @@ describe('buildOperations', () => {
 
   it('upserts every step numbered from 1 with its stepKey', () => {
     const { db, prisma } = fakePrisma();
-    buildOperations(prisma, limpieza);
+    void buildOperations(prisma, limpieza);
     const total = limpieza.versions.reduce((n, v) => n + v.steps.length, 0);
     expect(db.step.upsert).toHaveBeenCalledTimes(total);
     expect(db.step.upsert.mock.calls[0][0].create).toMatchObject({
@@ -75,7 +75,7 @@ describe('buildOperations', () => {
 
   it('leaves a draft without publication data', () => {
     const { db, prisma } = fakePrisma();
-    buildOperations(prisma, inventario);
+    void buildOperations(prisma, inventario);
     expect(db.procedureVersion.upsert.mock.calls[0][0].create).toMatchObject({
       status: 'DRAFT',
       publishedAt: null,

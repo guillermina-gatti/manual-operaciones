@@ -1,6 +1,6 @@
 /* Procedimientos de Operaciones de Supermercado La Esquina (spec 016) */
 import { FIXTURE_PROCEDURE_VERSIONS } from '../../executions/adapters/procedure-fixtures';
-import { demoSteps, demoUuid, demoVersion } from './demo-ids';
+import { demoSteps, demoUuid, demoVersion, fromCatalog } from './demo-ids';
 import type { DemoProcedure } from './demo-types';
 
 // Recepción de mercadería: los ids y pasos de los fixtures, más un tercer paso (P5).
@@ -16,12 +16,12 @@ export const recepcionDeMercaderia: DemoProcedure = {
       id: recepcion.versionId,
       versionNumber: 1,
       status: 'PUBLISHED',
-      title: recepcion.title,
+      title: 'Recepción de mercadería',
       description:
         'Cómo recibir y controlar la mercadería que llega al depósito.',
       day: '2026-10-01',
       steps: [
-        ...recepcion.steps,
+        ...fromCatalog(recepcion.steps),
         {
           id: demoUuid('1c', 23),
           stepKey: demoUuid('1d', 23),

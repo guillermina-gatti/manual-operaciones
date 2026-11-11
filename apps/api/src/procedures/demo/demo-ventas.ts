@@ -1,6 +1,6 @@
 /* Procedimientos de Ventas de Supermercado La Esquina (spec 016) */
 import { FIXTURE_PROCEDURE_VERSIONS } from '../../executions/adapters/procedure-fixtures';
-import { demoSteps, demoUuid, demoVersion } from './demo-ids';
+import { demoSteps, demoUuid, demoVersion, fromCatalog } from './demo-ids';
 import type { DemoProcedure, DemoStatus } from './demo-types';
 
 // Cierre de caja: los ids y pasos de los fixtures; la V2 es un cambio crítico.
@@ -15,13 +15,13 @@ export const cierreDeCaja: DemoProcedure = {
   versions: cierre.map((v, i) =>
     demoVersion({
       id: v.versionId,
-      versionNumber: v.versionNumber,
+      versionNumber: i + 1,
       status: CIERRE_STATUS[i],
-      title: v.title,
+      title: 'Cierre de caja',
       description:
         'Cómo se cuenta y se resguarda la caja al terminar el turno.',
       day: v.publishedAt!.toISOString().slice(0, 10),
-      steps: v.steps,
+      steps: fromCatalog(v.steps),
       changeSummary:
         i === 1
           ? 'Se agrega contar los comprobantes de tarjeta antes de comparar.'
