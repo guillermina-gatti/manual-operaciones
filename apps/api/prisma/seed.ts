@@ -13,6 +13,7 @@ import {
   DEV_FIXTURE_PASSWORD,
   seedDirectoryFixtures,
 } from '../test/directory-fixtures';
+import { seedDemoProcedures } from '../src/procedures/demo/demo-seed';
 
 function assertDevelopmentDatabase(url: string | undefined): string {
   if (process.env.NODE_ENV === 'production') {
@@ -40,6 +41,7 @@ async function main(): Promise<void> {
   });
   try {
     await seedDirectoryFixtures(prisma);
+    await seedDemoProcedures(prisma);
     const [areas, users] = await Promise.all([
       prisma.area.count(),
       prisma.user.count(),
