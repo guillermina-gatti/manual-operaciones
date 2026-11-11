@@ -21,8 +21,8 @@ const withStepsAndAreas = {
 
 type VersionRow = Prisma.ProcedureVersionGetPayload<{ include: typeof withStepsAndAreas }>;
 
-// Nothing else of the tables leaves: only what the port declares. The title of the procedure joins
-// when the port has it (pending with Mayra, D17).
+// Nothing else of the tables leaves: only what the port declares. It gives the title and the number
+// of the version, and the description and key of each step (D17, HU11).
 const toCatalogVersion = (row: VersionRow): CatalogProcedureVersion => ({
   procedureId: row.procedureId,
   versionId: row.id,
