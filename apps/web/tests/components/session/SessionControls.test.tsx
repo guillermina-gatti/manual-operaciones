@@ -7,15 +7,28 @@ const mocks = vi.hoisted(() => ({
   logoutSession: vi.fn(),
   useSession: vi.fn(),
   replace: vi.fn(),
+  listConflictAlerts: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }) }));
-vi.mock('@/lib/session', () => ({ REAL_AUTH_ENABLED: true, useSession: mocks.useSession }));
-vi.mock('@/lib/session/real-session', () => ({ logoutSession: mocks.logoutSession }));
+vi.mock('@/lib/session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/session')>()),
+  REAL_AUTH_ENABLED: true,
+  useSession: mocks.useSession,
+}));
+vi.mock('@/lib/session/real-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/session/real-session')>()),
+  logoutSession: mocks.logoutSession,
+}));
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api')>()),
+  listConflictAlerts: mocks.listConflictAlerts,
+}));
 
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.logoutSession.mockResolvedValue(undefined);
+  mocks.listConflictAlerts.mockResolvedValue({ data: [], total: 0, openTotal: 0, page: 1, limit: 1 });
   mocks.useSession.mockReturnValue({
     user: { id: 'id', name: 'Ada Lovelace', role: 'ADMIN' }, status: 'ready',
   });
@@ -71,17 +84,42 @@ describe('A-09: estado de sesión en encabezado', () => {
       expect(screen.queryByRole('link', { name: 'Alertas' })).not.toBeInTheDocument();
     });
 
-    test('un ADMIN ve Asistente y además el enlace a /documentos/alertas', () => {
+    test('un ADMIN ve Asistente y además el enlace a /documentos/alertas sin badge si no hay alertas', async () => {
+      mocks.listConflictAlerts.mockResolvedValueOnce({
+        data: [],
+        total: 0,
+        openTotal: 0,
+        page: 1,
+        limit: 1,
+      });
       mocks.useSession.mockReturnValue({
         user: { id: 'adm-1', name: 'Ana', role: 'ADMIN' },
         status: 'ready',
       });
       render(<SessionControls />);
       expect(screen.getByRole('link', { name: 'Asistente' })).toHaveAttribute('href', '/asistente');
-      expect(screen.getByRole('link', { name: 'Alertas' })).toHaveAttribute(
-        'href',
-        '/documentos/alertas',
-      );
+      const alertsLink = await screen.findByRole('link', { name: 'Alertas: ninguna abierta' });
+      expect(alertsLink).toHaveAttribute('href', '/documentos/alertas');
+      expect(screen.queryByTestId('alerts-badge')).not.toBeInTheDocument();
+    });
+
+    test('un ADMIN ve el badge con la cantidad de alertas abiertas', async () => {
+      mocks.listConflictAlerts.mockResolvedValueOnce({
+        data: [],
+        total: 3,
+        openTotal: 3,
+        page: 1,
+        limit: 1,
+      });
+      mocks.useSession.mockReturnValue({
+        user: { id: 'adm-1', name: 'Ana', role: 'ADMIN' },
+        status: 'ready',
+      });
+      render(<SessionControls />);
+      const alertsLink = await screen.findByRole('link', { name: 'Alertas: 3 abiertas' });
+      expect(alertsLink).toHaveAttribute('href', '/documentos/alertas');
+      const badge = screen.getByTestId('alerts-badge');
+      expect(badge).toHaveTextContent('3');
     });
 
     test('sin sesión no muestra ni Asistente ni Alertas', () => {

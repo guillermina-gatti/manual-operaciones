@@ -3,8 +3,40 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { listConflictAlerts, useApiResource } from '@/lib/api';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { logoutSession } from '@/lib/session/real-session';
+
+const describeOpen = (total: number) =>
+  total === 0 ? 'ninguna abierta' : total === 1 ? '1 abierta' : `${total} abiertas`;
+
+function AdminAlertsLink({ userId }: { userId: string }) {
+  const open = useApiResource(`conflict-alerts-count:${userId}`, (signal) =>
+    listConflictAlerts('OPEN', 1, 1, signal),
+  );
+
+  const openTotal = open.status === 'success' ? open.data.openTotal : 0;
+  const label =
+    open.status === 'success' ? `Alertas: ${describeOpen(openTotal)}` : 'Alertas';
+
+  return (
+    <Link
+      href="/documentos/alertas"
+      aria-label={label}
+      className="inline-flex items-center gap-1.5 hover:text-zinc-900 hover:underline dark:hover:text-white"
+    >
+      <span>Alertas</span>
+      {open.status === 'success' && openTotal > 0 && (
+        <span
+          data-testid="alerts-badge"
+          className="inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white shadow-xs dark:bg-amber-600"
+        >
+          {openTotal}
+        </span>
+      )}
+    </Link>
+  );
+}
 
 export function SessionControls() {
   const router = useRouter();
@@ -42,11 +74,7 @@ export function SessionControls() {
               <Link href="/asistente" className="hover:text-zinc-900 hover:underline dark:hover:text-white">
                 Asistente
               </Link>
-              {user.role === 'ADMIN' && (
-                <Link href="/documentos/alertas" className="hover:text-zinc-900 hover:underline dark:hover:text-white">
-                  Alertas
-                </Link>
-              )}
+              {user.role === 'ADMIN' && <AdminAlertsLink userId={user.id} />}
             </div>
           )}
         </div>
