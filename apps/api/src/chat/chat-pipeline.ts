@@ -7,6 +7,7 @@ import type { ChatResult, ChatResultStatus, ChatSource, NearestDocument } from '
 import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
 import { platformHelpReply, platformMenuReply } from './chat-help';
 import { smallTalkReply } from './chat-greeting';
+import { focusAreaOf, focusNoInfoText } from './chat-area';
 import type { ContactPerson } from './ports/contact-directory';
 import type { LlmAnswer, Passage } from './ports/chat-llm';
 import type { ChatRepository } from './ports/chat-repository';
@@ -109,7 +110,9 @@ export async function prepareChat(
         };
     }
 
-    const retrieved = await retrieval.search(queryVector, scope, TOP_K);
+    // Área nombrada en la pregunta ("... en Ventas"): la búsqueda se limita a esa área.
+    const focus = focusAreaOf(question) ?? undefined;
+    const retrieved = await retrieval.search(queryVector, scope, TOP_K, focus);
     const chunks = retrieved.filter((c) => c.distance <= MAX_COSINE_DISTANCE);
     if (chunks.length === 0) {
         // Ayuda de la plataforma ("¿cómo veo un documento?"): solo cuando los documentos no responden, así una
@@ -119,9 +122,15 @@ export async function prepareChat(
             return { kind: 'done', outcome: { status: 'answered', answer: help, chunks: [] } };
         }
         // HU19: los más cercanos, aunque estén fuera del umbral, para mostrar dónde buscar.
+        // Con área nombrada, el texto dice de qué área es, para que quien no la tiene sepa a quién consultar.
         return {
             kind: 'done',
-            outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], ...nearestOf(retrieved) },
+            outcome: {
+                status: 'no_info',
+                answer: focus ? focusNoInfoText(focus) : NO_INFO_TEXT,
+                chunks: [],
+                ...nearestOf(retrieved),
+            },
         };
     }
 
@@ -201,7 +210,9 @@ export function finishWithHelp(
     const outcome = finishChat(llm, chunks, logger);
     if (outcome.status !== 'no_info') return outcome;
     const help = platformHelpReply(question);
-    return help !== null ? { status: 'answered', answer: help, chunks: [] } : outcome;
+    if (help !== null) return { status: 'answered', answer: help, chunks: [] };
+    const focus = focusAreaOf(question);
+    return focus ? { ...outcome, answer: focusNoInfoText(focus) } : outcome;
 }
 
 // Guarda la consulta y arma la respuesta del Contrato 4. La latencia va desde startedAt hasta acá.

@@ -25,11 +25,16 @@ export class PrismaChatRetrieval extends ChatRetrieval {
     super();
   }
 
-  async search(queryVector: number[], areaIds: string[] | null, limit: number): Promise<RetrievedChunk[]> {
+  async search(queryVector: number[], areaIds: string[] | null, limit: number, focusArea?: string): Promise<RetrievedChunk[]> {
     if (areaIds !== null && areaIds.length === 0) return [];
     const vector = `[${queryVector.join(',')}]`;
     // null = sin filtro por área (solo ADMIN). Los demás roles siempre filtran en SQL.
     const areaFilter = areaIds === null ? Prisma.empty : Prisma.sql`AND c.area_ids && ${areaIds}::uuid[]`;
+    // Área nombrada en la pregunta: solo sus documentos. Si no existe o el usuario no la tiene, no devuelve nada.
+    const focusFilter =
+      focusArea === undefined
+        ? Prisma.empty
+        : Prisma.sql`AND c.area_ids && ARRAY(SELECT a.id FROM areas a WHERE lower(a.name) = lower(${focusArea}))`;
 
     const rows = await this.prisma.$queryRaw<ChunkRow[]>(Prisma.sql`
       SELECT c.id AS "chunkId",
@@ -51,6 +56,7 @@ export class PrismaChatRetrieval extends ChatRetrieval {
         AND v.status = 'CURRENT'
         AND v.processing_status = 'READY'
         ${areaFilter}
+        ${focusFilter}
       ORDER BY c.embedding <=> ${vector}::vector
       LIMIT ${limit}
     `);
