@@ -35,7 +35,21 @@ export function SessionControls() {
   return (
     <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
       <nav aria-label="Sesión" className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-sm">
-        <Link href="/documentos" className="font-bold">PispIAr · Manual de operaciones</Link>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link href="/documentos" className="font-bold">PispIAr · Manual de operaciones</Link>
+          {user && (
+            <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
+              <Link href="/asistente" className="hover:text-zinc-900 hover:underline dark:hover:text-white">
+                Asistente
+              </Link>
+              {user.role === 'ADMIN' && (
+                <Link href="/documentos/alertas" className="hover:text-zinc-900 hover:underline dark:hover:text-white">
+                  Alertas
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
         {status === 'loading' ? (
           <span role="status">Comprobando sesión…</span>
         ) : user ? (

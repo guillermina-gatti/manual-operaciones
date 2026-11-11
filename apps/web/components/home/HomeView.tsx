@@ -171,6 +171,13 @@ const ADMIN_QUICK_ACTIONS: readonly QuickActionConfig[] = [
     href: '/documentos/por-revisar',
     variant: 'secondary',
   },
+  {
+    id: 'alertas',
+    label: 'Alertas →',
+    description: 'Revisá los documentos que el asistente encontró contradictorios.',
+    href: '/documentos/alertas',
+    variant: 'secondary',
+  },
 ];
 
 const FOCUS_RING =
@@ -360,7 +367,7 @@ export function HomeView() {
                       Atajos directos para mantener el catálogo actualizado y al día.
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {quickActions.map((action) => (
                       <div
                         key={action.id}

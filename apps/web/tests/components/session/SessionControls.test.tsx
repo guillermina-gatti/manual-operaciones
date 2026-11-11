@@ -49,4 +49,46 @@ describe('A-09: estado de sesión en encabezado', () => {
     render(<SessionControls />);
     expect(screen.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', '/login');
   });
+
+  describe('navegación de Asistente y Alertas (spec 009 y spec 011)', () => {
+    test('con sesión activa, cualquier rol ve el enlace a /asistente', () => {
+      mocks.useSession.mockReturnValue({
+        user: { id: 'emp-1', name: 'Elena', role: 'EMPLOYEE' },
+        status: 'ready',
+      });
+      render(<SessionControls />);
+      expect(screen.getByRole('link', { name: 'Asistente' })).toHaveAttribute('href', '/asistente');
+      expect(screen.queryByRole('link', { name: 'Alertas' })).not.toBeInTheDocument();
+    });
+
+    test('un SUPERVISOR ve Asistente pero no ve Alertas', () => {
+      mocks.useSession.mockReturnValue({
+        user: { id: 'sup-1', name: 'Sergio', role: 'SUPERVISOR' },
+        status: 'ready',
+      });
+      render(<SessionControls />);
+      expect(screen.getByRole('link', { name: 'Asistente' })).toHaveAttribute('href', '/asistente');
+      expect(screen.queryByRole('link', { name: 'Alertas' })).not.toBeInTheDocument();
+    });
+
+    test('un ADMIN ve Asistente y además el enlace a /documentos/alertas', () => {
+      mocks.useSession.mockReturnValue({
+        user: { id: 'adm-1', name: 'Ana', role: 'ADMIN' },
+        status: 'ready',
+      });
+      render(<SessionControls />);
+      expect(screen.getByRole('link', { name: 'Asistente' })).toHaveAttribute('href', '/asistente');
+      expect(screen.getByRole('link', { name: 'Alertas' })).toHaveAttribute(
+        'href',
+        '/documentos/alertas',
+      );
+    });
+
+    test('sin sesión no muestra ni Asistente ni Alertas', () => {
+      mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+      render(<SessionControls />);
+      expect(screen.queryByRole('link', { name: 'Asistente' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Alertas' })).not.toBeInTheDocument();
+    });
+  });
 });

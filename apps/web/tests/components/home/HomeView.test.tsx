@@ -236,7 +236,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       mocks.useSession.mockReturnValue(sessionFor('ADMIN', 'Ana Administradora'));
     });
 
-    test('saluda por nombre, muestra el rol Administrador, Documentos, Métricas, Cargar documento y Por revisar', () => {
+    test('saluda por nombre, muestra el rol Administrador, Documentos, Métricas, Cargar documento, Por revisar y Alertas', () => {
       render(<HomeView />);
 
       expect(
@@ -265,6 +265,10 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
         'href',
         '/documentos/por-revisar',
       );
+      expect(screen.getByRole('link', { name: 'Alertas →' })).toHaveAttribute(
+        'href',
+        '/documentos/alertas',
+      );
 
       expect(allLinkHrefs()).toEqual([
         '/documentos',
@@ -272,6 +276,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
         '/metricas',
         '/documentos/nuevo',
         '/documentos/por-revisar',
+        '/documentos/alertas',
       ]);
       expect(screen.queryByText('Ejecuciones y recorridos')).not.toBeInTheDocument();
     });
