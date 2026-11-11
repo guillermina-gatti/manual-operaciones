@@ -4,7 +4,7 @@
 - **Responsable:** Micaela Franco (pareja B)
 - **Depende de:** spec 006 (borradores, pasos y áreas; sus reglas R3, R4, R9 y R10 se usan tal cual), `docs/contracts/permissions-matrix.md` (solo el ADMIN publica), `UsersDirectory` de documentos (para el nombre de quien publicó) y el puerto `ProceduresCatalog` de Mayra (`executions/ports/procedures-catalog.ts`), que no se modifica. **Dependencia con Mayra:** para `/metricas` ella agrega `title` (el título del procedimiento) a `CatalogProcedureVersion` en el puerto; el adaptador de esta spec lo llena. Si el puerto todavía no lo tiene cuando se escriba el adaptador, este funciona sin título y llenarlo queda como tarea pendiente (D17).
 - **Habilita:** HU33 (propuestas de cambio), HU28 (aprobación), HU38 (métricas por versión) y el catálogo real de ejecuciones.
-- **Estado:** implementada (10/11/2026), Partes 1 y 2. Mejora visual de la pantalla del ADMIN (11/11/2026, pedido de Matías, boceto aprobado por el equipo): D21 a D26, R14, E24 a E29, T22 a T27 (solo front). Las preguntas de la aclaración pasaron a la sección 10 (D10 a D17); la prueba visual de la Parte 1 sumó D18 a D20 (pantalla). Los e2e los corre Micaela. Pendiente: el título del procedimiento en el catálogo cuando Mayra lo agregue al puerto (D17).
+- **Estado:** implementada (10/11/2026), Partes 1 y 2. Mejora visual de la pantalla del ADMIN (11/11/2026, pedido de Matías, boceto aprobado por el equipo): D21 a D28, R14, R15, E24 a E32, T22 a T29 (solo front); la corrección de dos fallos de la prueba en el navegador (12/11/2026) sumó D27, D28, R15, E30 a E32 y T28, T29. Las preguntas de la aclaración pasaron a la sección 10 (D10 a D17); la prueba visual de la Parte 1 sumó D18 a D20 (pantalla). Los e2e los corre Micaela. Pendiente: el título del procedimiento en el catálogo cuando Mayra lo agregue al puerto (D17).
 
 ## 1. Problema y objetivo
 
@@ -83,6 +83,7 @@ Esta feature agrega el ciclo de vida de una versión: el ADMIN **publica** un bo
   - **título del procedimiento:** si `CatalogProcedureVersion` ya tiene `title` (lo agrega Mayra), el adaptador lo llena con el título de esa versión; si todavía no lo tiene, el adaptador funciona sin él y llenarlo queda como tarea pendiente (D17).
   El adaptador no cambia nada en `executions/`: el cambio de una línea en `executions.module.ts` lo hace Mayra.
 - **R13 · Áreas de la base y errores.** Las reglas del equipo se mantienen: ids UUID (un id que no lo es: 400), fechas ISO 8601 en UTC, errores estándar de NestJS (`statusCode`, `message`, `error`; en los 409, además `reason`), validación en el servidor, y si la base no responde: 503 sin cambios a medias.
+- **R15 · Una pantalla que sigue lo que pasa (D27, D28).** El ADMIN puede crear un segundo procedimiento sin recargar la página, y la lista de abajo refleja el estado de la API después de cada cambio del borrador, sin pasar por "Cargando".
 - **R14 · Pantalla del ADMIN (solo front, D21 a D26).** En `/procedimientos` y `/procedimientos/[id]` el ADMIN ve una pantalla única con el borrador: la tarjeta "Borrador" (título y descripción lado a lado, áreas como chips seleccionables, "Guardar cambios" y el tachito para descartar), "Pasos", "Versiones" con "Publicar" y la lista. Borrar un paso y descartar el borrador piden confirmación en un cartel modal. La API no cambia; la vista de SUPERVISOR y EMPLOYEE (spec 006) tampoco.
 
 ## 7. Estados
@@ -154,6 +155,8 @@ Tomadas el 10/11/2026 por ser menores; la regla correspondiente las usa.
 | D23 · Pasos | El título es "Pasos", sin "N de 50". El límite de 50 sigue en la API; al llegar a 50 la pantalla lo dice y no ofrece "+ Agregar paso" | R14 |
 | D24 · Fila de paso | Fondo salvia, número en círculo verde (el mismo de HU11), botones ↑, ↓, "Editar" y tachito rojo con `aria-label="Borrar el paso <título>"`. "+ Agregar paso" es un botón con borde punteado que abre el formulario del paso | R14 |
 | D25 · Cartel de confirmación | Borrar un paso y descartar el borrador piden confirmación en un `<dialog>` modal (`aria-modal="true"`, foco atrapado, Esc cierra, "Cancelar" con el foco inicial). Encabezado salvia, círculo rojo con "!", título "¿Borrar el paso «X»?" o "¿Descartar el borrador?", botones "Cancelar" y "Sí, borrar" (rojo). Texto del paso: "Se quita del borrador y los demás pasos se vuelven a numerar. No se puede deshacer." Texto de descartar: dice lo que pasa de verdad (se borra el borrador con sus pasos y, si es la única versión, el procedimiento con sus áreas) | R14 |
+| D27 · Crear otro procedimiento | Con un borrador a la vista, arriba aparece el botón secundario "+ Crear otro procedimiento": vuelve a mostrar el formulario de crear, vacío, sin recargar la página, y pide la lista otra vez. Mientras se ve el formulario, el botón no está | R15 |
+| D28 · La lista sigue al borrador | La lista de abajo se vuelve a pedir a la API al publicar, al crear una versión nueva, al guardar cambios del borrador (título, descripción, áreas o pasos) y al tocar "+ Crear otro procedimiento". Mientras llega la respuesta nueva se siguen viendo las tarjetas de antes: no vuelve a "Cargando". Cambiar de página sí empieza vacío. Reemplaza lo que decía la Parte 3 (la lista solo se actualizaba al crear y al descartar) | R15 |
 | D26 · Áreas inactivas | Un área inactiva se muestra como "Nombre (inactiva)", solo si el procedimiento ya la tiene; una inactiva nueva no se puede marcar (la API diría 400) | R14 |
 
 ## 11. Preguntas abiertas
@@ -343,6 +346,22 @@ Escenario: E28 · pasos sin límite a la vista
   Dado un borrador con 2 pasos
   Entonces el título es "Pasos" (sin "2 de 50") y "+ Agregar paso" abre el formulario del paso
 
+Escenario: E30 · crear otro procedimiento
+  Dado que el ADMIN creó un procedimiento y ve su borrador en /procedimientos
+  Cuando toca "+ Crear otro procedimiento"
+  Entonces ve el formulario "Crear un procedimiento" vacío, sin recargar
+  Y la lista se pidió otra vez
+
+Escenario: E31 · la lista sigue al borrador
+  Dado un borrador a la vista y la lista de abajo
+  Cuando el ADMIN guarda cambios, agrega un paso, publica o crea una versión nueva
+  Entonces la lista se pide otra vez y muestra lo que la API contesta (título, estado, pasos, áreas)
+
+Escenario: E32 · la lista no vuelve a "Cargando"
+  Dado un borrador a la vista y la lista con tarjetas
+  Cuando la lista se pide otra vez y la respuesta todavía no llegó
+  Entonces las tarjetas siguen a la vista y no aparece "Cargando procedimientos…"
+
 Escenario: E29 · áreas inactivas
   Dado un procedimiento con el área "Compras" inactiva y el área "Ventas" activa
   Entonces el borrador muestra "Compras (inactiva)" y "Ventas"
@@ -369,3 +388,4 @@ Se completa al escribir el plan y las tareas (`plan.md` y `tasks.md`): regla →
 | R12 | E19, E21, E22, E23 |
 | R13 | E16, E17, E20 |
 | R14 | E24, E25, E26, E27, E28, E29 |
+| R15 | E30, E31, E32 |

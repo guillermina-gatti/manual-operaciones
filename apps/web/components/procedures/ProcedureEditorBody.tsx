@@ -26,9 +26,17 @@ interface ProcedureEditorBodyProps {
   embedded?: boolean;
   // The draft is gone; the default goes back to the list.
   onGone?: () => void;
+  // Something changed on the API (draft saved, published, new version): the screen refreshes its list.
+  onChanged?: () => void;
 }
 
-export function ProcedureEditorBody({ procedure, onChange, embedded = false, onGone }: ProcedureEditorBodyProps) {
+export function ProcedureEditorBody({
+  procedure,
+  onChange,
+  embedded = false,
+  onGone,
+  onChanged,
+}: ProcedureEditorBodyProps) {
   const router = useRouter();
   const versions = useVersions(procedure.id);
   const baseId = useId();
@@ -42,10 +50,16 @@ export function ProcedureEditorBody({ procedure, onChange, embedded = false, onG
   const changeDraft = (next: EditableProcedure) => {
     onChange(next);
     versions.reload();
+    onChanged?.();
   };
   const followDraft = (draft: VersionDetail) => {
     onChange(withDraftVersion(procedure, draft));
     versions.reload();
+    onChanged?.();
+  };
+  const published = () => {
+    versions.reload();
+    onChanged?.();
   };
 
   return (
@@ -82,7 +96,7 @@ export function ProcedureEditorBody({ procedure, onChange, embedded = false, onG
               procedureId={procedure.id}
               versions={items}
               currentVersionId={procedure.versionId}
-              onChanged={versions.reload}
+              onChanged={published}
               onDraftStarted={followDraft}
             />
             <CompareVersions procedureId={procedure.id} versions={items} />
