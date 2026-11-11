@@ -36,6 +36,33 @@ beforeEach(() => {
   mocks.realAuthEnabled = true;
 });
 
+// Spec 006, W10 (E49): the card of the procedures, for every role, with the style of the others.
+describe('HomeView — tarjeta Procedimientos (spec 006, HU11)', () => {
+  test.each([
+    ['EMPLOYEE', 'Elena Empleada de Ventas', 'Ver procedimientos →'],
+    ['SUPERVISOR', 'Sergio Supervisor de Ventas', 'Ver procedimientos →'],
+    ['ADMIN', 'Ana Administradora', 'Gestionar procedimientos →'],
+  ] as const)('un %s ve la tarjeta que lleva a /procedimientos', (role, name, cta) => {
+    mocks.useSession.mockReturnValue(sessionFor(role, name));
+    render(<HomeView />);
+
+    const card = screen.getByRole('heading', { level: 3, name: 'Procedimientos' }).closest('article');
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByRole('link', { name: cta })).toHaveAttribute(
+      'href',
+      '/procedimientos',
+    );
+  });
+
+  test('sin sesión no hay tarjeta ni enlace a /procedimientos', () => {
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    render(<HomeView />);
+
+    expect(screen.queryByRole('heading', { name: 'Procedimientos' })).not.toBeInTheDocument();
+    expect(allLinkHrefs()).not.toContain('/procedimientos');
+  });
+});
+
 describe('HomeView — A-10b.3 Home de PispIAr', () => {
   describe('estado de carga', () => {
     test('mientras se verifica la sesión muestra estado accesible y ningún módulo privado', () => {
@@ -124,7 +151,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
         '/ejecuciones',
       );
 
-      expect(allLinkHrefs()).toEqual(['/documentos', '/ejecuciones']);
+      expect(allLinkHrefs()).toEqual(['/documentos', '/procedimientos', '/ejecuciones']);
       expect(screen.queryByText('Métricas')).not.toBeInTheDocument();
       expect(screen.queryByText('Acciones rápidas de administración')).not.toBeInTheDocument();
     });
@@ -157,7 +184,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
         '/metricas',
       );
 
-      expect(allLinkHrefs()).toEqual(['/documentos', '/metricas']);
+      expect(allLinkHrefs()).toEqual(['/documentos', '/procedimientos', '/metricas']);
       expect(screen.queryByText('Ejecuciones y recorridos')).not.toBeInTheDocument();
       expect(screen.queryByText('Acciones rápidas de administración')).not.toBeInTheDocument();
     });
@@ -200,6 +227,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
 
       expect(allLinkHrefs()).toEqual([
         '/documentos',
+        '/procedimientos',
         '/metricas',
         '/documentos/nuevo',
         '/documentos/por-revisar',
