@@ -9,6 +9,7 @@ export interface RetrievedChunk {
     content: string;
     validFrom: string; // YYYY-MM-DD
     distance: number; // distancia coseno: menor = más parecido
+    lexical?: boolean; // true si coincide por palabras con la pregunta (búsqueda de texto completo)
     // HU18: para el enlace firmado al archivo de la versión. Los trae la búsqueda; los tests pueden
     // omitirlos (sin ellos, la fuente queda sin enlace).
     storageKey?: string;
@@ -19,10 +20,12 @@ export interface RetrievedChunk {
 export abstract class ChatRetrieval {
     // areaIds null = sin filtro por área (solo ADMIN). Un array vacío no devuelve nada.
     // focusArea (opcional): nombre de un área; si se pasa, solo documentos de esa área (y de areaIds).
+    // queryText (opcional): el texto de la pregunta, para la búsqueda por palabras. Sin él, solo similitud.
     abstract search(
         queryVector: number[],
         areaIds: string[] | null,
         limit: number,
         focusArea?: string,
+        queryText?: string,
     ): Promise<RetrievedChunk[]>;
 }

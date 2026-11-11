@@ -166,6 +166,8 @@ model Chunk {
   // 768 dimensiones: gemini-embedding-001 con outputDimensionality=768
   // (permite indexar con HNSW, que en pgvector admite hasta 2000).
   embedding         Unsupported("vector(768)")?
+  // Texto completo en español (título de la sección + contenido), generado por la base. Lo usa la búsqueda por palabras.
+  contentTsv        Unsupported("tsvector")? @map("content_tsv")
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)

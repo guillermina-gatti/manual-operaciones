@@ -7,6 +7,7 @@ import type { ChatResult, ChatResultStatus, ChatSource, NearestDocument } from '
 import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
 import { platformHelpReply, platformMenuReply } from './chat-help';
 import { smallTalkReply } from './chat-greeting';
+import { unsupportedFigures } from './grounding-check';
 import { focusAreaOf, focusNoInfoText } from './chat-area';
 import type { ContactPerson } from './ports/contact-directory';
 import type { LlmAnswer, Passage } from './ports/chat-llm';
@@ -16,6 +17,8 @@ import type { ChatRetrieval, RetrievedChunk } from './ports/chat-retrieval';
 export const TOP_K = 6;
 // Distancia coseno máxima para considerar un fragmento relevante. Ajustar con documentos reales.
 export const MAX_COSINE_DISTANCE = 0.45;
+// Una coincidencia por palabras (texto exacto) puede tener una distancia algo mayor y igual ser la respuesta.
+export const LEXICAL_MAX_COSINE_DISTANCE = 0.6;
 // HU19: cuántos documentos cercanos se muestran cuando no hay información suficiente.
 export const NEAREST_DOCUMENTS_LIMIT = 3;
 export const NO_INFO_MARKER = 'NO_INFO';
@@ -99,7 +102,9 @@ export async function prepareChat(
 
     let queryVector: number[];
     try {
-        [queryVector] = await embeddings.embedMany([searchText]);
+        // Si el proveedor no trae embedQuery (por ejemplo, el wrapper del stream), se usa embedMany.
+        queryVector =
+            (await embeddings.embedQuery?.(searchText)) ?? (await embeddings.embedMany([searchText]))[0];
     } catch (error) {
         logger.warn(`Falló el embedding de la consulta: ${String(error)}`);
         // Sin el asistente, la ayuda fija sigue disponible; si no es una pregunta de ayuda, no hay respuesta.
@@ -112,8 +117,11 @@ export async function prepareChat(
 
     // Área nombrada en la pregunta ("... en Ventas"): la búsqueda se limita a esa área.
     const focus = focusAreaOf(question) ?? undefined;
-    const retrieved = await retrieval.search(queryVector, scope, TOP_K, focus);
-    const chunks = retrieved.filter((c) => c.distance <= MAX_COSINE_DISTANCE);
+    const retrieved = await retrieval.search(queryVector, scope, TOP_K, focus, searchText);
+    const chunks = retrieved.filter(
+        (c) =>
+            c.distance <= MAX_COSINE_DISTANCE || (c.lexical === true && c.distance <= LEXICAL_MAX_COSINE_DISTANCE),
+    );
     if (chunks.length === 0) {
         // Ayuda de la plataforma ("¿cómo veo un documento?"): solo cuando los documentos no responden, así una
         // pregunta que sí está en los documentos nunca se toma como ayuda. Texto fijo, sin modelo.
@@ -176,10 +184,18 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
         return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
     }
 
+    // Cifras que no están en los pasajes citados: no se muestra la respuesta (verificación de cifras).
+    const cited = citedChunks(cleaned.text, chunks);
+    const missing = unsupportedFigures(cleaned.text, cited.map((c) => c.content));
+    if (missing.length > 0) {
+        logger?.warn(`Cifras que no aparecen en los pasajes citados, no se responde: ${missing.join(', ')}`);
+        return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
+    }
+
     return {
         status: 'answered',
         answer: cleaned.text,
-        chunks: citedChunks(cleaned.text, chunks),
+        chunks: cited,
         llm,
     };
 }
