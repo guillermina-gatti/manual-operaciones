@@ -87,6 +87,14 @@ const MODULES_BY_ROLE: Record<Role, readonly ModuleCardConfig[]> = {
       href: '/ejecuciones',
       ctaLabel: 'Ir a ejecuciones →',
     },
+    {
+      id: 'mi-actividad',
+      title: 'Mi actividad',
+      subtitle: 'Tus recorridos',
+      description: 'Mirá cuánto tardás, tus recorridos completados y cuáles retomar.',
+      href: '/ejecuciones/mi-actividad',
+      ctaLabel: 'Ver mi actividad →',
+    },
   ],
   SUPERVISOR: [
     {
