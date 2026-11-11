@@ -1,5 +1,6 @@
-// Un documento en la vista Tarjetas: la hoja grande con el tipo, el título, la versión, el estado de
-// revisión y "Actualizado hace X · área". Debajo, chico, el responsable (spec 008, F1).
+// Un documento en la vista Tarjetas, en una sola fila. A la izquierda, el título (hasta dos líneas), el
+// estado de revisión, "Actualizado hace X · área" y el responsable (spec 008, F1), a 10 px entre sí. A
+// la derecha, un bloque que no se achica: la hoja del tipo de archivo (48×56) y, debajo, la versión.
 // Como en la Lista: un article con el título en h2 y un único enlace, estirado sobre la tarjeta.
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -38,47 +39,47 @@ export function DocumentTile({ document, isAdmin, now, children }: DocumentTileP
 
   return (
     <article className={`${LIST_CARD} flex h-full min-w-0 flex-col gap-4 p-5`}>
-      <div className="flex items-start justify-between gap-3">
-        <FileTypeIcon fileName={currentVersion.originalFileName} size="lg" />
-        <span className="sr-only">Archivo {fileExtension(currentVersion.originalFileName)}</span>
-        <span className={VERSION_CHIP}>
-          <span aria-hidden="true">v{currentVersion.versionNumber}</span>
-          <span className="sr-only">Versión {currentVersion.versionNumber}</span>
-        </span>
+      <div className="flex min-w-0 items-start gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+          <h2 className="min-w-0 text-lg leading-snug font-bold break-words">
+            {/* Lleva la vista al detalle, así la ruta ("Documentos › …") vuelve a las Tarjetas. */}
+            <Link
+              href={withView(`/documentos/${document.id}`, 'tarjetas')}
+              title={document.title}
+              className={TILE_LINK}
+            >
+              {document.title}
+            </Link>
+          </h2>
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1 empty:hidden">
+            {/* Solo el ADMIN recibe archivados; la marca de revisión solo llega al ADMIN y al
+                responsable (spec 005, R4). */}
+            {isAdmin && document.status === 'ARCHIVED' && <StatusDot tone="gris">Archivado</StatusDot>}
+            <ReviewStatusBadge status={document.review?.status} />
+          </span>
+          <p className="min-w-0 truncate text-sm text-texto-suave">
+            Actualizado <UpdatedAt value={updatedAtOf(document)} now={now} />
+            <span aria-hidden="true"> · </span>
+            <span className="sr-only">, en </span>
+            <span title={formatAreas(document.areas)}>{areaSummary(document)}</span>
+          </p>
+          <p className="min-w-0 truncate text-sm text-texto-suave" title={formatPerson(document.owner)}>
+            Responsable: {formatPerson(document.owner)}
+          </p>
+        </div>
+
+        {/* No se achica: el título se acomoda en lo que queda. */}
+        <div className="flex shrink-0 flex-col items-center gap-2">
+          <FileTypeIcon fileName={currentVersion.originalFileName} size="md" />
+          <span className="sr-only">Archivo {fileExtension(currentVersion.originalFileName)}</span>
+          <span className={VERSION_CHIP}>
+            <span aria-hidden="true">v{currentVersion.versionNumber}</span>
+            <span className="sr-only">Versión {currentVersion.versionNumber}</span>
+          </span>
+        </div>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-2">
-        <h2 className="min-w-0 text-lg leading-snug font-bold">
-          {/* Lleva la vista al detalle, así la ruta ("Documentos › …") vuelve a las Tarjetas. */}
-          <Link
-            href={withView(`/documentos/${document.id}`, 'tarjetas')}
-            title={document.title}
-            className={TILE_LINK}
-          >
-            {document.title}
-          </Link>
-        </h2>
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1 empty:hidden">
-          {/* Solo el ADMIN recibe archivados; la marca de revisión solo llega al ADMIN y al
-              responsable (spec 005, R4). */}
-          {isAdmin && document.status === 'ARCHIVED' && <StatusDot tone="gris">Archivado</StatusDot>}
-          <ReviewStatusBadge status={document.review?.status} />
-        </span>
-      </div>
-
-      <div className="mt-auto flex min-w-0 flex-col gap-1 text-sm text-texto-suave">
-        <p className="min-w-0 truncate">
-          Actualizado <UpdatedAt value={updatedAtOf(document)} now={now} />
-          <span aria-hidden="true"> · </span>
-          <span className="sr-only">, en </span>
-          <span title={formatAreas(document.areas)}>{areaSummary(document)}</span>
-        </p>
-        <p className="min-w-0 truncate" title={formatPerson(document.owner)}>
-          Responsable: {formatPerson(document.owner)}
-        </p>
-      </div>
-
-      {children && <div className={LIST_CARD_LAYER}>{children}</div>}
+      {children && <div className={`${LIST_CARD_LAYER} mt-auto`}>{children}</div>}
     </article>
   );
 }

@@ -206,3 +206,42 @@ test.describe('E12 · Documento ajeno', () => {
     expect(api.requests).toEqual([]);
   });
 });
+
+// Diseño de la tarjeta de la vista Tarjetas (11/11/2026): una sola fila, con el título a la izquierda y
+// el bloque del tipo de archivo (48×56) y la versión a la derecha, que no se achica ni se superpone.
+test.describe('Vista Tarjetas · el bloque del archivo no se achica ni se superpone', () => {
+  test('con un título largo, el ícono mide 48×56, queda a la derecha del título y no hay desplazamiento horizontal', async ({
+    page,
+  }) => {
+    await loginAs(page, 'empleadoVentas');
+    const title =
+      'Procedimiento de cierre de caja diario con arqueo, conteo de billetes y registro de diferencias del turno noche';
+    const api = await mockApi(page, {
+      list: () => ({
+        status: 200,
+        body: listResponse([documentSummary({ title, currentVersion: { versionNumber: 3 } as never })]),
+      }),
+    });
+
+    await page.goto('/documentos?vista=tarjetas');
+    const card = page.getByRole('article');
+    await expect(card).toHaveCount(1);
+
+    const icon = card.locator('svg[viewBox="0 0 40 48"]');
+    const heading = await card.getByRole('heading', { level: 2 }).boundingBox();
+    const iconBox = await icon.boundingBox();
+    const chip = await card.getByText('v3', { exact: true }).boundingBox();
+    expect(heading && iconBox && chip).toBeTruthy();
+    expect(Math.round(iconBox!.width)).toBe(48);
+    expect(Math.round(iconBox!.height)).toBe(56);
+    // El título termina antes del ícono; la versión, debajo del ícono y centrada.
+    expect(heading!.x + heading!.width).toBeLessThanOrEqual(iconBox!.x);
+    expect(chip!.y).toBeGreaterThanOrEqual(iconBox!.y + iconBox!.height);
+    expect(Math.abs(chip!.x + chip!.width / 2 - (iconBox!.x + iconBox!.width / 2))).toBeLessThanOrEqual(1);
+    await expect(card.getByText('Archivo PDF')).toHaveClass(/sr-only/);
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflow).toBe(false);
+    expect(api.unhandled).toEqual([]);
+  });
+});
