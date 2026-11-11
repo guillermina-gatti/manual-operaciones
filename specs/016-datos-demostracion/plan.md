@@ -5,7 +5,7 @@
 - `src/procedures/demo/demo-types.ts`: tipos `DemoProcedure`, `DemoVersion`, `DemoStep`.
 - `src/procedures/demo/demo-ids.ts`: `demoUuid` y los ids fijos.
 - `src/procedures/demo/demo-ventas.ts` y `demo-operaciones.ts`: los 8 procedimientos.
-- `src/procedures/demo/demo-procedures.ts`: la lista completa `DEMO_PROCEDURES`.
+- `src/procedures/demo/demo-procedures.ts`: la lista completa `DEMO_PROCEDURES` (`demo-ventas.ts`, `demo-reclamos.ts`, `demo-operaciones.ts` y `demo-operaciones-2.ts` tienen los datos).
 - `src/procedures/demo/demo-preflight.ts`: verifica admin y áreas, y detecta procedimientos con datos ajenos (S2, S5).
 - `src/procedures/demo/demo-operations.ts`: arma los `upsert` de un procedimiento.
 - `src/procedures/demo/demo-seed.ts`: `seedDemoProcedures(prisma)`, una sola `$transaction`.
