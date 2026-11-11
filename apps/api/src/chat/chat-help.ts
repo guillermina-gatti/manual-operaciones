@@ -52,6 +52,14 @@ const INTENT = [
 
 const DOCUMENT = ['docu', 'manual', 'archivo', 'pdf', 'instructivo'];
 
+// Palabras de la app. Un tema de ayuda solo puede responder si la pregunta nombra alguna: sin ninguna, es
+// una consulta de trabajo ("¿cómo le devuelvo la plata?") aunque tenga "cómo" y palabras parecidas.
+const APP_TERMS = [
+    ...DOCUMENT,
+    'procedimient', 'ejecuc', 'ejecut', 'metric', 'estadistic', 'asistent', 'chat', 'fuente', 'cita',
+    'respuest', 'estado', 'pendiente', 'procesand', 'listo',
+];
+
 interface Topic {
     name: string;
     // Cada grupo tiene que aparecer (alguna de sus raíces) para que el tema coincida.
@@ -95,7 +103,7 @@ const TOPICS: Topic[] = [
     },
     {
         name: 'origen-respuesta',
-        all: [['respuesta', 'contest'], ['sale', 'vien', 'origen', 'donde', 'de']],
+        all: [['respuesta', 'contest'], ['sale', 'vien', 'origen', 'donde', 'de'], ['asistent', 'fuente', 'cita', 'chat', ...DOCUMENT]],
         reply:
             'Cada respuesta del asistente muestra al final de qué documento sacó la información: el título, la sección y desde cuándo está vigente, con un enlace al archivo. Si no encuentra nada en tus documentos, te lo dice en lugar de inventar una respuesta.',
     },
@@ -172,8 +180,11 @@ export function platformHelpReply(question: string): string | null {
     if (tokens.length === 0 || tokens.length > MAX_TOKENS) return null;
     if (!has(tokens, INTENT)) return null;
 
-    for (const topic of TOPICS) {
-        if (topic.all.every((group) => has(tokens, group))) return topic.reply;
+    // Sin una palabra de la app, ningún tema de texto fijo aplica (ver APP_TERMS).
+    if (has(tokens, APP_TERMS)) {
+        for (const topic of TOPICS) {
+            if (topic.all.every((group) => has(tokens, group))) return topic.reply;
+        }
     }
     // Con "lo", solo preguntas cortas: en una frase larga, "lo" puede ser contenido de un documento.
     if (tokens.length <= MAX_PRONOUN_TOKENS) {
