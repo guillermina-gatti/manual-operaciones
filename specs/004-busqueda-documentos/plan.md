@@ -301,6 +301,19 @@ Qué resuelve cada parte:
 | Fragmento | R8 | `ts_headline` **solo** para los fragmentos de la página (como mucho `limit`), no para todos los resultados |
 | Índice | Sección 9 de la spec | El filtro de `best_chunk` usa la expresión del índice de 2.2 |
 
+### 3.5 Resultados aproximados (R13, 11/11/2026; D17)
+
+Si la consulta de 3.4 da `total = 0` y la búsqueda tiene más de una palabra (`numnode > 1`), se corre una segunda, en la misma transacción de solo lectura: `searchRankingSql(params, 'any')`. Es la misma consulta con cuatro diferencias, y con `'all'` (por defecto) el SQL es byte por byte el de antes (se comparó al implementar).
+
+| Qué | Cómo |
+| --- | --- |
+| Cualquiera de las palabras | `replace(plainto_tsquery('es_unaccent', :texto)::text, ' & ', ' \| ')::tsquery`. Son las mismas funciones, así que se calcula como constante, el texto sigue siendo un parámetro (D4) y el filtro de `best_chunk` puede usar el índice (test de `EXPLAIN`) |
+| Palabras cubiertas | Los lexemas de `tsvector_to_array(to_tsvector('es_unaccent', :texto))` que están en el vector (`= ANY(tsvector_to_array(…))`), sin volver a leerlos como `tsquery` |
+| El fragmento de cada documento | `best_chunk` ordena primero por `chunk_covered`, después por rango y `chunk_index` |
+| Orden de los documentos | `covered` = la mayor cantidad entre la de `doc_vector` (si coincide) y la del mejor fragmento. Primero `covered DESC`, después el orden de R9 |
+
+`approximate` es `true` solo si esta segunda consulta trae resultados. El puerto (`SearchPage`) y la respuesta (`DocumentSearchResponse`, Swagger) suman el campo. El servicio lo pasa sin cambios. La web lo muestra con F8.
+
 **Los títulos y descripciones no tienen índice** (D10). `visible` calcula su vector en cada búsqueda. Con el volumen esperado (cientos de documentos) es despreciable al lado de los fragmentos. Si algún día molesta, se agrega un índice GIN sobre esa expresión en `documents`, con el cuidado de D1 del plan 003.
 
 ## 4. Las palabras marcadas, sin HTML (R8, R11)
@@ -444,7 +457,8 @@ En `test/documents/search.e2e-spec.ts`, con la base de tests (reseteada antes de
 | **E10** especiales | Documento con `"caja"` | `caja & \| ! :` → 200 y lo encuentra. También `"caja"` con comillas, `caja:*`, `!!caja`, `(caja`, `caja <-> cierre`, `\` y `'; DROP TABLE documents; --` → nunca 500, y `documents` sigue existiendo |
 | **E11** sin resultados | — | `xyzxyz` → 200, `data: []`, `total: 0` |
 | **E12** HTML | Fragmento `"<script>alert(1)</script> caja"` | Al unir las partes aparece literal `<script>alert(1)</script>`; no hay `<b>` ni ninguna etiqueta que no estuviera en el texto |
-| R6 varias palabras | Un fragmento con `"cierre"` y otro con `"caja"` (del mismo documento) | `cierre caja` no lo encuentra por contenido (D7, D16). Con las dos palabras en el título, sí |
+| R6 varias palabras | Un fragmento con `"cierre"` y otro con `"caja"` (del mismo documento) | `cierre caja` no lo encuentra por contenido (D7, D16). Con las dos palabras en el título, sí. **Desde el 11/11/2026:** lo encuentra como aproximado (R13) |
+| R13 aproximados (11/11/2026) | Documentos que cubren 3, 2 y 1 de las palabras, y uno con ninguna | Todas las palabras en uno: solo ese, `approximate: false`. Ninguno con todas: los que tienen alguna, por palabras cubiertas, con `approximate: true`. Cuenta el título y la descripción o el mejor fragmento. El caso de los auriculares. Una sola palabra o ninguna coincidencia: vacío y `false`. Paginado. Con el OR, E5, E7, la versión `REPLACED`, `area_ids` de otra área y el fragmento inactivo, como en la búsqueda normal. `EXPLAIN` del OR con el índice. En la ruta: el caso de los auriculares con un EMPLOYEE de Ventas, `approximate` en `/api/docs` y E6 ("tarifa vieja" aparece como aproximado con el fragmento de la vigente) |
 | R9 orden | A: título "Cierre de caja", creado antes; B: solo contenido con `"cierre de caja"`, más nuevo; C y D: el mismo contenido, creados en distinto momento | A primero (título); entre C y D, el más nuevo primero |
 | R10 paginado | 25 documentos que coinciden | `page=2` → 5 resultados, `total = 25`; `page=9` → `data: []`, `total = 25`; `limit=101` → 400 |
 | Palabras ignoradas | — | `de la para` → 200, `data: []` (caso borde de la sección 8) |
@@ -462,7 +476,7 @@ El 503 (R12) se prueba en los tests unitarios con el repositorio simulado, como 
 | `parseSearchParam` | `null` → `none`; `"  ca "` → `invalid`; `"caja"` → `valid` recortado; 101 caracteres → `invalid` |
 | `SearchBox` | **E9**: `ca` + Enter → aviso con `role="alert"` y `router.push` **no** se llama; `caja` + botón → `push('/documentos?q=caja')`; Enter también busca; escribir no busca (F1); el texto se codifica (`cierre & caja` → `q=cierre%20%26%20caja`); "Borrar búsqueda" → `push('/documentos')` |
 | `DocumentList` con `?q=` | Con `q` válido llama a `searchDocuments` y no a `listDocuments`; con `q` inválido no llama a `searchDocuments` y muestra el aviso y el listado; sin `q`, todo igual que antes (los tests del plan 002 pasan sin cambios) |
-| `SearchResults` | "Buscando…"; **E1**: tarjeta con el fragmento y "Página 4"; **E2**: sin fragmento ni página; **E11**: "No encontramos documentos para «xyzxyz»" y "Borrar búsqueda"; error 503 con "Reintentar", que vuelve a pedir; `?pagina=2` pide `page=2`; "N resultados para «texto»" |
+| `SearchResults` | "Buscando…"; **E1**: tarjeta con el fragmento y "Página 4"; **E2**: sin fragmento ni página; **E11**: "No encontramos documentos para «xyzxyz»" y "Borrar búsqueda"; error 503 con "Reintentar", que vuelve a pedir; `?pagina=2` pide `page=2`; "N resultados para «texto»". **F8 (11/11/2026):** con `approximate`, el aviso entre el total y los resultados, en el orden de la API; sin `approximate` o sin resultados, sin aviso |
 | `MatchFragment` | Las partes con `match` van en `<mark>`; **E12**: con `<script>alert(1)</script> caja`, `container.querySelector('script')` es `null` y el texto se ve literal; un texto con `«` y `»` del usuario no rompe nada |
 | `Pagination` | Con `query`, los enlaces son `/documentos?q=caja&pagina=2` y la página 1 es `/documentos?q=caja`; sin `query`, los de siempre |
 | `describeApiError` | El contexto `'search'`: 400 con su mensaje; 503, 0 y 500 con los de siempre |
@@ -534,6 +548,8 @@ D1 a D14, propuestas al escribir el plan y aceptadas en su revisión, el 25/10/2
 | D14 · ¿`page` y `limit` validan igual que el listado? | Sí: `SearchDocumentsQuery` extiende `ListDocumentsQuery` (1 a 100, por defecto 20; `101` → 400) | R10 |
 | D15 · El índice de texto completo es de Guille: ¿agregamos uno nuevo (A), reemplazamos el suyo (B) o cambiamos su definición conservando el nombre (C)? (era Q1) | A: se agrega `chunks_content_fts_es_unaccent_idx` sin tocar `chunks_content_fts_idx` ni `chunks_embedding_idx` (2.4). Se le avisa a Guille; si prefiere B o C, se hace después en una migración aparte aprobada por ella. **Afecta a todo el equipo: avisar antes de mergear** | R5 |
 | D16 · R6 dice "aunque no estén juntas": ¿dónde tienen que estar todas las palabras? (era Q2) | Todas entre el título y la descripción, o todas en un mismo fragmento del contenido; R6 de la spec se actualizó con ese texto. Cruzar campos (una palabra en el título y otra en el contenido) obliga a buscar fragmentos con **cualquiera** de las palabras y combinar después, sin aprovechar tan bien el índice. Cruzar fragmentos deja sin un fragmento que muestre todas las palabras (R8). Es lo que implementa D7 | R6, R8 |
+
+| D17 · (11/11/2026) ¿Qué pasa si ningún documento tiene todas las palabras? | Una segunda consulta con cualquiera de ellas, ordenada por cuántas cubren, con `approximate: true` y el aviso de F8 (3.5). Solo si la primera no trae nada y hay más de una palabra, así la búsqueda normal no cambia. Se descartó cambiar el texto del enlace del asistente (spec 009): una lista de palabras vacías no alcanzaba para el caso real | R13, F8 |
 
 ### 9.2 Pregunta abierta
 

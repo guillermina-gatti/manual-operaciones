@@ -72,6 +72,8 @@ export interface DocumentSearchResponse {
   total: number;
   page: number;
   limit: number;
+  // Spec 004 (R13, 11/11/2026): true si son resultados con alguna de las palabras, no con todas.
+  approximate: boolean;
 }
 
 // Consultas de documentos (plan 1): listado, detalle y descarga.
@@ -177,7 +179,7 @@ export class DocumentQueryService {
     return this.mapErrors(async () => {
       const today = this.today();
       const viewer = await this.viewerFor(user);
-      const { data, total } = await this.documents.search({
+      const { data, total, approximate } = await this.documents.search({
         text: query.q,
         scope: searchScope(viewer),
         page: query.page,
@@ -205,6 +207,7 @@ export class DocumentQueryService {
         total,
         page: query.page,
         limit: query.limit,
+        approximate,
       };
     }, 'búsqueda');
   }

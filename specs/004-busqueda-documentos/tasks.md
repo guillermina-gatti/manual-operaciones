@@ -382,6 +382,21 @@ Convenciones:
 - **Depende de:** T18 y el worker de Guille
 - **Commit:** `test(web): probar la búsqueda por contenido con el procesamiento real`
 
+## Ajuste del 11/11/2026
+
+### T21 · Resultados aproximados (R13, F8; plan 3.5, D17)
+
+- **Qué hace:** si ningún documento tiene todas las palabras, una segunda consulta con cualquiera de ellas, ordenada por cuántas cubren, con `approximate: true`; la pantalla lo avisa en una línea.
+- **Archivos:**
+  - API: `src/documents/prisma-documents.repository.ts` (`searchRankingSql(params, mode)` y `search`), `documents.repository.ts` (`SearchPage.approximate`), `document-query.service.ts` (`DocumentSearchResponse.approximate`), `documents.controller.ts` (Swagger) y sus tests;
+  - web: `lib/api/documents.ts`, `components/documents/SearchResults.tsx`, `e2e/support/mock-api.ts` (`searchResponse` suma `approximate`) y sus tests.
+- **Verificación:**
+  - **API, unitarios:** `document-query.service.spec.ts`, el servicio pasa `approximate` y el orden del repositorio.
+  - **API, integración:** `search.repository.e2e-spec.ts` › "resultados aproximados (R13)" (13 tests nuevos, más el `EXPLAIN` del OR en "índice"); D16, "de la para" y R10 suman `approximate`. `search.e2e-spec.ts` › R13 (los auriculares y `/api/docs`) y E6 ajustado.
+  - **Web:** `SearchResults.test.tsx` › F8 (3 tests).
+  - **Prueba de que no cambió la búsqueda normal:** el SQL de `searchRankingSql` con `'all'` se comparó byte por byte con el de antes del cambio, con sus valores, y es idéntico.
+- **Estado:** hecha (11/11/2026). API: lint y `tsc` sin errores; unitarios de documentos, 33 suites y 522 tests; integración de documentos, 16 suites y 312 tests, con `manual_test` reseteada con la confirmación del usuario. Falla 1, `assignments.e2e-spec.ts` › E22 (spec 008, el listado): también falla en `HEAD` sin estos cambios, así que no es de esta tarea. Web: lint y `tsc` sin errores; tests de documentos, 48 archivos y 579 tests. **Mutación de control:** sin el orden por palabras cubiertas, falla "cubrir más palabras pesa más que una palabra en el título o una palabra muy repetida". Ese test se sumó porque los demás no la detectaban. Playwright no se corrió (el aviso está cubierto en Vitest).
+
 ## Verificación final
 
 ### T20 · Verificación de la feature

@@ -481,12 +481,14 @@ export function searchResult(
   };
 }
 
+// approximate: spec 004 (R13), resultados con alguna de las palabras, no con todas.
 export function searchResponse(
   data: DocumentSearchResult[],
   total = data.length,
   page = 1,
+  approximate = false,
 ): DocumentSearchResponse {
-  return { data, total, page, limit: 20 };
+  return { data, total, page, limit: 20, approximate };
 }
 
 // Spec 005: la respuesta de "Por revisar". Los documentos traen su `review` (documentSummary con
