@@ -74,10 +74,12 @@ export class DocumentWriteSteps {
   // Valida que las áreas existan (R5 de la spec 001) y que las agregadas estén activas (R7 de la
   // spec 008). Agregadas son las que no están en currentAreaIds: en la carga, todas. Las inactivas
   // que el documento ya tiene se conservan (R8). Una sola consulta al directorio (plan 008, PD6).
+  // Devuelve las áreas activas del documento, en el orden de areaIds, para validar al responsable
+  // (spec 008, R10, D6 del 11/11/2026).
   async assertAreasCanBeAssigned(
     areaIds: string[],
     currentAreaIds: string[] = [],
-  ): Promise<void> {
+  ): Promise<string[]> {
     const found = new Map(
       (await this.areas.findByIds(areaIds)).map((area) => [area.id, area]),
     );
@@ -98,13 +100,17 @@ export class DocumentWriteSteps {
         `areaIds: están inactivas las áreas ${inactive.join(', ')}`,
       );
     }
+    return areaIds.filter((id) => found.get(id)?.isActive === true);
   }
 
   // Valida que el responsable exista y tenga acceso a las áreas del documento. Si es un responsable
   // nuevo, además tiene que estar activo (spec 008, R5); el actual se conserva aunque no lo esté (R6).
+  // Spec 008 (R10, D6 del 11/11/2026): solo cuentan las áreas activas del documento, las que devuelve
+  // assertAreasCanBeAssigned. Con A-SEC, un área inactiva no da acceso, así que no alcanza para ser
+  // responsable. Vale también si el responsable no cambia (P5).
   async assertOwnerCanSeeDocument(
     ownerId: string,
-    areaIds: string[],
+    activeAreaIds: string[],
     { isNew }: { isNew: boolean },
   ): Promise<void> {
     const owner = await this.users.findById(ownerId);
@@ -114,7 +120,7 @@ export class DocumentWriteSteps {
     if (isNew && !owner.isActive) {
       throw new BadRequestException('ownerId: el responsable está inactivo');
     }
-    if (!canBeOwner(owner, areaIds)) {
+    if (!canBeOwner(owner, activeAreaIds)) {
       throw new BadRequestException(
         'ownerId: el responsable no comparte ningún área con el documento',
       );

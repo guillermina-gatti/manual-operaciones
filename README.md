@@ -253,7 +253,6 @@ Each feature has a folder in [`specs/`](./specs/) with `spec.md` (what and why),
 > [!NOTE]
 > **The first login may return 503.** If Redis fails while the first logins arrive, the login rate limiter fails closed with HTTP 503. Try again.
 
-- **The assistant ignores inactive areas.** An `EMPLOYEE` whose area was deactivated still sees its documents in Documents, but the assistant doesn't find them.
 - **Citations are matched by order.** Sources don't say which `[Sn]` marker they belong to; the web pairs them in order and, if the counts don't match, shows the text without markers.
 
 ## Documentation

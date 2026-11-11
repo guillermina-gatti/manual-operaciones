@@ -2,7 +2,7 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Matías Fauda (pareja C)
-- **Estado (04/11/2026):** T01 a T14 **hechas**, sin commits (los hace el usuario). **10/11/2026:** la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) se reemplazó por `UsersDirectory.findByIds` (PR #55 de la pareja A). Falta solo mandar los [avisos a la pareja A](#avisos-a-la-pareja-a-pd13). T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
+- **Estado (04/11/2026):** T01 a T14 **hechas**, sin commits (los hace el usuario). **10/11/2026:** la [función temporal `findUsersByIds`](#función-temporal-findusersbyids) se reemplazó por `UsersDirectory.findByIds` (PR #55 de la pareja A). Falta solo mandar los [avisos a la pareja A](#avisos-a-la-pareja-a-pd13). **11/11/2026:** D3 se actualizó por A-SEC: las áreas inactivas no dan acceso, y E22 se reescribió (T03). Además, D6 (era Q2): el responsable tiene que compartir un área **activa**. `assertAreasCanBeAssigned` devuelve las activas y `assertOwnerCanSeeDocument` valida con esas. Hay 6 tests nuevos en `assignments.e2e-spec.ts` › "el responsable tiene que compartir un área activa (D6)", y los de `assertAreasCanBeAssigned` esperan las activas. T01 a T07 son la API, T08 a T13 la web y T14, la [verificación](#t14--verificación-de-la-feature).
 
 ## Función temporal `findUsersByIds`
 
@@ -104,7 +104,9 @@ Convenciones:
   - **E16:** el mismo responsable inactivo; cambio a Operaciones sin `ownerId` → 400 de acceso;
   - **E17:** cambio con `ownerId` de otro usuario inactivo → 400 de R5; el responsable no cambia;
   - **E18:** se desactivan el responsable y Compras → `ownerId` y `areaIds` del documento no cambian;
-  - **E22:** un EMPLOYEE de Compras (creado en el test, activo), con Compras inactiva → el listado y el detalle incluyen el documento;
+  - **E22:** un EMPLOYEE de Compras (creado en el test, activo), con Compras inactiva → el listado y el detalle incluyen el documento. **11/11/2026 (D3 actualizada, A-SEC):** pasa a probar lo contrario, en dos tests:
+    - con Compras como única área, el EMPLOYEE no lo ve en el listado ni en la búsqueda, y el detalle da 404; el ADMIN sí, con `areas` `[{ id: Compras, isActive: false }]`;
+    - con Ventas y Compras, Ana (Ventas) lo ve con Compras inactiva, y Bruno (solo Compras) recibe 404;
   - los 400 de E11, E14 y E17 quedan en la auditoría como `FAILURE` con detalle `400`;
   - las suites `upload`, `lifecycle` y `query` pasan sin cambios.
 
