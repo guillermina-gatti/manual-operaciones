@@ -6,6 +6,7 @@
 // parts out.
 import { useSearchParams } from 'next/navigation';
 import { useId, useState } from 'react';
+import { BUTTON_SECONDARY } from '@/components/documents/design';
 import { LIST_PANEL } from '@/components/documents/list-design';
 import { parsePageParam } from '@/lib/documents/pagination';
 import { useSession } from '@/lib/session';
@@ -28,14 +29,27 @@ export function ProcedureList() {
   return (
     <>
       {isAdmin && draftId && (
-        <ProcedureEditorById
-          id={draftId}
-          embedded
-          onGone={() => {
-            setDraftId(null);
-            list.reload();
-          }}
-        />
+        <>
+          <button
+            type="button"
+            className={`${BUTTON_SECONDARY} self-start`}
+            onClick={() => {
+              setDraftId(null);
+              list.reload();
+            }}
+          >
+            + Crear otro procedimiento
+          </button>
+          <ProcedureEditorById
+            id={draftId}
+            embedded
+            onChanged={list.reload}
+            onGone={() => {
+              setDraftId(null);
+              list.reload();
+            }}
+          />
+        </>
       )}
       {isAdmin && !draftId && (
         <section aria-labelledby={`${baseId}-create`} className={`${LIST_PANEL} flex flex-col gap-5`}>

@@ -18,6 +18,8 @@ interface ProcedureEditorByIdProps {
   embedded?: boolean;
   // The draft is gone (discarded, or the API does not know it); the default goes back to the list.
   onGone?: () => void;
+  // The procedure changed on the API (draft saved, published, new version): the screen refreshes its list.
+  onChanged?: () => void;
 }
 
 export function ProcedureEditor() {
@@ -25,7 +27,7 @@ export function ProcedureEditor() {
   return <ProcedureEditorById id={id} />;
 }
 
-export function ProcedureEditorById({ id, embedded = false, onGone }: ProcedureEditorByIdProps) {
+export function ProcedureEditorById({ id, embedded = false, onGone, onChanged }: ProcedureEditorByIdProps) {
   const { detail, procedure, update } = useEditableProcedure(id);
 
   if (detail.status === 'error') {
@@ -41,5 +43,13 @@ export function ProcedureEditorById({ id, embedded = false, onGone }: ProcedureE
     );
   }
 
-  return <ProcedureEditorBody procedure={procedure} embedded={embedded} onGone={onGone} onChange={update} />;
+  return (
+    <ProcedureEditorBody
+      procedure={procedure}
+      embedded={embedded}
+      onGone={onGone}
+      onChanged={onChanged}
+      onChange={update}
+    />
+  );
 }
