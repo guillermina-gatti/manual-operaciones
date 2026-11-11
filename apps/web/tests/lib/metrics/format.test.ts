@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   formatCount,
   formatDay,
+  formatLatency,
   formatPercent,
   formatPeriod,
   formatShare,
@@ -29,6 +30,25 @@ describe('formatCount', () => {
   test('groups thousands with a dot', () => {
     expect(formatCount(1284)).toBe('1.284');
     expect(formatCount(7)).toBe('7');
+  });
+});
+
+describe('formatLatency', () => {
+  test.each([
+    [850, '850 ms'],
+    [0, '0 ms'],
+    [999.4, '999 ms'],
+    [999.6, '1,0 s'],
+    [2400, '2,4 s'],
+    [61000, '61,0 s'],
+  ])('%s → %s', (ms, text) => {
+    expect(formatLatency(ms)).toBe(text);
+  });
+
+  test('nothing timed or a value that is not a time: "—"', () => {
+    expect(formatLatency(null)).toBe('—');
+    expect(formatLatency(Number.NaN)).toBe('—');
+    expect(formatLatency(-1)).toBe('—');
   });
 });
 

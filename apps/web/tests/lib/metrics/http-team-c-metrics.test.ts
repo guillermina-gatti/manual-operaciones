@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { ApiError } from '@/lib/api';
 import type { ApiClient } from '@/lib/api';
-import type { DocumentMetrics, TeamCMetricsSource } from '@/lib/metrics';
+import type { AssistantMetrics, DocumentMetrics } from '@/lib/metrics';
 import { createHttpTeamCMetrics } from '@/lib/metrics/http-team-c-metrics';
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
@@ -12,61 +12,97 @@ const DOCUMENTS: DocumentMetrics = {
   totals: { active: 12, upToDate: 8, dueSoon: 3, overdue: 1, processingFailed: 0, uploaded: 4 },
 };
 
-const unavailable = (): TeamCMetricsSource => ({
-  getAssistant: vi.fn().mockResolvedValue(null),
-  getDocuments: vi.fn().mockResolvedValue(null),
-});
+// Same shape as the API's AssistantMetricsResponse.
+const ASSISTANT: AssistantMetrics = {
+  filters: { areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' },
+  totals: {
+    questions: 4,
+    answered: 2,
+    noInfo: 1,
+    conflict: 0,
+    aiUnavailable: 1,
+    smallTalk: 3,
+    latencyP50Ms: 2000,
+    latencyP95Ms: null,
+    inputTokens: 500,
+    outputTokens: 60,
+    feedback: { useful: 1, notUseful: 0 },
+  },
+};
 
 describe('createHttpTeamCMetrics', () => {
-  test('gets the documents metrics with the filters and the abort signal', async () => {
-    const request = vi.fn().mockResolvedValue(DOCUMENTS);
-    const client: ApiClient = { request };
-    const signal = new AbortController().signal;
+  describe('documents', () => {
+    test('gets the documents metrics with the filters and the abort signal', async () => {
+      const request = vi.fn().mockResolvedValue(DOCUMENTS);
+      const client: ApiClient = { request };
+      const signal = new AbortController().signal;
 
-    const result = await createHttpTeamCMetrics(client, unavailable()).getDocuments(
-      { areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' },
-      signal,
-    );
+      const result = await createHttpTeamCMetrics(client).getDocuments(
+        { areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' },
+        signal,
+      );
 
-    expect(result).toBe(DOCUMENTS);
-    expect(request).toHaveBeenCalledWith(
-      `/api/metrics/documents?areaId=${VENTAS}&from=2026-10-01&to=2026-10-27`,
-      { signal },
-    );
-  });
-
-  test('sends only the filters that have a value', async () => {
-    const request = vi.fn().mockResolvedValue(DOCUMENTS);
-
-    await createHttpTeamCMetrics({ request }, unavailable()).getDocuments({
-      areaId: null,
-      from: '2026-10-01',
-      to: null,
+      expect(result).toBe(DOCUMENTS);
+      expect(request).toHaveBeenCalledWith(
+        `/api/metrics/documents?areaId=${VENTAS}&from=2026-10-01&to=2026-10-27`,
+        { signal },
+      );
     });
 
-    expect(request).toHaveBeenCalledWith('/api/metrics/documents?from=2026-10-01', {
-      signal: undefined,
+    test('sends only the filters that have a value', async () => {
+      const request = vi.fn().mockResolvedValue(DOCUMENTS);
+
+      await createHttpTeamCMetrics({ request }).getDocuments({
+        areaId: null,
+        from: '2026-10-01',
+        to: null,
+      });
+
+      expect(request).toHaveBeenCalledWith('/api/metrics/documents?from=2026-10-01', {
+        signal: undefined,
+      });
+    });
+
+    test('passes the API errors through, for the card to describe', async () => {
+      const request = vi.fn().mockRejectedValue(new ApiError(404));
+
+      await expect(
+        createHttpTeamCMetrics({ request }).getDocuments({ areaId: VENTAS }),
+      ).rejects.toEqual(new ApiError(404));
     });
   });
 
-  test('passes the API errors through, for the card to describe', async () => {
-    const request = vi.fn().mockRejectedValue(new ApiError(404));
+  describe('assistant', () => {
+    test('gets the assistant metrics with the filters and the abort signal', async () => {
+      const request = vi.fn().mockResolvedValue(ASSISTANT);
+      const signal = new AbortController().signal;
 
-    await expect(
-      createHttpTeamCMetrics({ request }, unavailable()).getDocuments({ areaId: VENTAS }),
-    ).rejects.toEqual(new ApiError(404));
-  });
+      const result = await createHttpTeamCMetrics({ request }).getAssistant(
+        { areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' },
+        signal,
+      );
 
-  test('the assistant still comes from the fallback, without calling the API', async () => {
-    const request = vi.fn();
-    const fallback = unavailable();
-    const signal = new AbortController().signal;
+      expect(result).toBe(ASSISTANT);
+      expect(request).toHaveBeenCalledWith(
+        `/api/metrics/assistant?areaId=${VENTAS}&from=2026-10-01&to=2026-10-27`,
+        { signal },
+      );
+    });
 
-    await expect(
-      createHttpTeamCMetrics({ request }, fallback).getAssistant({ from: '2026-10-01' }, signal),
-    ).resolves.toBeNull();
+    test('without filters, no query', async () => {
+      const request = vi.fn().mockResolvedValue(ASSISTANT);
 
-    expect(fallback.getAssistant).toHaveBeenCalledWith({ from: '2026-10-01' }, signal);
-    expect(request).not.toHaveBeenCalled();
+      await createHttpTeamCMetrics({ request }).getAssistant({});
+
+      expect(request).toHaveBeenCalledWith('/api/metrics/assistant', { signal: undefined });
+    });
+
+    test('passes the API errors through, for the card to describe', async () => {
+      const request = vi.fn().mockRejectedValue(new ApiError(503));
+
+      await expect(createHttpTeamCMetrics({ request }).getAssistant({})).rejects.toEqual(
+        new ApiError(503),
+      );
+    });
   });
 });

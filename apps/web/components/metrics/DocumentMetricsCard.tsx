@@ -4,7 +4,6 @@
 // procedures ones.
 import Link from 'next/link';
 import { useId } from 'react';
-import type { ReactNode } from 'react';
 import { CARD, TEXT_LINK } from '@/components/documents/design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { describeMetricsError } from '@/lib/api';
@@ -14,6 +13,7 @@ import type { DocumentMetrics } from '@/lib/metrics';
 import { metricsHref } from '@/lib/metrics/filters';
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { formatCount } from '@/lib/metrics/format';
+import { MetricsFacts } from './MetricsFacts';
 
 interface DocumentMetricsCardProps {
   filters: PanelFilters;
@@ -73,41 +73,20 @@ function DocumentMetricsContent({ filters, state }: DocumentMetricsCardProps) {
   const { totals } = state.data;
   return (
     <>
-      <Facts
+      <MetricsFacts
         title="Estado actual"
         facts={[
-          ['Activos', totals.active],
-          ['Al día', totals.upToDate],
-          ['Vencen pronto', totals.dueSoon],
-          ['Vencidos', totals.overdue],
-          ['Con error de procesamiento', totals.processingFailed],
+          ['Activos', formatCount(totals.active)],
+          ['Al día', formatCount(totals.upToDate)],
+          ['Vencen pronto', formatCount(totals.dueSoon)],
+          ['Vencidos', formatCount(totals.overdue)],
+          ['Con error de procesamiento', formatCount(totals.processingFailed)],
         ]}
       />
-      <Facts
+      <MetricsFacts
         title={`Del ${formatDay(filters.from)} al ${formatDay(filters.to)}`}
-        facts={[['Cargados en el período', totals.uploaded]]}
+        facts={[['Cargados en el período', formatCount(totals.uploaded)]]}
       />
     </>
-  );
-}
-
-function Facts({ title, facts }: { title: string; facts: [string, number][] }): ReactNode {
-  const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2">
-      <h4 id={headingId} className="text-sm font-semibold text-texto">
-        {title}
-      </h4>
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
-        {facts.map(([label, value]) => (
-          <div key={label} className="flex flex-col">
-            <dt className="text-sm font-semibold text-texto-suave">{label}</dt>
-            <dd className="text-2xl font-extrabold text-bosque tabular-nums">
-              {formatCount(value)}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </section>
   );
 }

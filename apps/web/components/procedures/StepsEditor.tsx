@@ -6,9 +6,8 @@
 // holds it lays its parts out.
 import { LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { EditableProcedure } from '@/lib/procedures/editable';
-import { ADD_BOX } from './design';
+import { AddStep } from './AddStep';
 import { Notice } from './Notice';
-import { StepForm } from './StepForm';
 import { StepItem } from './StepItem';
 import { useStepActions } from './useStepActions';
 
@@ -57,7 +56,7 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
               onStartEdit={() => actions.startEdit(step.id)}
               onCancelEdit={actions.cancelEdit}
               onSave={(values) => actions.edit(step, values)}
-              onRemove={() => void actions.remove(step)}
+              onRemove={() => actions.remove(step)}
             />
           ))}
         </ol>
@@ -66,16 +65,7 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
       {steps.length >= MAX_STEPS ? (
         <p className="text-texto-suave">El borrador ya tiene {MAX_STEPS} pasos: es el máximo.</p>
       ) : (
-        <StepForm
-          className={ADD_BOX}
-          legend="Agregar un paso"
-          submitLabel="Agregar paso"
-          busyLabel="Agregando…"
-          disabled={busy !== null}
-          working={busy === 'add'}
-          resetOnSuccess
-          onSubmit={actions.add}
-        />
+        <AddStep disabled={busy !== null} working={busy === 'add'} onAdd={actions.add} />
       )}
     </>
   );
