@@ -21,6 +21,7 @@ vi.setConfig({ testTimeout: 15_000 });
 const mocks = vi.hoisted(() => ({
   getProcedureMetrics: vi.fn(),
   getDocuments: vi.fn(),
+  getAssistant: vi.fn(),
   useSession: vi.fn(),
   listAreas: vi.fn(),
   push: vi.fn(),
@@ -35,7 +36,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 vi.mock('@/lib/metrics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/metrics')>()),
   teamCMetrics: {
-    getAssistant: () => Promise.resolve(null),
+    getAssistant: mocks.getAssistant,
     getDocuments: mocks.getDocuments,
   },
 }));
@@ -75,6 +76,22 @@ beforeEach(() => {
   mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(ANA);
   mocks.getProcedureMetrics.mockResolvedValue(metricsResponse());
+  mocks.getAssistant.mockResolvedValue({
+    filters: { areaId: null, from: '2026-09-28', to: '2026-10-27' },
+    totals: {
+      questions: 9,
+      answered: 5,
+      noInfo: 2,
+      conflict: 1,
+      aiUnavailable: 1,
+      smallTalk: 3,
+      latencyP50Ms: 2400,
+      latencyP95Ms: null,
+      inputTokens: 9000,
+      outputTokens: 1500,
+      feedback: { useful: 4, notUseful: 1 },
+    },
+  });
   mocks.getDocuments.mockResolvedValue({
     filters: { areaId: null, from: '2026-09-28', to: '2026-10-27' },
     totals: { active: 12, upToDate: 8, dueSoon: 3, overdue: 1, processingFailed: 0, uploaded: 4 },
@@ -700,12 +717,44 @@ describe('metrics of pair C', () => {
     expect(cards).toEqual(['Documentos', 'Asistente']);
   });
 
-  test('the assistant card says it is not available yet, without numbers', async () => {
+  test('the assistant card asks with the panel filters and shows the totals', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
     render(<MetricsPanel />);
 
-    const card = (await screen.findByRole('heading', { name: 'Asistente' })).closest('article')!;
-    expect(await within(card).findByText('Todavía no disponible.')).toBeInTheDocument();
-    expect(card.textContent).not.toMatch(/\d/);
+    const card = await screen.findByRole('article', { name: 'Asistente' });
+    const questions = await within(card).findByText('Preguntas', { selector: 'dt' });
+    expect(questions.nextSibling).toHaveTextContent('9');
+    expect(within(card).getByText('Saludos y ayuda', { selector: 'dt' }).nextSibling).toHaveTextContent(
+      '3',
+    );
+    expect(within(card).getByText('p95', { selector: 'dt' }).nextSibling).toHaveTextContent('—');
+    expect(
+      within(card).getByText('El filtro por área usa las áreas actuales de quien preguntó.'),
+    ).toBeInTheDocument();
+    expect(mocks.getAssistant).toHaveBeenCalledWith(
+      { areaId: VENTAS, from: '2026-10-01', to: '2026-10-15' },
+      expect.any(AbortSignal),
+    );
+  });
+
+  test('the assistant card describes an error of its own, without hiding the documents', async () => {
+    mocks.getAssistant.mockRejectedValue(new ApiError(503));
+    render(<MetricsPanel />);
+
+    const card = await screen.findByRole('article', { name: 'Asistente' });
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      /El servicio no está disponible/,
+    );
+    const documents = screen.getByRole('article', { name: 'Documentos' });
+    expect(await within(documents).findByText('Activos', { selector: 'dt' })).toBeInTheDocument();
+  });
+
+  test('without a session the assistant is not asked for', async () => {
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    render(<MetricsPanel />);
+
+    await waitFor(() => expect(mocks.getDocuments).not.toHaveBeenCalled());
+    expect(mocks.getAssistant).not.toHaveBeenCalled();
   });
 
   test('the documents card asks with the panel filters and shows the totals', async () => {

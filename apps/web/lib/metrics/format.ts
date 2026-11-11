@@ -26,6 +26,19 @@ export function formatCount(value: number): string {
   return countFormat.format(value);
 }
 
+const secondsFormat = new Intl.NumberFormat('es-AR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+// The latency of the assistant: 850 → "850 ms", 2400 → "2,4 s", 61000 → "61,0 s". Under a
+// second in milliseconds, so a fast answer never reads "0 s". null (nothing timed) → "—".
+export function formatLatency(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return MISSING;
+  if (Math.round(ms) < 1000) return `${Math.round(ms)} ms`;
+  return `${secondsFormat.format(ms / 1000)} s`;
+}
+
 // Abbreviated in lowercase, as the design asks ("4 nov 2026"). Written by hand: Intl adds a dot
 // ("nov.") in some runtimes and not in others.
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
