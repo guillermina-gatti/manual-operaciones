@@ -11,6 +11,9 @@ export interface ExecutionStepResponse {
   stepId: string;
   order: number;
   title: string;
+  // The instruction of the step; null when the catalog does not give it (the real one, until
+  // HU11).
+  description?: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   durationMs: number | null;
@@ -38,6 +41,8 @@ export interface VersionChangeResponse {
 export interface ExecutionResponse {
   id: string;
   procedureId: string;
+  // The title of the version it runs; null when the catalog does not give it.
+  procedureTitle?: string | null;
   procedureVersionId: string;
   status: ExecutionStatus;
   startedAt: string;

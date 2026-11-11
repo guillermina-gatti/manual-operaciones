@@ -9,6 +9,7 @@ export interface SlowestStep {
 
 export interface ProcedureTimeRow {
   procedureId: string;
+  title: string | null;
   areaIds: string[];
   completed: number;
   avgCompletionMs: number | null;
@@ -40,6 +41,7 @@ export function procedureTimeRows(procedures: ProcedureMetricsResponse[]): Proce
   const rows = procedures.map(
     (procedure): ProcedureTimeRow => ({
       procedureId: procedure.procedureId,
+      title: procedure.title ?? null,
       areaIds: procedure.areaIds,
       completed: procedure.completed,
       avgCompletionMs: procedure.avgCompletionMs,

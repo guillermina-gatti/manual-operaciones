@@ -273,6 +273,24 @@ describe('to resume', () => {
     );
   });
 
+  test('a title from the API names the card and the row, instead of the sample name', async () => {
+    const answer = myMetricsResponse();
+    mocks.getMyMetrics.mockResolvedValue({
+      ...answer,
+      resume: answer.resume.map((item, i) => (i === 0 ? { ...item, procedureTitle: 'Arqueo de caja' } : item)),
+      procedures: answer.procedures.map((p, i) => (i === 0 ? { ...p, title: 'Arqueo de caja' } : p)),
+    });
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(within(resume()).getByRole('heading', { name: 'Arqueo de caja' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('table', { name: 'Tus procedimientos recientes' })).getAllByRole(
+        'rowheader',
+      )[0],
+    ).toHaveTextContent('Arqueo de caja');
+  });
+
   test('the most recently moved first', async () => {
     render(<MyActivityPanel />);
     await loaded();

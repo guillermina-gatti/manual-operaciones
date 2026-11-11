@@ -128,6 +128,33 @@ describe('an execution in progress', () => {
     expect(screen.getByText('Ventas')).toBeInTheDocument();
   });
 
+  test('the title of the API and the instruction of each step, when the catalog gives them', async () => {
+    const base = execution(1);
+    mocks.getExecution.mockResolvedValue({
+      ...base,
+      procedureTitle: 'Arqueo de caja',
+      steps: base.steps.map((step, i) => ({
+        ...step,
+        description: i === 1 ? 'Contá los comprobantes de tarjeta del día.' : null,
+      })),
+    });
+    render(<ExecutionView />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Arqueo de caja' }),
+    ).toBeInTheDocument();
+    expect(within(stepItem(2)).getByText('Contá los comprobantes de tarjeta del día.')).toBeInTheDocument();
+    // Without an instruction, only the title.
+    expect(stepItem(1).querySelectorAll('p')).toHaveLength(1);
+  });
+
+  test('a blank title falls back to the name of the sample procedure', async () => {
+    mocks.getExecution.mockResolvedValue({ ...execution(0), procedureTitle: '  ' });
+    render(<ExecutionView />);
+
+    expect(await heading()).toBeInTheDocument();
+  });
+
   test('shows the progress and every step in order', async () => {
     render(<ExecutionView />);
 

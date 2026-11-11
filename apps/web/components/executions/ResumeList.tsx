@@ -48,7 +48,7 @@ function ResumeCard({ item, staleAfterHours }: { item: MyResumeItem; staleAfterH
     <li className={`${CARD} flex min-w-0 flex-col gap-4 p-6`}>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <h3 id={nameId} className="min-w-0 break-words text-xl font-bold text-texto">
-          {metricsProcedureName(item.procedureId)}
+          {metricsProcedureName(item.procedureId, item.procedureTitle)}
         </h3>
         {item.stale ? (
           <StatusDot tone="durazno">{staleLabel(staleAfterHours)}</StatusDot>

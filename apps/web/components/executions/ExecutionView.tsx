@@ -205,7 +205,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
       <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
         <div className="flex min-w-0 flex-col gap-3">
           <PageHeader
-            title={procedureName(execution.procedureId)}
+            title={procedureName(execution.procedureId, execution.procedureTitle)}
             subtitle="Seguí los pasos en orden y marcá cada uno cuando lo termines."
           />
           {(areaName || resumed) && (
@@ -248,7 +248,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
         {completed && (
           <CompletedPanel
-            procedureName={procedureName(execution.procedureId)}
+            procedureName={procedureName(execution.procedureId, execution.procedureTitle)}
             totalDurationMs={summary.totalDurationMs}
           />
         )}

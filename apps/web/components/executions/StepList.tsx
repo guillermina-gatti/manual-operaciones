@@ -74,6 +74,16 @@ export function StepList({
                   <span className="sr-only">Paso {step.order}: </span>
                   {step.title}
                 </h3>
+                {/* The instruction, when the catalog gives it; without one the title is enough. */}
+                {step.description?.trim() && (
+                  <p
+                    className={`whitespace-pre-line break-words ${
+                      state === 'pending' ? 'text-texto-suave' : 'text-texto'
+                    }`}
+                  >
+                    {step.description.trim()}
+                  </p>
+                )}
                 <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-texto-suave">
                   <StatusDot tone={STATE[state].tone}>{STATE[state].label}</StatusDot>
                   <StepTimes step={step} state={state} />
