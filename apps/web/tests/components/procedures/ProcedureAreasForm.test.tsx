@@ -5,7 +5,7 @@ import { ProcedureAreasForm } from '@/components/procedures/ProcedureAreasForm';
 import { ApiError } from '@/lib/api';
 import { PROCEDURE_MESSAGES } from '@/lib/procedures';
 import { AREAS } from '../../support/procedure-areas';
-import { ARCHIVO, OPERACIONES, PROCEDURE_ID, VENTAS, stored } from '../../support/procedures';
+import { ARCHIVO, OPERACIONES, PROCEDURE_ID, VENTAS, editable } from '../../support/procedures';
 
 const mocks = vi.hoisted(() => ({
   listAreas: vi.fn(),
@@ -28,7 +28,7 @@ beforeEach(() => {
 });
 
 async function renderForm(areaIds: string[], onChange = vi.fn()) {
-  render(<ProcedureAreasForm procedure={stored({ areaIds })} onChange={onChange} />);
+  render(<ProcedureAreasForm procedure={editable({ areaIds })} onChange={onChange} />);
   await screen.findByRole('group', { name: 'Áreas' });
   return onChange;
 }

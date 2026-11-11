@@ -4,23 +4,23 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ProcedureEditor } from '@/components/procedures/ProcedureEditor';
 import { ApiError } from '@/lib/api';
 import { PROCEDURE_MESSAGES } from '@/lib/procedures';
-import { loadProcedures, saveProcedure } from '@/lib/procedures/session-list';
 import { AREAS } from '../../support/procedure-areas';
 import {
-  ADMIN_ID,
   ANA,
   PROCEDURE_ID,
   STEP_A,
   VENTAS,
   procedureResponse,
   stepResponse,
-  stored,
+  editable,
 } from '../../support/procedures';
+import { detailOf } from '../../support/procedure-view';
 import { V1, V2, page, published, versionDetail, versionItem } from '../../support/versions';
 
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
   listAreas: vi.fn(),
+  getProcedure: vi.fn(),
   listVersions: vi.fn(),
   getVersion: vi.fn(),
   createVersionDraft: vi.fn(),
@@ -40,6 +40,7 @@ vi.mock('@/lib/directory', () => ({ areasDirectory: { listAreas: mocks.listAreas
 
 vi.mock('@/lib/procedures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/procedures')>()),
+  getProcedure: mocks.getProcedure,
   listVersions: mocks.listVersions,
   getVersion: mocks.getVersion,
   createVersionDraft: mocks.createVersionDraft,
@@ -54,13 +55,14 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-// The draft 2 is the one the copy follows, and the version 1 is the published one.
-const storedDraft = () => stored({ versionId: V2, versionNumber: 2 });
-const storedPublished = () => stored({ versionId: V1, versionNumber: 1 });
+// What the API answers for the procedure: the draft 2, or the published version 1.
+const serve = (procedure: ReturnType<typeof editable>) =>
+  mocks.getProcedure.mockResolvedValue(detailOf(procedure));
+const storedDraft = () => editable({ versionId: V2, versionNumber: 2 });
+const storedPublished = () => editable({ versionId: V1, versionNumber: 1, status: 'PUBLISHED' });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  window.sessionStorage.clear();
   mocks.params = { id: PROCEDURE_ID };
   mocks.useSession.mockReturnValue(ANA);
   mocks.listAreas.mockResolvedValue(AREAS);
@@ -70,7 +72,7 @@ beforeEach(() => {
 
 describe('the versions of the procedure (spec 015, R8)', () => {
   test('shows the section "Versiones" with the history of this procedure', async () => {
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
 
     expect(await screen.findByRole('list', { name: 'Versiones' })).toBeInTheDocument();
@@ -79,15 +81,15 @@ describe('the versions of the procedure (spec 015, R8)', () => {
 
   test('if the history fails, the draft is still there and the section says what happened', async () => {
     mocks.listVersions.mockRejectedValue(new ApiError(503));
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
 
     expect(await screen.findByText('No pudimos cargar las versiones.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Borrador' })).toBeInTheDocument();
   });
 
-  test('spec 015, R2: with the draft of the copy in the history it offers "Publicar"', async () => {
-    saveProcedure(ADMIN_ID, storedDraft());
+  test('spec 015, R2: with the draft in the history it offers "Publicar"', async () => {
+    serve(storedDraft());
     render(<ProcedureEditor />);
 
     expect(await screen.findByRole('button', { name: 'Publicar' })).toBeInTheDocument();
@@ -96,7 +98,7 @@ describe('the versions of the procedure (spec 015, R8)', () => {
 
   test('the confirmation to publish names a replaced version only if one is published', async () => {
     mocks.listVersions.mockResolvedValue(page([versionItem({ id: V2 })]));
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     const { unmount } = render(<ProcedureEditor />);
     await userEvent.click(await screen.findByRole('button', { name: 'Publicar' }));
     expect(screen.getByRole('group', { name: 'Confirmar publicación' })).not.toHaveTextContent('reemplazada');
@@ -112,7 +114,7 @@ describe('the versions of the procedure (spec 015, R8)', () => {
   });
 
   test('spec 015, R10: with two versions or more it offers to compare them; with one it does not', async () => {
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     const { unmount } = render(<ProcedureEditor />);
     expect(await screen.findByRole('heading', { level: 3, name: 'Comparar versiones' })).toBeInTheDocument();
     unmount();
@@ -124,9 +126,11 @@ describe('the versions of the procedure (spec 015, R8)', () => {
     expect(screen.queryByRole('heading', { name: 'Comparar versiones' })).not.toBeInTheDocument();
   });
 
-  test('a procedure that is not in this session does not ask for any history', () => {
+  test('a procedure the API does not find does not ask for any history', async () => {
+    mocks.getProcedure.mockRejectedValue(new ApiError(404));
     render(<ProcedureEditor />);
 
+    await screen.findByText('No se encontró el procedimiento');
     expect(mocks.listVersions).not.toHaveBeenCalled();
   });
 });
@@ -146,7 +150,7 @@ describe('when the draft changes, the history follows (spec 015, R8)', () => {
   });
 
   test('a step added to the draft is counted in the timeline', async () => {
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
     expect(await screen.findByText('0 pasos')).toBeInTheDocument();
 
@@ -158,7 +162,7 @@ describe('when the draft changes, the history follows (spec 015, R8)', () => {
 
   test('a title saved in the draft asks the history again', async () => {
     mocks.updateVersion.mockResolvedValue({ ...procedureResponse().versions[0], title: 'Cierre nuevo' });
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
     await screen.findByText('0 pasos');
 
@@ -176,7 +180,7 @@ describe('when the draft changes, the history follows (spec 015, R8)', () => {
       .mockReset()
       .mockResolvedValueOnce(page([versionItem({ stepCount: 0 }), published()]))
       .mockReturnValue(new Promise(() => {}));
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
     await screen.findByText('0 pasos');
 
@@ -201,7 +205,7 @@ describe('an error of publishing does not outlive the change that fixes it (spec
 
   test('NO_STEPS: it goes away when a step is added', async () => {
     mocks.addStep.mockResolvedValue(stepResponse(STEP_A, 1, 'Contar'));
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
     expect(await failToPublish('NO_STEPS')).toHaveTextContent('La versión no tiene pasos.');
 
@@ -214,7 +218,7 @@ describe('an error of publishing does not outlive the change that fixes it (spec
 
   test('NO_AREAS: it goes away when the areas are saved', async () => {
     mocks.setAreas.mockResolvedValue({ areaIds: [VENTAS] });
-    saveProcedure(ADMIN_ID, {
+    serve({
       ...storedDraft(),
       steps: [{ id: STEP_A, order: 1, title: 'Contar', description: '' }],
     });
@@ -229,7 +233,7 @@ describe('an error of publishing does not outlive the change that fixes it (spec
 
   test('it goes away when the title of the draft is saved', async () => {
     mocks.updateVersion.mockResolvedValue({ ...procedureResponse().versions[0], title: 'Cierre nuevo' });
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
     await failToPublish('NO_STEPS');
 
@@ -242,7 +246,7 @@ describe('an error of publishing does not outlive the change that fixes it (spec
   });
 
   test('it stays while nothing changes', async () => {
-    saveProcedure(ADMIN_ID, storedDraft());
+    serve(storedDraft());
     render(<ProcedureEditor />);
 
     await failToPublish('NO_STEPS');
@@ -258,7 +262,7 @@ describe('a version that is no longer a draft (spec 015, R6 and R7)', () => {
   });
 
   test('is shown read-only: no fields to edit it, and the subtitle says its state', async () => {
-    saveProcedure(ADMIN_ID, storedPublished());
+    serve(storedPublished());
     render(<ProcedureEditor />);
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Versión 1 · Publicada' })).toBeInTheDocument();
@@ -267,28 +271,18 @@ describe('a version that is no longer a draft (spec 015, R6 and R7)', () => {
     expect(screen.queryByRole('textbox', { name: 'Título' })).not.toBeInTheDocument();
   });
 
-  test('the local copy learns the state of its version from the history, so the list can show it', async () => {
-    saveProcedure(ADMIN_ID, storedPublished());
-    render(<ProcedureEditor />);
-
-    await screen.findByRole('heading', { level: 2, name: 'Versión 1 · Publicada' }, { timeout: 4000 });
-
-    await waitFor(() => expect(loadProcedures(ADMIN_ID)[0].status).toBe('PUBLISHED'));
-  });
-
-  test('"Crear nueva versión" makes the copy follow the new draft, which can be edited and published', async () => {
+  test('"Crear nueva versión" shows the new draft, which can be edited and published', async () => {
     mocks.createVersionDraft.mockResolvedValue({ ...procedureResponse().versions[0], id: V2, versionNumber: 2 });
     mocks.getVersion.mockImplementation((_procedure: string, id: string) =>
       Promise.resolve(id === V2 ? versionDetail({ id: V2, versionNumber: 2, status: 'DRAFT' }) : versionDetail()),
     );
-    saveProcedure(ADMIN_ID, storedPublished());
+    serve(storedPublished());
     render(<ProcedureEditor />);
     mocks.listVersions.mockResolvedValue(page([versionItem(), published()]));
 
     await userEvent.click(await screen.findByRole('button', { name: 'Crear nueva versión' }));
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Borrador' })).toBeInTheDocument();
-    expect(loadProcedures(ADMIN_ID)[0]).toMatchObject({ versionId: V2, versionNumber: 2 });
     expect(await screen.findByRole('button', { name: 'Publicar' })).toBeInTheDocument();
   });
 });

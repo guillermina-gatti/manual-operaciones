@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { withDraftVersion } from '@/lib/procedures/snapshot';
-import { stored } from '../../support/procedures';
+import { editable } from '../../support/procedures';
 import { V2, versionDetail } from '../../support/versions';
 
 describe('withDraftVersion (spec 015, T13)', () => {
@@ -14,7 +14,7 @@ describe('withDraftVersion (spec 015, T13)', () => {
   });
 
   test('the copy now follows the new draft: its id, number, title, description and steps', () => {
-    const next = withDraftVersion(stored({ areaIds: ['a1'] }), draft);
+    const next = withDraftVersion(editable({ areaIds: ['a1'] }), draft);
 
     expect(next).toMatchObject({
       versionId: V2,
@@ -26,7 +26,7 @@ describe('withDraftVersion (spec 015, T13)', () => {
   });
 
   test('keeps what belongs to the procedure: its id, its areas and when it was created', () => {
-    const before = stored({ areaIds: ['a1'] });
+    const before = editable({ areaIds: ['a1'] });
 
     const next = withDraftVersion(before, draft);
 
@@ -34,10 +34,10 @@ describe('withDraftVersion (spec 015, T13)', () => {
   });
 
   test('does not change the copy it receives', () => {
-    const before = stored();
+    const before = editable();
 
     withDraftVersion(before, draft);
 
-    expect(before).toEqual(stored());
+    expect(before).toEqual(editable());
   });
 });

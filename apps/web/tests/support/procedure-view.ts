@@ -6,6 +6,7 @@ import type {
   ProcedureListItem,
   ProcedureListPage,
 } from '@/lib/api/procedure-view';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import type { SessionState } from '@/lib/session';
 import { OPERACIONES, PROCEDURE_ID, STEP_A, STEP_B, VENTAS, VERSION_ID } from './procedures';
 
@@ -50,6 +51,24 @@ export const listPage = (data: ProcedureListItem[], total = data.length): Proced
   page: 1,
   limit: 12,
 });
+
+// What GET /api/procedures/:id answers for a procedure as the editor holds it (an ADMIN's detail).
+export function detailOf(procedure: EditableProcedure): ProcedureDetail {
+  return {
+    id: procedure.id,
+    createdAt: procedure.createdAt,
+    areas: procedure.areaIds.map((id) => ({ id, name: id, isActive: true })),
+    version: {
+      id: procedure.versionId,
+      versionNumber: procedure.versionNumber,
+      status: procedure.status ?? 'DRAFT',
+      title: procedure.title,
+      description: procedure.description,
+      stepCount: procedure.steps.length,
+      steps: procedure.steps,
+    },
+  };
+}
 
 export function procedureDetail(overrides: Partial<ProcedureDetail> = {}): ProcedureDetail {
   return {

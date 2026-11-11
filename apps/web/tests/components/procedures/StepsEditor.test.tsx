@@ -12,7 +12,7 @@ import {
   STEP_C,
   VERSION_ID,
   stepResponse,
-  stored,
+  editable,
 } from '../../support/procedures';
 
 const mocks = vi.hoisted(() => ({
@@ -37,7 +37,7 @@ const step = (id: string, order: number, title: string, description = '') => ({
   description,
 });
 
-const THREE = stored({
+const THREE = editable({
   steps: [
     step(STEP_A, 1, 'Contar el efectivo'),
     step(STEP_B, 2, 'Contar los comprobantes', 'Tarjetas y transferencias'),
@@ -78,7 +78,7 @@ const addButton = () => within(addForm()).getByRole('button', { name: /Agregar p
 
 describe('the list', () => {
   test('without steps it says so, and the form to add one is there', () => {
-    setup(stored());
+    setup(editable());
 
     expect(screen.getByText('Todavía no tiene pasos.')).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Pasos' })).not.toBeInTheDocument();
@@ -130,7 +130,7 @@ describe('the list', () => {
 
 describe('adding a step', () => {
   test('an empty title is marked and nothing is sent', async () => {
-    setup(stored());
+    setup(editable());
 
     await userEvent.click(addButton());
 
@@ -139,7 +139,7 @@ describe('adding a step', () => {
   });
 
   test('a description of 2001 characters is marked and nothing is sent', async () => {
-    setup(stored());
+    setup(editable());
 
     await userEvent.type(addTitle(), 'Contar el efectivo');
     await userEvent.click(addDescription());
@@ -153,7 +153,7 @@ describe('adding a step', () => {
   });
 
   test('sends the title, without a position (at the end), and gives the new copy to the screen', async () => {
-    const { onChange } = setup(stored());
+    const { onChange } = setup(editable());
 
     await userEvent.type(addTitle(), '  Contar el efectivo  ');
     await userEvent.click(addButton());
@@ -171,7 +171,7 @@ describe('adding a step', () => {
   });
 
   test('sends the description when there is one, and clears the form', async () => {
-    setup(stored());
+    setup(editable());
 
     await userEvent.type(addTitle(), 'Contar el efectivo');
     await userEvent.type(addDescription(), 'Billetes y monedas');
@@ -187,7 +187,7 @@ describe('adding a step', () => {
 
   test('409 STEP_LIMIT_REACHED → the draft has 50 steps, and what was typed stays', async () => {
     mocks.addStep.mockRejectedValue(new ApiError(409, [], undefined, 'STEP_LIMIT_REACHED'));
-    setup(stored());
+    setup(editable());
 
     await userEvent.type(addTitle(), 'Contar el efectivo');
     await userEvent.click(addButton());
@@ -198,7 +198,7 @@ describe('adding a step', () => {
 
   test('with 50 steps there is no form to add one, and it says why', () => {
     const fifty = Array.from({ length: 50 }, (_, i) => step(`1c000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`, i + 1, `Paso ${i + 1}`));
-    setup(stored({ steps: fifty }));
+    setup(editable({ steps: fifty }));
 
     expect(screen.getByText('El borrador ya tiene 50 pasos: es el máximo.')).toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Agregar un paso' })).not.toBeInTheDocument();

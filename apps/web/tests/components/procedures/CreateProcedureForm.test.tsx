@@ -5,8 +5,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { CreateProcedureForm } from '@/components/procedures/CreateProcedureForm';
 import { ApiError } from '@/lib/api';
 import { PROCEDURE_MESSAGES } from '@/lib/procedures';
-import { loadProcedures } from '@/lib/procedures/session-list';
-import { ADMIN_ID, ANA, PROCEDURE_ID, procedureResponse } from '../../support/procedures';
+import { ANA, PROCEDURE_ID, procedureResponse } from '../../support/procedures';
 
 const mocks = vi.hoisted(() => ({
   createProcedure: vi.fn(),
@@ -120,8 +119,9 @@ describe('creating', () => {
     });
   });
 
-  test('saves the procedure in the list of the user and links to its draft', async () => {
-    render(<CreateProcedureForm />);
+  test('links to its draft, tells the list to ask again, and keeps nothing in the browser', async () => {
+    const onCreated = vi.fn();
+    render(<CreateProcedureForm onCreated={onCreated} />);
 
     await userEvent.type(titleField(), 'Cierre de caja');
     await userEvent.click(submitButton());
@@ -131,9 +131,8 @@ describe('creating', () => {
       'href',
       `/procedimientos/${PROCEDURE_ID}`,
     );
-    const saved = loadProcedures(ADMIN_ID);
-    expect(saved).toHaveLength(1);
-    expect(saved[0]).toMatchObject({ id: PROCEDURE_ID, title: 'Cierre de caja', steps: [] });
+    expect(onCreated).toHaveBeenCalledOnce();
+    expect(window.sessionStorage).toHaveLength(0);
   });
 
   test('clears the fields after creating', async () => {
@@ -166,9 +165,10 @@ describe('creating', () => {
 });
 
 describe('errors', () => {
-  test('403 → only an administrator can, nothing is saved and the data stays', async () => {
+  test('403 → only an administrator can, the list is not told and the data stays', async () => {
+    const onCreated = vi.fn();
     mocks.createProcedure.mockRejectedValue(new ApiError(403));
-    render(<CreateProcedureForm />);
+    render(<CreateProcedureForm onCreated={onCreated} />);
 
     await userEvent.type(titleField(), 'Cierre de caja');
     await userEvent.click(submitButton());
@@ -176,7 +176,7 @@ describe('errors', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(PROCEDURE_MESSAGES.noPermission);
     expect(titleField()).toHaveValue('Cierre de caja');
     expect(submitButton()).toBeEnabled();
-    expect(loadProcedures(ADMIN_ID)).toEqual([]);
+    expect(onCreated).not.toHaveBeenCalled();
   });
 
   test('401 → the session is not valid', async () => {
