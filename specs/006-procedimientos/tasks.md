@@ -250,3 +250,23 @@ Convenciones:
   - **D-web-4:** se vuelve con `BACK_LINK` ("← Volver a procedimientos").
   - **D-web-5:** las pantallas importan botones, campos y encabezado de `components/documents/design.tsx` y `list-design.tsx` (DESIGN.md 1 y 9); `components/procedures/design.tsx` queda solo con la fila de un paso, su número, la caja de agregar y los íconos.
   - **Pendiente:** llevar el foco al primer campo con error después de enviar un formulario con errores (DESIGN.md 8). Es comportamiento nuevo: va con su criterio y su test primero, y no se hizo en este rediseño.
+
+---
+
+## Pantallas de HU11 (web)
+
+Trazabilidad: regla → escenario → tarea → test → resultado. Cada tarea es test primero y un commit chico. Todas son solo del front; `GET /api/procedures` y `GET /api/procedures/:id` ya existen (T16).
+
+| Tarea | Qué hace | Regla | Escenario | Test |
+| --- | --- | --- | --- | --- |
+| T26 | Cliente de `GET /procedures` y `GET /procedures/:id` (`lib/api/procedure-view.ts`) | W1, W5 | E41, E45 | `tests/lib/api/procedure-view.test.ts` |
+| T27 | Hooks que piden la lista y el detalle (`useProcedureList`, `useProcedureDetail`) | W1, W6, W7 | E41, E46, E47 | `tests/components/procedures/useProcedureDetail.test.tsx` |
+| T28 | Tarjeta de la lista con título, versión, pasos y áreas como chips | W4 | E44 | `tests/components/procedures/ProcedureCard.test.tsx` |
+| T29 | Lista paginada desde la API, por rol; formulario solo para ADMIN; vacía, carga y error | W1, W2, W3, W8, W9 | E41, E42, E43, E48 | `tests/components/procedures/ProcedureList.test.tsx` |
+| T30 | Ficha de solo lectura y estado 404 | W5, W7 | E45, E47 | `tests/components/procedures/ProcedureReadView.test.tsx` |
+| T31 | Páginas `/procedimientos` y `/procedimientos/[id]` por rol | W2, W3, W5, W6 | E42, E43, E45 | `tests/app/procedimientos-pages.test.tsx` |
+| T32 | El editor del ADMIN lee de la API y se elimina la copia de `sessionStorage` (P25) | W1, W6 | E41, E46 | `ProcedureEditor.test.tsx` y los de `components/procedures/` |
+| T33 | Tarjeta "Procedimientos" en el inicio | W10 | E49 | `tests/components/home/HomeView.test.tsx` |
+
+- **Verificación:** `pnpm --filter web lint`, `pnpm --filter web test` y `pnpm --filter web build` (con `API_URL=http://localhost:3000`) en verde. La prueba manual con login real la hace Micaela.
+- **Fuera de alcance:** el adaptador de `ProceduresCatalog` no llena los campos opcionales que Mayra dejó como `TODO(HU11)` (`title`, `versionNumber`, `description`); se coordina con ella en otro PR.

@@ -87,6 +87,19 @@ Publicar queda fuera (HU32). Por eso, al terminar esta spec, un empleado todaví
 - **R16 · Listado.** Paginado con `?page` y `?limit` (por defecto 1 y 20; máximo 100). Si `limit` es mayor a 100, o `page` o `limit` no son válidos: 400. Ordenado del más nuevo al más viejo. Formato: `{ data, total, page, limit }`. Cada ítem muestra los datos de la versión vigente (el ADMIN, que ve también los que no se publicaron, ve los del borrador) y las áreas del procedimiento; al ADMIN se le indica además si tiene un borrador abierto.
 - **R17 · Versiones solo para el ADMIN.** Las rutas que muestran una versión puntual, incluido un borrador, son solo del ADMIN. Para los demás roles: 403.
 
+**Pantallas de visibilidad (web, HU11)**
+
+- **W1 · Lista desde el servidor.** `/procedimientos` pide `GET /api/procedures` con `page` y `limit` (12 por página; el número de página viaja en `?pagina=`) y muestra lo que la API devuelve, sin filtrar ni completar nada en el navegador. No hay copia en `sessionStorage` (P25).
+- **W2 · ADMIN.** Ve la lista completa, el formulario para crear un procedimiento y, en cada tarjeta, el acceso al editor. Al crear uno, la lista se vuelve a pedir y lo incluye.
+- **W3 · SUPERVISOR y EMPLOYEE.** Ven solo lo que la API devuelve para sus áreas. La pantalla no tiene formulario de crear ni botones de editar.
+- **W4 · La tarjeta.** Título, "Versión N · publicada" (para el ADMIN, el estado real de la versión que se muestra: "borrador" si no hay publicada), cantidad de pasos y las áreas como chips con su nombre (el ADMIN ve "(inactiva)" donde corresponda; los demás nunca reciben una inactiva, P20). Toda la tarjeta lleva al detalle.
+- **W5 · Ficha de solo lectura.** SUPERVISOR y EMPLOYEE, en `/procedimientos/[id]`, ven desde `GET /api/procedures/:id` el título, "Versión N · publicada", las áreas como chips, la descripción y los pasos numerados (número, título y descripción). Sin campos ni botones de edición.
+- **W6 · Editor del ADMIN.** El ADMIN ve en `/procedimientos/[id]` el editor de siempre, pero sus datos salen de `GET /api/procedures/:id`, no de una copia del navegador. Cada cambio que la API acepta actualiza lo que se ve sin volver a pedir el detalle; publicar o crear un borrador sí lo vuelven a pedir.
+- **W7 · 404.** Si el detalle responde 404 (inexistente, de otra área o sin versión publicada, R14), la pantalla dice "No se encontró el procedimiento" y ofrece volver a la lista. El mensaje es el mismo en los tres casos y para todos los roles.
+- **W8 · Lista vacía.** Sin procedimientos, SUPERVISOR y EMPLOYEE leen "Todavía no hay procedimientos publicados en tus áreas."; el ADMIN, "Todavía no hay procedimientos creados.".
+- **W9 · Carga y error.** Mientras se pide, un esqueleto con el texto "Cargando…" para lectores de pantalla; si falla, un mensaje con "Reintentar". Los textos de error que manda la API no se muestran.
+- **W10 · Inicio.** El inicio tiene una tarjeta "Procedimientos" con un enlace a `/procedimientos` para los tres roles (cambio mínimo en `HomeView.tsx`, autorizado por Camila).
+
 **Adjuntos (última parte)**
 
 - **R18 · Adjuntar.** El ADMIN adjunta un archivo a un paso de un borrador. El archivo sigue las mismas reglas que en documentos (`inspectFile`): PDF, `.txt` o `.md`, comprobado por contenido, hasta 10 MB; tipo no aceptado: 415; más grande: 413; vacío: 400 (P14).
@@ -375,6 +388,59 @@ Escenario: E40 · usuario inactivo (P20)
   Cuando hace cualquier pedido
   Entonces el guard lo rechaza con 401
   Y, si el directorio lo marcara inactivo y el pedido llegara al servicio, recibiría una lista vacía y un 404
+
+# --- HU11 · pantallas (web) ---
+
+Escenario: E41 · la lista sale de la API (W1)
+  Dado que la API responde una página con dos procedimientos
+  Cuando un usuario abre /procedimientos
+  Entonces ve esas dos tarjetas
+  Y la web pidió GET /api/procedures con page y limit
+  Y no leyó ni escribió nada en sessionStorage
+
+Escenario: E42 · el ADMIN crea y edita (W2)
+  Dado un ADMIN en /procedimientos
+  Entonces ve el formulario "Crear procedimiento" y un enlace al editor en cada tarjeta
+  Y al crear uno la lista se vuelve a pedir y lo incluye
+
+Escenario: E43 · el EMPLOYEE no edita (W3)
+  Dado un EMPLOYEE o un SUPERVISOR en /procedimientos
+  Entonces ve las tarjetas que la API devolvió
+  Y no hay formulario de crear ni botón de editar
+
+Escenario: E44 · la tarjeta (W4)
+  Dado un procedimiento publicado, versión 2, con 3 pasos, en Ventas y Operaciones
+  Entonces su tarjeta dice "Versión 2 · publicada" y "3 pasos"
+  Y muestra los chips "Operaciones" y "Ventas"
+
+Escenario: E45 · la ficha de solo lectura (W5)
+  Dado un procedimiento publicado visible para el EMPLOYEE
+  Cuando abre /procedimientos/[id]
+  Entonces ve el título, "Versión 1 · publicada", las áreas, la descripción y los pasos numerados en orden
+  Y no hay campos ni botones de edición
+
+Escenario: E46 · el ADMIN abre el editor desde la API (W6)
+  Dado un ADMIN y un procedimiento con borrador
+  Cuando abre /procedimientos/[id]
+  Entonces la web pide GET /api/procedures/:id y muestra el borrador, los pasos y las áreas
+  Y, si el id no existe, ve "No se encontró el procedimiento" en vez de "no tenemos los datos"
+
+Escenario: E47 · 404 (W7)
+  Dado un procedimiento de otra área
+  Cuando un EMPLOYEE abre /procedimientos/[id]
+  Entonces ve "No se encontró el procedimiento" y un enlace "Volver a procedimientos"
+  Y el texto es el mismo que para un id que no existe
+
+Escenario: E48 · lista vacía, carga y error (W8, W9)
+  Dado un EMPLOYEE sin procedimientos visibles
+  Entonces lee "Todavía no hay procedimientos publicados en tus áreas."
+  Y mientras se pide se anuncia "Cargando…"
+  Y si la API falla ve un mensaje con "Reintentar", sin el texto del servidor
+
+Escenario: E49 · tarjeta en el inicio (W10)
+  Dado un usuario con sesión de cualquier rol
+  Cuando abre el inicio
+  Entonces ve la tarjeta "Procedimientos" con un enlace a /procedimientos
 
 # --- Adjuntos (última parte) ---
 
