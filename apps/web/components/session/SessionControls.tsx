@@ -74,7 +74,17 @@ export function SessionControls() {
               <Link href="/asistente" className="hover:text-zinc-900 hover:underline dark:hover:text-white">
                 Asistente
               </Link>
-              {user.role === 'ADMIN' && <AdminAlertsLink userId={user.id} />}
+              {user.role === 'ADMIN' && (
+                <>
+                  <AdminAlertsLink userId={user.id} />
+                  <Link
+                    href="/admin/invitaciones"
+                    className="hover:text-zinc-900 hover:underline dark:hover:text-white"
+                  >
+                    Invitar usuario
+                  </Link>
+                </>
+              )}
             </div>
           )}
         </div>

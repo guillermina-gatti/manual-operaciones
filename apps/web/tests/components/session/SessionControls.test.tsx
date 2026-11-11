@@ -82,6 +82,7 @@ describe('A-09: estado de sesión en encabezado', () => {
       render(<SessionControls />);
       expect(screen.getByRole('link', { name: 'Asistente' })).toHaveAttribute('href', '/asistente');
       expect(screen.queryByRole('link', { name: 'Alertas' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Invitar usuario' })).not.toBeInTheDocument();
     });
 
     test('un ADMIN ve Asistente y además el enlace a /documentos/alertas sin badge si no hay alertas', async () => {
@@ -98,6 +99,7 @@ describe('A-09: estado de sesión en encabezado', () => {
       });
       render(<SessionControls />);
       expect(screen.getByRole('link', { name: 'Asistente' })).toHaveAttribute('href', '/asistente');
+      expect(screen.getByRole('link', { name: 'Invitar usuario' })).toHaveAttribute('href', '/admin/invitaciones');
       const alertsLink = await screen.findByRole('link', { name: 'Alertas: ninguna abierta' });
       expect(alertsLink).toHaveAttribute('href', '/documentos/alertas');
       expect(screen.queryByTestId('alerts-badge')).not.toBeInTheDocument();
