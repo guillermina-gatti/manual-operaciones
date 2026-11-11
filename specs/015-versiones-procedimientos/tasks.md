@@ -8,7 +8,7 @@
 Convenciones:
 
 - Una tarea = un commit (a veces dos: test y código), con Conventional Commits y alcance `procedures` o `web`. Las rutas de backend son relativas a `apps/api/`, las de front a `apps/web/`.
-- R1 a R13 son las reglas de la spec; E1 a E23, sus escenarios; D1 a D17, sus decisiones; PD1 a PD8, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado (tabla al final).
+- R1 a R14 son las reglas de la spec; E1 a E29, sus escenarios; D1 a D26, sus decisiones; PD1 a PD8, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado (tabla al final).
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa. Un test por criterio, con AAA, `describe` por clase o método y mocks con `jest.fn().mockResolvedValue(...)` limpiados entre tests. En el front, `getByRole` y `getByLabel`, nunca esperas por tiempo fijo.
 - Nunca se modifica un test existente para que pase: si una tarea tiene que cambiar uno, se avisa antes.
 - **"Avisar al equipo antes de mergear"** marca las tareas que tocan `schema.prisma` o `prisma/migrations`.
@@ -203,3 +203,35 @@ Se completa la columna "Resultado" a medida que cada test pasa.
 | R11 · Qué no cambia al publicar | E19 | T06, T09, T14 | `procedure-publish.service.spec.ts`, `versions.e2e-spec.ts`, `catalog.e2e-spec.ts` | unitarios ✔ (10/11); e2e escrito |
 | R12 · Catálogo de ejecuciones | E19, E21, E22, E23 | T14 | `prisma-procedures-catalog.spec.ts`, `catalog.e2e-spec.ts` | unitario ✔ (10/11, 12 tests); e2e escrito; `title` pendiente de Mayra |
 | R13 · Formato y errores | E16, E17, E20 | T04, T08, T09 | `http-errors.spec.ts`, `procedure-versions.controller.spec.ts`, `versions.e2e-spec.ts` | unitarios ✔ (10/11); e2e escrito |
+| R14 · Pantalla del ADMIN | E24 a E29 | T22 a T27 | `ConfirmDialog.test.tsx`, `AreaChipsField.test.tsx`, `StepsEditor.test.tsx`, `DraftForm.test.tsx`, `ProcedureList.test.tsx`, `ProcedureEditor.test.tsx` | se completa en T27 |
+
+---
+
+## Parte 3 · mejora visual de la pantalla del ADMIN (solo front, 11/11/2026)
+
+Pedido de Matías, boceto aprobado por el equipo. R14, D21 a D26, E24 a E29. La API, `components/documents/` y la vista de SUPERVISOR y EMPLOYEE no se tocan. Los tests existentes que cambian de texto o de lugar se ajustan porque cambió el comportamiento (la spec va primero); no se tocan para "hacerlos pasar".
+
+### T22 · Cartel de confirmación
+- **Qué hace:** `ConfirmDialog`: `<dialog>` modal con encabezado salvia, "!" rojo, "Cancelar" y "Sí, borrar".
+- **Cubre:** D25; E26, E27. **Archivos:** `components/procedures/ConfirmDialog.tsx` y `tests/components/procedures/ConfirmDialog.test.tsx`.
+- **Verificación, test primero:** `role="dialog"` con nombre y descripción; Esc y "Cancelar" cierran sin confirmar; "Sí, borrar" confirma; con `busy` los botones se deshabilitan.
+
+### T23 · Pasos: fila salvia, tachito y "+ Agregar paso"
+- **Qué hace:** `StepItem` con fondo salvia y los botones en una línea; el tachito abre el cartel; `AddStep` con borde punteado; el título "Pasos" sin "de 50".
+- **Cubre:** D23, D24, D25; E26, E28. **Archivos:** `StepItem.tsx`, `StepActions.tsx`, `AddStep.tsx`, `StepsEditor.tsx`, `DraftSections.tsx`, `design.tsx` y sus tests.
+- **Verificación, test primero:** "Borrar el paso X" abre el cartel y no llama a la API; "Sí, borrar" llama y renumera; "+ Agregar paso" abre el formulario.
+
+### T24 · Chips de áreas seleccionables
+- **Qué hace:** `AreaChipsField`: casillas con forma de chip, "(inactiva)", con el estilo de `AreaChips` de HU11 (sin modificar `components/documents/`).
+- **Cubre:** D22, D26; E29. **Archivos:** `AreaChipsField.tsx` y su test.
+
+### T25 · Tarjeta "Borrador"
+- **Qué hace:** `DraftForm` con título y descripción lado a lado, las áreas, "Guardar cambios" (título, descripción y áreas) y el tachito "Descartar borrador" con el cartel; mientras es borrador no hay sección "Áreas" aparte.
+- **Cubre:** D22, D25; E25, E27. **Archivos:** `DraftForm.tsx`, `DiscardDraft.tsx`, `useDraftActions.ts`, `DraftSections.tsx`, `ProcedureEditorBody.tsx` y sus tests.
+
+### T26 · Pantalla única al crear
+- **Qué hace:** al crear, `ProcedureList` muestra el borrador en lugar del formulario, sin "Abrir el borrador".
+- **Cubre:** D21; E24. **Archivos:** `CreateProcedureForm.tsx`, `ProcedureList.tsx`, `ProcedureEditor.tsx`, `ProcedureEditorBody.tsx` y sus tests.
+
+### T27 · Verificación
+- lint, tests y build de web y de api en verde; prueba en el navegador como `admin@fixtures.test`.
