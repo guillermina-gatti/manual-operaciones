@@ -371,9 +371,10 @@ Escenario: E39 · área desactivada (P20)
   Y el detalle responde 404, igual que uno inexistente
 
 Escenario: E40 · usuario inactivo (P20)
-  Dado un usuario que el directorio marca como inactivo
-  Cuando pide el listado
-  Entonces recibe una lista vacía
+  Dado un usuario que está inactivo
+  Cuando hace cualquier pedido
+  Entonces el guard lo rechaza con 401
+  Y, si el directorio lo marcara inactivo y el pedido llegara al servicio, recibiría una lista vacía y un 404
 
 # --- Adjuntos (última parte) ---
 
