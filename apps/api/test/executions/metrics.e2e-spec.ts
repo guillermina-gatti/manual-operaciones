@@ -14,6 +14,7 @@ import {
   OTRO_EMPLEADO_VENTAS,
   authHeaders,
   cleanExecutions,
+  closeExecutionsTestApp,
   createExecutionsTestApp,
 } from './helpers';
 
@@ -149,7 +150,7 @@ describe('Procedures metrics (integration)', () => {
   });
 
   afterAll(async () => {
-    await t.app.close();
+    await closeExecutionsTestApp(t);
     if (previousTimeZone === undefined) delete process.env.APP_TIMEZONE;
     else process.env.APP_TIMEZONE = previousTimeZone;
   });
