@@ -63,6 +63,42 @@ describe('HomeView — tarjeta Procedimientos (spec 006, HU11)', () => {
   });
 });
 
+// The card of the personal activity of the employee (HU38), next to "Ejecuciones y recorridos".
+describe('HomeView — tarjeta Mi actividad', () => {
+  test('un EMPLOYEE ve la tarjeta, después de Ejecuciones, que lleva a /ejecuciones/mi-actividad', () => {
+    mocks.useSession.mockReturnValue(sessionFor('EMPLOYEE', 'Elena Empleada de Ventas'));
+    render(<HomeView />);
+
+    const card = screen.getByRole('heading', { level: 3, name: 'Mi actividad' }).closest('article');
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByText('Tus recorridos')).toBeInTheDocument();
+    expect(
+      within(card as HTMLElement).getByText(
+        'Mirá cuánto tardás, tus recorridos completados y cuáles retomar.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(card as HTMLElement).getByRole('link', { name: 'Ver mi actividad →' }),
+    ).toHaveAttribute('href', '/ejecuciones/mi-actividad');
+
+    const titles = screen
+      .getAllByRole('heading', { level: 3 })
+      .map((heading) => heading.textContent);
+    expect(titles.slice(-2)).toEqual(['Ejecuciones y recorridos', 'Mi actividad']);
+  });
+
+  test.each([
+    ['ADMIN', 'Ana Administradora'],
+    ['SUPERVISOR', 'Sergio Supervisor de Ventas'],
+  ] as const)('un %s no la ve', (role, name) => {
+    mocks.useSession.mockReturnValue(sessionFor(role, name));
+    render(<HomeView />);
+
+    expect(screen.queryByRole('heading', { name: 'Mi actividad' })).not.toBeInTheDocument();
+    expect(allLinkHrefs()).not.toContain('/ejecuciones/mi-actividad');
+  });
+});
+
 describe('HomeView — A-10b.3 Home de PispIAr', () => {
   describe('estado de carga', () => {
     test('mientras se verifica la sesión muestra estado accesible y ningún módulo privado', () => {
@@ -151,7 +187,12 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
         '/ejecuciones',
       );
 
-      expect(allLinkHrefs()).toEqual(['/documentos', '/procedimientos', '/ejecuciones']);
+      expect(allLinkHrefs()).toEqual([
+        '/documentos',
+        '/procedimientos',
+        '/ejecuciones',
+        '/ejecuciones/mi-actividad',
+      ]);
       expect(screen.queryByText('Métricas')).not.toBeInTheDocument();
       expect(screen.queryByText('Acciones rápidas de administración')).not.toBeInTheDocument();
     });

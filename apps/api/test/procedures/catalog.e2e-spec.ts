@@ -43,9 +43,11 @@ describe('PrismaProceduresCatalog (integration)', () => {
       versionId: versionIds[1],
       areaIds: [AREA_IDS.ventas],
       steps: [
-        { id: stepIds[1][0], order: 1, title: 'Contar' },
-        { id: stepIds[1][1], order: 2, title: 'Comparar' },
+        { id: stepIds[1][0], order: 1, title: 'Contar', description: '', stepKey: expect.any(String) },
+        { id: stepIds[1][1], order: 2, title: 'Comparar', description: '', stepKey: expect.any(String) },
       ],
+      title: 'Cierre de caja',
+      versionNumber: 2,
     });
   });
 
@@ -56,7 +58,11 @@ describe('PrismaProceduresCatalog (integration)', () => {
       procedureId,
       versionId: versionIds[0],
       areaIds: [AREA_IDS.ventas],
-      steps: [{ id: stepIds[0][0], order: 1, title: 'Contar' }],
+      steps: [
+        { id: stepIds[0][0], order: 1, title: 'Contar', description: '', stepKey: expect.any(String) },
+      ],
+      title: 'Cierre de caja',
+      versionNumber: 1,
     });
   });
 
