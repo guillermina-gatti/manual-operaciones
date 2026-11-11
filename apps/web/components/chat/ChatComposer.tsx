@@ -36,7 +36,7 @@ export function ChatComposer({ value, busy, onChange, onSend, onNewConversation 
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2 rounded-b-2xl bg-blanco px-6 pb-4 pt-2">
+    <form onSubmit={submit} className="flex shrink-0 flex-col gap-2 rounded-b-2xl bg-blanco px-6 pb-4 pt-2">
       <label htmlFor={`${id}-pregunta`} className="sr-only">
         Tu pregunta
       </label>
