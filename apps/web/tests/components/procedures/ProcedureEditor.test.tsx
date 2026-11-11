@@ -60,9 +60,10 @@ describe('the procedure', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Cierre de caja' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Borrador' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: /^Pasos · \d+ de 50$/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Áreas' })).toBeInTheDocument();
-    await screen.findByRole('group', { name: 'Áreas' });
+    expect(screen.getByRole('heading', { level: 2, name: 'Pasos' })).toBeInTheDocument();
+    // The areas are chips inside the card of the draft, not a section of their own (D22).
+    expect(await screen.findByRole('group', { name: 'Áreas' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Áreas' })).not.toBeInTheDocument();
   });
 
   test('does not read or write the browser storage', async () => {

@@ -4,7 +4,7 @@
 - **Responsable:** Micaela Franco (pareja B)
 - **Depende de:** spec 006 (borradores, pasos y áreas; sus reglas R3, R4, R9 y R10 se usan tal cual), `docs/contracts/permissions-matrix.md` (solo el ADMIN publica), `UsersDirectory` de documentos (para el nombre de quien publicó) y el puerto `ProceduresCatalog` de Mayra (`executions/ports/procedures-catalog.ts`), que no se modifica. **Dependencia con Mayra:** para `/metricas` ella agrega `title` (el título del procedimiento) a `CatalogProcedureVersion` en el puerto; el adaptador de esta spec lo llena. Si el puerto todavía no lo tiene cuando se escriba el adaptador, este funciona sin título y llenarlo queda como tarea pendiente (D17).
 - **Habilita:** HU33 (propuestas de cambio), HU28 (aprobación), HU38 (métricas por versión) y el catálogo real de ejecuciones.
-- **Estado:** implementada (10/11/2026), Partes 1 y 2. Las preguntas de la aclaración pasaron a la sección 10 (D10 a D17); la prueba visual de la Parte 1 sumó D18 a D20 (pantalla). Los e2e los corre Micaela. Pendiente: el título del procedimiento en el catálogo cuando Mayra lo agregue al puerto (D17).
+- **Estado:** implementada (10/11/2026), Partes 1 y 2. Mejora visual de la pantalla del ADMIN (11/11/2026, pedido de Matías, boceto aprobado por el equipo): D21 a D26, R14, E24 a E29, T22 a T27 (solo front). Las preguntas de la aclaración pasaron a la sección 10 (D10 a D17); la prueba visual de la Parte 1 sumó D18 a D20 (pantalla). Los e2e los corre Micaela. Pendiente: el título del procedimiento en el catálogo cuando Mayra lo agregue al puerto (D17).
 
 ## 1. Problema y objetivo
 
@@ -83,6 +83,7 @@ Esta feature agrega el ciclo de vida de una versión: el ADMIN **publica** un bo
   - **título del procedimiento:** si `CatalogProcedureVersion` ya tiene `title` (lo agrega Mayra), el adaptador lo llena con el título de esa versión; si todavía no lo tiene, el adaptador funciona sin él y llenarlo queda como tarea pendiente (D17).
   El adaptador no cambia nada en `executions/`: el cambio de una línea en `executions.module.ts` lo hace Mayra.
 - **R13 · Áreas de la base y errores.** Las reglas del equipo se mantienen: ids UUID (un id que no lo es: 400), fechas ISO 8601 en UTC, errores estándar de NestJS (`statusCode`, `message`, `error`; en los 409, además `reason`), validación en el servidor, y si la base no responde: 503 sin cambios a medias.
+- **R14 · Pantalla del ADMIN (solo front, D21 a D26).** En `/procedimientos` y `/procedimientos/[id]` el ADMIN ve una pantalla única con el borrador: la tarjeta "Borrador" (título y descripción lado a lado, áreas como chips seleccionables, "Guardar cambios" y el tachito para descartar), "Pasos", "Versiones" con "Publicar" y la lista. Borrar un paso y descartar el borrador piden confirmación en un cartel modal. La API no cambia; la vista de SUPERVISOR y EMPLOYEE (spec 006) tampoco.
 
 ## 7. Estados
 
@@ -148,6 +149,12 @@ Tomadas el 10/11/2026 por ser menores; la regla correspondiente las usa.
 | D18 · Historial al día en la pantalla | Cuando cambian el título, la descripción o los pasos del borrador, la pantalla pide el historial otra vez y deja a la vista la lista anterior mientras llega la nueva, para que el conteo de pasos de la línea de tiempo no quede viejo | R8 |
 | D19 · Estado real en la lista | La copia local del procedimiento guarda el estado de su versión (la pantalla lo aprende del historial); la lista de `/procedimientos` y el editor muestran el mismo texto: "Versión N · borrador", "publicada" o "reemplazada" | R6, R8 |
 | D20 · Texto de la confirmación | "La versión vigente pasa a reemplazada" solo se dice si hay una versión publicada; en la primera publicación dice "Va a ser la versión vigente" | R4 |
+| D21 · Pantalla única | Al crear un procedimiento, en `/procedimientos` el formulario de creación pasa a mostrar el borrador recién creado (editable) y la lista de abajo se actualiza. Desaparece el paso intermedio "Procedimiento creado. Abrir el borrador". Al descartar el borrador vuelve el formulario de creación | R14 |
+| D22 · Tarjeta "Borrador" | Título y Descripción lado a lado desde `sm` (uno abajo del otro en el celular); las áreas son chips seleccionables dentro de la misma tarjeta; "Guardar cambios" guarda título, descripción y áreas (solo llama a la API por lo que cambió); "Descartar borrador" pasa a un botón con ícono de tachito rojo y `aria-label="Descartar borrador"`. Mientras la versión es borrador no hay sección "Áreas" ni "Guardar áreas" aparte; una versión que no es borrador sigue con su sección "Áreas" (spec 006, HU10) | R14 |
+| D23 · Pasos | El título es "Pasos", sin "N de 50". El límite de 50 sigue en la API; al llegar a 50 la pantalla lo dice y no ofrece "+ Agregar paso" | R14 |
+| D24 · Fila de paso | Fondo salvia, número en círculo verde (el mismo de HU11), botones ↑, ↓, "Editar" y tachito rojo con `aria-label="Borrar el paso <título>"`. "+ Agregar paso" es un botón con borde punteado que abre el formulario del paso | R14 |
+| D25 · Cartel de confirmación | Borrar un paso y descartar el borrador piden confirmación en un `<dialog>` modal (`aria-modal="true"`, foco atrapado, Esc cierra, "Cancelar" con el foco inicial). Encabezado salvia, círculo rojo con "!", título "¿Borrar el paso «X»?" o "¿Descartar el borrador?", botones "Cancelar" y "Sí, borrar" (rojo). Texto del paso: "Se quita del borrador y los demás pasos se vuelven a numerar. No se puede deshacer." Texto de descartar: dice lo que pasa de verdad (se borra el borrador con sus pasos y, si es la única versión, el procedimiento con sus áreas) | R14 |
+| D26 · Áreas inactivas | Un área inactiva se muestra como "Nombre (inactiva)", solo si el procedimiento ya la tiene; una inactiva nueva no se puede marcar (la API diría 400) | R14 |
 
 ## 11. Preguntas abiertas
 
@@ -306,6 +313,40 @@ Escenario: E23 · el título en el catálogo
   Cuando el catálogo pide findPublished o findVersion
   Entonces el resultado trae el título de esa versión
   Y si el puerto todavía no tiene title, el adaptador devuelve lo mismo sin él
+
+Escenario: E24 · crear muestra el borrador en la misma pantalla
+  Dado un ADMIN en /procedimientos
+  Cuando crea un procedimiento con título "Recepción de mercadería"
+  Entonces la misma pantalla muestra el borrador con "Versión 1 · borrador"
+  Y no aparece "Abrir el borrador" y la lista de abajo incluye el procedimiento nuevo
+
+Escenario: E25 · guardar cambios guarda título, descripción y áreas
+  Dado un borrador con el área Operaciones, y el ADMIN marca Ventas y cambia el título
+  Cuando aprieta "Guardar cambios"
+  Entonces se guardan el título y las áreas, y el aviso dice "Cambios guardados."
+  Y si no cambió nada, dice "No hay cambios para guardar." y no llama a la API
+
+Escenario: E26 · borrar un paso pide confirmación
+  Dado un borrador con los pasos "Revisar el remito" y "Contar las cajas"
+  Cuando el ADMIN aprieta el tachito de "Contar las cajas"
+  Entonces aparece el cartel "¿Borrar el paso «Contar las cajas»?" y todavía no se llamó a la API
+  Y "Cancelar" o Esc lo cierran sin borrar
+  Y "Sí, borrar" borra el paso y los demás se vuelven a numerar
+
+Escenario: E27 · descartar el borrador pide confirmación
+  Dado un borrador abierto
+  Cuando el ADMIN aprieta el tachito "Descartar borrador"
+  Entonces aparece "¿Descartar el borrador?" y "Sí, borrar" lo descarta
+  Y la versión publicada del procedimiento conserva sus pasos
+
+Escenario: E28 · pasos sin límite a la vista
+  Dado un borrador con 2 pasos
+  Entonces el título es "Pasos" (sin "2 de 50") y "+ Agregar paso" abre el formulario del paso
+
+Escenario: E29 · áreas inactivas
+  Dado un procedimiento con el área "Compras" inactiva y el área "Ventas" activa
+  Entonces el borrador muestra "Compras (inactiva)" y "Ventas"
+  Y una inactiva que el procedimiento no tiene no aparece para marcarla
 ```
 
 ## 13. Trazabilidad
@@ -327,3 +368,4 @@ Se completa al escribir el plan y las tareas (`plan.md` y `tasks.md`): regla →
 | R11 | E19 |
 | R12 | E19, E21, E22, E23 |
 | R13 | E16, E17, E20 |
+| R14 | E24, E25, E26, E27, E28, E29 |
