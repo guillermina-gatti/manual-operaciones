@@ -27,8 +27,18 @@ const procedure = (
   abandoned: avgCompletionMs === null ? 2 : 0,
   completionRate: avgCompletionMs === null ? 0 : 1,
   avgCompletionMs,
+  minCompletionMs: avgCompletionMs,
+  maxCompletionMs: avgCompletionMs,
   versions: [
-    { procedureVersionId: `${id}-v`, started: 2, completed: 2, inProgress: 0, abandoned: 0, steps },
+    {
+      procedureVersionId: `${id}-v`,
+      started: 2,
+      completed: 2,
+      inProgress: 0,
+      abandoned: 0,
+      avgCompletionMs,
+      steps,
+    },
   ],
 });
 
@@ -69,6 +79,14 @@ describe('procedureTimeRows', () => {
     ]);
   });
 
+  test('keeps the fastest and the slowest execution of each procedure', () => {
+    const row = procedureTimeRows([
+      { ...procedure('a', 60000), minCompletionMs: 30000, maxCompletionMs: 120000 },
+    ])[0];
+
+    expect([row.minCompletionMs, row.maxCompletionMs]).toEqual([30000, 120000]);
+  });
+
   test('the slowest step is the one of the latest version', () => {
     const latest = procedure('a', 60000, [step(1, 'Nuevo', 30000)]);
     latest.versions.push({ ...latest.versions[0], steps: [step(1, 'Viejo', 90000)] });
@@ -92,5 +110,26 @@ describe('metricsProcedureName', () => {
     expect(metricsProcedureName('1a000000-0000-4000-8000-00000000000a')).toBe(
       'Procedimiento 00000A',
     );
+  });
+
+  test('the title of the API wins, trimmed', () => {
+    expect(metricsProcedureName('5d2f6a10-8c3e-4f3a-9c2b-4f3a9c2b81de', '  Arqueo  ')).toBe(
+      'Arqueo',
+    );
+  });
+
+  test('a blank or missing title falls back to the sample name or the short code', () => {
+    expect(metricsProcedureName('1a000000-0000-4000-8000-000000000001', '   ')).toBe(
+      'Cierre de caja',
+    );
+    expect(metricsProcedureName('5d2f6a10-8c3e-4f3a-9c2b-4f3a9c2b81de', null)).toBe(
+      'Procedimiento 2B81DE',
+    );
+  });
+
+  test('a row of the time table keeps the title', () => {
+    const row = procedureTimeRows([{ ...procedure('a', 60000), title: 'Arqueo' }])[0];
+
+    expect(row.title).toBe('Arqueo');
   });
 });

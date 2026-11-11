@@ -2,6 +2,7 @@ import type { CatalogProcedureVersion } from '../ports/procedures-catalog';
 import {
   ExecutionAggregate,
   StepAggregate,
+  areaSummaryOf,
   buildProcedureMetrics,
   ratio,
   totalsOf,
@@ -49,6 +50,8 @@ const executions = (
   completed: 0,
   inProgress: 0,
   completedDurationMs: 0,
+  minCompletionMs: null,
+  maxCompletionMs: null,
   lastStartedAt: new Date('2026-10-27T10:00:00.000Z'),
   ...overrides,
 });
@@ -78,6 +81,77 @@ describe('ratio', () => {
 });
 
 describe('buildProcedureMetrics', () => {
+  it('the title is the one of the latest version with executions; blank or missing is null', () => {
+    const titled = new Map([
+      [V1.versionId, { ...V1, title: 'Cierre de caja (v1)' }],
+      [V2.versionId, { ...V2, title: 'Cierre de caja' }],
+      [R1.versionId, { ...R1, title: '   ' }],
+    ]);
+
+    const procedures = buildProcedureMetrics(
+      [
+        executions(V1, {
+          started: 1,
+          lastStartedAt: new Date('2026-10-01T10:00:00.000Z'),
+        }),
+        executions(V2, {
+          started: 1,
+          lastStartedAt: new Date('2026-10-20T10:00:00.000Z'),
+        }),
+        executions(R1, { started: 1 }),
+      ],
+      [],
+      titled,
+    );
+
+    expect(procedures.map((p) => [p.procedureId, p.title])).toEqual([
+      [CIERRE, 'Cierre de caja'],
+      [RECEPCION, null],
+    ]);
+    expect(
+      buildProcedureMetrics([executions(V2, { started: 1 })], [], ALL)[0].title,
+    ).toBeNull();
+  });
+
+  it('the fastest and the slowest completed execution, of any version', () => {
+    const [cierre] = buildProcedureMetrics(
+      [
+        executions(V1, {
+          started: 2,
+          completed: 2,
+          minCompletionMs: 300_000,
+          maxCompletionMs: 900_000.4,
+        }),
+        executions(V2, {
+          started: 1,
+          completed: 1,
+          minCompletionMs: 240_000.6,
+          maxCompletionMs: 240_000.6,
+        }),
+      ],
+      [],
+      ALL,
+    );
+
+    expect(cierre).toMatchObject({
+      minCompletionMs: 240_001,
+      maxCompletionMs: 900_000,
+    });
+  });
+
+  it('without completed executions, no fastest nor slowest', () => {
+    const [cierre] = buildProcedureMetrics(
+      [executions(V2, { started: 1, inProgress: 1 })],
+      [],
+      ALL,
+    );
+
+    expect(cierre).toMatchObject({
+      minCompletionMs: null,
+      maxCompletionMs: null,
+    });
+  });
+
   it('counts executions and computes the averages of each step', () => {
     // 4 started: 2 completed, 1 in progress, 1 abandoned at step 2.
     const [cierre] = buildProcedureMetrics(
@@ -217,6 +291,40 @@ describe('buildProcedureMetrics', () => {
     expect(cierre.avgCompletionMs).toBe(150);
   });
 
+  it('each version has the average of its own completed executions', () => {
+    const [cierre] = buildProcedureMetrics(
+      [
+        executions(V1, {
+          started: 1,
+          completed: 1,
+          completedDurationMs: 100,
+          lastStartedAt: new Date('2026-10-01T10:00:00.000Z'),
+        }),
+        executions(V2, {
+          started: 4,
+          completed: 3,
+          completedDurationMs: 500,
+          lastStartedAt: new Date('2026-10-20T10:00:00.000Z'),
+        }),
+      ],
+      [],
+      ALL,
+    );
+
+    // V2 first: it has the latest execution. 500 / 3 rounded.
+    expect(cierre.versions.map((v) => v.avgCompletionMs)).toEqual([167, 100]);
+  });
+
+  it('a version without completed executions has no average', () => {
+    const [cierre] = buildProcedureMetrics(
+      [executions(V2, { started: 1, inProgress: 1 })],
+      [],
+      ALL,
+    );
+
+    expect(cierre.versions[0].avgCompletionMs).toBeNull();
+  });
+
   it('the abandoned executions are the abandoned steps, so the counts add up', () => {
     const [cierre] = buildProcedureMetrics(
       [executions(V2, { started: 3, inProgress: 3 })],
@@ -268,31 +376,74 @@ describe('buildProcedureMetrics', () => {
 
 describe('totalsOf', () => {
   it('adds up every procedure', () => {
-    const procedures = buildProcedureMetrics(
-      [
-        executions(V2, { started: 2, completed: 1, inProgress: 1 }),
-        executions(R1, { started: 2, completed: 2 }),
-      ],
-      [],
-      ALL,
-    );
+    const aggregates = [
+      executions(V2, {
+        started: 2,
+        completed: 1,
+        inProgress: 1,
+        completedDurationMs: 100,
+      }),
+      executions(R1, { started: 2, completed: 2, completedDurationMs: 201 }),
+    ];
+    const procedures = buildProcedureMetrics(aggregates, [], ALL);
 
-    expect(totalsOf(procedures)).toEqual({
+    expect(totalsOf(procedures, aggregates)).toEqual({
       started: 4,
       completed: 3,
       inProgress: 1,
       abandoned: 0,
       completionRate: 0.75,
+      // (100 + 201) / 3, from the exact sums: the procedures' averages are 100 and 101
+      // (rounded from 100,5), which would give 100,67.
+      avgCompletionMs: 100,
     });
   });
 
-  it('with no executions the completion rate is null', () => {
-    expect(totalsOf([])).toEqual({
+  it('the average leaves out the versions not in view', () => {
+    const aggregates = [
+      executions(V2, { started: 1, completed: 1, completedDurationMs: 600 }),
+      executions(R1, { started: 1, completed: 1, completedDurationMs: 60_000 }),
+    ];
+    const onlyV2 = new Map([[V2.versionId, V2]]);
+    const procedures = buildProcedureMetrics(aggregates, [], onlyV2);
+
+    expect(totalsOf(procedures, aggregates).avgCompletionMs).toBe(600);
+  });
+
+  it('with no executions the completion rate and the average are null', () => {
+    expect(totalsOf([], [])).toEqual({
       started: 0,
       completed: 0,
       inProgress: 0,
       abandoned: 0,
       completionRate: null,
+      avgCompletionMs: null,
     });
+  });
+});
+
+describe('areaSummaryOf', () => {
+  const shared = version(CIERRE, CIERRE_V2, [VENTAS, OPERACIONES], 2, 3);
+  const procedures = buildProcedureMetrics(
+    [executions(shared, { started: 1 }), executions(R1, { started: 1 })],
+    [],
+    new Map([shared, R1].map((v) => [v.versionId, v])),
+  );
+
+  it('ADMIN: every area with its procedures; a shared one counts in each', () => {
+    expect(areaSummaryOf(procedures, null)).toEqual([
+      { areaId: VENTAS, procedures: 1 },
+      { areaId: OPERACIONES, procedures: 2 },
+    ]);
+  });
+
+  it('a supervisor: only their areas, never the other area of a shared procedure', () => {
+    expect(areaSummaryOf(procedures, [VENTAS])).toEqual([
+      { areaId: VENTAS, procedures: 1 },
+    ]);
+  });
+
+  it('without procedures, no areas', () => {
+    expect(areaSummaryOf([], null)).toEqual([]);
   });
 });

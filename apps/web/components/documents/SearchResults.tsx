@@ -50,7 +50,7 @@ export function SearchResults({ query, page, userId, isAdmin, view = 'lista' }: 
     );
   }
 
-  const { data, total } = results.data;
+  const { data, total, approximate } = results.data;
 
   // F5 (E11): el texto va como texto de React, nunca como HTML.
   if (total === 0) {
@@ -88,6 +88,13 @@ export function SearchResults({ query, page, userId, isAdmin, view = 'lista' }: 
       <p aria-live="polite" className="text-sm text-texto-suave">
         {total === 1 ? '1 resultado' : `${total} resultados`} para «{query}»
       </p>
+
+      {/* Spec 004 (F8, R13): ningún documento tenía todas las palabras; son los que tienen alguna. */}
+      {approximate && (
+        <p className="rounded-xl bg-salvia px-4 py-3 text-texto">
+          No encontramos documentos con todas las palabras; te mostramos los más parecidos.
+        </p>
+      )}
 
       <DocumentCollection documents={data} view={view} isAdmin={isAdmin} />
 

@@ -1,6 +1,5 @@
 // "Tiempo por procedimiento": how long a complete execution takes, from start to end, slowest
-// first. The fastest and slowest execution columns of the design wait for the API (min and max
-// of the completed ones are not given yet), so they are not shown.
+// first, with the fastest and the slowest completed execution of each procedure.
 import { useId } from 'react';
 import { CARD } from '@/components/documents/design';
 import type { ProcedureMetricsResponse } from '@/lib/api';
@@ -43,7 +42,7 @@ export function ProcedureTimeTable({ procedures, areaNames }: ProcedureTimeTable
         ) : (
           // Wide tables scroll inside their card; the page never scrolls sideways.
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[44rem] border-collapse text-texto">
+            <table className="w-full min-w-[56rem] border-collapse text-texto">
               <caption className="sr-only">Tiempo por procedimiento</caption>
               <thead className="bg-fondo">
                 <tr>
@@ -57,6 +56,12 @@ export function ProcedureTimeTable({ procedures, areaNames }: ProcedureTimeTable
                     Tiempo medio total
                   </th>
                   <th scope="col" className={HEAD}>
+                    Más rápida
+                  </th>
+                  <th scope="col" className={HEAD}>
+                    Más lenta
+                  </th>
+                  <th scope="col" className={HEAD}>
                     Paso que más tarda
                   </th>
                 </tr>
@@ -68,7 +73,7 @@ export function ProcedureTimeTable({ procedures, areaNames }: ProcedureTimeTable
                     <tr key={row.procedureId}>
                       <th scope="row" className={`${CELL} text-left font-normal`}>
                         <span className="block font-bold">
-                          {metricsProcedureName(row.procedureId)}
+                          {metricsProcedureName(row.procedureId, row.title)}
                         </span>
                         {areas.length > 0 && (
                           <span className="block text-sm text-texto-suave">
@@ -86,6 +91,12 @@ export function ProcedureTimeTable({ procedures, areaNames }: ProcedureTimeTable
                             {formatDuration(row.avgCompletionMs)}
                           </span>
                         </span>
+                      </td>
+                      <td className={`${CELL} tabular-nums whitespace-nowrap`}>
+                        {formatDuration(row.minCompletionMs)}
+                      </td>
+                      <td className={`${CELL} tabular-nums whitespace-nowrap`}>
+                        {formatDuration(row.maxCompletionMs)}
                       </td>
                       <td className={CELL}>
                         {row.slowestStep ? (

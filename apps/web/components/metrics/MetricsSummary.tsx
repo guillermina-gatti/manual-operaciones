@@ -3,25 +3,16 @@
 // the API totals or from the procedures, never from the area cards, so a procedure with two
 // areas counts once. Texts stay in ink colors; nothing is told by color alone.
 import { useId } from 'react';
-import type { ReactNode } from 'react';
 import { CARD } from '@/components/documents/design';
 import type { ProceduresMetricsResponse } from '@/lib/api';
 import { formatDuration } from '@/lib/executions/format';
 import { formatCount, formatPercent } from '@/lib/metrics/format';
-import { averageCompletionMs, outcomeShares } from '@/lib/metrics/summary';
+import { outcomeShares } from '@/lib/metrics/summary';
 import { FeatherBar, FeatherLegend } from './FeatherBar';
+import { MetricTiles } from './MetricTiles';
+import type { MetricTile } from './MetricTiles';
 import { ChartIcon, CheckIcon, ClockIcon, CrossIcon, FeatherIcon, TimerIcon } from './icons';
 import styles from './metrics.module.css';
-
-interface Tile {
-  label: string;
-  icon: ReactNode;
-  value: string;
-  hint: string;
-  hintClass?: string;
-  // The duration is longer than a count: a smaller number so the five fit in one row.
-  small?: boolean;
-}
 
 export function MetricsSummary({ metrics }: { metrics: ProceduresMetricsResponse }) {
   const distributionId = useId();
@@ -29,7 +20,7 @@ export function MetricsSummary({ metrics }: { metrics: ProceduresMetricsResponse
   const shares = outcomeShares(totals);
   const ofTotal = (share: number | null) => `${formatPercent(share)} del total`;
 
-  const tiles: Tile[] = [
+  const tiles: MetricTile[] = [
     {
       label: 'Ejecuciones',
       icon: <ChartIcon />,
@@ -60,7 +51,8 @@ export function MetricsSummary({ metrics }: { metrics: ProceduresMetricsResponse
     {
       label: 'Tiempo medio',
       icon: <TimerIcon />,
-      value: formatDuration(averageCompletionMs(metrics.procedures)),
+      // The exact average of the API, from the sums of every completed execution.
+      value: formatDuration(totals.avgCompletionMs),
       hint: 'por ejecución completada',
       small: true,
     },
@@ -68,30 +60,7 @@ export function MetricsSummary({ metrics }: { metrics: ProceduresMetricsResponse
 
   return (
     <div className="flex flex-col gap-6">
-      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {tiles.map((tile) => (
-          <div
-            key={tile.label}
-            className={`${CARD} flex min-w-0 flex-col gap-2 p-5 last:col-span-2 sm:last:col-span-1`}
-          >
-            <span
-              aria-hidden="true"
-              className="flex size-10 items-center justify-center rounded-xl bg-fondo text-naranja"
-            >
-              {tile.icon}
-            </span>
-            <dt className="text-sm font-semibold text-texto-suave">{tile.label}</dt>
-            <dd
-              className={`font-extrabold leading-none tracking-[-0.02em] text-bosque tabular-nums ${
-                tile.small ? 'text-[28px]' : 'text-5xl'
-              }`}
-            >
-              {tile.value}
-            </dd>
-            <dd className={`text-sm ${tile.hintClass ?? 'text-texto-suave'}`}>{tile.hint}</dd>
-          </div>
-        ))}
-      </dl>
+      <MetricTiles tiles={tiles} />
 
       <section aria-labelledby={distributionId} className={`${CARD} flex flex-col gap-4 p-6 sm:p-8`}>
         <h3

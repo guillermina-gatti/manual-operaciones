@@ -222,6 +222,7 @@ describe('resultados de búsqueda en cada vista', () => {
     total: 1,
     page: 1,
     limit: 20,
+    approximate: false,
   };
 
   test.each([['lista'], ['tarjetas']])('%s: el fragmento resaltado y la página', async (vista) => {

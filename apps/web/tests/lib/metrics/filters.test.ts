@@ -8,7 +8,6 @@ import {
   matchingQuickPeriod,
   metricsHref,
   parseMetricsFilters,
-  proceduresPerArea,
   quickPeriodRange,
   todayInCompany,
   withAreaHints,
@@ -118,6 +117,12 @@ describe('metricsHref', () => {
       '/metricas?desde=2026-10-01&hasta=2026-10-27',
     );
   });
+
+  test('another page can reuse the same filters', () => {
+    expect(
+      metricsHref({ areaId: VENTAS, from: '2026-10-01', to: '2026-10-27' }, '/ejecuciones/mi-actividad'),
+    ).toBe(`/ejecuciones/mi-actividad?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`);
+  });
 });
 
 describe('areaOptions', () => {
@@ -167,19 +172,6 @@ describe('areaOptions', () => {
       value: unknown,
       label: 'Área elegida',
     });
-  });
-});
-
-describe('proceduresPerArea', () => {
-  test('counts each procedure once per area, also when it has two', () => {
-    const counts = proceduresPerArea([
-      { areaIds: [VENTAS] },
-      { areaIds: [VENTAS, OPERACIONES] },
-      { areaIds: [VENTAS, VENTAS] },
-    ]);
-
-    expect(counts.get(VENTAS)).toBe(3);
-    expect(counts.get(OPERACIONES)).toBe(1);
   });
 });
 

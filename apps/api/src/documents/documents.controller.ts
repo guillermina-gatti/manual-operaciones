@@ -113,6 +113,13 @@ class DocumentSearchBody implements DocumentSearchResponse {
 
   @ApiProperty({ example: 20 })
   limit: number;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'true si ningún documento tenía todas las palabras y estos tienen alguna, primero los que cubren más (spec 004, R13)',
+  })
+  approximate: boolean;
 }
 
 // Clase para documentar en Swagger el historial de versiones (spec 003)
@@ -225,7 +232,7 @@ export class DocumentsController {
   @ApiResponse({
     status: 200,
     description:
-      'Documentos visibles que coinciden, del más relevante al menos relevante, con el fragmento',
+      'Documentos visibles que coinciden, del más relevante al menos relevante, con el fragmento. Si ninguno tiene todas las palabras, los que tienen alguna, con approximate: true',
     type: DocumentSearchBody,
   })
   @ApiResponse({

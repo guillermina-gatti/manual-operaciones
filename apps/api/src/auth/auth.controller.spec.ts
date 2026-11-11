@@ -31,6 +31,8 @@ describe('AuthController', () => {
     login: jest.Mock;
     refresh: jest.Mock;
     logout: jest.Mock;
+    validateInvitation: jest.Mock;
+    registerWithInvitation: jest.Mock;
   };
 
   let mockConfigService: {
@@ -87,6 +89,8 @@ describe('AuthController', () => {
       login: jest.fn(),
       refresh: jest.fn(),
       logout: jest.fn(),
+      validateInvitation: jest.fn(),
+      registerWithInvitation: jest.fn(),
     };
 
     mockConfigService = {
@@ -370,6 +374,183 @@ describe('AuthController', () => {
         path: REFRESH_TOKEN_COOKIE_PATH,
       });
       expect(response).toEqual({ revoked: false });
+    });
+  });
+
+  describe('POST /api/auth/invitations/validate', () => {
+    const validToken = 'V1StGXR8_Z5jdHi6B-myTEYWgkUVnxI4463m48EEUIU';
+
+    it('debe delegar la validación a AuthService extrayendo la IP de req.ip y retornar 200 con el resultado', async () => {
+      mockAuthService.validateInvitation.mockResolvedValue({
+        valid: true,
+        email: 'invitado@empresa.com',
+        role: 'EMPLOYEE',
+      });
+
+      const req = createMockRequest({ ip: '203.0.113.195' });
+      const response = await controller.validateInvitation(
+        { token: validToken },
+        req,
+      );
+
+      expect(mockAuthService.validateInvitation).toHaveBeenCalledWith(
+        validToken,
+        '203.0.113.195',
+      );
+      expect(response).toEqual({
+        valid: true,
+        email: 'invitado@empresa.com',
+        role: 'EMPLOYEE',
+      });
+    });
+
+    it('debe utilizar 127.0.0.1 si req.ip no está presente', async () => {
+      mockAuthService.validateInvitation.mockResolvedValue({
+        valid: true,
+        email: 'invitado@empresa.com',
+        role: 'SUPERVISOR',
+      });
+
+      const req = createMockRequest({});
+      await controller.validateInvitation({ token: validToken }, req);
+
+      expect(mockAuthService.validateInvitation).toHaveBeenCalledWith(
+        validToken,
+        '127.0.0.1',
+      );
+    });
+
+    it('debe propagar excepciones lanzadas por AuthService (ej. 429, 404, 410, 503)', async () => {
+      mockAuthService.validateInvitation.mockRejectedValue(
+        new HttpException(
+          { statusCode: HttpStatus.TOO_MANY_REQUESTS, error: 'Demasiadas consultas' },
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      const req = createMockRequest({ ip: '198.51.100.5' });
+      await expect(
+        controller.validateInvitation({ token: validToken }, req),
+      ).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('POST /api/auth/register', () => {
+    const validToken = 'V1StGXR8_Z5jdHi6B-myTEYWgkUVnxI4463m48EEUIU';
+    const registerDto = {
+      token: validToken,
+      name: 'Elena Empleada',
+      password: 'MiPasswordSegura123!',
+    };
+
+    it('debe registrar al usuario, delegar en AuthService, configurar la cookie httpOnly y retornar 201 sin exponer el refreshToken en JSON', async () => {
+      const fakeRefreshToken = generateRefreshToken();
+      mockAuthService.registerWithInvitation.mockResolvedValue({
+        accessToken: 'jwt-access-token-15m',
+        refreshToken: fakeRefreshToken,
+        user: mockUserSummary,
+      });
+
+      const req = createMockRequest({
+        ip: '198.51.100.22',
+        userAgent: 'Mozilla/5.0 TestBrowser',
+      });
+      const { res, cookieMock } = createMockResponse();
+
+      const response = await controller.register(registerDto, req, res);
+
+      expect(mockAuthService.registerWithInvitation).toHaveBeenCalledWith(
+        registerDto,
+        {
+          ipAddress: '198.51.100.22',
+          userAgent: 'Mozilla/5.0 TestBrowser',
+        },
+      );
+
+      // Verificación de cookie de sesión reutilizando getRefreshCookieOptions()
+      expect(cookieMock).toHaveBeenCalledWith(
+        REFRESH_TOKEN_COOKIE_NAME,
+        fakeRefreshToken,
+        {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'lax',
+          path: REFRESH_TOKEN_COOKIE_PATH,
+          maxAge: SESSION_TTL_MS,
+        },
+      );
+
+      // Verificación de respuesta HTTP
+      expect(response).toEqual({
+        accessToken: 'jwt-access-token-15m',
+        user: mockUserSummary,
+      });
+      expect(response).not.toHaveProperty('refreshToken');
+    });
+
+    it('debe configurar secure: true en la cookie cuando NODE_ENV es production', async () => {
+      mockConfigService.get.mockReturnValue('production');
+      const fakeRefreshToken = generateRefreshToken();
+      mockAuthService.registerWithInvitation.mockResolvedValue({
+        accessToken: 'jwt-access-token-15m',
+        refreshToken: fakeRefreshToken,
+        user: mockUserSummary,
+      });
+
+      const req = createMockRequest({ ip: '203.0.113.1' });
+      const { res, cookieMock } = createMockResponse();
+
+      await controller.register(registerDto, req, res);
+
+      expect(cookieMock).toHaveBeenCalledWith(
+        REFRESH_TOKEN_COOKIE_NAME,
+        fakeRefreshToken,
+        expect.objectContaining({
+          secure: true,
+          sameSite: 'lax',
+          httpOnly: true,
+        }),
+      );
+    });
+
+    it('debe extraer la IP y User-Agent recortándolos a longitudes seguras', async () => {
+      const oversizedUa = 'A'.repeat(MAX_USER_AGENT_LENGTH + 50);
+      const oversizedIp = '192.168.1.1' + '0'.repeat(MAX_IP_ADDRESS_LENGTH);
+
+      mockAuthService.registerWithInvitation.mockResolvedValue({
+        accessToken: 'jwt-token',
+        refreshToken: 'rt-token',
+        user: mockUserSummary,
+      });
+
+      const req = createMockRequest({
+        ip: oversizedIp,
+        userAgent: oversizedUa,
+      });
+      const { res } = createMockResponse();
+
+      await controller.register(registerDto, req, res);
+
+      expect(mockAuthService.registerWithInvitation).toHaveBeenCalledWith(
+        registerDto,
+        {
+          ipAddress: oversizedIp.slice(0, MAX_IP_ADDRESS_LENGTH),
+          userAgent: oversizedUa.slice(0, MAX_USER_AGENT_LENGTH),
+        },
+      );
+    });
+
+    it('debe propagar excepciones lanzadas por AuthService durante el registro', async () => {
+      mockAuthService.registerWithInvitation.mockRejectedValue(
+        new ServiceUnavailableException('Servicio temporalmente no disponible'),
+      );
+
+      const req = createMockRequest({ ip: '127.0.0.1' });
+      const { res } = createMockResponse();
+
+      await expect(controller.register(registerDto, req, res)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
   });
 

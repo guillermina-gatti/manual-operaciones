@@ -6,7 +6,7 @@ import { isCalendarDate } from '../metrics-period';
 
 // "YYYY-MM-DD" and a day that exists. A full date-time is rejected: days are the
 // company's, not instants.
-const IsCalendarDate = () =>
+export const IsCalendarDate = () =>
   ValidateBy({
     name: 'isCalendarDate',
     validator: {

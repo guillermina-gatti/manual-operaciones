@@ -14,15 +14,36 @@ export const documentNotFound = () =>
 
 // El rol sale de la sesión; las áreas, del directorio y no del token (D5 del plan 001).
 // Si el directorio falla, el error se propaga: nunca se lista sin filtro.
+
 export async function viewerFor(
   users: UsersDirectory,
   user: AuthUser,
 ): Promise<AccessSubject> {
-  // El ADMIN ve todo y la política no usa sus áreas: no hace falta pedirlas.
-  if (user.role === 'ADMIN') return { role: user.role, areaIds: [] };
+  // ADMIN conserva el acceso global definido por la política.
+  if (user.role === 'ADMIN') {
+    return { role: user.role, areaIds: [] };
+  }
+
+  // El directorio conserva las relaciones históricas.
   const found = await users.findById(user.id);
-  // Un usuario que el directorio no conoce no ve ningún área.
-  return { role: user.role, areaIds: found?.areaIds ?? [] };
+
+  // Un usuario inexistente o inactivo no recibe permisos.
+  if (!found?.isActive) {
+    return { role: user.role, areaIds: [] };
+  }
+
+  // El guard ya verificó qué áreas continúan activas.
+  // Solo autorizamos las que también pertenecen al usuario.
+  const activeAreaIds = new Set(user.areaIds);
+
+  const authorizedAreaIds = found.areaIds.filter((areaId) =>
+    activeAreaIds.has(areaId),
+  );
+
+  return {
+    role: user.role,
+    areaIds: authorizedAreaIds,
+  };
 }
 
 // El documento, si existe y el usuario puede verlo; si no, 404.

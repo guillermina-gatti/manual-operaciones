@@ -9,7 +9,6 @@ import {
   referenceIdsOf,
 } from './document-references';
 import { RepositoryUnavailableError } from './documents.repository';
-import { findUsersByIds } from './find-users-by-ids';
 import type { DocumentRecord } from './documents.repository';
 
 const UNKNOWN_USER = '0b000000-0000-4000-8000-000000000099';
@@ -169,46 +168,6 @@ describe('referenceIdsOf', () => {
   });
 });
 
-// TODO(spec 008, T05): cuando UsersDirectory.findByIds esté en develop, este bloque se borra junto con
-// findUsersByIds.
-describe('findUsersByIds (temporal, hasta UsersDirectory.findByIds)', () => {
-  it('un findById por cada ID distinto, y omite los que no existen', async () => {
-    const users = new InMemoryUsersDirectory();
-    const findById = jest.spyOn(users, 'findById');
-
-    const found = await findUsersByIds(users, [
-      FIXTURE_USERS.admin.id,
-      UNKNOWN_USER,
-      FIXTURE_USERS.admin.id,
-      FIXTURE_USERS.empleadoVentas.id,
-    ]);
-
-    expect(findById).toHaveBeenCalledTimes(3);
-    expect(found.map((user) => user.id).sort()).toEqual(
-      [FIXTURE_USERS.admin.id, FIXTURE_USERS.empleadoVentas.id].sort(),
-    );
-  });
-
-  it('sin IDs no llama al directorio', async () => {
-    const users = new InMemoryUsersDirectory();
-    const findById = jest.spyOn(users, 'findById');
-
-    await expect(findUsersByIds(users, [])).resolves.toEqual([]);
-    expect(findById).not.toHaveBeenCalled();
-  });
-
-  it('si el directorio falla, deja pasar el error', async () => {
-    const users = new InMemoryUsersDirectory();
-    jest
-      .spyOn(users, 'findById')
-      .mockRejectedValue(new RepositoryUnavailableError('caído'));
-
-    await expect(
-      findUsersByIds(users, [FIXTURE_USERS.admin.id]),
-    ).rejects.toBeInstanceOf(RepositoryUnavailableError);
-  });
-});
-
 describe('DocumentReferences (T05)', () => {
   const COMPRAS_INACTIVA = { id: COMPRAS, name: 'Compras', isActive: false };
 
@@ -226,7 +185,7 @@ describe('DocumentReferences (T05)', () => {
 
   it('pide usuarios y áreas una sola vez, sin repetidos, y arma las referencias', async () => {
     const { users, areas, references } = build();
-    const findUsers = jest.spyOn(users, 'findById');
+    const findUsers = jest.spyOn(users, 'findByIds');
     const findAreas = jest.spyOn(areas, 'findByIds');
 
     const lookup = await references.lookup({
@@ -238,7 +197,11 @@ describe('DocumentReferences (T05)', () => {
       areaIds: [AREA_IDS.ventas, COMPRAS, AREA_IDS.ventas],
     });
 
-    expect(findUsers).toHaveBeenCalledTimes(2);
+    expect(findUsers).toHaveBeenCalledTimes(1);
+    expect(findUsers).toHaveBeenCalledWith([
+      FIXTURE_USERS.empleadoVentas.id,
+      FIXTURE_USERS.admin.id,
+    ]);
     expect(findAreas).toHaveBeenCalledTimes(1);
     expect(findAreas).toHaveBeenCalledWith([AREA_IDS.ventas, COMPRAS]);
     expect(lookup.user(FIXTURE_USERS.empleadoVentas.id)).toStrictEqual({
@@ -251,7 +214,7 @@ describe('DocumentReferences (T05)', () => {
 
   it('con listas vacías no llama a los directorios', async () => {
     const { users, areas, references } = build();
-    const findUsers = jest.spyOn(users, 'findById');
+    const findUsers = jest.spyOn(users, 'findByIds');
     const findAreas = jest.spyOn(areas, 'findByIds');
 
     const lookup = await references.lookup({ userIds: [], areaIds: [] });
@@ -286,7 +249,7 @@ describe('DocumentReferences (T05)', () => {
       const { users, areas, references } = build();
       const error = new RepositoryUnavailableError('caído');
       if (which === 'usuarios') {
-        jest.spyOn(users, 'findById').mockRejectedValue(error);
+        jest.spyOn(users, 'findByIds').mockRejectedValue(error);
       } else {
         jest.spyOn(areas, 'findByIds').mockRejectedValue(error);
       }

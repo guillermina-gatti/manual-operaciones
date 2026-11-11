@@ -70,6 +70,15 @@ const MODULES_BY_ROLE: Record<Role, readonly ModuleCardConfig[]> = {
       ctaLabel: 'Ver documentos →',
     },
     {
+      id: 'procedimientos',
+      title: 'Procedimientos',
+      subtitle: 'Paso a paso de tu área',
+      description:
+        'Mirá los procedimientos publicados de tus áreas y repasá sus pasos antes de ejecutarlos.',
+      href: '/procedimientos',
+      ctaLabel: 'Ver procedimientos →',
+    },
+    {
       id: 'ejecuciones',
       title: 'Ejecuciones y recorridos',
       subtitle: 'Tu nido va tomando forma',
@@ -77,6 +86,14 @@ const MODULES_BY_ROLE: Record<Role, readonly ModuleCardConfig[]> = {
         'Elegí un procedimiento publicado para empezarlo desde cero o retomá paso a paso el que tenías en curso.',
       href: '/ejecuciones',
       ctaLabel: 'Ir a ejecuciones →',
+    },
+    {
+      id: 'mi-actividad',
+      title: 'Mi actividad',
+      subtitle: 'Tus recorridos',
+      description: 'Mirá cuánto tardás, tus recorridos completados y cuáles retomar.',
+      href: '/ejecuciones/mi-actividad',
+      ctaLabel: 'Ver mi actividad →',
     },
   ],
   SUPERVISOR: [
@@ -88,6 +105,15 @@ const MODULES_BY_ROLE: Record<Role, readonly ModuleCardConfig[]> = {
         'Consultá los manuales vigentes de tus áreas, revisá los documentos a tu cargo y buscá en su contenido.',
       href: '/documentos',
       ctaLabel: 'Ver documentos →',
+    },
+    {
+      id: 'procedimientos',
+      title: 'Procedimientos',
+      subtitle: 'Los de tus áreas',
+      description:
+        'Consultá los procedimientos publicados de tus áreas y sus pasos, tal como los siguen tus equipos.',
+      href: '/procedimientos',
+      ctaLabel: 'Ver procedimientos →',
     },
     {
       id: 'metricas',
@@ -108,6 +134,15 @@ const MODULES_BY_ROLE: Record<Role, readonly ModuleCardConfig[]> = {
         'Accedé a los documentos de todas las áreas, administrá su ciclo de vida, versiones e historial.',
       href: '/documentos',
       ctaLabel: 'Ver documentos →',
+    },
+    {
+      id: 'procedimientos',
+      title: 'Procedimientos',
+      subtitle: 'Crear y editar',
+      description:
+        'Creá procedimientos, armá sus pasos, asignalos a áreas y publicá nuevas versiones.',
+      href: '/procedimientos',
+      ctaLabel: 'Gestionar procedimientos →',
     },
     {
       id: 'metricas',

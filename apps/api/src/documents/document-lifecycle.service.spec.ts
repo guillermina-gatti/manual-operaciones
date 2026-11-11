@@ -95,7 +95,7 @@ const documentRecord = (
 describe('DocumentLifecycleService', () => {
   let events: string[];
   let areas: { findByIds: jest.Mock };
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: {
     runInTransaction: jest.Mock;
     findByIdWithAreas: jest.Mock;
@@ -131,6 +131,9 @@ describe('DocumentLifecycleService', () => {
     users = {
       findById: jest.fn((id: string) =>
         Promise.resolve(fixtureUsers.find((user) => user.id === id) ?? null),
+      ),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(fixtureUsers.filter((user) => ids.includes(user.id))),
       ),
     };
     repository = {
@@ -409,6 +412,9 @@ describe('DocumentLifecycleService', () => {
         const fixtureUsers = [...Object.values(FIXTURE_USERS), inactiveOwner];
         users.findById.mockImplementation((id: string) =>
           Promise.resolve(fixtureUsers.find((user) => user.id === id) ?? null),
+        );
+        users.findByIds.mockImplementation((ids: string[]) =>
+          Promise.resolve(fixtureUsers.filter((user) => ids.includes(user.id))),
         );
       });
 
@@ -1032,7 +1038,7 @@ describe('DocumentLifecycleService.markReviewed (R6 a R9)', () => {
     });
 
   let events: string[];
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: {
     runInTransaction: jest.Mock;
     findByIdWithAreas: jest.Mock;
@@ -1052,6 +1058,9 @@ describe('DocumentLifecycleService.markReviewed (R6 a R9)', () => {
     users = {
       findById: jest.fn((id: string) =>
         Promise.resolve(fixtureUsers.find((user) => user.id === id) ?? null),
+      ),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(fixtureUsers.filter((user) => ids.includes(user.id))),
       ),
     };
     repository = {
@@ -1446,7 +1455,7 @@ describe('DocumentLifecycleService: referencias con nombre (spec 008)', () => {
 
   let events: string[];
   let areas: InMemoryAreasDirectory;
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: {
     runInTransaction: jest.Mock;
     findByIdWithAreas: jest.Mock;
@@ -1461,6 +1470,10 @@ describe('DocumentLifecycleService: referencias con nombre (spec 008)', () => {
     Promise.resolve(
       Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
     );
+  const manyFromFixtures = (ids: string[]) =>
+    Promise.resolve(
+      Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
+    );
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(NOON_IN_BUENOS_AIRES);
@@ -1474,6 +1487,10 @@ describe('DocumentLifecycleService: referencias con nombre (spec 008)', () => {
       findById: jest.fn((id: string) => {
         events.push(`user:${id}`);
         return fromFixtures(id);
+      }),
+      findByIds: jest.fn((ids: string[]) => {
+        ids.forEach((id) => events.push(`user:${id}`));
+        return manyFromFixtures(ids);
       }),
     };
     repository = {
@@ -1588,10 +1605,10 @@ describe('DocumentLifecycleService: referencias con nombre (spec 008)', () => {
       status: 'ARCHIVED',
       ownerId: OTHER_OWNER,
     });
-    users.findById.mockImplementation((id: string) =>
-      id === OTHER_OWNER
+    users.findByIds.mockImplementation((ids: string[]) =>
+      ids.includes(OTHER_OWNER)
         ? Promise.reject(new RepositoryUnavailableError('caído'))
-        : fromFixtures(id),
+        : manyFromFixtures(ids),
     );
 
     const response = await service.archive(DOCUMENT_ID, admin);

@@ -113,12 +113,16 @@ export function parseMetricsFilters(params: SearchParamsLike, today: string): Pa
   };
 }
 
-export function metricsHref({ areaId, from, to }: PanelFilters): string {
+// The same filters serve another page (the employee's own activity): `path` is where they go.
+export function metricsHref(
+  { areaId, from, to }: PanelFilters,
+  path: string = METRICS_PATH,
+): string {
   const params = new URLSearchParams();
   if (areaId) params.set('area', areaId);
   params.set('desde', from);
   params.set('hasta', to);
-  return `${METRICS_PATH}?${params.toString()}`;
+  return `${path}?${params.toString()}`;
 }
 
 // ADMIN: "Todas las áreas" and every area. SUPERVISOR: "Todas mis áreas" and only theirs (filterable,
@@ -139,19 +143,6 @@ export function areaOptions(
     options.push({ value: selected, label: 'Área elegida' });
   }
   return [{ value: '', label: isAdmin ? 'Todas las áreas' : 'Todas mis áreas' }, ...options];
-}
-
-// How many procedures with executions each area has. Only meaningful for an answer without an
-// area filter: with one, the other areas are not in it. A procedure with two areas counts in each
-// of them, as it is shown in both.
-export function proceduresPerArea(procedures: { areaIds: string[] }[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const procedure of procedures) {
-    for (const areaId of new Set(procedure.areaIds)) {
-      counts.set(areaId, (counts.get(areaId) ?? 0) + 1);
-    }
-  }
-  return counts;
 }
 
 const plural = (count: number, one: string, many: string) =>

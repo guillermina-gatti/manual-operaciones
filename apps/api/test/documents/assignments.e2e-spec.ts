@@ -1,4 +1,4 @@
-/* Spec 008 (T03): asignaciones con usuarios y áreas inactivos, de punta a punta (R5 a R11, E11 a E18 y E22) */
+/* Spec 008 (T03): asignaciones con usuarios y áreas inactivos, de punta a punta (R5 a R11, E11 a E18 y E22; E22 con D3 del 11/11/2026) */
 
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
@@ -43,6 +43,8 @@ describe('Asignaciones con usuarios y áreas inactivos (integración, spec 008)'
   let logistica: string;
   let ana: string;
   let bruno: string;
+  // Carla: EMPLOYEE de Ventas y de Compras (D6 del 11/11/2026: comparte un área activa).
+  let carla: string;
 
   const admin = authHeaders(FIXTURE_USERS.admin);
   const http = () => request(t.app.getHttpServer());
@@ -90,12 +92,17 @@ describe('Asignaciones con usuarios y áreas inactivos (integración, spec 008)'
       role: 'EMPLOYEE',
       areaIds: [compras],
     });
+    carla = await seedUser(t.prisma, {
+      name: 'Carla Díaz',
+      role: 'EMPLOYEE',
+      areaIds: [AREA_IDS.ventas, compras],
+    });
   });
 
   afterAll(async () => {
     await cleanDocuments(t.prisma);
     await deleteSeededDirectory(t.prisma, {
-      userIds: [ana, bruno],
+      userIds: [ana, bruno, carla],
       areaIds: [compras, logistica],
     });
     await t.app.close();
@@ -106,7 +113,9 @@ describe('Asignaciones con usuarios y áreas inactivos (integración, spec 008)'
     for (const area of [compras, logistica]) {
       await setAreaActive(t.prisma, area, true);
     }
-    for (const user of [ana, bruno]) await setUserActive(t.prisma, user, true);
+    for (const user of [ana, bruno, carla]) {
+      await setUserActive(t.prisma, user, true);
+    }
   });
 
   afterEach(() => {
@@ -289,18 +298,157 @@ describe('Asignaciones con usuarios y áreas inactivos (integración, spec 008)'
     );
   });
 
-  it('E22: un EMPLOYEE de un área inactiva sigue viendo sus documentos (la visibilidad no cambia)', async () => {
-    const doc = await seedDocument(t.prisma, { areaIds: [compras] });
+  // Spec 008, D6 (11/11/2026; era Q2): para ser responsable hay que compartir un área ACTIVA con el
+  // documento, o ser ADMIN. Las inactivas no cuentan, porque con A-SEC no dan acceso. También si el
+  // responsable no cambia (P5). El 400 es el mismo de un responsable sin acceso.
+  describe('el responsable tiene que compartir un área activa (D6)', () => {
+    const NO_ACCESS = 'ownerId: el responsable no comparte ningún área con el documento';
+
+    it('carga: un responsable que solo comparte un área inactiva → 400 y no se guarda nada', async () => {
+      // En la carga todas las áreas son agregadas, así que R7 rechaza el área inactiva antes de
+      // llegar al responsable: nunca se puede cargar con un área inactiva como la única compartida.
+      await setAreaActive(t.prisma, compras, false);
+      const put = jest.spyOn(t.storage, 'put');
+
+      const res = await upload({ areaIds: [compras], ownerId: bruno });
+
+      expect(res.status).toBe(400);
+      expect(messages(res.body as ErrorBody)).toContain(
+        `areaIds: están inactivas las áreas ${compras}`,
+      );
+      expect(await t.prisma.document.count()).toBe(0);
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it('carga: un responsable que comparte un área activa (y es de otra inactiva) → 201', async () => {
+      await setAreaActive(t.prisma, compras, false);
+
+      const res = await upload({ areaIds: [AREA_IDS.ventas], ownerId: carla });
+
+      expect(res.status).toBe(201);
+      expect((res.body as DocumentBody).ownerId).toBe(carla);
+    });
+
+    it('cambio de áreas sin ownerId (P5): el responsable que solo comparte un área inactiva → 400 y nada cambia', async () => {
+      const doc = await seedDocument(t.prisma, {
+        areaIds: [AREA_IDS.ventas, compras],
+        ownerId: bruno,
+      });
+      await setAreaActive(t.prisma, compras, false);
+
+      const res = await changeAreas(doc.id, {
+        areaIds: [AREA_IDS.ventas, compras, AREA_IDS.operaciones],
+      });
+
+      expect(res.status).toBe(400);
+      expect(messages(res.body as ErrorBody)).toContain(NO_ACCESS);
+      expect(await documentAreas(doc.id)).toEqual(
+        [AREA_IDS.ventas, compras].sort(),
+      );
+    });
+
+    it('cambio de áreas con un ownerId nuevo que solo comparte un área inactiva → 400 y el responsable no cambia', async () => {
+      const doc = await seedDocument(t.prisma, {
+        areaIds: [AREA_IDS.ventas, compras],
+        ownerId: ana,
+      });
+      await setAreaActive(t.prisma, compras, false);
+
+      const res = await changeAreas(doc.id, {
+        areaIds: [AREA_IDS.ventas, compras],
+        ownerId: bruno,
+      });
+
+      expect(res.status).toBe(400);
+      expect(messages(res.body as ErrorBody)).toContain(NO_ACCESS);
+      const stored = await t.prisma.document.findUniqueOrThrow({
+        where: { id: doc.id },
+      });
+      expect(stored.ownerId).toBe(ana);
+    });
+
+    it('cambio de áreas: el responsable que comparte un área activa se conserva → 200', async () => {
+      const doc = await seedDocument(t.prisma, {
+        areaIds: [AREA_IDS.ventas, compras],
+        ownerId: carla,
+      });
+      await setAreaActive(t.prisma, compras, false);
+
+      const res = await changeAreas(doc.id, {
+        areaIds: [AREA_IDS.ventas, compras, AREA_IDS.operaciones],
+      });
+
+      expect(res.status).toBe(200);
+      expect((res.body as DocumentBody).ownerId).toBe(carla);
+    });
+
+    it('cambio de áreas con un ownerId nuevo que comparte un área activa → 200', async () => {
+      const doc = await seedDocument(t.prisma, {
+        areaIds: [AREA_IDS.ventas, compras],
+        ownerId: ana,
+      });
+      await setAreaActive(t.prisma, compras, false);
+
+      const res = await changeAreas(doc.id, {
+        areaIds: [AREA_IDS.ventas, compras],
+        ownerId: carla,
+      });
+
+      expect(res.status).toBe(200);
+      expect((res.body as DocumentBody).ownerId).toBe(carla);
+    });
+  });
+
+  // D3 (11/11/2026): con A-SEC (pareja A, matriz A-02), un área inactiva ya no da acceso. El ADMIN
+  // sigue viendo todo, y la referencia al área inactiva se conserva (R4).
+  it('E22: si su única área está inactiva, el documento solo lo ve el ADMIN, con el área como referencia inactiva', async () => {
+    const doc = await seedDocument(t.prisma, {
+      areaIds: [compras],
+      title: 'Manual de compras',
+    });
     await setAreaActive(t.prisma, compras, false);
     const asBruno = authHeaders({ id: bruno, role: 'EMPLOYEE' });
 
     const list = await http().get('/api/documents').set(asBruno);
     const detail = await http().get(`/api/documents/${doc.id}`).set(asBruno);
+    const search = await http()
+      .get('/api/documents/search')
+      .query({ q: 'manual de compras' })
+      .set(asBruno);
 
     expect(list.status).toBe(200);
+    expect((list.body as { data: DocumentBody[] }).data).toEqual([]);
+    expect(detail.status).toBe(404);
+    expect(search.status).toBe(200);
+    expect((search.body as { total: number }).total).toBe(0);
+
+    const asAdmin = await http().get(`/api/documents/${doc.id}`).set(admin);
+    expect(asAdmin.status).toBe(200);
+    expect((asAdmin.body as { areas: unknown[] }).areas).toEqual([
+      { id: compras, name: expect.any(String), isActive: false },
+    ]);
+  });
+
+  it('E22: con un área activa y otra inactiva, lo ve quien está en la activa, no quien está solo en la inactiva', async () => {
+    const doc = await seedDocument(t.prisma, {
+      areaIds: [AREA_IDS.ventas, compras],
+    });
+    await setAreaActive(t.prisma, compras, false);
+
+    const asAna = await http()
+      .get(`/api/documents/${doc.id}`)
+      .set(authHeaders({ id: ana, role: 'EMPLOYEE' }));
+    const asBruno = await http()
+      .get(`/api/documents/${doc.id}`)
+      .set(authHeaders({ id: bruno, role: 'EMPLOYEE' }));
+
+    expect(asAna.status).toBe(200);
     expect(
-      (list.body as { data: DocumentBody[] }).data.map((d) => d.id),
-    ).toEqual([doc.id]);
-    expect(detail.status).toBe(200);
+      (asAna.body as { areas: { id: string; isActive: boolean }[] }).areas,
+    ).toEqual([
+      expect.objectContaining({ id: AREA_IDS.ventas, isActive: true }),
+      expect.objectContaining({ id: compras, isActive: false }),
+    ]);
+    expect(asBruno.status).toBe(404);
   });
 });

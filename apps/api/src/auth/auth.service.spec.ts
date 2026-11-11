@@ -1,8 +1,20 @@
-import { HttpException, HttpStatus, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  GoneException,
+  HttpException,
+  HttpStatus,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { InvitationsService } from '../users/invitations.service';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
 import { AuthService } from './auth.service';
 import { PasswordService } from './password.service';
@@ -19,16 +31,37 @@ describe('AuthService', () => {
     session: {
       findUnique: jest.Mock;
     };
+    $transaction: jest.Mock;
+  };
+
+  let mockTx: {
+    user: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+    };
+    userArea: {
+      createMany: jest.Mock;
+    };
   };
 
   let mockPasswordService: {
     compare: jest.Mock;
+    hash: jest.Mock;
+  };
+
+  let mockInvitationsService: {
+    validateToken: jest.Mock;
+    consumeInvitation: jest.Mock;
   };
 
   let mockRateLimiter: {
     assertAllowed: jest.Mock;
     recordFailure: jest.Mock;
     reset: jest.Mock;
+    assertInvitationValidationAllowed: jest.Mock;
+    recordInvitationValidationFailure: jest.Mock;
+    assertRegistrationAllowed: jest.Mock;
+    recordRegistrationFailure: jest.Mock;
   };
 
   let mockSessionService: {
@@ -61,6 +94,21 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    mockTx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(({ data }) => ({
+          id: VALID_USER_ID,
+          email: data.email,
+          name: data.name,
+          role: data.role,
+        })),
+      },
+      userArea: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+
     mockPrisma = {
       user: {
         findUnique: jest.fn(),
@@ -68,22 +116,35 @@ describe('AuthService', () => {
       session: {
         findUnique: jest.fn(),
       },
+      $transaction: jest.fn().mockImplementation(async (callback) => {
+        return callback(mockTx);
+      }),
     };
 
     mockPasswordService = {
       compare: jest.fn(),
+      hash: jest.fn().mockResolvedValue('$2b$10$hashedpasswordforexampleuser'),
+    };
+
+    mockInvitationsService = {
+      validateToken: jest.fn(),
+      consumeInvitation: jest.fn(),
     };
 
     mockRateLimiter = {
       assertAllowed: jest.fn().mockResolvedValue(undefined),
       recordFailure: jest.fn().mockResolvedValue(undefined),
       reset: jest.fn().mockResolvedValue(undefined),
+      assertInvitationValidationAllowed: jest.fn().mockResolvedValue(undefined),
+      recordInvitationValidationFailure: jest.fn().mockResolvedValue(undefined),
+      assertRegistrationAllowed: jest.fn().mockResolvedValue(undefined),
+      recordRegistrationFailure: jest.fn().mockResolvedValue(undefined),
     };
 
     mockSessionService = {
       createSession: jest.fn(),
       rotateSession: jest.fn(),
-      revokeSession: jest.fn(),
+      revokeSession: jest.fn().mockResolvedValue(true),
       revokeAllUserSessions: jest.fn(),
     };
 
@@ -107,6 +168,7 @@ describe('AuthService', () => {
         { provide: SessionService, useValue: mockSessionService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: InvitationsService, useValue: mockInvitationsService },
       ],
     }).compile();
 
@@ -536,6 +598,408 @@ describe('AuthService', () => {
         VALID_USER_ID,
       );
       expect(result).toEqual({ revokedCount: 4 });
+    });
+  });
+
+  describe('HU29 - validateInvitation()', () => {
+    const validToken = 'V1StGXR8_Z5jdHi6B-myTEYWgkUVnxI4463m48EEUIU';
+    const testIp = '192.168.1.10';
+
+    it('debe validar exitosamente una invitación activa retornando datos públicos', async () => {
+      mockInvitationsService.validateToken.mockResolvedValue({
+        id: 'inv-uuid-1',
+        email: 'nuevo@empresa.com',
+        role: 'EMPLOYEE',
+        expiresAt: new Date(Date.now() + 86400000),
+        areaIds: ['area-1'],
+      });
+
+      const result = await service.validateInvitation(validToken, testIp);
+
+      expect(mockRateLimiter.assertInvitationValidationAllowed).toHaveBeenCalledWith(testIp);
+      expect(mockInvitationsService.validateToken).toHaveBeenCalledWith(validToken);
+      expect(mockRateLimiter.recordInvitationValidationFailure).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        valid: true,
+        email: 'nuevo@empresa.com',
+        role: 'EMPLOYEE',
+      });
+    });
+
+    it('debe fallar con HTTP 429 si se excede el rate limit por IP', async () => {
+      mockRateLimiter.assertInvitationValidationAllowed.mockRejectedValue(
+        new HttpException(
+          { statusCode: HttpStatus.TOO_MANY_REQUESTS, error: 'Demasiadas consultas' },
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(service.validateInvitation(validToken, testIp)).rejects.toThrow(
+        HttpException,
+      );
+      expect(mockInvitationsService.validateToken).not.toHaveBeenCalled();
+    });
+
+    it('debe fallar con HTTP 503 si Redis está caído (Fail-Closed)', async () => {
+      mockRateLimiter.assertInvitationValidationAllowed.mockRejectedValue(
+        new ServiceUnavailableException('Servicio no disponible'),
+      );
+
+      await expect(service.validateInvitation(validToken, testIp)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(mockInvitationsService.validateToken).not.toHaveBeenCalled();
+    });
+
+    it('debe registrar fallo en rate limiter y lanzar NotFoundException si el token no existe', async () => {
+      mockInvitationsService.validateToken.mockRejectedValue(
+        new NotFoundException('Invitación no encontrada'),
+      );
+
+      await expect(service.validateInvitation(validToken, testIp)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockRateLimiter.recordInvitationValidationFailure).toHaveBeenCalledWith(testIp);
+    });
+
+    it('debe registrar fallo en rate limiter y lanzar GoneException si el token está expirado', async () => {
+      mockInvitationsService.validateToken.mockRejectedValue(
+        new GoneException('La invitación ha expirado'),
+      );
+
+      await expect(service.validateInvitation(validToken, testIp)).rejects.toThrow(
+        GoneException,
+      );
+      expect(mockRateLimiter.recordInvitationValidationFailure).toHaveBeenCalledWith(testIp);
+    });
+
+    it('debe registrar fallo en rate limiter y lanzar GoneException si el token fue revocado', async () => {
+      mockInvitationsService.validateToken.mockRejectedValue(
+        new GoneException('La invitación fue revocada'),
+      );
+
+      await expect(service.validateInvitation(validToken, testIp)).rejects.toThrow(
+        GoneException,
+      );
+      expect(mockRateLimiter.recordInvitationValidationFailure).toHaveBeenCalledWith(testIp);
+    });
+
+    it('debe registrar fallo en rate limiter y lanzar GoneException si el token ya fue utilizado', async () => {
+      mockInvitationsService.validateToken.mockRejectedValue(
+        new GoneException('La invitación ya fue utilizada'),
+      );
+
+      await expect(service.validateInvitation(validToken, testIp)).rejects.toThrow(
+        GoneException,
+      );
+      expect(mockRateLimiter.recordInvitationValidationFailure).toHaveBeenCalledWith(testIp);
+    });
+
+    it('debe registrar fallo en rate limiter y lanzar BadRequestException si el token es inválido', async () => {
+      mockInvitationsService.validateToken.mockRejectedValue(
+        new BadRequestException('Token de invitación inválido'),
+      );
+
+      await expect(service.validateInvitation('token_corto', testIp)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockRateLimiter.recordInvitationValidationFailure).toHaveBeenCalledWith(testIp);
+    });
+  });
+
+  describe('HU29 - registerWithInvitation()', () => {
+    const validToken = 'V1StGXR8_Z5jdHi6B-myTEYWgkUVnxI4463m48EEUIU';
+    const testIp = '192.168.1.50';
+    const registerDto = {
+      token: validToken,
+      name: '  Elena Empleada  ',
+      password: 'PasswordSeguro2026!',
+    };
+    const metadata = {
+      ipAddress: testIp,
+      userAgent: 'Mozilla/5.0 TestAgent',
+    };
+    const mockValidatedInv = {
+      id: 'inv-uuid-100',
+      email: 'elena@empresa.com',
+      role: 'EMPLOYEE' as const,
+      expiresAt: new Date(Date.now() + 86400000),
+      areaIds: ['area-dep-1', 'area-dep-2'],
+    };
+
+    beforeEach(() => {
+      mockInvitationsService.validateToken.mockResolvedValue(mockValidatedInv);
+      mockInvitationsService.consumeInvitation.mockResolvedValue(mockValidatedInv);
+      mockSessionService.createSession.mockResolvedValue({
+        refreshToken: 'fresh-refresh-token-session-12345678901234567890',
+        session: {
+          id: VALID_SESSION_ID,
+          userId: VALID_USER_ID,
+          expiresAt: new Date(Date.now() + 604800000),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          userAgent: metadata.userAgent,
+          ipAddress: metadata.ipAddress,
+        },
+      });
+      mockJwtService.signAsync.mockResolvedValue('fresh-signed-jwt-access-token');
+    });
+
+    it('debe registrar exitosamente un usuario consumiendo la invitación y creando sesión', async () => {
+      const result = await service.registerWithInvitation(registerDto, metadata);
+
+      // 1. Rate limiter
+      expect(mockRateLimiter.assertRegistrationAllowed).toHaveBeenCalledWith(testIp, validToken);
+
+      // 2. Pre-validación
+      expect(mockInvitationsService.validateToken).toHaveBeenCalledWith(validToken);
+
+      // 3. Bcrypt
+      expect(mockPasswordService.hash).toHaveBeenCalledWith('PasswordSeguro2026!');
+
+      // 4. Transacción Prisma
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(mockInvitationsService.consumeInvitation).toHaveBeenCalledWith(validToken, mockTx);
+      expect(mockTx.user.create).toHaveBeenCalledWith({
+        data: {
+          email: 'elena@empresa.com',
+          name: 'Elena Empleada',
+          passwordHash: '$2b$10$hashedpasswordforexampleuser',
+          role: 'EMPLOYEE',
+          isActive: true,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
+      });
+      expect(mockTx.userArea.createMany).toHaveBeenCalledWith({
+        data: [
+          { userId: VALID_USER_ID, areaId: 'area-dep-1' },
+          { userId: VALID_USER_ID, areaId: 'area-dep-2' },
+        ],
+      });
+
+      // 5. Sesión y JWT post-commit
+      expect(mockSessionService.createSession).toHaveBeenCalledWith({
+        userId: VALID_USER_ID,
+        userAgent: metadata.userAgent,
+        ipAddress: metadata.ipAddress,
+      });
+      expect(mockJwtService.signAsync).toHaveBeenCalled();
+
+      // 6. Resultado
+      expect(result).toEqual({
+        accessToken: 'fresh-signed-jwt-access-token',
+        refreshToken: 'fresh-refresh-token-session-12345678901234567890',
+        user: {
+          id: VALID_USER_ID,
+          name: 'Elena Empleada',
+          email: 'elena@empresa.com',
+          role: 'EMPLOYEE',
+        },
+      });
+    });
+
+    it('debe verificar que bcrypt (passwordService.hash) se ejecuta estrictamente ANTES de prisma.$transaction', async () => {
+      await service.registerWithInvitation(registerDto, metadata);
+
+      const hashOrder = mockPasswordService.hash.mock.invocationCallOrder[0];
+      const txOrder = mockPrisma.$transaction.mock.invocationCallOrder[0];
+
+      expect(hashOrder).toBeDefined();
+      expect(txOrder).toBeDefined();
+      expect(hashOrder).toBeLessThan(txOrder);
+    });
+
+    it('no debe llamar a userArea.createMany si la invitación no contiene áreas (ej. ADMIN)', async () => {
+      const adminInv = { ...mockValidatedInv, role: 'ADMIN' as const, areaIds: [] };
+      mockInvitationsService.validateToken.mockResolvedValue(adminInv);
+      mockInvitationsService.consumeInvitation.mockResolvedValue(adminInv);
+
+      await service.registerWithInvitation(registerDto, metadata);
+
+      expect(mockTx.userArea.createMany).not.toHaveBeenCalled();
+      expect(mockTx.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ role: 'ADMIN' }),
+        }),
+      );
+    });
+
+    it('debe fallar con HTTP 429 si el rate limiter bloquea la solicitud de registro', async () => {
+      mockRateLimiter.assertRegistrationAllowed.mockRejectedValue(
+        new HttpException(
+          { statusCode: HttpStatus.TOO_MANY_REQUESTS, error: 'Demasiados intentos' },
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        HttpException,
+      );
+
+      expect(mockInvitationsService.validateToken).not.toHaveBeenCalled();
+      expect(mockPasswordService.hash).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('debe fallar con HTTP 503 si Redis no está disponible (Fail-Closed)', async () => {
+      mockRateLimiter.assertRegistrationAllowed.mockRejectedValue(
+        new ServiceUnavailableException('Redis caído'),
+      );
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+
+      expect(mockInvitationsService.validateToken).not.toHaveBeenCalled();
+    });
+
+    it('debe registrar fallo y abortar sin hash ni transacción si la pre-validación falla', async () => {
+      mockInvitationsService.validateToken.mockRejectedValue(
+        new GoneException('La invitación ha expirado'),
+      );
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        GoneException,
+      );
+
+      expect(mockRateLimiter.recordRegistrationFailure).toHaveBeenCalledWith(testIp, validToken);
+      expect(mockPasswordService.hash).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('debe manejar concurrencia CAS (409 Conflict): solo una solicitud concurrente completa el registro', async () => {
+      mockInvitationsService.consumeInvitation.mockRejectedValue(
+        new ConflictException('La invitación ya fue consumida por otra solicitud concurrente'),
+      );
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        ConflictException,
+      );
+
+      expect(mockRateLimiter.recordRegistrationFailure).toHaveBeenCalledWith(testIp, validToken);
+      expect(mockTx.user.create).not.toHaveBeenCalled();
+      expect(mockSessionService.createSession).not.toHaveBeenCalled();
+    });
+
+    it('debe lanzar ConflictException si el correo electrónico ya existe registrado en la base de datos', async () => {
+      mockTx.user.findUnique.mockResolvedValue({ id: 'existing-id', email: 'elena@empresa.com' });
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        ConflictException,
+      );
+
+      expect(mockRateLimiter.recordRegistrationFailure).toHaveBeenCalledWith(testIp, validToken);
+      expect(mockTx.user.create).not.toHaveBeenCalled();
+    });
+
+    it('debe propagar el error y abortar sin crear sesión si tx.user.create() falla', async () => {
+      mockTx.user.create.mockRejectedValue(new Error('Error de conexión al insertar usuario'));
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        'Error de conexión al insertar usuario',
+      );
+
+      expect(mockRateLimiter.recordRegistrationFailure).toHaveBeenCalledWith(testIp, validToken);
+      expect(mockSessionService.createSession).not.toHaveBeenCalled();
+    });
+
+    it('debe propagar el error y abortar sin crear sesión si tx.userArea.createMany() falla', async () => {
+      mockTx.userArea.createMany.mockRejectedValue(new Error('Fallo al asociar áreas'));
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        'Fallo al asociar áreas',
+      );
+
+      expect(mockRateLimiter.recordRegistrationFailure).toHaveBeenCalledWith(testIp, validToken);
+      expect(mockSessionService.createSession).not.toHaveBeenCalled();
+    });
+
+    it('debe mapear el error P2002 de Prisma a ConflictException (409) controlado únicamente si el target es email', async () => {
+      const prismaP2002Error = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on email',
+        { code: 'P2002', meta: { target: ['email'] }, clientVersion: '5.0.0' },
+      );
+      mockTx.user.create.mockRejectedValue(prismaP2002Error);
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        ConflictException,
+      );
+
+      expect(mockRateLimiter.recordRegistrationFailure).toHaveBeenCalledWith(testIp, validToken);
+    });
+
+    it('no debe atribuir falsamente duplicado de email si P2002 ocurre en otra restricción que no es email', async () => {
+      const otherP2002Error = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on other_key',
+        { code: 'P2002', meta: { target: ['other_key'] }, clientVersion: '5.0.0' },
+      );
+      mockTx.user.create.mockRejectedValue(otherP2002Error);
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        otherP2002Error,
+      );
+      expect(mockRateLimiter.recordRegistrationFailure).toHaveBeenCalledWith(testIp, validToken);
+    });
+
+    it('debe lanzar ServiceUnavailableException si falla la creación de sesión post-commit sin revertir el usuario', async () => {
+      mockSessionService.createSession.mockRejectedValue(
+        new Error('Conexión perdida al crear sesión'),
+      );
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+
+      // Verificamos que la transacción ya se confirmó
+      expect(mockTx.user.create).toHaveBeenCalled();
+      // Verificamos que no se intentó revocar sesiones porque ninguna fue creada
+      expect(mockSessionService.revokeSession).not.toHaveBeenCalled();
+    });
+
+    it('debe revocar la sesión creada si falla la emisión del JWT post-commit para no dejar sesiones huérfanas', async () => {
+      mockJwtService.signAsync.mockRejectedValue(new Error('Fallo firma JWT'));
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+
+      // Verificamos que la sesión huérfana fue revocada
+      expect(mockSessionService.revokeSession).toHaveBeenCalledWith(VALID_SESSION_ID);
+    });
+
+    it('debe registrar un incidente crítico si la emisión de JWT falla y también falla la revocación compensatoria de sesión', async () => {
+      const loggerErrorSpy = jest.spyOn(Logger.prototype, 'error');
+      mockJwtService.signAsync.mockRejectedValue(new Error('Fallo firma JWT'));
+      mockSessionService.revokeSession.mockRejectedValue(new Error('Fallo de conexión en revoke'));
+
+      await expect(service.registerWithInvitation(registerDto, metadata)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+
+      expect(mockSessionService.revokeSession).toHaveBeenCalledWith(VALID_SESSION_ID);
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('CRITICAL_INCIDENT: Falló la revocación compensatoria de la sesión huérfana tras error de JWT'),
+      );
+    });
+
+    it('no debe exponer el token plano ni la contraseña en respuestas de error ni logs', async () => {
+      mockInvitationsService.consumeInvitation.mockRejectedValue(
+        new Error('Database disk error'),
+      );
+
+      try {
+        await service.registerWithInvitation(registerDto, metadata);
+        fail('Se esperaba error');
+      } catch (err: unknown) {
+        const errorMsg = (err as Error).message;
+        expect(errorMsg).not.toContain(registerDto.password);
+        expect(errorMsg).not.toContain(validToken);
+      }
     });
   });
 });

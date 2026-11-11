@@ -7,6 +7,7 @@ import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
 import { createExecutionsApi } from './executions';
 import { createMetricsApi } from './metrics';
+import { createMyMetricsApi } from './my-metrics';
 
 // El cliente que usan las pantallas: cada pedido lleva el Bearer de la sesión y, si el token
 // venció (401), se renueva una vez y se repite.
@@ -65,11 +66,15 @@ export const { startExecution, getExecution, completeStep } = createExecutionsAp
 export type { ExecutionResponse, ExecutionStatus, ExecutionStepResponse } from './executions';
 export { describeExecutionError, EXECUTION_MESSAGES } from './execution-errors';
 export type { ExecutionErrorContext, ExecutionErrorDescription } from './execution-errors';
+// HU33: restarting an execution on the current version of its procedure.
+export const { restartExecution } = createExecutionsApi(apiClient);
+export type { PublishedChangeResponse, VersionChangeResponse } from './executions';
 
 // HU38: the calls to /api/metrics/procedures, with the same client.
 export const { getProcedureMetrics } = createMetricsApi(apiClient);
 export { metricsQuery } from './metrics';
 export type {
+  AreaSummaryResponse,
   ExecutionCounts,
   MetricsFilters,
   ProcedureMetricsResponse,
@@ -79,6 +84,16 @@ export type {
 } from './metrics';
 export { describeMetricsError, METRICS_MESSAGES } from './metrics-errors';
 export type { MetricsErrorDescription } from './metrics-errors';
+
+// The employee's own activity: GET /api/metrics/me, with the same client.
+export const { getMyMetrics } = createMyMetricsApi(apiClient);
+export type {
+  MyMetricsResponse,
+  MyMetricsTotals,
+  MyProcedureMetrics,
+  MyResumeItem,
+} from './my-metrics';
+export { describeMyMetricsError, MY_METRICS_MESSAGES } from './metrics-errors';
 
 // Spec 009 (HU20): POST /api/chat/stream, con el mismo cliente.
 export const { askStream } = createChatApi(apiClient);

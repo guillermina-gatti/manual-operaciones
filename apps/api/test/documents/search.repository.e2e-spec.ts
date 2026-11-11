@@ -155,10 +155,15 @@ describe('PrismaDocumentsRepository.search (integración)', () => {
       expect(ids(await search('procedimientos'))).toEqual([document.id]);
     });
 
-    it('D16: dos palabras en fragmentos distintos no alcanzan', async () => {
-      await documentWith(['El cierre del turno', 'La caja chica']);
+    // R13 (11/11/2026): no alcanzan para la búsqueda con todas las palabras; el documento aparece
+    // como resultado aproximado.
+    it('D16: dos palabras en fragmentos distintos no alcanzan: el resultado es aproximado', async () => {
+      const document = await documentWith(['El cierre del turno', 'La caja chica']);
 
-      expect((await search('cierre caja')).total).toBe(0);
+      const page = await search('cierre caja');
+
+      expect(page.approximate).toBe(true);
+      expect(ids(page)).toEqual([document.id]);
     });
 
     it('D16: las dos palabras en el título, o entre el título y la descripción, sí', async () => {
@@ -176,7 +181,7 @@ describe('PrismaDocumentsRepository.search (integración)', () => {
     it('solo palabras que el español ignora: sin resultados y sin error', async () => {
       await documentWith(['de la para con'], { title: 'de la para' });
 
-      expect(await search('de la para')).toEqual({ data: [], total: 0 });
+      expect(await search('de la para')).toEqual({ data: [], total: 0, approximate: false });
     });
   });
 
@@ -304,7 +309,7 @@ describe('PrismaDocumentsRepository.search (integración)', () => {
 
       expect(second.data).toHaveLength(5);
       expect(second.total).toBe(25);
-      expect(beyond).toEqual({ data: [], total: 25 });
+      expect(beyond).toEqual({ data: [], total: 25, approximate: false });
     });
   });
 
@@ -350,6 +355,152 @@ describe('PrismaDocumentsRepository.search (integración)', () => {
     });
   });
 
+  // Spec 004 (R13, 11/11/2026): si ningún documento tiene todas las palabras, los que tienen alguna,
+  // primero los que cubren más, con approximate. La búsqueda con todas las palabras no cambia.
+  describe('resultados aproximados (R13)', () => {
+    it('con un documento que tiene todas las palabras, solo ese y approximate: false', async () => {
+      const completo = await documentWith(['El cierre de caja diario']);
+      await documentWith(['La caja chica']);
+
+      const page = await search('cierre de caja');
+
+      expect(page).toMatchObject({ total: 1, approximate: false });
+      expect(ids(page)).toEqual([completo.id]);
+    });
+
+    it('sin ninguno con todas, los que tienen alguna, primero los que cubren más', async () => {
+      const una = await documentWith(['La caja chica'], { createdAt: new Date('2026-03-01T10:00:00Z') });
+      const tres = await documentWith(['Cierre de caja del turno noche'], {
+        createdAt: new Date('2026-01-01T10:00:00Z'),
+      });
+      const dos = await documentWith(['El cierre de caja'], { createdAt: new Date('2026-02-01T10:00:00Z') });
+      await documentWith(['Control de stock']);
+
+      const page = await search('cierre de caja turno mañana');
+
+      expect(page).toMatchObject({ total: 3, approximate: true });
+      expect(ids(page)).toEqual([tres.id, dos.id, una.id]);
+      expect(page.data[0].fragment?.markedText).toContain(mark('turno'));
+    });
+
+    it('cubrir más palabras pesa más que una palabra en el título o una palabra muy repetida', async () => {
+      const tres = await documentWith(['Cierre de caja del turno'], {
+        createdAt: new Date('2026-01-01T10:00:00Z'),
+      });
+      const titulo = await documentWith(['Otro tema'], {
+        title: 'Caja',
+        createdAt: new Date('2026-02-01T10:00:00Z'),
+      });
+      const repetida = await documentWith(['caja caja caja caja caja caja caja caja'], {
+        createdAt: new Date('2026-03-01T10:00:00Z'),
+      });
+
+      const page = await search('cierre caja turno noche');
+
+      expect(page.approximate).toBe(true);
+      expect(ids(page)[0]).toBe(tres.id);
+      expect(ids(page).slice(1).sort()).toEqual([titulo.id, repetida.id].sort());
+    });
+
+    it('cuenta las palabras del título y la descripción, o las de un mismo fragmento, la mayor', async () => {
+      const titulo = await documentWith(['Otro tema'], {
+        title: 'Cierre del turno',
+        description: 'Caja chica',
+      });
+      const fragmento = await documentWith(['El cierre de caja']);
+
+      const page = await search('cierre caja turno noche');
+
+      expect(page.approximate).toBe(true);
+      expect(ids(page)).toEqual([titulo.id, fragmento.id]);
+      expect(page.data[1].fragment?.markedText).toBe(`El ${mark('cierre')} de ${mark('caja')}`);
+    });
+
+    it('el caso de los auriculares (HU36): la pregunta entera encuentra la política', async () => {
+      const politica = await documentWith(
+        [
+          'El cliente puede devolver un producto dentro de los 30 días corridos desde la compra.',
+          'Los productos electrónicos (celulares, auriculares, parlantes) tienen 7 días corridos para devolverse.',
+        ],
+        { title: 'Política de devoluciones' },
+      );
+
+      const page = await search('¿Puedo devolver unos auriculares que compré hace 10 días?');
+
+      expect(page.approximate).toBe(true);
+      expect(ids(page)).toEqual([politica.id]);
+    });
+
+    it('una sola palabra sin resultados: no es aproximado', async () => {
+      await documentWith(['La caja chica']);
+
+      expect(await search('inventario')).toEqual({ data: [], total: 0, approximate: false });
+    });
+
+    it('sin ninguna palabra en ningún documento: vacío y no aproximado', async () => {
+      await documentWith(['La caja chica']);
+
+      expect(await search('inventario mensual')).toEqual({ data: [], total: 0, approximate: false });
+    });
+
+    it('pagina y cuenta igual que la búsqueda con todas las palabras (R10)', async () => {
+      for (let i = 0; i < 3; i++) {
+        await documentWith([`Caja ${i}`], { createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)) });
+      }
+
+      const second = await search('caja turno', ALL, 2, 2);
+
+      expect(second).toMatchObject({ total: 3, approximate: true });
+      expect(second.data).toHaveLength(1);
+    });
+
+    describe('la visibilidad sigue igual (R2, R3, D5)', () => {
+      it('E5: un documento de Operaciones no aparece con el alcance de Ventas', async () => {
+        const operaciones = await documentWith(['Control de inventario'], {
+          areaIds: [AREA_IDS.operaciones],
+        });
+
+        expect(await search('inventario mensual', VENTAS)).toMatchObject({ total: 0, approximate: false });
+        expect(ids(await search('inventario mensual', { areaIds: [AREA_IDS.operaciones] }))).toEqual([
+          operaciones.id,
+        ]);
+      });
+
+      it('E7: un documento ARCHIVED no aparece, ni por contenido ni por título', async () => {
+        await documentWith(['El procedimiento antiguo'], { status: 'ARCHIVED', title: 'Procedimiento antiguo' });
+
+        expect((await search('procedimiento nuevo', ALL)).total).toBe(0);
+      });
+
+      it('defensa: un fragmento activo de una versión REPLACED no aparece', async () => {
+        const document = await documentWith(['La tarifa vieja']);
+        await replaceWithoutDeactivating(document.id);
+
+        expect((await search('tarifa nueva', ALL)).total).toBe(0);
+      });
+
+      it('defensa: un fragmento con area_ids de otra área no aparece para quien no es ADMIN', async () => {
+        const document = await documentWith(['Control de stock'], { chunkAreaIds: [AREA_IDS.operaciones] });
+
+        expect((await search('stock mensual', VENTAS)).total).toBe(0);
+        expect(ids(await search('stock mensual', ALL))).toEqual([document.id]);
+      });
+
+      it('un fragmento inactivo no aparece', async () => {
+        const document = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+        await seedProcessedVersion(prisma, {
+          documentId: document.id,
+          versionId: document.versionId,
+          areaIds: [AREA_IDS.ventas],
+          contents: ['Control de stock'],
+          isActive: false,
+        });
+
+        expect((await search('stock mensual', ALL)).total).toBe(0);
+      });
+    });
+  });
+
   describe('índice (sección 9 de la spec)', () => {
     // Con pocos datos, el planificador prefiere ir a los fragmentos por versión, o por área si filtra
     // por áreas: otros índices, que tampoco recorren la tabla. Con el alcance del ADMIN (sin filtro de
@@ -365,6 +516,21 @@ describe('PrismaDocumentsRepository.search (integración)', () => {
         return tx.$queryRaw<{ 'QUERY PLAN': string }[]>(
           Prisma.sql`EXPLAIN ${query}`,
         );
+      });
+
+      expect(plan.map((row) => row['QUERY PLAN']).join('\n')).toContain(
+        'chunks_content_fts_es_unaccent_idx',
+      );
+    });
+
+    it('R13: la búsqueda con cualquiera de las palabras también puede usarlo', async () => {
+      await documentWith(['caja']);
+      const query = searchRankingSql({ text: 'caja turno', scope: ALL, page: 1, limit: 20 }, 'any');
+
+      const plan = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SET LOCAL enable_seqscan = off`;
+        await tx.$executeRaw`SET LOCAL enable_nestloop = off`;
+        return tx.$queryRaw<{ 'QUERY PLAN': string }[]>(Prisma.sql`EXPLAIN ${query}`);
       });
 
       expect(plan.map((row) => row['QUERY PLAN']).join('\n')).toContain(

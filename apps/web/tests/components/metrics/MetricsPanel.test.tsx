@@ -21,6 +21,7 @@ vi.setConfig({ testTimeout: 15_000 });
 const mocks = vi.hoisted(() => ({
   getProcedureMetrics: vi.fn(),
   getDocuments: vi.fn(),
+  getAssistant: vi.fn(),
   useSession: vi.fn(),
   listAreas: vi.fn(),
   push: vi.fn(),
@@ -35,7 +36,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 vi.mock('@/lib/metrics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/metrics')>()),
   teamCMetrics: {
-    getAssistant: () => Promise.resolve(null),
+    getAssistant: mocks.getAssistant,
     getDocuments: mocks.getDocuments,
   },
 }));
@@ -75,6 +76,22 @@ beforeEach(() => {
   mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(ANA);
   mocks.getProcedureMetrics.mockResolvedValue(metricsResponse());
+  mocks.getAssistant.mockResolvedValue({
+    filters: { areaId: null, from: '2026-09-28', to: '2026-10-27' },
+    totals: {
+      questions: 9,
+      answered: 5,
+      noInfo: 2,
+      conflict: 1,
+      aiUnavailable: 1,
+      smallTalk: 3,
+      latencyP50Ms: 2400,
+      latencyP95Ms: null,
+      inputTokens: 9000,
+      outputTokens: 1500,
+      feedback: { useful: 4, notUseful: 1 },
+    },
+  });
   mocks.getDocuments.mockResolvedValue({
     filters: { areaId: null, from: '2026-09-28', to: '2026-10-27' },
     totals: { active: 12, upToDate: 8, dueSoon: 3, overdue: 1, processingFailed: 0, uploaded: 4 },
@@ -169,7 +186,9 @@ describe('loading and filters', () => {
   test('SUPERVISOR chooses only among their areas', async () => {
     const user = userEvent.setup();
     mocks.useSession.mockReturnValue(SERGIO);
-    mocks.getProcedureMetrics.mockResolvedValue(metricsResponse({ areaIds: [VENTAS] }));
+    mocks.getProcedureMetrics.mockResolvedValue(
+      metricsResponse({ areaIds: [VENTAS], areaSummary: [{ areaId: VENTAS, procedures: 1 }] }),
+    );
     render(<MetricsPanel />);
 
     await procedureCard();
@@ -186,6 +205,7 @@ describe('loading and filters', () => {
     mocks.getProcedureMetrics.mockResolvedValue({
       ...metrics,
       procedures: metrics.procedures.filter((procedure) => procedure.areaIds.includes(VENTAS)),
+      areaSummary: [{ areaId: VENTAS, procedures: 1 }],
     });
     render(<MetricsPanel />);
 
@@ -194,14 +214,27 @@ describe('loading and filters', () => {
     expect(await optionTexts(user)).toContain('Operaciones · Sin datos');
   });
 
-  test('with an area chosen, the other areas show no counts', async () => {
+  test('with an area chosen, every area keeps its count from the summary', async () => {
     const user = userEvent.setup();
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    const metrics = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...metrics,
+      procedures: metrics.procedures.filter((procedure) => procedure.areaIds.includes(VENTAS)),
+      areaSummary: [
+        { areaId: VENTAS, procedures: 1 },
+        { areaId: OPERACIONES, procedures: 3 },
+      ],
+    });
     render(<MetricsPanel />);
 
     await procedureCard();
     await waitFor(() => expect(areaButton()).toHaveTextContent('Ventas'));
-    expect(await optionTexts(user)).toEqual(['Todas las áreas · 2 áreas', 'Ventas', 'Operaciones']);
+    expect(await optionTexts(user)).toEqual([
+      'Todas las áreas · 2 áreas',
+      'Ventas · 1 procedimiento',
+      'Operaciones · 3 procedimientos',
+    ]);
   });
 
   test('choosing an area applies it at once, with the loaded dates', async () => {
@@ -361,11 +394,37 @@ describe('with data', () => {
     expect(tile('Completadas')).toHaveTextContent('360,0% del total');
     expect(tile('En curso')).toHaveTextContent('120,0% del total');
     expect(tile('Abandonadas')).toHaveTextContent('120,0% del total');
-    // (12 min × 2 + 5 min × 1) ÷ 3 completed.
+    // totals.avgCompletionMs: (12 min × 2 + 5 min × 1) ÷ 3 completed.
     expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 spor ejecución completada');
     expect(
       screen.getByText(/^En curso: con avance en las últimas 24 h\. Abandonadas: sin avanzar/),
     ).toBeInTheDocument();
+  });
+
+  test('a procedure with a title from the API shows it instead of the sample name', async () => {
+    const answer = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...answer,
+      procedures: answer.procedures.map((p, i) => (i === 0 ? { ...p, title: 'Arqueo de caja' } : p)),
+    });
+    render(<MetricsPanel />);
+
+    expect(await screen.findByRole('article', { name: 'Arqueo de caja' })).toBeInTheDocument();
+    const table = screen.getByRole('table', { name: 'Tiempo por procedimiento' });
+    expect(within(table).getAllByRole('rowheader')[0]).toHaveTextContent('Arqueo de caja');
+  });
+
+  test('the average time of the summary is the one of the totals, not one computed here', async () => {
+    const answer = metricsResponse();
+    mocks.getProcedureMetrics.mockResolvedValue({
+      ...answer,
+      totals: { ...answer.totals, avgCompletionMs: 123000 },
+    });
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const tile = screen.getAllByText('Tiempo medio', { selector: 'dt' })[0].parentElement!;
+    expect(tile).toHaveTextContent('2 min 3 s');
   });
 
   test('the distribution bar tells the counts as text, and the legend only counts', async () => {
@@ -485,11 +544,11 @@ describe('with data', () => {
     expect(cells).toEqual(['3', '0', '0', '0', '—']);
   });
 
-  test('"Procedimiento completo" shows the time only with a single version', async () => {
+  test('"Procedimiento completo" shows the time of each version', async () => {
     render(<MetricsPanel />);
     const card = await procedureCard();
 
-    // Cierre de caja has two versions in the period: no time per version.
+    // Cierre de caja has two versions in the period: each one with its own time.
     const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
     const complete = within(table).getByRole('row', { name: /Procedimiento completo/ });
     expect(within(complete).getByRole('rowheader')).toHaveTextContent(
@@ -500,8 +559,19 @@ describe('with data', () => {
       '3',
       '1',
       '1',
-      '—',
+      '14 min',
     ]);
+    const older = within(card).getByRole('table', {
+      name: 'Versión anterior 1 de Cierre de caja',
+      hidden: true,
+    });
+    const olderComplete = within(older).getByRole('row', {
+      name: /Procedimiento completo/,
+      hidden: true,
+    });
+    expect(within(olderComplete).getAllByRole('cell', { hidden: true }).at(-1)).toHaveTextContent(
+      '10 min',
+    );
 
     // Recepción de mercadería has one: its average time.
     const recepcion = screen.getByRole('table', { name: 'Pasos de Recepción de mercadería' });
@@ -647,12 +717,44 @@ describe('metrics of pair C', () => {
     expect(cards).toEqual(['Documentos', 'Asistente']);
   });
 
-  test('the assistant card says it is not available yet, without numbers', async () => {
+  test('the assistant card asks with the panel filters and shows the totals', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
     render(<MetricsPanel />);
 
-    const card = (await screen.findByRole('heading', { name: 'Asistente' })).closest('article')!;
-    expect(await within(card).findByText('Todavía no disponible.')).toBeInTheDocument();
-    expect(card.textContent).not.toMatch(/\d/);
+    const card = await screen.findByRole('article', { name: 'Asistente' });
+    const questions = await within(card).findByText('Preguntas', { selector: 'dt' });
+    expect(questions.nextSibling).toHaveTextContent('9');
+    expect(within(card).getByText('Saludos y ayuda', { selector: 'dt' }).nextSibling).toHaveTextContent(
+      '3',
+    );
+    expect(within(card).getByText('p95', { selector: 'dt' }).nextSibling).toHaveTextContent('—');
+    expect(
+      within(card).getByText('El filtro por área usa las áreas actuales de quien preguntó.'),
+    ).toBeInTheDocument();
+    expect(mocks.getAssistant).toHaveBeenCalledWith(
+      { areaId: VENTAS, from: '2026-10-01', to: '2026-10-15' },
+      expect.any(AbortSignal),
+    );
+  });
+
+  test('the assistant card describes an error of its own, without hiding the documents', async () => {
+    mocks.getAssistant.mockRejectedValue(new ApiError(503));
+    render(<MetricsPanel />);
+
+    const card = await screen.findByRole('article', { name: 'Asistente' });
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      /El servicio no está disponible/,
+    );
+    const documents = screen.getByRole('article', { name: 'Documentos' });
+    expect(await within(documents).findByText('Activos', { selector: 'dt' })).toBeInTheDocument();
+  });
+
+  test('without a session the assistant is not asked for', async () => {
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    render(<MetricsPanel />);
+
+    await waitFor(() => expect(mocks.getDocuments).not.toHaveBeenCalled());
+    expect(mocks.getAssistant).not.toHaveBeenCalled();
   });
 
   test('the documents card asks with the panel filters and shows the totals', async () => {

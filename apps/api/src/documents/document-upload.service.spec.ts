@@ -86,7 +86,7 @@ const recordFrom = (data: NewDocument): DocumentRecord => ({
 describe('DocumentUploadService', () => {
   let events: string[];
   let areas: { findByIds: jest.Mock };
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: {
     findActiveByChecksum: jest.Mock;
     runInTransaction: jest.Mock;
@@ -120,6 +120,11 @@ describe('DocumentUploadService', () => {
       findById: jest.fn((id: string) =>
         Promise.resolve(
           Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        ),
+      ),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
         ),
       ),
     };
@@ -630,7 +635,7 @@ describe('DocumentUploadService', () => {
 describe('DocumentUploadService: referencias con nombre (spec 008)', () => {
   let events: string[];
   let areas: { findByIds: jest.Mock; findExistingIds: jest.Mock };
-  let users: { findById: jest.Mock };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
   let repository: {
     findActiveByChecksum: jest.Mock;
     runInTransaction: jest.Mock;
@@ -656,6 +661,12 @@ describe('DocumentUploadService: referencias con nombre (spec 008)', () => {
         events.push('users');
         return Promise.resolve(
           Object.values(FIXTURE_USERS).find((user) => user.id === id) ?? null,
+        );
+      }),
+      findByIds: jest.fn((ids: string[]) => {
+        events.push('users');
+        return Promise.resolve(
+          Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
         );
       }),
     };

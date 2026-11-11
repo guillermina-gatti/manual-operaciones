@@ -15,6 +15,7 @@ import {
   ExecutionsTestApp,
   authHeaders,
   cleanExecutions,
+  closeExecutionsTestApp,
   createExecutionsTestApp,
 } from './helpers';
 
@@ -40,7 +41,7 @@ describe('Executions repository (integration)', () => {
   });
 
   afterAll(async () => {
-    await t.app.close();
+    await closeExecutionsTestApp(t);
   });
 
   beforeEach(async () => {

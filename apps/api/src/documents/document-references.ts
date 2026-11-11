@@ -4,7 +4,6 @@ búsqueda en lote, DocumentReferences (plan 008, 1.1; PD1). */
 
 import { Logger } from '@nestjs/common';
 import type { DocumentRecord } from './documents.repository';
-import { findUsersByIds } from './find-users-by-ids';
 import type { AreasDirectory } from './ports/areas-directory';
 import type { UsersDirectory } from './ports/users-directory';
 
@@ -145,8 +144,7 @@ export class DocumentReferences {
     const userIds = [...new Set(ids.userIds)];
     const areaIds = [...new Set(ids.areaIds)];
     const [users, areas] = await Promise.all([
-      // TODO(spec 008): users.findByIds(userIds) cuando esté en develop (ver find-users-by-ids.ts).
-      userIds.length > 0 ? findUsersByIds(this.users, userIds) : [],
+      userIds.length > 0 ? this.users.findByIds(userIds) : [],
       areaIds.length > 0 ? this.areas.findByIds(areaIds) : [],
     ]);
     return ReferenceLookup.from(users, areas, { userIds, areaIds });

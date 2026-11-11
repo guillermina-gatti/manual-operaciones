@@ -11,12 +11,9 @@ import { StepMetricsTable } from './StepMetricsTable';
 
 export function ProcedureMetricsCard({ procedure }: { procedure: ProcedureMetricsResponse }) {
   const headingId = useId();
-  const name = metricsProcedureName(procedure.procedureId);
+  const name = metricsProcedureName(procedure.procedureId, procedure.title);
   const [latest, ...older] = procedure.versions;
   const shares = outcomeShares(procedure);
-  // The API gives the average time per procedure: it is the one of the version only when the
-  // period has a single version.
-  const completeMs = procedure.versions.length === 1 ? procedure.avgCompletionMs : null;
 
   return (
     <article aria-labelledby={headingId} className="flex min-w-0 flex-col gap-4">
@@ -40,7 +37,7 @@ export function ProcedureMetricsCard({ procedure }: { procedure: ProcedureMetric
       <FeatherBar counts={procedure} size="md" />
 
       {latest && (
-        <VersionSteps version={latest} name={name} label="Pasos" completeMs={completeMs} />
+        <VersionSteps version={latest} name={name} label="Pasos" />
       )}
 
       {older.length > 0 && (
@@ -55,7 +52,6 @@ export function ProcedureMetricsCard({ procedure }: { procedure: ProcedureMetric
                 version={version}
                 name={name}
                 label={`Versión anterior ${i + 1}`}
-                completeMs={null}
               />
             ))}
           </div>
@@ -69,12 +65,10 @@ function VersionSteps({
   version,
   name,
   label,
-  completeMs,
 }: {
   version: VersionMetricsResponse;
   name: string;
   label: string;
-  completeMs: number | null;
 }) {
   return (
     <section className="flex flex-col gap-2">
@@ -84,7 +78,7 @@ function VersionSteps({
           · {formatCount(version.started)} {version.started === 1 ? 'ejecución' : 'ejecuciones'}
         </span>
       </h5>
-      <StepMetricsTable version={version} caption={`${label} de ${name}`} completeMs={completeMs} />
+      <StepMetricsTable version={version} caption={`${label} de ${name}`} />
     </section>
   );
 }

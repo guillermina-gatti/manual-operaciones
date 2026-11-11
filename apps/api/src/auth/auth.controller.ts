@@ -23,6 +23,9 @@ import {
   type LogoutResult,
 } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RegisterWithInvitationDto } from './dto/register-with-invitation.dto';
+import { ValidateInvitationDto } from './dto/validate-invitation.dto';
+import { ValidateInvitationResponse } from './dto/validate-invitation.response';
 import {
   MAX_IP_ADDRESS_LENGTH,
   MAX_USER_AGENT_LENGTH,
@@ -199,6 +202,106 @@ export class AuthController {
 
     return {
       revoked: result.revoked,
+    };
+  }
+
+  @Post('invitations/validate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Validar un token de invitación públicamente',
+  })
+  @ApiBody({ type: ValidateInvitationDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Invitación válida y disponible para su uso.',
+    type: ValidateInvitationResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Formato de token inválido.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Invitación no encontrada.',
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'La invitación ha expirado, fue revocada o ya fue utilizada.',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Demasiadas consultas de validación desde esta dirección IP.',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Servicio de control de tasa no disponible (Fail-Closed).',
+  })
+  async validateInvitation(
+    @Body() dto: ValidateInvitationDto,
+    @Req() req: Request,
+  ): Promise<ValidateInvitationResponse> {
+    const metadata = this.extractMetadata(req);
+    const ip = metadata.ipAddress ?? '127.0.0.1';
+    return this.authService.validateInvitation(dto.token, ip);
+  }
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Registrar un nuevo usuario a partir de un token de invitación válido',
+  })
+  @ApiBody({ type: RegisterWithInvitationDto })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Usuario registrado y autenticado exitosamente. Devuelve el Access Token JWT y establece la cookie refreshToken.',
+    type: LoginHttpResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Datos de registro inválidos.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Invitación no encontrada.',
+  })
+  @ApiResponse({
+    status: 409,
+    description:
+      'El correo electrónico ya está registrado o la invitación ya fue consumida por otra solicitud concurrente.',
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'La invitación ha expirado, fue revocada o ya fue utilizada.',
+  })
+  @ApiResponse({
+    status: 429,
+    description:
+      'Demasiados intentos de registro para este token o desde esta dirección IP.',
+  })
+  @ApiResponse({
+    status: 503,
+    description:
+      'Servicio de control de tasa o autenticación temporalmente no disponible.',
+  })
+  async register(
+    @Body() dto: RegisterWithInvitationDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginHttpResponse> {
+    const metadata = this.extractMetadata(req);
+    const result = await this.authService.registerWithInvitation(dto, metadata);
+
+    res.cookie(
+      REFRESH_TOKEN_COOKIE_NAME,
+      result.refreshToken,
+      this.getRefreshCookieOptions(),
+    );
+
+    return {
+      accessToken: result.accessToken,
+      user: result.user,
     };
   }
 

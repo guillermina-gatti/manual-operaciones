@@ -1,4 +1,4 @@
-/* Pure rules for moving through the steps of an execution (spec 005, CA2 and CA3) */
+/* Pure rules for moving through the steps of an execution (spec 012, CA2 and CA3) */
 import type { CatalogStep } from './ports/procedures-catalog';
 
 // A step row of the execution: it exists once the step was started.

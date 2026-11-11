@@ -12,7 +12,11 @@ import {
   AuthRateLimiterService,
   BLOCK_WINDOW_SECONDS,
   GLOBAL_IP_MAX_ATTEMPTS,
+  INVITATION_VALIDATION_IP_MAX_ATTEMPTS,
   RECORD_FAILURE_LUA_SCRIPT,
+  REGISTRATION_BLOCK_WINDOW_SECONDS,
+  REGISTRATION_IP_MAX_ATTEMPTS,
+  REGISTRATION_TOKEN_MAX_ATTEMPTS,
 } from './auth-rate-limiter.service';
 
 describe('AuthRateLimiterService', () => {
@@ -26,6 +30,7 @@ describe('AuthRateLimiterService', () => {
 
   beforeEach(() => {
     mockRedis = {
+      get: jest.fn(),
       mget: jest.fn(),
       ttl: jest.fn(),
       eval: jest.fn(),
@@ -593,6 +598,252 @@ describe('AuthRateLimiterService', () => {
       } finally {
         await realRedis.del(testListKey, testIpKey);
       }
+    });
+  });
+
+  describe('Control de tasa para Registro y Validación de Invitaciones (HU29 / M4.1)', () => {
+    const rawToken = 'V1StGXR8_Z5jdHi6B-myTEYWgkUVnxI4463m48EEUIU';
+
+    describe('Constantes y configuración de registro/validación', () => {
+      it('debe tener los umbrales específicos estipulados sin modificar los del login', () => {
+        expect(REGISTRATION_IP_MAX_ATTEMPTS).toBe(10);
+        expect(REGISTRATION_TOKEN_MAX_ATTEMPTS).toBe(5);
+        expect(INVITATION_VALIDATION_IP_MAX_ATTEMPTS).toBe(30);
+        expect(REGISTRATION_BLOCK_WINDOW_SECONDS).toBe(900);
+
+        expect(service.registrationIpMaxAttempts).toBe(10);
+        expect(service.registrationTokenMaxAttempts).toBe(5);
+        expect(service.invitationValidationIpMaxAttempts).toBe(30);
+        expect(service.registrationBlockWindowSeconds).toBe(900);
+
+        // Verifica que los límites del login permanecen intactos
+        expect(service.accountIpMaxAttempts).toBe(5);
+        expect(service.globalIpMaxAttempts).toBe(50);
+        expect(service.blockWindowSeconds).toBe(900);
+      });
+    });
+
+    describe('Seguridad de tokens y separación de claves', () => {
+      it('calcula hash SHA-256 del token y nunca almacena el token plano en la clave Redis', () => {
+        const key = service.getRegistrationTokenKey(rawToken);
+
+        expect(key).not.toContain(rawToken);
+        expect(key).toMatch(/^rl:auth:reg_tok:[0-9a-f]{64}$/);
+        expect(key).toBe(`rl:auth:reg_tok:${service.hashToken(rawToken)}`);
+      });
+
+      it('genera claves separadas para registro por IP y validación por IP', () => {
+        const regIpKey = service.getRegistrationIpKey(validIpv4);
+        const valIpKey = service.getInvitationValidationIpKey(validIpv4);
+        const loginIpKey = service.getGlobalIpKey(validIpv4);
+
+        expect(regIpKey).toBe(`rl:auth:reg_ip:${validIpv4}`);
+        expect(valIpKey).toBe(`rl:auth:val_ip:${validIpv4}`);
+        expect(loginIpKey).toBe(`rl:auth:ip:${validIpv4}`);
+
+        expect(regIpKey).not.toBe(valIpKey);
+        expect(regIpKey).not.toBe(loginIpKey);
+      });
+    });
+
+    describe('assertRegistrationAllowed', () => {
+      it('permite el registro cuando los contadores no existen (null)', async () => {
+        (mockRedis.mget as jest.Mock).mockResolvedValue([null, null]);
+
+        await expect(
+          service.assertRegistrationAllowed(validIpv4, rawToken),
+        ).resolves.toBeUndefined();
+
+        expect(mockRedis.mget).toHaveBeenCalledWith(
+          service.getRegistrationIpKey(validIpv4),
+          service.getRegistrationTokenKey(rawToken),
+        );
+      });
+
+      it('permite el registro cuando solo se provee IP y no hay contador previo', async () => {
+        (mockRedis.get as jest.Mock).mockResolvedValue(null);
+
+        await expect(
+          service.assertRegistrationAllowed(validIpv4),
+        ).resolves.toBeUndefined();
+
+        expect(mockRedis.get).toHaveBeenCalledWith(
+          service.getRegistrationIpKey(validIpv4),
+        );
+      });
+
+      it('permite el registro cuando los contadores están por debajo de los umbrales', async () => {
+        (mockRedis.mget as jest.Mock).mockResolvedValue(['9', '4']);
+
+        await expect(
+          service.assertRegistrationAllowed(validIpv4, rawToken),
+        ).resolves.toBeUndefined();
+      });
+
+      it('bloquea con HTTP 429 (INVITATION_TOKEN) si el token alcanza 5 intentos fallidos', async () => {
+        (mockRedis.mget as jest.Mock).mockResolvedValue(['0', '5']);
+        (mockRedis.ttl as jest.Mock).mockResolvedValue(600);
+
+        try {
+          await service.assertRegistrationAllowed(validIpv4, rawToken);
+          fail('Se esperaba que lanzara HttpException');
+        } catch (err) {
+          expect(err).toBeInstanceOf(HttpException);
+          const httpError = err as HttpException;
+          expect(httpError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+          const response = httpError.getResponse() as Record<string, unknown>;
+          expect(response.limitType).toBe('INVITATION_TOKEN');
+          expect(response.message).toContain('para esta invitación');
+        }
+      });
+
+      it('bloquea con HTTP 429 (REGISTRATION_IP) si la IP alcanza 10 intentos fallidos', async () => {
+        (mockRedis.mget as jest.Mock).mockResolvedValue(['10', '0']);
+        (mockRedis.ttl as jest.Mock).mockResolvedValue(300);
+
+        try {
+          await service.assertRegistrationAllowed(validIpv4, rawToken);
+          fail('Se esperaba que lanzara HttpException');
+        } catch (err) {
+          expect(err).toBeInstanceOf(HttpException);
+          const httpError = err as HttpException;
+          expect(httpError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+          const response = httpError.getResponse() as Record<string, unknown>;
+          expect(response.limitType).toBe('REGISTRATION_IP');
+          expect(response.message).toContain('desde esta dirección IP');
+        }
+      });
+
+      it('prioriza el bloqueo de INVITATION_TOKEN si ambos contadores están saturados', async () => {
+        (mockRedis.mget as jest.Mock).mockResolvedValue(['10', '5']);
+        (mockRedis.ttl as jest.Mock).mockResolvedValue(400);
+
+        try {
+          await service.assertRegistrationAllowed(validIpv4, rawToken);
+          fail('Se esperaba que lanzara HttpException');
+        } catch (err) {
+          const httpError = err as HttpException;
+          const response = httpError.getResponse() as Record<string, unknown>;
+          expect(response.limitType).toBe('INVITATION_TOKEN');
+        }
+      });
+
+      it('aplica Fail-Closed (HTTP 503) si Redis falla al verificar registro', async () => {
+        (mockRedis.mget as jest.Mock).mockRejectedValue(new Error('ECONNREFUSED'));
+
+        await expect(
+          service.assertRegistrationAllowed(validIpv4, rawToken),
+        ).rejects.toThrow(ServiceUnavailableException);
+        expect(loggerErrorSpy).toHaveBeenCalled();
+      });
+
+      it('falla con BadRequestException ante IP o token no válidos', async () => {
+        await expect(
+          service.assertRegistrationAllowed('invalid-ip', rawToken),
+        ).rejects.toThrow(BadRequestException);
+
+        await expect(
+          service.assertRegistrationAllowed(validIpv4, '   '),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('recordRegistrationFailure', () => {
+      it('incrementa claves de token e IP atómicamente con TTL de 15 minutos', async () => {
+        (mockRedis.eval as jest.Mock).mockResolvedValue([1, 1]);
+
+        await service.recordRegistrationFailure(validIpv4, rawToken);
+
+        expect(mockRedis.eval).toHaveBeenCalledWith(
+          RECORD_FAILURE_LUA_SCRIPT,
+          2,
+          service.getRegistrationTokenKey(rawToken),
+          service.getRegistrationIpKey(validIpv4),
+          '900',
+        );
+      });
+
+      it('incrementa solo la clave de IP si no se suministra token', async () => {
+        (mockRedis.eval as jest.Mock).mockResolvedValue(1);
+
+        await service.recordRegistrationFailure(validIpv4);
+
+        expect(mockRedis.eval).toHaveBeenCalledWith(
+          expect.any(String),
+          1,
+          service.getRegistrationIpKey(validIpv4),
+          '900',
+        );
+      });
+
+      it('aplica Fail-Closed (HTTP 503) si Redis falla al registrar fallo de registro', async () => {
+        (mockRedis.eval as jest.Mock).mockRejectedValue(new Error('ETIMEDOUT'));
+
+        await expect(
+          service.recordRegistrationFailure(validIpv4, rawToken),
+        ).rejects.toThrow(ServiceUnavailableException);
+        expect(loggerErrorSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('assertInvitationValidationAllowed', () => {
+      it('permite la consulta cuando el contador es null o menor a 30', async () => {
+        (mockRedis.get as jest.Mock).mockResolvedValue('29');
+
+        await expect(
+          service.assertInvitationValidationAllowed(validIpv4),
+        ).resolves.toBeUndefined();
+      });
+
+      it('bloquea con HTTP 429 (INVITATION_VALIDATION_IP) cuando se alcanzan 30 consultas', async () => {
+        (mockRedis.get as jest.Mock).mockResolvedValue('30');
+        (mockRedis.ttl as jest.Mock).mockResolvedValue(180);
+
+        try {
+          await service.assertInvitationValidationAllowed(validIpv4);
+          fail('Se esperaba que lanzara HttpException');
+        } catch (err) {
+          expect(err).toBeInstanceOf(HttpException);
+          const httpError = err as HttpException;
+          expect(httpError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+          const response = httpError.getResponse() as Record<string, unknown>;
+          expect(response.limitType).toBe('INVITATION_VALIDATION_IP');
+          expect(response.message).toContain('Demasiadas consultas de validación');
+        }
+      });
+
+      it('aplica Fail-Closed (HTTP 503) si Redis falla en validación', async () => {
+        (mockRedis.get as jest.Mock).mockRejectedValue(new Error('ECONNRESET'));
+
+        await expect(
+          service.assertInvitationValidationAllowed(validIpv4),
+        ).rejects.toThrow(ServiceUnavailableException);
+        expect(loggerErrorSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('recordInvitationValidationFailure', () => {
+      it('incrementa el contador de validación fallida por IP con TTL de 15 minutos', async () => {
+        (mockRedis.eval as jest.Mock).mockResolvedValue(1);
+
+        await service.recordInvitationValidationFailure(validIpv4);
+
+        expect(mockRedis.eval).toHaveBeenCalledWith(
+          expect.any(String),
+          1,
+          service.getInvitationValidationIpKey(validIpv4),
+          '900',
+        );
+      });
+
+      it('aplica Fail-Closed (HTTP 503) si Redis falla al registrar fallo de validación', async () => {
+        (mockRedis.eval as jest.Mock).mockRejectedValue(new Error('NR_CLOSED'));
+
+        await expect(
+          service.recordInvitationValidationFailure(validIpv4),
+        ).rejects.toThrow(ServiceUnavailableException);
+        expect(loggerErrorSpy).toHaveBeenCalled();
+      });
     });
   });
 });

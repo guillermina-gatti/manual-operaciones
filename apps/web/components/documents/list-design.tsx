@@ -147,24 +147,26 @@ export function fileTypeKind(fileName: string): FileTypeKind {
   return KIND_BY_EXTENSION[fileExtension(fileName)] ?? 'text';
 }
 
-const ICON_SIZE = { sm: 'h-8 w-7', lg: 'h-16 w-14' } as const;
+// sm: Lista (28×32); md: Tarjetas (48×56); lg: detalle y vista previa de la carga (56×64).
+const ICON_SIZE = { sm: 'h-8 w-7', md: 'h-14 w-12', lg: 'h-16 w-14' } as const;
 
 // La hoja: esquinas de radio 4 y la superior derecha bien redondeada, como una hoja doblada.
 const SHEET = 'M6 1h20a12 12 0 0 1 12 12v30a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V5a4 4 0 0 1 4-4Z';
 
-// La hoja entera en el tono suave del tipo, con la extensión en la tinta oscura. La grande (Tarjetas)
-// suma arriba un glifo de documento; la chica (Lista) lleva solo la extensión, que a 28 px es lo que se
+// La hoja entera en el tono suave del tipo, con la extensión en la tinta oscura. La mediana y la grande
+// suman arriba un glifo de documento; la chica (Lista) lleva solo la extensión, que a 28 px es lo que se
 // lee. Decorativa: quien la usa dice el tipo con texto (sr-only "Archivo PDF").
-export function FileTypeIcon({ fileName, size }: { fileName: string; size: 'sm' | 'lg' }) {
+export function FileTypeIcon({ fileName, size }: { fileName: string; size: 'sm' | 'md' | 'lg' }) {
   const extension = fileExtension(fileName);
   const { background, ink } = FILE_TYPE_COLORS[fileTypeKind(fileName)];
   const long = extension.length > 3;
+  const withGlyph = size !== 'sm';
 
   return (
     <svg aria-hidden="true" viewBox="0 0 40 48" className={`${ICON_SIZE[size]} shrink-0`}>
       {/* Un borde de la misma tinta, apenas visible, para que la hoja gris no se pierda sobre blanco. */}
       <path d={SHEET} fill={background} stroke={ink} strokeOpacity="0.2" strokeWidth="1" />
-      {size === 'lg' && (
+      {withGlyph && (
         // Un documento con tres renglones.
         <g data-part="glyph" fill="none" stroke={ink} strokeWidth="1.6" strokeLinecap="round">
           <rect x="13" y="8" width="14" height="17" rx="2" />
@@ -173,10 +175,10 @@ export function FileTypeIcon({ fileName, size }: { fileName: string; size: 'sm' 
       )}
       <text
         x="20"
-        y={size === 'lg' ? 38 : 28.5}
+        y={withGlyph ? 38 : 28.5}
         textAnchor="middle"
         fill={ink}
-        fontSize={size === 'lg' ? (long ? 8.5 : 9.5) : long ? 9.5 : 11}
+        fontSize={withGlyph ? (long ? 8.5 : 9.5) : long ? 9.5 : 11}
         fontWeight="700"
         fontFamily="inherit"
         letterSpacing="0.3"

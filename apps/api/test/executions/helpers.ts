@@ -4,7 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
-import { AREA_IDS } from '../../src/documents/adapters/fixtures';
+import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
 import type { DirectoryUser } from '../../src/documents/ports/users-directory';
 import { InMemoryProceduresCatalog } from '../../src/executions/adapters/in-memory-procedures-catalog';
 import { ProceduresCatalog } from '../../src/executions/ports/procedures-catalog';
@@ -69,6 +69,26 @@ async function seedSecondVentasEmployee(prisma: PrismaService): Promise<void> {
       data: areaIds.map((areaId) => ({ userId: id, areaId })),
     }),
   ]);
+}
+
+// For the afterAll of each suite: removes the users and areas seeded above, so suites that
+// count the whole directory (A-15) do not find them. Every suite that needs them seeds them
+// again in its beforeAll. An area another user still belongs to is left in place.
+export async function closeExecutionsTestApp(
+  t: ExecutionsTestApp,
+): Promise<void> {
+  const userIds = [
+    ...Object.values(FIXTURE_USERS).map((user) => user.id),
+    OTRO_EMPLEADO_VENTAS.id,
+  ];
+  await t.prisma.$transaction([
+    t.prisma.userArea.deleteMany({ where: { userId: { in: userIds } } }),
+    t.prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+    t.prisma.area.deleteMany({
+      where: { id: { in: Object.values(AREA_IDS) }, users: { none: {} } },
+    }),
+  ]);
+  await t.app.close();
 }
 
 // Only the tables of this feature; documents and the directory are left alone.

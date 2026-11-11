@@ -1,6 +1,7 @@
 /* HTTP route of the procedures metrics (HU38, contract 5). No logic: guards and the
 DTO validate the input, the service decides, and the response is mapped field by
-field. Pair C exposes /metrics/assistant and /metrics/documents in their own module */
+field. /metrics/assistant lives in this same folder (assistant-metrics.controller.ts);
+/metrics/documents, in the documents module */
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {

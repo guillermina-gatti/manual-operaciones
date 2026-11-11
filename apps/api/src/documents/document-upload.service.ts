@@ -160,9 +160,10 @@ export class DocumentUploadService {
   ): Promise<InspectedFile> {
     const inspected = inspectFile(file); // Valida formato y contenido binario
     this.steps.assertReviewDateIsAfterToday(dto.reviewDate); // Valida fecha
-    await this.steps.assertAreasCanBeAssigned(dto.areaIds); // Que existan y estén activas (spec 008, R7)
-    // Que el responsable esté activo y pertenezca al área. En la carga siempre es nuevo (spec 008, R5)
-    await this.steps.assertOwnerCanSeeDocument(dto.ownerId, dto.areaIds, {
+    // Que existan y estén activas (spec 008, R7)
+    const activeAreaIds = await this.steps.assertAreasCanBeAssigned(dto.areaIds);
+    // Que el responsable esté activo y comparta un área activa. En la carga siempre es nuevo (spec 008, R5 y R10)
+    await this.steps.assertOwnerCanSeeDocument(dto.ownerId, activeAreaIds, {
       isNew: true,
     });
     await this.steps.assertNotDuplicated(inspected.checksum); // Valida que no esté repetido

@@ -24,6 +24,7 @@ const EMPLOYEE = bearer(SPEC_USERS.empleadoVentas);
 const view: ExecutionView = {
   id: EXECUTION_ID,
   procedureId: PROCEDURE_ID,
+  procedureTitle: 'Cierre de caja',
   procedureVersionId: '1b000000-0000-4000-8000-000000000001',
   status: 'IN_PROGRESS',
   startedAt: new Date('2026-10-27T10:00:00.000Z'),
@@ -34,16 +35,25 @@ const view: ExecutionView = {
       stepId: STEP_1,
       order: 1,
       title: 'Contar el efectivo',
+      description: 'Contá los billetes y las monedas de la caja.',
       startedAt: new Date('2026-10-27T10:00:00.000Z'),
       finishedAt: null,
       durationMs: null,
     },
   ],
+  versionChange: {
+    changed: false,
+    critical: false,
+    currentVersionId: null,
+    currentVersionNumber: null,
+    changes: [],
+  },
 };
 
 const body = {
   id: EXECUTION_ID,
   procedureId: PROCEDURE_ID,
+  procedureTitle: 'Cierre de caja',
   procedureVersionId: '1b000000-0000-4000-8000-000000000001',
   status: 'IN_PROGRESS',
   startedAt: '2026-10-27T10:00:00.000Z',
@@ -54,11 +64,19 @@ const body = {
       stepId: STEP_1,
       order: 1,
       title: 'Contar el efectivo',
+      description: 'Contá los billetes y las monedas de la caja.',
       startedAt: '2026-10-27T10:00:00.000Z',
       finishedAt: null,
       durationMs: null,
     },
   ],
+  versionChange: {
+    changed: false,
+    critical: false,
+    currentVersionId: null,
+    currentVersionNumber: null,
+    changes: [],
+  },
 };
 
 describe('ExecutionsController (HTTP, service mocked)', () => {
@@ -67,10 +85,16 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
     start: jest.Mock;
     findOne: jest.Mock;
     completeStep: jest.Mock;
+    restart: jest.Mock;
   };
 
   beforeAll(async () => {
-    service = { start: jest.fn(), findOne: jest.fn(), completeStep: jest.fn() };
+    service = {
+      start: jest.fn(),
+      findOne: jest.fn(),
+      completeStep: jest.fn(),
+      restart: jest.fn(),
+    };
     const moduleRef = await Test.createTestingModule({
       controllers: [ExecutionsController],
       providers: [
@@ -255,6 +279,10 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
             `/api/executions/${EXECUTION_ID}/steps/${STEP_1}/complete`,
           ),
       ],
+      [
+        'POST restart',
+        () => http().post(`/api/executions/${EXECUTION_ID}/restart`),
+      ],
     ];
 
     it.each(routes)('%s: 401 without a session', async (_route, call) => {
@@ -285,8 +313,53 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
         expect(service.start).not.toHaveBeenCalled();
         expect(service.findOne).not.toHaveBeenCalled();
         expect(service.completeStep).not.toHaveBeenCalled();
+        expect(service.restart).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('POST /api/executions/:id/restart (HU33)', () => {
+    it('201 with the new execution, for the user of the session', async () => {
+      service.restart.mockResolvedValue(view);
+
+      const response = await http()
+        .post(`/api/executions/${EXECUTION_ID}/restart`)
+        .set(EMPLOYEE)
+        .expect(201);
+
+      expect(response.body).toEqual(body);
+      expect(service.restart).toHaveBeenCalledWith(
+        SPEC_USERS.empleadoVentas,
+        EXECUTION_ID,
+      );
+    });
+
+    it('400 when the id is not a UUID, without calling the service', async () => {
+      await http()
+        .post('/api/executions/not-a-uuid/restart')
+        .set(EMPLOYEE)
+        .expect(400);
+
+      expect(service.restart).not.toHaveBeenCalled();
+    });
+
+    it('a 409 of the service passes with its reason', async () => {
+      service.restart.mockRejectedValue(
+        new ConflictException({
+          statusCode: 409,
+          message: 'La ejecución se reinició con la versión nueva',
+          error: 'Conflict',
+          reason: 'EXECUTION_RESTARTED',
+        }),
+      );
+
+      const response = await http()
+        .post(`/api/executions/${EXECUTION_ID}/restart`)
+        .set(EMPLOYEE)
+        .expect(409);
+
+      expect(response.body.reason).toBe('EXECUTION_RESTARTED');
+    });
   });
 
   describe('Swagger', () => {
@@ -321,6 +394,15 @@ describe('ExecutionsController (HTTP, service mocked)', () => {
       expect(
         codes('/api/executions/{id}/steps/{stepId}/complete', 'post'),
       ).toEqual(['200', '400', '401', '403', '404', '409', '503']);
+      expect(codes('/api/executions/{id}/restart', 'post')).toEqual([
+        '201',
+        '400',
+        '401',
+        '403',
+        '404',
+        '409',
+        '503',
+      ]);
     });
   });
 });
