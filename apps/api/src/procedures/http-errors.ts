@@ -22,7 +22,9 @@ export type ProcedureOperation =
   | 'publish'
   | 'listVersions'
   | 'getVersion'
-  | 'compareVersions';
+  | 'compareVersions'
+  | 'listProcedures'
+  | 'getProcedure';
 
 // How each operation is named in the messages, with its article.
 const PHRASES: Record<ProcedureOperation, string> = {
@@ -39,6 +41,8 @@ const PHRASES: Record<ProcedureOperation, string> = {
   listVersions: 'la consulta del historial de versiones',
   getVersion: 'la consulta de la versión',
   compareVersions: 'la comparación de versiones',
+  listProcedures: 'la consulta de procedimientos',
+  getProcedure: 'la consulta del procedimiento',
 };
 
 const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1);

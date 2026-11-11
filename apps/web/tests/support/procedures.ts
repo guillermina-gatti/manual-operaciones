@@ -1,7 +1,7 @@
 // Test data for the procedures screens (spec 006): the same ids as the API fixtures.
 import { AREA_IDS } from '@/lib/directory/fixtures';
 import type { ProcedureResponse, StepResponse } from '@/lib/api/procedures';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import type { SessionState } from '@/lib/session';
 
 export const ADMIN_ID = '0b000000-0000-4000-8000-000000000001';
@@ -56,8 +56,8 @@ export function stepResponse(
   return { id, procedureVersionId: VERSION_ID, order, title, description };
 }
 
-// The local copy of a procedure the screens keep in sessionStorage.
-export function stored(overrides: Partial<StoredProcedure> = {}): StoredProcedure {
+// A procedure as the editor holds it: what GET /api/procedures/:id answered plus the changes the API accepted.
+export function editable(overrides: Partial<EditableProcedure> = {}): EditableProcedure {
   return {
     id: PROCEDURE_ID,
     versionId: VERSION_ID,

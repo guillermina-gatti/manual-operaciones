@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { DraftForm } from '@/components/procedures/DraftForm';
 import { ApiError } from '@/lib/api';
 import { PROCEDURE_MESSAGES } from '@/lib/procedures';
-import { PROCEDURE_ID, VERSION_ID, procedureResponse, stored } from '../../support/procedures';
+import { PROCEDURE_ID, VERSION_ID, procedureResponse, editable } from '../../support/procedures';
 
 const mocks = vi.hoisted(() => ({
   updateVersion: vi.fn(),
@@ -25,7 +25,7 @@ const version = (title: string, description: string | null) => ({
   description,
 });
 
-const PROCEDURE = stored({ description: 'Al final del día' });
+const PROCEDURE = editable({ description: 'Al final del día' });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -63,7 +63,7 @@ describe('the form', () => {
   });
 
   test('a draft without description has an empty field', () => {
-    setup(stored({ description: null }));
+    setup(editable({ description: null }));
 
     expect(descriptionField()).toHaveValue('');
   });

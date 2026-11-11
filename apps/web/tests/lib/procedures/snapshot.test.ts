@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import {
-  fromCreated,
   withAreas,
   withDraft,
   withStepAdded,
@@ -17,31 +16,18 @@ import {
   VERSION_ID,
   procedureResponse,
   stepResponse,
-  stored,
+  editable,
 } from '../../support/procedures';
 
 const step = (id: string, order: number, title: string) => ({ id, order, title, description: '' });
 const threeSteps = () =>
-  stored({ steps: [step(STEP_A, 1, 'A'), step(STEP_B, 2, 'B'), step(STEP_C, 3, 'C')] });
-
-describe('fromCreated', () => {
-  test('keeps the version 1 draft, with no steps', () => {
-    expect(fromCreated(procedureResponse())).toEqual(stored());
-  });
-
-  test('keeps the description of the draft', () => {
-    const response = procedureResponse();
-    response.versions[0].description = 'Al final del día';
-
-    expect(fromCreated(response).description).toBe('Al final del día');
-  });
-});
+  editable({ steps: [step(STEP_A, 1, 'A'), step(STEP_B, 2, 'B'), step(STEP_C, 3, 'C')] });
 
 describe('withDraft', () => {
   test('takes the title and description of the updated version', () => {
     const version = { ...procedureResponse().versions[0], title: 'Cierre', description: 'Nueva' };
 
-    const result = withDraft(stored(), version);
+    const result = withDraft(editable(), version);
 
     expect(result.title).toBe('Cierre');
     expect(result.description).toBe('Nueva');
@@ -51,7 +37,7 @@ describe('withDraft', () => {
 
 describe('steps', () => {
   test('withStepAdded puts the new step at the end', () => {
-    const result = withStepAdded(stored({ steps: [step(STEP_A, 1, 'A')] }), stepResponse(STEP_B, 2, 'B', 'x'));
+    const result = withStepAdded(editable({ steps: [step(STEP_A, 1, 'A')] }), stepResponse(STEP_B, 2, 'B', 'x'));
 
     expect(result.steps.map((s) => [s.id, s.order])).toEqual([
       [STEP_A, 1],
@@ -105,12 +91,12 @@ describe('steps', () => {
 
 describe('withAreas', () => {
   test('replaces the whole set of areas', () => {
-    const result = withAreas(stored({ areaIds: [VENTAS] }), [OPERACIONES]);
+    const result = withAreas(editable({ areaIds: [VENTAS] }), [OPERACIONES]);
 
     expect(result.areaIds).toEqual([OPERACIONES]);
   });
 
   test('an empty set is valid', () => {
-    expect(withAreas(stored({ areaIds: [VENTAS] }), []).areaIds).toEqual([]);
+    expect(withAreas(editable({ areaIds: [VENTAS] }), []).areaIds).toEqual([]);
   });
 });

@@ -4,7 +4,7 @@
 - **Responsable:** Micaela Franco (pareja B)
 - **Depende de:** spec 005 de Mayra (ejecuciones; el puerto está en `apps/api/src/executions/ports/procedures-catalog.ts`), `docs/contracts/` (usuarios, áreas y matriz de permisos), `UsersDirectory` y `AreasDirectory` de la pareja A y, para los adjuntos, `StorageModule` e `inspectFile` de la pareja C (se usan sin modificarlos).
 - **Habilita:** HU32 (publicar, historial, comparar y cambio crítico), que es lo que desbloquea el catálogo real de Mayra, y más adelante HU28, HU33 y HU38.
-- **Estado:** borrador para revisión (27/10/2026). Las decisiones de la etapa de aclaración están en la sección 10; no quedan preguntas que bloqueen (sección 11). No hay código ni cambios de esquema todavía.
+- **Estado (11/11/2026):** HU11 completa en esta rama: la API (R13 a R17) y las pantallas de la web (W1 a W10, T26 a T33). Lo siguiente en esta línea es la verificación final (T18). Texto original del estado: borrador para revisión (27/10/2026). Las decisiones de la etapa de aclaración están en la sección 10; no quedan preguntas que bloqueen (sección 11). No hay código ni cambios de esquema todavía.
 
 ## 1. Problema y objetivo
 
@@ -87,6 +87,19 @@ Publicar queda fuera (HU32). Por eso, al terminar esta spec, un empleado todaví
 - **R16 · Listado.** Paginado con `?page` y `?limit` (por defecto 1 y 20; máximo 100). Si `limit` es mayor a 100, o `page` o `limit` no son válidos: 400. Ordenado del más nuevo al más viejo. Formato: `{ data, total, page, limit }`. Cada ítem muestra los datos de la versión vigente (el ADMIN, que ve también los que no se publicaron, ve los del borrador) y las áreas del procedimiento; al ADMIN se le indica además si tiene un borrador abierto.
 - **R17 · Versiones solo para el ADMIN.** Las rutas que muestran una versión puntual, incluido un borrador, son solo del ADMIN. Para los demás roles: 403.
 
+**Pantallas de visibilidad (web, HU11)**
+
+- **W1 · Lista desde el servidor.** `/procedimientos` pide `GET /api/procedures` con `page` y `limit` (12 por página; el número de página viaja en `?pagina=`) y muestra lo que la API devuelve, sin filtrar ni completar nada en el navegador. No hay copia en `sessionStorage` (P25).
+- **W2 · ADMIN.** Ve la lista completa, el formulario para crear un procedimiento y, en cada tarjeta, el acceso al editor. Al crear uno, la lista se vuelve a pedir y lo incluye.
+- **W3 · SUPERVISOR y EMPLOYEE.** Ven solo lo que la API devuelve para sus áreas. La pantalla no tiene formulario de crear ni botones de editar.
+- **W4 · La tarjeta.** Título, "Versión N · publicada" (para el ADMIN, el estado real de la versión que se muestra: "borrador" si no hay publicada), cantidad de pasos y las áreas como chips con su nombre (el ADMIN ve "(inactiva)" donde corresponda; los demás nunca reciben una inactiva, P20). Toda la tarjeta lleva al detalle.
+- **W5 · Ficha de solo lectura.** SUPERVISOR y EMPLOYEE, en `/procedimientos/[id]`, ven desde `GET /api/procedures/:id` el título, "Versión N · publicada", las áreas como chips, la descripción y los pasos numerados (número, título y descripción). Sin campos ni botones de edición.
+- **W6 · Editor del ADMIN.** El ADMIN ve en `/procedimientos/[id]` el editor de siempre, pero sus datos salen de `GET /api/procedures/:id`, no de una copia del navegador. Cada cambio que la API acepta actualiza lo que se ve sin volver a pedir el detalle; publicar o crear un borrador sí lo vuelven a pedir.
+- **W7 · 404.** Si el detalle responde 404 (inexistente, de otra área o sin versión publicada, R14), la pantalla dice "No se encontró el procedimiento" y ofrece volver a la lista. El mensaje es el mismo en los tres casos y para todos los roles.
+- **W8 · Lista vacía.** Sin procedimientos, SUPERVISOR y EMPLOYEE leen "Todavía no hay procedimientos publicados en tus áreas."; el ADMIN, "Todavía no hay procedimientos creados.".
+- **W9 · Carga y error.** Mientras se pide, un esqueleto con el texto "Cargando…" para lectores de pantalla; si falla, un mensaje con "Reintentar". Los textos de error que manda la API no se muestran.
+- **W10 · Inicio.** El inicio tiene una tarjeta "Procedimientos" con un enlace a `/procedimientos` para los tres roles (cambio mínimo en `HomeView.tsx`, autorizado por Camila).
+
 **Adjuntos (última parte)**
 
 - **R18 · Adjuntar.** El ADMIN adjunta un archivo a un paso de un borrador. El archivo sigue las mismas reglas que en documentos (`inspectFile`): PDF, `.txt` o `.md`, comprobado por contenido, hasta 10 MB; tipo no aceptado: 415; más grande: 413; vacío: 400 (P14).
@@ -158,7 +171,12 @@ Tomadas en la etapa de aclaración (clarify) el 27/10/2026.
 | P18 · ¿Qué devuelve `PUT /procedures/:id/areas`? | 200 con `{ areaIds }`, las áreas que quedaron, ordenadas. Un conjunto vacío es válido | R11 |
 | P19 · ¿Cómo se valida el pedido de áreas? | Formato en el DTO (arreglo de UUID, sin repetidos, hasta 100) y estado de las áreas (existencia e `isActive`) con `AreasDirectory.findByIds`. El orden de los chequeos es: rol (403), formato (400), existencia de las áreas (400), área inactiva nueva (400) y por último el procedimiento (404) | R11 |
 | D16 · ¿Cómo se autentica ahora que está el login real de la Pareja A? | El servidor exige `Authorization: Bearer <jwt>` y rechaza con 401 los headers `x-user-id` y `x-user-role`. El rol y las áreas salen de la base en cada pedido. Los tests de controlador corren detrás del guard real con `real-auth.ts` de Mayra; los e2e firman los tokens con `signTestJwt` de Camila. Swagger pasa de los headers a Bearer. No cambia ninguna regla de negocio ni ninguna respuesta de las rutas | R1, R15 |
-| P20 · ¿Qué pasa con las áreas inactivas y la sesión? | El guard excluye las áreas inactivas de `user.areaIds` (`jwt-auth.guard.ts`, líneas 73 a 78), y la matriz lo documenta: SUPERVISOR y EMPLOYEE no acceden a procedimientos vinculados solo a áreas inactivas (`docs/contracts/permissions-matrix.md`, líneas 149 a 151). Para HU11 se decide si se usa `user.areaIds` o `UsersDirectory`; hoy el directorio no filtra las inactivas (`prisma-users-directory.ts`). No se modifica código ajeno: la regla se acuerda con las parejas A y C | R11, R13, R15 |
+| P20 · ¿Qué pasa con las áreas inactivas y la sesión? | El guard excluye las áreas inactivas de `user.areaIds` (`jwt-auth.guard.ts`, líneas 73 a 78), y la matriz lo documenta: SUPERVISOR y EMPLOYEE no acceden a procedimientos vinculados solo a áreas inactivas (`docs/contracts/permissions-matrix.md`, líneas 149 a 151). **Decidido (10/11/2026), con el criterio de A-SEC (rama `feat/A-SEC-areas-inactivas`, `viewerFor` de `documents/document-access.ts`, todavía sin mergear):** el ADMIN no necesita áreas; para los demás, las áreas del visor son las del `UsersDirectory` que además están en `user.areaIds` (el guard ya dejó afuera las inactivas). Un usuario desconocido o inactivo para el directorio no tiene áreas. Así un área desactivada no da acceso. Se implementa en `procedures`, sin importar ni copiar código de `documents`; no se toca el guard ni `canViewProcedure` ni `currentVersion` (los usa el chat de Matías) | R11, R13, R15 |
+| P21 · ¿Qué trae cada ítem del listado? | Id, título y descripción de la versión vigente, su número y estado, cantidad de pasos y áreas con nombre (una sola consulta a `AreasDirectory.findByIds` por página). Al ADMIN, además, `hasOpenDraft` y los datos del borrador si no hay publicada. Límite por defecto 20, máximo 100; desempate del orden por `id` | R16 |
+| P22 · ¿Qué trae el detalle? | ADMIN: el borrador abierto con sus pasos (o la vigente si no hay borrador), las áreas y `hasOpenDraft`, sin repetir el historial (es de `GET /versions`, HU32). SUPERVISOR y EMPLOYEE: solo la vigente con sus pasos y las áreas, sin `ownerId` ni datos internos | R13, R14 |
+| P23 · ¿Cómo se ven las áreas desactivadas? | Solo el ADMIN las ve, marcadas "desactivada" (R11). Para los demás rige P20: solo áreas activas | R11, R13 |
+| P24 · ¿Un procedimiento que solo tiene borrador? | El ADMIN lo ve en el listado como "borrador"; los demás roles, no | R13, R16 |
+| P25 · ¿Qué pasa con la copia en `sessionStorage` de la web? | Desde HU11 la web lee del servidor; el código de la copia que deje de usarse se elimina y los datos viejos no se migran. **Hecho el 11/11/2026** (T32): ya no existe `session-list.ts` | R16 |
 
 ## 11. Preguntas abiertas
 
@@ -358,6 +376,71 @@ Escenario: E27 · versiones solo para el ADMIN
   Dado un EMPLOYEE con sesión
   Cuando pide una versión de un procedimiento por su identificador
   Entonces la respuesta es 403
+
+Escenario: E39 · área desactivada (P20)
+  Dado un EMPLOYEE cuya única área de un procedimiento publicado fue desactivada
+  Cuando pide el listado y el detalle de ese procedimiento
+  Entonces el listado no lo incluye
+  Y el detalle responde 404, igual que uno inexistente
+
+Escenario: E40 · usuario inactivo (P20)
+  Dado un usuario que está inactivo
+  Cuando hace cualquier pedido
+  Entonces el guard lo rechaza con 401
+  Y, si el directorio lo marcara inactivo y el pedido llegara al servicio, recibiría una lista vacía y un 404
+
+# --- HU11 · pantallas (web) ---
+
+Escenario: E41 · la lista sale de la API (W1)
+  Dado que la API responde una página con dos procedimientos
+  Cuando un usuario abre /procedimientos
+  Entonces ve esas dos tarjetas
+  Y la web pidió GET /api/procedures con page y limit
+  Y no leyó ni escribió nada en sessionStorage
+
+Escenario: E42 · el ADMIN crea y edita (W2)
+  Dado un ADMIN en /procedimientos
+  Entonces ve el formulario "Crear procedimiento" y un enlace al editor en cada tarjeta
+  Y al crear uno la lista se vuelve a pedir y lo incluye
+
+Escenario: E43 · el EMPLOYEE no edita (W3)
+  Dado un EMPLOYEE o un SUPERVISOR en /procedimientos
+  Entonces ve las tarjetas que la API devolvió
+  Y no hay formulario de crear ni botón de editar
+
+Escenario: E44 · la tarjeta (W4)
+  Dado un procedimiento publicado, versión 2, con 3 pasos, en Ventas y Operaciones
+  Entonces su tarjeta dice "Versión 2 · publicada" y "3 pasos"
+  Y muestra los chips "Operaciones" y "Ventas"
+
+Escenario: E45 · la ficha de solo lectura (W5)
+  Dado un procedimiento publicado visible para el EMPLOYEE
+  Cuando abre /procedimientos/[id]
+  Entonces ve el título, "Versión 1 · publicada", las áreas, la descripción y los pasos numerados en orden
+  Y no hay campos ni botones de edición
+
+Escenario: E46 · el ADMIN abre el editor desde la API (W6)
+  Dado un ADMIN y un procedimiento con borrador
+  Cuando abre /procedimientos/[id]
+  Entonces la web pide GET /api/procedures/:id y muestra el borrador, los pasos y las áreas
+  Y, si el id no existe, ve "No se encontró el procedimiento" en vez de "no tenemos los datos"
+
+Escenario: E47 · 404 (W7)
+  Dado un procedimiento de otra área
+  Cuando un EMPLOYEE abre /procedimientos/[id]
+  Entonces ve "No se encontró el procedimiento" y un enlace "Volver a procedimientos"
+  Y el texto es el mismo que para un id que no existe
+
+Escenario: E48 · lista vacía, carga y error (W8, W9)
+  Dado un EMPLOYEE sin procedimientos visibles
+  Entonces lee "Todavía no hay procedimientos publicados en tus áreas."
+  Y mientras se pide se anuncia "Cargando…"
+  Y si la API falla ve un mensaje con "Reintentar", sin el texto del servidor
+
+Escenario: E49 · tarjeta en el inicio (W10)
+  Dado un usuario con sesión de cualquier rol
+  Cuando abre el inicio
+  Entonces ve la tarjeta "Procedimientos" con un enlace a /procedimientos
 
 # --- Adjuntos (última parte) ---
 

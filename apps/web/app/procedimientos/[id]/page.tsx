@@ -1,13 +1,15 @@
-// /procedimientos/[id]: the draft, the steps and the areas of a procedure (HU09 and HU10). Only ADMIN;
-// the API answers 403 anyway. A server component without data: the id is read in the browser. Without
+// /procedimientos/[id]: one procedure (spec 006, HU09 to HU11). An ADMIN gets the editor; SUPERVISOR and
+// EMPLOYEE, the read-only sheet. The API decides what each one can read (a procedure of another area
+// is a 404). A server component without data: the id is read in the browser. Without
 // generateStaticParams the id is not known at build time, so useParams has to be inside a <Suspense>
 // (cacheComponents).
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { ProcedureEditor } from '@/components/procedures/ProcedureEditor';
+import { ProcedureDetailScreen } from '@/components/procedures/ProcedureDetailScreen';
 import { Skeleton } from '@/components/procedures/Skeleton';
 import { RequireRole } from '@/components/session/RequireRole';
 import { ScreenState } from '@/components/ui/ScreenState';
+import { ROLES } from '@/lib/session';
 
 export const metadata: Metadata = {
   title: 'Procedimiento · Manual de operaciones',
@@ -23,11 +25,8 @@ export default function ProcedimientoPage() {
           </ScreenState>
         }
       >
-        <RequireRole
-          role="ADMIN"
-          deniedMessage="Solo un administrador puede crear y editar procedimientos."
-        >
-          <ProcedureEditor />
+        <RequireRole roles={ROLES} deniedMessage="No tenés permiso para ver los procedimientos.">
+          <ProcedureDetailScreen />
         </RequireRole>
       </Suspense>
     </main>

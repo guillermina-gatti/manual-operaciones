@@ -1,54 +1,46 @@
-'use client';
-
-// One procedure of the list (HU09): the whole card goes to its editor through the link of the title,
-// and "Quitar de la lista" stays usable above it. Areas are only counted: their names come with HU11.
+// One procedure of the list (spec 006, W4): title, version and its state, steps and areas. The whole
+// card goes to the detail through the link of the title: the editor for an ADMIN, the read-only
+// sheet for the rest (the page decides). It has no buttons: nothing is edited from the list.
 import Link from 'next/link';
-import { CHIP } from '@/components/documents/design';
-import {
-  LIST_BUTTON_SMALL,
-  LIST_CARD,
-  LIST_CARD_LAYER,
-  TILE_LINK,
-} from '@/components/documents/list-design';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import { AreaChips, CHIP, StatusDot } from '@/components/documents/design';
+import { LIST_CARD, META_LABEL, TILE_LINK } from '@/components/documents/list-design';
+import type { ProcedureListItem } from '@/lib/procedures';
 import { versionSummary } from '@/lib/procedures/versions';
 
-function summary(procedure: StoredProcedure): string {
-  const steps = procedure.steps.length;
-  const areas = procedure.areaIds.length;
-  return [
-    steps === 0 ? 'sin pasos' : `${steps} ${steps === 1 ? 'paso' : 'pasos'}`,
-    areas === 0 ? 'sin áreas' : `${areas} ${areas === 1 ? 'área' : 'áreas'}`,
-  ].join(' · ');
+export function stepCountLabel(count: number): string {
+  if (count === 0) return 'sin pasos';
+  return count === 1 ? '1 paso' : `${count} pasos`;
 }
 
-interface ProcedureCardProps {
-  procedure: StoredProcedure;
-  onRemove: () => void;
-}
+export function ProcedureCard({ procedure }: { procedure: ProcedureListItem }) {
+  const { version, areas } = procedure;
 
-export function ProcedureCard({ procedure, onRemove }: ProcedureCardProps) {
   return (
-    <article className={`${LIST_CARD} flex min-w-0 flex-col gap-3 p-6`}>
-      <h3 className="break-words text-xl font-bold">
-        <Link href={`/procedimientos/${procedure.id}`} className={TILE_LINK}>
-          {procedure.title}
-        </Link>
-      </h3>
-      <p className="text-base text-texto-suave">
-        {versionSummary(procedure.versionNumber, procedure.status ?? 'DRAFT')}
-      </p>
-      {procedure.description && (
-        <p className="line-clamp-2 break-words">{procedure.description}</p>
-      )}
+    <article className={`${LIST_CARD} flex h-full min-w-0 flex-col gap-4 p-6`}>
+      <header className="flex min-w-0 flex-col gap-2">
+        <h3 className="min-w-0 break-words text-xl leading-snug font-bold">
+          <Link href={`/procedimientos/${procedure.id}`} title={version.title} className={TILE_LINK}>
+            {version.title}
+          </Link>
+        </h3>
+        <p className="text-base text-texto-suave">
+          {versionSummary(version.versionNumber, version.status)}
+        </p>
+        {procedure.hasOpenDraft && <StatusDot tone="azul">Borrador abierto</StatusDot>}
+      </header>
+
+      {version.description && <p className="line-clamp-2 break-words">{version.description}</p>}
+
       <p className="flex">
-        <span className={`${CHIP} bg-chip-area text-chip-area-texto`}>{summary(procedure)}</span>
+        <span className={`${CHIP} bg-fondo text-texto`}>{stepCountLabel(version.stepCount)}</span>
       </p>
-      <footer className={`${LIST_CARD_LAYER} flex`}>
-        <button type="button" className={LIST_BUTTON_SMALL} onClick={onRemove}>
-          Quitar de la lista
-        </button>
-      </footer>
+
+      <dl className="mt-auto flex min-w-0 flex-col gap-1 border-t border-borde pt-4">
+        <dt className={META_LABEL}>Áreas</dt>
+        <dd className="min-w-0">
+          <AreaChips areas={areas} />
+        </dd>
+      </dl>
     </article>
   );
 }
