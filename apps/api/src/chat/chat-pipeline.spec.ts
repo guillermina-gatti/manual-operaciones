@@ -27,7 +27,7 @@ function chunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
         versionId: 'ver-1',
         versionNumber: 2,
         section: 'Aprobaciones',
-        content: 'Las compras mayores a 100.000 requieren aprobación del supervisor.',
+        content: 'Las compras mayores a 100.000 requieren aprobación del supervisor. El plazo de entrega es de 5 días.',
         validFrom: '2026-10-01',
         distance: 0.2,
         ...overrides,

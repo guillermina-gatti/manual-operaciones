@@ -5,8 +5,10 @@ import type { Logger } from '@nestjs/common';
 import type { EmbeddingProvider } from '../processing/ports/embedding-provider';
 import type { ChatResult, ChatResultStatus, ChatSource, NearestDocument } from './chat.contract';
 import { keepOnlyRefs, readConflictMarker, refsOf } from './chat-conflict';
-import { platformHelpReply } from './chat-help';
+import { platformHelpReply, platformMenuReply } from './chat-help';
 import { smallTalkReply } from './chat-greeting';
+import { unsupportedFigures } from './grounding-check';
+import { focusAreaOf, focusNoInfoText } from './chat-area';
 import type { ContactPerson } from './ports/contact-directory';
 import type { LlmAnswer, Passage } from './ports/chat-llm';
 import type { ChatRepository } from './ports/chat-repository';
@@ -15,6 +17,8 @@ import type { ChatRetrieval, RetrievedChunk } from './ports/chat-retrieval';
 export const TOP_K = 6;
 // Distancia coseno máxima para considerar un fragmento relevante. Ajustar con documentos reales.
 export const MAX_COSINE_DISTANCE = 0.45;
+// Una coincidencia por palabras (texto exacto) puede tener una distancia algo mayor y igual ser la respuesta.
+export const LEXICAL_MAX_COSINE_DISTANCE = 0.6;
 // HU19: cuántos documentos cercanos se muestran cuando no hay información suficiente.
 export const NEAREST_DOCUMENTS_LIMIT = 3;
 export const NO_INFO_MARKER = 'NO_INFO';
@@ -90,27 +94,51 @@ export async function prepareChat(
         return { kind: 'done', outcome: { status: 'answered', answer: reply, chunks: [] } };
     }
 
-    // Ayuda de la plataforma ("¿cómo veo un documento?"): texto fijo, sin buscar ni llamar al modelo.
-    const help = platformHelpReply(question);
-    if (help !== null) {
-        return { kind: 'done', outcome: { status: 'answered', answer: help, chunks: [] } };
+    // "ayuda" sola: el menú de temas, sin buscar. La ayuda por tema va después de la búsqueda.
+    const menu = platformMenuReply(question);
+    if (menu !== null) {
+        return { kind: 'done', outcome: { status: 'answered', answer: menu, chunks: [] } };
     }
 
     let queryVector: number[];
     try {
-        [queryVector] = await embeddings.embedMany([searchText]);
+        // Si el proveedor no trae embedQuery (por ejemplo, el wrapper del stream), se usa embedMany.
+        queryVector =
+            (await embeddings.embedQuery?.(searchText)) ?? (await embeddings.embedMany([searchText]))[0];
     } catch (error) {
         logger.warn(`Falló el embedding de la consulta: ${String(error)}`);
-        return { kind: 'done', outcome: unavailable() };
-    }
-
-    const retrieved = await retrieval.search(queryVector, scope, TOP_K);
-    const chunks = retrieved.filter((c) => c.distance <= MAX_COSINE_DISTANCE);
-    if (chunks.length === 0) {
-        // HU19: los más cercanos, aunque estén fuera del umbral, para mostrar dónde buscar.
+        // Sin el asistente, la ayuda fija sigue disponible; si no es una pregunta de ayuda, no hay respuesta.
+        const fallback = platformHelpReply(question);
         return {
             kind: 'done',
-            outcome: { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], ...nearestOf(retrieved) },
+            outcome: fallback !== null ? { status: 'answered', answer: fallback, chunks: [] } : unavailable(),
+        };
+    }
+
+    // Área nombrada en la pregunta ("... en Ventas"): la búsqueda se limita a esa área.
+    const focus = focusAreaOf(question) ?? undefined;
+    const retrieved = await retrieval.search(queryVector, scope, TOP_K, focus, searchText);
+    const chunks = retrieved.filter(
+        (c) =>
+            c.distance <= MAX_COSINE_DISTANCE || (c.lexical === true && c.distance <= LEXICAL_MAX_COSINE_DISTANCE),
+    );
+    if (chunks.length === 0) {
+        // Ayuda de la plataforma ("¿cómo veo un documento?"): solo cuando los documentos no responden, así una
+        // pregunta que sí está en los documentos nunca se toma como ayuda. Texto fijo, sin modelo.
+        const help = platformHelpReply(question);
+        if (help !== null) {
+            return { kind: 'done', outcome: { status: 'answered', answer: help, chunks: [] } };
+        }
+        // HU19: los más cercanos, aunque estén fuera del umbral, para mostrar dónde buscar.
+        // Con área nombrada, el texto dice de qué área es, para que quien no la tiene sepa a quién consultar.
+        return {
+            kind: 'done',
+            outcome: {
+                status: 'no_info',
+                answer: focus ? focusNoInfoText(focus) : NO_INFO_TEXT,
+                chunks: [],
+                ...nearestOf(retrieved),
+            },
         };
     }
 
@@ -156,10 +184,18 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
         return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
     }
 
+    // Cifras que no están en los pasajes citados: no se muestra la respuesta (verificación de cifras).
+    const cited = citedChunks(cleaned.text, chunks);
+    const missing = unsupportedFigures(cleaned.text, cited.map((c) => c.content));
+    if (missing.length > 0) {
+        logger?.warn(`Cifras que no aparecen en los pasajes citados, no se responde: ${missing.join(', ')}`);
+        return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
+    }
+
     return {
         status: 'answered',
         answer: cleaned.text,
-        chunks: citedChunks(cleaned.text, chunks),
+        chunks: cited,
         llm,
     };
 }
@@ -177,6 +213,22 @@ export function cleanCitations(text: string, count: number): { text: string; ref
         return '';
     });
     return { text: cleaned.trim(), refs };
+}
+
+// Si el modelo dijo que no hay información pero la pregunta es de ayuda de la plataforma ("¿dónde veo las
+// métricas?"), se responde el texto fijo de ayuda en lugar de "No encontré información". Sin cuota extra.
+export function finishWithHelp(
+    llm: LlmAnswer,
+    chunks: RetrievedChunk[],
+    question: string,
+    logger?: Pick<Logger, 'warn'>,
+): Outcome {
+    const outcome = finishChat(llm, chunks, logger);
+    if (outcome.status !== 'no_info') return outcome;
+    const help = platformHelpReply(question);
+    if (help !== null) return { status: 'answered', answer: help, chunks: [] };
+    const focus = focusAreaOf(question);
+    return focus ? { ...outcome, answer: focusNoInfoText(focus) } : outcome;
 }
 
 // Guarda la consulta y arma la respuesta del Contrato 4. La latencia va desde startedAt hasta acá.

@@ -84,7 +84,8 @@ export class ProcessingService {
     if (chunks.length === 0) throw new EmptyDocumentError(versionId);
 
     // 2. Embeddings: sin lock, antes de abrir la transacción.
-    const vectors = await this.embeddings.embedMany(chunks.map((c) => c.content));
+    const texts = chunks.map((c) => c.content);
+    const vectors = await (this.embeddings.embedDocuments?.(texts) ?? this.embeddings.embedMany(texts));
     if (vectors.length !== chunks.length) {
       throw new Error(`Se pidieron ${chunks.length} embeddings y llegaron ${vectors.length}`);
     }

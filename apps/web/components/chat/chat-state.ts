@@ -23,6 +23,8 @@ export interface AssistantMessage {
   messageId?: string;
   // HU19: con no_info, los documentos más cercanos a la consulta.
   nearestDocuments?: NearestDocument[];
+  // HU19: con no_info, a quién consultar (si la API tiene un contacto).
+  suggestedContact?: { name: string; email: string };
   // El aviso de un corte, un error o un pedido inválido.
   notice?: string;
 }
