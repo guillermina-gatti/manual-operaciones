@@ -3,12 +3,21 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ProcedureList } from '@/components/procedures/ProcedureList';
 import { ApiError } from '@/lib/api';
-import { ANA, PROCEDURE_ID, procedureResponse } from '../../support/procedures';
-import { ELENA, SUSANA, listItem, listPage } from '../../support/procedure-view';
+import { simulateDialogs } from '../../support/dialog';
+import { AREAS } from '../../support/procedure-areas';
+import { ANA, PROCEDURE_ID, editable, procedureResponse } from '../../support/procedures';
+import { ELENA, SUSANA, detailOf, listItem, listPage } from '../../support/procedure-view';
+
+simulateDialogs();
 
 const mocks = vi.hoisted(() => ({
   listProcedures: vi.fn(),
   createProcedure: vi.fn(),
+  getProcedure: vi.fn(),
+  listVersions: vi.fn(),
+  discardDraft: vi.fn(),
+  listAreas: vi.fn(),
+  push: vi.fn(),
   useSession: vi.fn(),
   search: new URLSearchParams(),
 }));
@@ -17,14 +26,22 @@ vi.mock('@/lib/procedures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/procedures')>()),
   listProcedures: mocks.listProcedures,
   createProcedure: mocks.createProcedure,
+  getProcedure: mocks.getProcedure,
+  listVersions: mocks.listVersions,
+  discardDraft: mocks.discardDraft,
 }));
+
+vi.mock('@/lib/directory', () => ({ areasDirectory: { listAreas: mocks.listAreas } }));
 
 vi.mock('@/lib/session', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/session')>()),
   useSession: mocks.useSession,
 }));
 
-vi.mock('next/navigation', () => ({ useSearchParams: () => mocks.search }));
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => mocks.search,
+  useRouter: () => ({ push: mocks.push }),
+}));
 
 const OTHER_ID = '1a000000-0000-4000-8000-000000000002';
 const OTHER = listItem({
@@ -39,6 +56,10 @@ beforeEach(() => {
   mocks.useSession.mockReturnValue(ELENA);
   mocks.listProcedures.mockResolvedValue(listPage([listItem(), OTHER]));
   mocks.createProcedure.mockResolvedValue(procedureResponse());
+  mocks.listAreas.mockResolvedValue(AREAS);
+  mocks.listVersions.mockResolvedValue({ data: [], total: 0, page: 1, limit: 100 });
+  mocks.getProcedure.mockResolvedValue(detailOf(editable({ title: 'Cierre de caja' })));
+  mocks.discardDraft.mockResolvedValue(undefined);
 });
 
 // Spec 006, W1 (E41): the list is what the API answers, page by page.
@@ -174,16 +195,59 @@ describe('for an ADMIN', () => {
     await screen.findAllByRole('listitem');
   });
 
+  const createOne = async () => {
+    await userEvent.type(screen.getByRole('textbox', { name: 'Título' }), 'Cierre de caja');
+    await userEvent.click(screen.getByRole('button', { name: 'Crear procedimiento' }));
+  };
+
   test('after creating one, the list is asked again and includes it', async () => {
     mocks.listProcedures.mockResolvedValueOnce(listPage([]));
     render(<ProcedureList />);
     await screen.findByText('Todavía no hay procedimientos creados.');
     mocks.listProcedures.mockResolvedValue(listPage([listItem()]));
 
-    await userEvent.type(screen.getByRole('textbox', { name: 'Título' }), 'Cierre de caja');
-    await userEvent.click(screen.getByRole('button', { name: 'Crear procedimiento' }));
+    await createOne();
 
     expect(await screen.findByRole('heading', { level: 3, name: 'Cierre de caja' })).toBeVisible();
     expect(mocks.listProcedures).toHaveBeenCalledTimes(2);
+  });
+
+  test('after creating one, the same screen shows its draft in place of the form (E24)', async () => {
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+
+    await createOne();
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Borrador' })).toBeVisible();
+    expect(mocks.getProcedure).toHaveBeenCalledWith(PROCEDURE_ID, expect.any(AbortSignal));
+    expect(screen.queryByRole('heading', { name: 'Crear un procedimiento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Abrir el borrador' })).not.toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  test('the draft of the same screen has one h1 only: the one of the page', async () => {
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+
+    await createOne();
+    await screen.findByRole('heading', { level: 2, name: 'Borrador' });
+
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Cierre de caja' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: /Volver a procedimientos/ })).not.toBeInTheDocument();
+  });
+
+  test('discarding that draft brings the form back and asks the list again', async () => {
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+    await createOne();
+    await screen.findByRole('heading', { level: 2, name: 'Borrador' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Descartar borrador' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toBeVisible();
+    expect(mocks.listProcedures).toHaveBeenCalledTimes(3);
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 });
