@@ -19,9 +19,10 @@ const versionRow = (overrides: Record<string, unknown> = {}) => ({
   id: VERSION_ID,
   procedureId: PROCEDURE_ID,
   title: 'Cierre de caja',
+  versionNumber: 2,
   steps: [
-    { id: 's1', stepOrder: 1, title: 'Contar' },
-    { id: 's2', stepOrder: 2, title: 'Comparar' },
+    { id: 's1', stepOrder: 1, title: 'Contar', description: 'Billetes y monedas', stepKey: 'k1' },
+    { id: 's2', stepOrder: 2, title: 'Comparar', description: '', stepKey: 'k2' },
   ],
   procedure: { areas: [{ areaId: OPERACIONES }, { areaId: VENTAS }] },
   ...overrides,
@@ -45,9 +46,11 @@ describe('PrismaProceduresCatalog (spec 015, R12)', () => {
         versionId: VERSION_ID,
         areaIds: [VENTAS, OPERACIONES],
         steps: [
-          { id: 's1', order: 1, title: 'Contar' },
-          { id: 's2', order: 2, title: 'Comparar' },
+          { id: 's1', order: 1, title: 'Contar', description: 'Billetes y monedas', stepKey: 'k1' },
+          { id: 's2', order: 2, title: 'Comparar', description: '', stepKey: 'k2' },
         ],
+        title: 'Cierre de caja',
+        versionNumber: 2,
       });
     });
 
@@ -92,9 +95,11 @@ describe('PrismaProceduresCatalog (spec 015, R12)', () => {
         versionId: VERSION_ID,
         areaIds: [VENTAS, OPERACIONES],
         steps: [
-          { id: 's1', order: 1, title: 'Contar' },
-          { id: 's2', order: 2, title: 'Comparar' },
+          { id: 's1', order: 1, title: 'Contar', description: 'Billetes y monedas', stepKey: 'k1' },
+          { id: 's2', order: 2, title: 'Comparar', description: '', stepKey: 'k2' },
         ],
+        title: 'Cierre de caja',
+        versionNumber: 2,
       });
       expect(prisma.procedureVersion.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: VERSION_ID } }),
@@ -107,25 +112,36 @@ describe('PrismaProceduresCatalog (spec 015, R12)', () => {
       await expect(catalog.findVersion(VERSION_ID)).resolves.toBeNull();
     });
 
-    it('does not give the description of the steps nor any other field of the tables', async () => {
+    it('gives the description and the key of the steps, but no other field of the tables', async () => {
       prisma.procedureVersion.findUnique.mockResolvedValue(
-        versionRow({ steps: [{ id: 's1', stepOrder: 1, title: 'Contar', description: 'x', stepKey: 'k' }] }),
+        versionRow({
+          steps: [
+            { id: 's1', stepOrder: 1, title: 'Contar', description: 'x', stepKey: 'k', procedureVersionId: VERSION_ID },
+          ],
+        }),
       );
 
       const version = await catalog.findVersion(VERSION_ID);
 
-      expect(version?.steps).toEqual([{ id: 's1', order: 1, title: 'Contar' }]);
+      expect(version?.steps).toEqual([{ id: 's1', order: 1, title: 'Contar', description: 'x', stepKey: 'k' }]);
     });
   });
 
   describe('E23: the title of the procedure', () => {
-    // Pending: Mayra adds title to CatalogProcedureVersion; until then the adapter does not send it.
-    it('does not send a title yet, because the port does not have one', async () => {
+    // The port has title and versionNumber (HU11): the adapter sends the ones of the version.
+    it('sends the title and the number of the version, and nothing else of the version', async () => {
       prisma.procedureVersion.findUnique.mockResolvedValue(versionRow());
 
       const version = await catalog.findVersion(VERSION_ID);
 
-      expect(Object.keys(version ?? {}).sort()).toEqual(['areaIds', 'procedureId', 'steps', 'versionId']);
+      expect(Object.keys(version ?? {}).sort()).toEqual([
+        'areaIds',
+        'procedureId',
+        'steps',
+        'title',
+        'versionId',
+        'versionNumber',
+      ]);
     });
   });
 

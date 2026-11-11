@@ -12,7 +12,10 @@ import { isUnavailable } from '../prisma-procedures.repository';
 
 // The steps by order and the areas the procedure has now (the same for all its versions).
 const withStepsAndAreas = {
-  steps: { orderBy: { stepOrder: 'asc' }, select: { id: true, stepOrder: true, title: true } },
+  steps: {
+    orderBy: { stepOrder: 'asc' },
+    select: { id: true, stepOrder: true, title: true, description: true, stepKey: true },
+  },
   procedure: { select: { areas: { select: { areaId: true } } } },
 } satisfies Prisma.ProcedureVersionInclude;
 
@@ -24,7 +27,15 @@ const toCatalogVersion = (row: VersionRow): CatalogProcedureVersion => ({
   procedureId: row.procedureId,
   versionId: row.id,
   areaIds: row.procedure.areas.map((area) => area.areaId).sort(),
-  steps: row.steps.map((step) => ({ id: step.id, order: step.stepOrder, title: step.title })),
+  steps: row.steps.map((step) => ({
+    id: step.id,
+    order: step.stepOrder,
+    title: step.title,
+    description: step.description,
+    stepKey: step.stepKey,
+  })),
+  title: row.title,
+  versionNumber: row.versionNumber,
 });
 
 // What findPublishedAfter reads of each version, and how it leaves (HU33).
