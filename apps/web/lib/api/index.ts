@@ -110,6 +110,13 @@ export const { listConflictAlerts, resolveConflictAlert } = createConflictAlerts
 export { CONFLICT_ALERTS_CHANGED_EVENT, notifyConflictAlertsChanged } from './conflict-alerts';
 export type { ConflictAlert, ConflictAlertDocument, ConflictAlertPage, ConflictAlertStatus } from './conflict-alerts';
 
-// HU29: Emisión de invitaciones por administradores.
-export const { createInvitation } = createInvitationsApi(apiClient);
-export type { CreateInvitationPayload, CreatedInvitation } from './invitations';
+// HU29: Emisión y gestión de invitaciones por administradores.
+export const { createInvitation, listInvitations, revokeInvitation } =
+  createInvitationsApi(apiClient);
+export { INVITATIONS_CHANGED_EVENT, notifyInvitationsChanged } from './invitations';
+export type {
+  CreateInvitationPayload,
+  CreatedInvitation,
+  InvitationListItem,
+  InvitationStatus,
+} from './invitations';

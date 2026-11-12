@@ -8,6 +8,10 @@ import {
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Role } from '../common/auth';
+import type {
+  InvitationListItemResponse,
+  InvitationStatus,
+} from './dto/invitation-list-item.response';
 import {
   generateInvitationToken,
   hashInvitationToken,
@@ -338,6 +342,67 @@ export class InvitationsService {
       expiresAt: invitation.expiresAt,
       areaIds: invitation.areas.map((a) => a.areaId),
     };
+  }
+
+  /**
+   * Retorna todas las invitaciones registradas con su estado actual y áreas.
+   */
+  async listInvitations(): Promise<InvitationListItemResponse[]> {
+    const invitations = await this.prisma.userInvitation.findMany({
+      include: {
+        areas: {
+          include: {
+            area: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    const now = new Date();
+
+    return invitations.map((inv) => {
+      let status: InvitationStatus;
+      if (inv.acceptedAt !== null) {
+        status = 'ACCEPTED';
+      } else if (inv.revokedAt !== null) {
+        status = 'REVOKED';
+      } else if (inv.expiresAt <= now) {
+        status = 'EXPIRED';
+      } else {
+        status = 'PENDING';
+      }
+
+      return {
+        id: inv.id,
+        email: inv.email,
+        role: inv.role,
+        status,
+        areaIds: inv.areas.map((a) => a.areaId),
+        areaNames: inv.areas.map((a) => a.area.name),
+        createdAt: inv.createdAt,
+        expiresAt: inv.expiresAt,
+        acceptedAt: inv.acceptedAt,
+        revokedAt: inv.revokedAt,
+        createdBy: {
+          id: inv.createdBy.id,
+          name: inv.createdBy.name,
+        },
+      };
+    });
   }
 
   /**

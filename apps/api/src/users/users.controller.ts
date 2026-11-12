@@ -2,8 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Logger,
+  NotFoundException,
+  Param,
   Post,
   Query,
   ServiceUnavailableException,
@@ -15,6 +18,7 @@ import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../common/auth';
 import type { AuthUser } from '../common/auth';
 import { UUID_REGEX } from '../auth/session.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
+import { InvitationListItemResponse } from './dto/invitation-list-item.response';
 import { InvitationResponse } from './dto/invitation.response';
 import { UserCandidateResponse } from './dto/user-candidate.response';
 import { InvitationDeliveryService } from './invitation-delivery.service';
@@ -237,5 +241,40 @@ export class UsersController {
       createdAt: result.invitation.createdAt,
       invitationUrl: isLocal ? deliveryResult.invitationUrl : undefined,
     };
+  }
+
+  @Get('invitations')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de todas las invitaciones registradas',
+    type: InvitationListItemResponse,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede listar invitaciones' })
+  async listInvitations(): Promise<InvitationListItemResponse[]> {
+    return this.invitationsService.listInvitations();
+  }
+
+  @Delete('invitations/:id')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Invitación revocada correctamente',
+  })
+  @ApiResponse({ status: 400, description: 'ID de invitación inválido' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede revocar invitaciones' })
+  @ApiResponse({ status: 404, description: 'Invitación no encontrada o ya no es revocable' })
+  async revokeInvitation(@Param('id') id: string): Promise<{ id: string; revoked: boolean }> {
+    if (!UUID_REGEX.test(id)) {
+      throw new BadRequestException('ID de invitación inválido');
+    }
+    const revoked = await this.invitationsService.revokeInvitation(id);
+    if (!revoked) {
+      throw new NotFoundException('Invitación no encontrada o ya no es revocable');
+    }
+    return { id, revoked: true };
   }
 }

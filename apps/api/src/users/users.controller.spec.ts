@@ -43,6 +43,7 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
   let listOwnerCandidates: jest.Mock;
   let createInvitation: jest.Mock;
   let revokeInvitation: jest.Mock;
+  let listInvitations: jest.Mock;
   let assertReady: jest.Mock;
   let deliver: jest.Mock;
   let configGet: jest.Mock;
@@ -51,6 +52,7 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     listOwnerCandidates = jest.fn();
     createInvitation = jest.fn();
     revokeInvitation = jest.fn();
+    listInvitations = jest.fn();
     assertReady = jest.fn();
     deliver = jest.fn();
     configGet = jest.fn((key: string) => {
@@ -66,7 +68,7 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
         { provide: UsersService, useValue: { listOwnerCandidates } },
         {
           provide: InvitationsService,
-          useValue: { createInvitation, revokeInvitation },
+          useValue: { createInvitation, revokeInvitation, listInvitations },
         },
         {
           provide: InvitationDeliveryService,
@@ -99,7 +101,10 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     });
 
     revokeInvitation.mockReset();
-    revokeInvitation.mockResolvedValue(undefined);
+    revokeInvitation.mockResolvedValue(true);
+
+    listInvitations.mockReset();
+    listInvitations.mockResolvedValue([]);
 
     assertReady.mockReset();
 
@@ -712,6 +717,88 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
 
         loggerSpy.mockRestore();
       });
+    });
+  });
+
+  describe('GET /api/users/invitations', () => {
+    it('rechaza 401 si no hay token de autenticación', async () => {
+      await http().get('/api/users/invitations').expect(401);
+    });
+
+    it('rechaza 403 si el rol no es ADMIN', async () => {
+      await http()
+        .get('/api/users/invitations')
+        .set(bearer(SPEC_USERS.supervisorVentas))
+        .expect(403);
+    });
+
+    it('devuelve 200 con el listado de invitaciones para ADMIN', async () => {
+      listInvitations.mockResolvedValueOnce([
+        {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          email: 'colaborador@empresa.com',
+          role: 'EMPLOYEE',
+          status: 'PENDING',
+          areaIds: [VENTAS],
+          areaNames: ['Ventas'],
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date().toISOString(),
+          acceptedAt: null,
+          revokedAt: null,
+          createdBy: { id: 'admin-id', name: 'Ana Administradora' },
+        },
+      ]);
+
+      const res = await http()
+        .get('/api/users/invitations')
+        .set(admin())
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].email).toBe('colaborador@empresa.com');
+      expect(res.body[0].status).toBe('PENDING');
+      expect(listInvitations).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('DELETE /api/users/invitations/:id', () => {
+    const validId = '550e8400-e29b-41d4-a716-446655440000';
+
+    it('rechaza 401 si no hay token', async () => {
+      await http().delete(`/api/users/invitations/${validId}`).expect(401);
+    });
+
+    it('rechaza 403 si el rol no es ADMIN', async () => {
+      await http()
+        .delete(`/api/users/invitations/${validId}`)
+        .set(bearer(SPEC_USERS.empleadoVentas))
+        .expect(403);
+    });
+
+    it('rechaza 400 si el ID no es UUID válido', async () => {
+      await http()
+        .delete('/api/users/invitations/invalido')
+        .set(admin())
+        .expect(400);
+    });
+
+    it('devuelve 404 si la invitación no existe o ya no es revocable', async () => {
+      revokeInvitation.mockResolvedValueOnce(false);
+      await http()
+        .delete(`/api/users/invitations/${validId}`)
+        .set(admin())
+        .expect(404);
+    });
+
+    it('devuelve 200 y { id, revoked: true } si se revoca con éxito', async () => {
+      revokeInvitation.mockResolvedValueOnce(true);
+      const res = await http()
+        .delete(`/api/users/invitations/${validId}`)
+        .set(admin())
+        .expect(200);
+
+      expect(res.body).toEqual({ id: validId, revoked: true });
+      expect(revokeInvitation).toHaveBeenCalledWith(validId);
     });
   });
 
