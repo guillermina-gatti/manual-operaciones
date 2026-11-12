@@ -1,5 +1,7 @@
 packages:
   - 'apps/*'
+overrides:
+  deepmerge-ts: ^8.0.2
 allowBuilds:
   '@parcel/watcher': true
   '@prisma/engines': true
