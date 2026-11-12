@@ -33,6 +33,8 @@ const ABOUT_KEYWORDS = [
     ['como', 'funcionas'],
 ];
 
+const MAX_ABOUT_TOKENS = 5;
+
 const FAREWELL_WORDS = new Set(['chau', 'adios', 'bye', 'vemos', 'luego', 'pronto']);
 const THANKS_WORDS = new Set(['gracias', 'muchas', 'mil']);
 const GREETING_WORDS = new Set([
@@ -72,7 +74,12 @@ export function smallTalkReply(question: string, random: () => number = Math.ran
     if (!normalized) return null;
 
     const tokens = normalized.split(' ');
-    if (ABOUT_KEYWORDS.some((keywords) => keywords.every((word) => tokens.includes(word)))) {
+    // Solo una pregunta corta sobre el asistente. Con más palabras, "qué sos capaz de responder sobre
+    // devoluciones" es una consulta de trabajo y tiene que ir a los documentos.
+    if (
+        tokens.length <= MAX_ABOUT_TOKENS &&
+        ABOUT_KEYWORDS.some((keywords) => keywords.every((word) => tokens.includes(word)))
+    ) {
         return ABOUT_REPLY;
     }
 
