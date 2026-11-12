@@ -2,143 +2,252 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ProcedureList } from '@/components/procedures/ProcedureList';
-import { loadProcedures, saveProcedure } from '@/lib/procedures/session-list';
-import {
-  ADMIN_ID,
-  ANA,
-  PROCEDURE_ID,
-  STEP_A,
-  STEP_B,
-  VENTAS,
-  procedureResponse,
-  stored,
-} from '../../support/procedures';
+import { ApiError } from '@/lib/api';
+import { simulateDialogs } from '../../support/dialog';
+import { AREAS } from '../../support/procedure-areas';
+import { ANA, PROCEDURE_ID, editable, procedureResponse } from '../../support/procedures';
+import { ELENA, SUSANA, detailOf, listItem, listPage } from '../../support/procedure-view';
+
+simulateDialogs();
 
 const mocks = vi.hoisted(() => ({
+  listProcedures: vi.fn(),
   createProcedure: vi.fn(),
+  getProcedure: vi.fn(),
+  listVersions: vi.fn(),
+  discardDraft: vi.fn(),
+  listAreas: vi.fn(),
+  push: vi.fn(),
   useSession: vi.fn(),
+  search: new URLSearchParams(),
 }));
 
 vi.mock('@/lib/procedures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/procedures')>()),
+  listProcedures: mocks.listProcedures,
   createProcedure: mocks.createProcedure,
+  getProcedure: mocks.getProcedure,
+  listVersions: mocks.listVersions,
+  discardDraft: mocks.discardDraft,
 }));
+
+vi.mock('@/lib/directory', () => ({ areasDirectory: { listAreas: mocks.listAreas } }));
 
 vi.mock('@/lib/session', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/session')>()),
   useSession: mocks.useSession,
 }));
 
-const OTHER_PROCEDURE = '1a000000-0000-4000-8000-000000000002';
-const OTHER_USER = '0b000000-0000-4000-8000-000000000002';
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => mocks.search,
+  useRouter: () => ({ push: mocks.push }),
+}));
+
+const OTHER_ID = '1a000000-0000-4000-8000-000000000002';
+const OTHER = listItem({
+  id: OTHER_ID,
+  version: { ...listItem().version, title: 'Recepción de mercadería', stepCount: 4 },
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
-  mocks.useSession.mockReturnValue(ANA);
+  mocks.search = new URLSearchParams();
+  mocks.useSession.mockReturnValue(ELENA);
+  mocks.listProcedures.mockResolvedValue(listPage([listItem(), OTHER]));
   mocks.createProcedure.mockResolvedValue(procedureResponse());
+  mocks.listAreas.mockResolvedValue(AREAS);
+  mocks.listVersions.mockResolvedValue({ data: [], total: 0, page: 1, limit: 100 });
+  mocks.getProcedure.mockResolvedValue(detailOf(editable({ title: 'Cierre de caja' })));
+  mocks.discardDraft.mockResolvedValue(undefined);
 });
 
-const card = (name: string) =>
-  screen.getByRole('heading', { level: 3, name }).closest('li') as HTMLElement;
-
-describe('the notice', () => {
-  test('says the list only has what was created in this session, and why', () => {
+// Spec 006, W1 (E41): the list is what the API answers, page by page.
+describe('the list', () => {
+  test('shows a card for each procedure the API answers', async () => {
     render(<ProcedureList />);
 
-    expect(screen.getByRole('note')).toHaveTextContent(
-      'Todavía no hay un listado completo de procedimientos; por ahora se ven los que creaste en esta sesión del navegador.',
+    expect(await screen.findByRole('heading', { level: 3, name: 'Cierre de caja' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 3, name: 'Recepción de mercadería' })).toBeVisible();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  test('asks for the first page, 12 at a time', async () => {
+    render(<ProcedureList />);
+
+    await screen.findAllByRole('listitem');
+    expect(mocks.listProcedures).toHaveBeenCalledWith(
+      { page: 1, limit: 12 },
+      expect.any(AbortSignal),
+    );
+  });
+
+  test('asks for the page of the address (?pagina=)', async () => {
+    mocks.search = new URLSearchParams('pagina=3');
+
+    render(<ProcedureList />);
+
+    await screen.findAllByRole('listitem');
+    expect(mocks.listProcedures).toHaveBeenCalledWith({ page: 3, limit: 12 }, expect.any(AbortSignal));
+  });
+
+  test('does not keep a copy in the browser storage', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+
+    expect(setItem).not.toHaveBeenCalled();
+    expect(window.sessionStorage).toHaveLength(0);
+    setItem.mockRestore();
+  });
+
+  test('has page links when there are more than one page', async () => {
+    mocks.listProcedures.mockResolvedValue({ ...listPage([listItem()], 30), page: 1 });
+
+    render(<ProcedureList />);
+
+    const pages = await screen.findByRole('navigation', { name: 'Páginas' });
+    expect(within(pages).getByRole('link', { name: 'Página 3' })).toHaveAttribute(
+      'href',
+      '/procedimientos?pagina=3',
     );
   });
 });
 
-describe('the list', () => {
-  test('without procedures it says so', () => {
+// W8 and W9 (E48): empty, loading and error.
+describe('the states', () => {
+  test('without procedures, an EMPLOYEE reads the friendly message', async () => {
+    mocks.listProcedures.mockResolvedValue(listPage([]));
+
     render(<ProcedureList />);
 
-    expect(screen.getByText('Todavía no creaste procedimientos en esta sesión.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Todavía no hay procedimientos publicados en tus áreas.'),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });
 
-  test('shows each procedure with its version, steps and areas', () => {
-    saveProcedure(
-      ADMIN_ID,
-      stored({
-        description: 'Al final del día',
-        areaIds: [VENTAS],
-        steps: [
-          { id: STEP_A, order: 1, title: 'A', description: '' },
-          { id: STEP_B, order: 2, title: 'B', description: '' },
-        ],
-      }),
-    );
-    saveProcedure(ADMIN_ID, stored({ id: OTHER_PROCEDURE, title: 'Recepción de mercadería' }));
+  test('without procedures, an ADMIN reads a message about creating them', async () => {
+    mocks.useSession.mockReturnValue(ANA);
+    mocks.listProcedures.mockResolvedValue(listPage([]));
+
     render(<ProcedureList />);
 
-    const first = within(card('Cierre de caja'));
-    expect(first.getByText('Versión 1 · borrador')).toBeInTheDocument();
-    expect(first.getByText('Al final del día')).toBeInTheDocument();
-    expect(first.getByText('2 pasos · 1 área')).toBeInTheDocument();
-    expect(within(card('Recepción de mercadería')).getByText('sin pasos · sin áreas')).toBeInTheDocument();
+    expect(await screen.findByText('Todavía no hay procedimientos creados.')).toBeInTheDocument();
   });
 
-  test('the newest goes first', () => {
-    saveProcedure(ADMIN_ID, stored());
-    saveProcedure(ADMIN_ID, stored({ id: OTHER_PROCEDURE, title: 'Recepción de mercadería' }));
+  test('while it asks, it tells screen readers', () => {
+    mocks.listProcedures.mockReturnValue(new Promise(() => undefined));
+
     render(<ProcedureList />);
 
-    const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(titles).toEqual(['Recepción de mercadería', 'Cierre de caja']);
+    expect(screen.getByRole('status')).toHaveTextContent('Cargando procedimientos…');
   });
 
-  test('the title of each one links to its editor, and it is the only link of the card', () => {
-    saveProcedure(ADMIN_ID, stored());
+  test('if it fails, it says so without the text of the server, and retrying asks again', async () => {
+    mocks.listProcedures.mockRejectedValueOnce(new ApiError(503, ['pg connection refused']));
+
     render(<ProcedureList />);
 
-    const links = within(card('Cierre de caja')).getAllByRole('link');
-    expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAccessibleName('Cierre de caja');
-    expect(links[0]).toHaveAttribute('href', `/procedimientos/${PROCEDURE_ID}`);
-  });
-
-  test('has no "Abrir" button: the card is the way in', () => {
-    saveProcedure(ADMIN_ID, stored());
-    render(<ProcedureList />);
-
-    expect(screen.queryByRole('link', { name: 'Abrir' })).not.toBeInTheDocument();
-  });
-
-  test('does not show what another user created', () => {
-    saveProcedure(OTHER_USER, stored({ title: 'De otra persona' }));
-    render(<ProcedureList />);
-
-    expect(screen.queryByText('De otra persona')).not.toBeInTheDocument();
-  });
-
-  test('"Quitar de la lista" removes only that one, and does not call the API', async () => {
-    saveProcedure(ADMIN_ID, stored());
-    saveProcedure(ADMIN_ID, stored({ id: OTHER_PROCEDURE, title: 'Recepción de mercadería' }));
-    render(<ProcedureList />);
-
-    await userEvent.click(
-      within(card('Cierre de caja')).getByRole('button', { name: 'Quitar de la lista' }),
-    );
-
-    expect(screen.queryByRole('heading', { level: 3, name: 'Cierre de caja' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'Recepción de mercadería' })).toBeInTheDocument();
-    expect(loadProcedures(ADMIN_ID).map((p) => p.id)).toEqual([OTHER_PROCEDURE]);
-    expect(mocks.createProcedure).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).not.toHaveTextContent('pg connection');
+    await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Cierre de caja' })).toBeVisible();
+    expect(mocks.listProcedures).toHaveBeenCalledTimes(2);
   });
 });
 
-describe('creating a procedure', () => {
-  test('has the form, and the new procedure shows up in the list', async () => {
+// W3 (E43): the employee and the supervisor read; they do not create or edit.
+describe.each([
+  ['EMPLOYEE', ELENA],
+  ['SUPERVISOR', SUSANA],
+])('for a %s', (_role, session) => {
+  test('has no form to create and no field', async () => {
+    mocks.useSession.mockReturnValue(session);
+
     render(<ProcedureList />);
 
+    await screen.findAllByRole('listitem');
+    expect(screen.queryByRole('button', { name: 'Crear procedimiento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Crear un procedimiento' })).not.toBeInTheDocument();
+  });
+
+  test('each card goes to its read-only sheet', async () => {
+    mocks.useSession.mockReturnValue(session);
+
+    render(<ProcedureList />);
+
+    const title = await screen.findByRole('link', { name: 'Cierre de caja' });
+    expect(title).toHaveAttribute('href', `/procedimientos/${PROCEDURE_ID}`);
+  });
+});
+
+// W2 (E42): the ADMIN keeps creating, and sees the new one.
+describe('for an ADMIN', () => {
+  beforeEach(() => mocks.useSession.mockReturnValue(ANA));
+
+  test('has the form to create a procedure above the list', async () => {
+    render(<ProcedureList />);
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Crear procedimiento' })).toBeVisible();
+    await screen.findAllByRole('listitem');
+  });
+
+  const createOne = async () => {
     await userEvent.type(screen.getByRole('textbox', { name: 'Título' }), 'Cierre de caja');
     await userEvent.click(screen.getByRole('button', { name: 'Crear procedimiento' }));
+  };
 
-    expect(await screen.findByRole('heading', { level: 3, name: 'Cierre de caja' })).toBeInTheDocument();
-    expect(screen.queryByText('Todavía no creaste procedimientos en esta sesión.')).not.toBeInTheDocument();
+  test('after creating one, the list is asked again and includes it', async () => {
+    mocks.listProcedures.mockResolvedValueOnce(listPage([]));
+    render(<ProcedureList />);
+    await screen.findByText('Todavía no hay procedimientos creados.');
+    mocks.listProcedures.mockResolvedValue(listPage([listItem()]));
+
+    await createOne();
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Cierre de caja' })).toBeVisible();
+    expect(mocks.listProcedures).toHaveBeenCalledTimes(2);
+  });
+
+  test('after creating one, the same screen shows its draft in place of the form (E24)', async () => {
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+
+    await createOne();
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Borrador' })).toBeVisible();
+    expect(mocks.getProcedure).toHaveBeenCalledWith(PROCEDURE_ID, expect.any(AbortSignal));
+    expect(screen.queryByRole('heading', { name: 'Crear un procedimiento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Abrir el borrador' })).not.toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  test('the draft of the same screen has one h1 only: the one of the page', async () => {
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+
+    await createOne();
+    await screen.findByRole('heading', { level: 2, name: 'Borrador' });
+
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Cierre de caja' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: /Volver a procedimientos/ })).not.toBeInTheDocument();
+  });
+
+  test('discarding that draft brings the form back and asks the list again', async () => {
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+    await createOne();
+    await screen.findByRole('heading', { level: 2, name: 'Borrador' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Descartar borrador' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toBeVisible();
+    expect(mocks.listProcedures).toHaveBeenCalledTimes(3);
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 });

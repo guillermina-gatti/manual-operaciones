@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="es" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+      <body className="h-dvh flex flex-col">
         <SessionProvider>
           <SessionControls />
           {children}

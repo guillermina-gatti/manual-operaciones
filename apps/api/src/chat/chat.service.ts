@@ -13,7 +13,7 @@ import { type StepContext, openStepContext, rememberConversationStep } from './c
 import {
     type ChatUser,
     type Outcome,
-    finishChat,
+    finishWithHelp,
     prepareChat,
     saveResult,
     unavailable,
@@ -93,6 +93,6 @@ export class ChatService {
             return unavailable();
         }
 
-        return finishChat(llm, prepared.chunks, this.logger);
+        return finishWithHelp(llm, prepared.chunks, question, this.logger);
     }
 }

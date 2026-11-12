@@ -1,8 +1,7 @@
-// Procedures an employee can choose on /ejecuciones.
-// TODO(HU12): provisional sample data, the same ids as the API fixtures
-// (apps/api/src/executions/adapters/procedure-fixtures.ts). Replace with Mica's procedure
-// listing once it exists. They are not filtered by area: the API decides, and answers 404
-// to an employee of another area.
+// The sample procedures, with the same ids as the in-memory catalog of the API
+// (apps/api/src/executions/adapters/procedure-fixtures.ts). Only a fallback for names: the
+// picker of /ejecuciones lists the real ones (GET /api/procedures), and the API gives the title
+// of each execution. They still name the executions of the sample data and the e2e tests.
 
 export interface ProcedureOption {
   id: string;

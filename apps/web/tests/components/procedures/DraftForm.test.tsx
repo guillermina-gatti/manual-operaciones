@@ -5,17 +5,23 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { DraftForm } from '@/components/procedures/DraftForm';
 import { ApiError } from '@/lib/api';
 import { PROCEDURE_MESSAGES } from '@/lib/procedures';
-import { PROCEDURE_ID, VERSION_ID, procedureResponse, stored } from '../../support/procedures';
+import { simulateDialogs } from '../../support/dialog';
+import { AREAS } from '../../support/procedure-areas';
+import { OPERACIONES, PROCEDURE_ID, VENTAS, VERSION_ID, procedureResponse, editable } from '../../support/procedures';
+
+simulateDialogs();
 
 const mocks = vi.hoisted(() => ({
   updateVersion: vi.fn(),
   discardDraft: vi.fn(),
+  setAreas: vi.fn(),
 }));
 
 vi.mock('@/lib/procedures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/procedures')>()),
   updateVersion: mocks.updateVersion,
   discardDraft: mocks.discardDraft,
+  setAreas: mocks.setAreas,
 }));
 
 // What PATCH …/versions/:versionId answers.
@@ -25,7 +31,7 @@ const version = (title: string, description: string | null) => ({
   description,
 });
 
-const PROCEDURE = stored({ description: 'Al final del día' });
+const PROCEDURE = editable({ description: 'Al final del día' });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -35,12 +41,13 @@ beforeEach(() => {
     ),
   );
   mocks.discardDraft.mockResolvedValue(undefined);
+  mocks.setAreas.mockImplementation((_id: string, areaIds: string[]) => Promise.resolve({ procedureId: PROCEDURE_ID, areaIds }));
 });
 
 function setup(procedure = PROCEDURE) {
   const onChange = vi.fn();
   const onGone = vi.fn();
-  render(<DraftForm procedure={procedure} onChange={onChange} onGone={onGone} />);
+  render(<DraftForm procedure={procedure} areas={AREAS} onChange={onChange} onGone={onGone} />);
   return { onChange, onGone };
 }
 
@@ -63,7 +70,7 @@ describe('the form', () => {
   });
 
   test('a draft without description has an empty field', () => {
-    setup(stored({ description: null }));
+    setup(editable({ description: null }));
 
     expect(descriptionField()).toHaveValue('');
   });
@@ -218,13 +225,99 @@ describe('errors when saving', () => {
   });
 });
 
+const chip = (name: string) => screen.getByRole('checkbox', { name });
+
+describe('the areas in the same card (D22, D26)', () => {
+  const WITH_OPERACIONES = editable({ description: 'Al final del día', areaIds: [OPERACIONES] });
+
+  test('the areas of the procedure are chips: the ones it has are marked', () => {
+    setup(WITH_OPERACIONES);
+
+    expect(screen.getByRole('group', { name: 'Áreas' })).toBeInTheDocument();
+    expect(chip('Operaciones')).toBeChecked();
+    expect(chip('Ventas')).not.toBeChecked();
+  });
+
+  test('an inactive area is shown "(inactiva)" only if the procedure has it (E29)', () => {
+    const { unmount } = render(
+      <DraftForm procedure={editable({ areaIds: [VENTAS] })} areas={AREAS} onChange={vi.fn()} onGone={vi.fn()} />,
+    );
+    expect(screen.queryByRole('checkbox', { name: /Archivo/ })).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <DraftForm procedure={editable({ areaIds: [AREAS[0].id] })} areas={AREAS} onChange={vi.fn()} onGone={vi.fn()} />,
+    );
+    expect(chip('Archivo (inactiva)')).toBeChecked();
+  });
+
+  test('"Guardar cambios" also saves the areas that were marked (E25)', async () => {
+    const { onChange } = setup(WITH_OPERACIONES);
+
+    await retitle('Cierre y arqueo');
+    await userEvent.click(chip('Ventas'));
+    await userEvent.click(saveButton());
+
+    expect(mocks.updateVersion).toHaveBeenCalledWith(PROCEDURE_ID, VERSION_ID, { title: 'Cierre y arqueo' });
+    expect(mocks.setAreas).toHaveBeenCalledWith(PROCEDURE_ID, [OPERACIONES, VENTAS]);
+    expect(await screen.findByRole('status')).toHaveTextContent('Cambios guardados.');
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: 'Cierre y arqueo', areaIds: [OPERACIONES, VENTAS] }),
+    );
+  });
+
+  test('if only the areas changed, only the areas are sent (E25)', async () => {
+    setup(WITH_OPERACIONES);
+
+    await userEvent.click(chip('Operaciones'));
+    await userEvent.click(saveButton());
+
+    expect(mocks.setAreas).toHaveBeenCalledWith(PROCEDURE_ID, []);
+    expect(mocks.updateVersion).not.toHaveBeenCalled();
+  });
+
+  test('if the title was saved and the areas fail, it says so and the title is kept (E25)', async () => {
+    mocks.setAreas.mockRejectedValue(new ApiError(400));
+    const { onChange } = setup(WITH_OPERACIONES);
+
+    await retitle('Cierre y arqueo');
+    await userEvent.click(chip('Ventas'));
+    await userEvent.click(saveButton());
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cierre y arqueo' }));
+  });
+
+  test('without changes in the areas, the areas are not sent', async () => {
+    setup(WITH_OPERACIONES);
+
+    await retitle('Cierre y arqueo');
+    await userEvent.click(saveButton());
+
+    expect(mocks.setAreas).not.toHaveBeenCalled();
+  });
+
+  test('title and description sit side by side from sm up (one under the other on a phone)', () => {
+    setup();
+
+    expect(titleField().closest('form')?.firstElementChild).toHaveClass('grid', 'sm:grid-cols-2');
+  });
+});
+
 describe('discarding the draft', () => {
-  test('asks first, and does not call the API yet', async () => {
+  test('the trash button has no text, only the label for screen readers', () => {
+    setup();
+
+    expect(discardButton()).toHaveTextContent('');
+    expect(discardButton()).toHaveClass('text-peligro');
+  });
+
+  test('asks first in a dialog, and does not call the API yet (E27)', async () => {
     setup();
 
     await userEvent.click(discardButton());
 
-    expect(screen.getByText(/¿Descartar el borrador\?/)).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '¿Descartar el borrador?' })).toBeInTheDocument();
     expect(mocks.discardDraft).not.toHaveBeenCalled();
   });
 
@@ -242,7 +335,7 @@ describe('discarding the draft', () => {
     const { onGone } = setup();
 
     await userEvent.click(discardButton());
-    await userEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
 
     expect(mocks.discardDraft).toHaveBeenCalledWith(PROCEDURE_ID, VERSION_ID);
     expect(await vi.waitFor(() => expect(onGone).toHaveBeenCalledTimes(1)));
@@ -254,7 +347,7 @@ describe('discarding the draft', () => {
     setup();
 
     await userEvent.click(discardButton());
-    await userEvent.dblClick(screen.getByRole('button', { name: /Sí, descartar|Descartando…/ }));
+    await userEvent.dblClick(screen.getByRole('button', { name: /Sí, borrar|Borrando…/ }));
 
     expect(mocks.discardDraft).toHaveBeenCalledTimes(1);
     resolve(undefined);
@@ -265,7 +358,7 @@ describe('discarding the draft', () => {
     const { onGone } = setup();
 
     await userEvent.click(discardButton());
-    await userEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(PROCEDURE_MESSAGES.versionNotEditable);
     expect(onGone).not.toHaveBeenCalled();
@@ -277,7 +370,7 @@ describe('discarding the draft', () => {
     const { onGone } = setup();
 
     await userEvent.click(discardButton());
-    await userEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(PROCEDURE_MESSAGES.notFound);
 
     await userEvent.click(screen.getByRole('button', { name: 'Quitar de la lista' }));
@@ -291,7 +384,7 @@ describe('coming back to the screen (Activity)', () => {
     mocks.updateVersion.mockRejectedValue(new ApiError(503));
     const screenOf = (mode: 'visible' | 'hidden') => (
       <Activity mode={mode}>
-        <DraftForm procedure={PROCEDURE} onChange={vi.fn()} onGone={vi.fn()} />
+        <DraftForm procedure={PROCEDURE} areas={AREAS} onChange={vi.fn()} onGone={vi.fn()} />
       </Activity>
     );
     const { rerender } = render(screenOf('visible'));

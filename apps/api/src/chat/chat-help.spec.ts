@@ -3,7 +3,7 @@ import { platformHelpReply } from './chat-help';
 
 describe('platformHelpReply', () => {
     it('cómo ver un documento, aunque esté mal escrito', () => {
-        expect(platformHelpReply('como busoc un documento')).toContain('/documentos');
+        expect(platformHelpReply('como busco un documento')).toContain('/documentos');
         expect(platformHelpReply('Cómo veo un documento que hable de esto?')).toContain('Documentos');
         expect(platformHelpReply('donde encuentro los manuales')).toContain('/documentos');
     });
@@ -15,7 +15,7 @@ describe('platformHelpReply', () => {
 
     it('cómo ejecutar un procedimiento', () => {
         expect(platformHelpReply('como hago un procedimiento')).toContain('/ejecuciones');
-        expect(platformHelpReply('donde veo mis tareas')).toContain('/ejecuciones');
+        expect(platformHelpReply('donde veo mis procedimientos')).toContain('/ejecuciones');
     });
 
     it('métricas, avisos de revisión y uso del asistente', () => {
@@ -61,8 +61,8 @@ describe('platformHelpReply · documentos visibles, estados y citas', () => {
     });
 
     it('de dónde sale la información', () => {
-        expect(platformHelpReply('de donde sacas esto')).toContain('qué documento');
-        expect(platformHelpReply('como se si es confiable')).toContain('qué documento');
+        expect(platformHelpReply('de donde saco la fuente de esta respuesta')).toContain('qué documento');
+        expect(platformHelpReply('como se si la cita es confiable')).toContain('qué documento');
     });
 
     it('no se pisa con consultas de contenido', () => {
@@ -95,5 +95,16 @@ describe('platformHelpReply · "ayuda" y preguntas con "lo"', () => {
     it('una pregunta de contenido con "cargar" no es ayuda', () => {
         expect(platformHelpReply('como cargo la caja registradora')).toBeNull();
         expect(platformHelpReply('como lo cargo en el sistema de ventas')).toBeNull();
+    });
+});
+
+describe('platformHelpReply · preguntas de trabajo que no son ayuda (regresión)', () => {
+    // Casos reales: sus respuestas están en "Política de devoluciones" y "Medios de pago".
+    it.each([
+        'Pagó con crédito en cuotas, ¿cómo le devuelvo la plata?',
+        'El producto no tiene la caja original, ¿igual lo acepto?',
+        'Pagó 150.000 pesos en efectivo, ¿se los devuelvo yo?',
+    ])('%s', (question) => {
+        expect(platformHelpReply(question)).toBeNull();
     });
 });

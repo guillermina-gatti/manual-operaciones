@@ -12,19 +12,30 @@ import { isUnavailable } from '../prisma-procedures.repository';
 
 // The steps by order and the areas the procedure has now (the same for all its versions).
 const withStepsAndAreas = {
-  steps: { orderBy: { stepOrder: 'asc' }, select: { id: true, stepOrder: true, title: true } },
+  steps: {
+    orderBy: { stepOrder: 'asc' },
+    select: { id: true, stepOrder: true, title: true, description: true, stepKey: true },
+  },
   procedure: { select: { areas: { select: { areaId: true } } } },
 } satisfies Prisma.ProcedureVersionInclude;
 
 type VersionRow = Prisma.ProcedureVersionGetPayload<{ include: typeof withStepsAndAreas }>;
 
-// Nothing else of the tables leaves: only what the port declares. The title of the procedure joins
-// when the port has it (pending with Mayra, D17).
+// Nothing else of the tables leaves: only what the port declares. It gives the title and the number
+// of the version, and the description and key of each step (D17, HU11).
 const toCatalogVersion = (row: VersionRow): CatalogProcedureVersion => ({
   procedureId: row.procedureId,
   versionId: row.id,
   areaIds: row.procedure.areas.map((area) => area.areaId).sort(),
-  steps: row.steps.map((step) => ({ id: step.id, order: step.stepOrder, title: step.title })),
+  steps: row.steps.map((step) => ({
+    id: step.id,
+    order: step.stepOrder,
+    title: step.title,
+    description: step.description,
+    stepKey: step.stepKey,
+  })),
+  title: row.title,
+  versionNumber: row.versionNumber,
 });
 
 // What findPublishedAfter reads of each version, and how it leaves (HU33).

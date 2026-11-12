@@ -5,10 +5,9 @@
 // of the API updates the local copy through onChange. It has no box of its own: the section that
 // holds it lays its parts out.
 import { LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
-import { ADD_BOX } from './design';
+import type { EditableProcedure } from '@/lib/procedures/editable';
+import { AddStep } from './AddStep';
 import { Notice } from './Notice';
-import { StepForm } from './StepForm';
 import { StepItem } from './StepItem';
 import { useStepActions } from './useStepActions';
 
@@ -16,9 +15,9 @@ import { useStepActions } from './useStepActions';
 export const MAX_STEPS = 50;
 
 interface StepsEditorProps {
-  procedure: StoredProcedure;
+  procedure: EditableProcedure;
   // The new copy of the procedure after the API accepted a change.
-  onChange: (next: StoredProcedure) => void;
+  onChange: (next: EditableProcedure) => void;
   // The procedure is not in the API anymore: leave the screen.
   onGone: () => void;
 }
@@ -57,7 +56,7 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
               onStartEdit={() => actions.startEdit(step.id)}
               onCancelEdit={actions.cancelEdit}
               onSave={(values) => actions.edit(step, values)}
-              onRemove={() => void actions.remove(step)}
+              onRemove={() => actions.remove(step)}
             />
           ))}
         </ol>
@@ -66,16 +65,7 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
       {steps.length >= MAX_STEPS ? (
         <p className="text-texto-suave">El borrador ya tiene {MAX_STEPS} pasos: es el máximo.</p>
       ) : (
-        <StepForm
-          className={ADD_BOX}
-          legend="Agregar un paso"
-          submitLabel="Agregar paso"
-          busyLabel="Agregando…"
-          disabled={busy !== null}
-          working={busy === 'add'}
-          resetOnSuccess
-          onSubmit={actions.add}
-        />
+        <AddStep disabled={busy !== null} working={busy === 'add'} onAdd={actions.add} />
       )}
     </>
   );

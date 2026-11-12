@@ -16,7 +16,7 @@ import {
     NO_INFO_MARKER,
     type Outcome,
     UNAVAILABLE_TEXT,
-    finishChat,
+    finishWithHelp,
     prepareChat,
     saveResult,
     unavailable,
@@ -201,7 +201,8 @@ export class ChatStreamService {
                     this.logger.warn(retryFailedNotice(error));
                 }
             }
-            return finishChat(llm, prepared.chunks, this.logger);
+            // develop: si no hay respuesta, la ayuda de la plataforma (finishWithHelp), igual que POST /api/chat.
+            return finishWithHelp(llm, prepared.chunks, question, this.logger);
         } catch (error) {
             if (!clientSignal.aborted) this.logger.warn(`Falló la llamada al modelo: ${String(error)}`);
             return unavailable();

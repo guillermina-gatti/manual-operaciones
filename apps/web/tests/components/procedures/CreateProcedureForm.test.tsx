@@ -5,8 +5,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { CreateProcedureForm } from '@/components/procedures/CreateProcedureForm';
 import { ApiError } from '@/lib/api';
 import { PROCEDURE_MESSAGES } from '@/lib/procedures';
-import { loadProcedures } from '@/lib/procedures/session-list';
-import { ADMIN_ID, ANA, PROCEDURE_ID, procedureResponse } from '../../support/procedures';
+import { ANA, PROCEDURE_ID, procedureResponse } from '../../support/procedures';
 
 const mocks = vi.hoisted(() => ({
   createProcedure: vi.fn(),
@@ -120,29 +119,27 @@ describe('creating', () => {
     });
   });
 
-  test('saves the procedure in the list of the user and links to its draft', async () => {
-    render(<CreateProcedureForm />);
+  test('tells the screen the id of the new procedure, with no link and no notice (E24)', async () => {
+    const onCreated = vi.fn();
+    render(<CreateProcedureForm onCreated={onCreated} />);
 
     await userEvent.type(titleField(), 'Cierre de caja');
     await userEvent.click(submitButton());
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Procedimiento creado.');
-    expect(screen.getByRole('link', { name: 'Abrir el borrador' })).toHaveAttribute(
-      'href',
-      `/procedimientos/${PROCEDURE_ID}`,
-    );
-    const saved = loadProcedures(ADMIN_ID);
-    expect(saved).toHaveLength(1);
-    expect(saved[0]).toMatchObject({ id: PROCEDURE_ID, title: 'Cierre de caja', steps: [] });
+    await vi.waitFor(() => expect(onCreated).toHaveBeenCalledExactlyOnceWith(PROCEDURE_ID));
+    expect(screen.queryByRole('link', { name: 'Abrir el borrador' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(window.sessionStorage).toHaveLength(0);
   });
 
   test('clears the fields after creating', async () => {
-    render(<CreateProcedureForm />);
+    const onCreated = vi.fn();
+    render(<CreateProcedureForm onCreated={onCreated} />);
 
     await userEvent.type(titleField(), 'Cierre de caja');
     await userEvent.type(descriptionField(), 'Al final del día');
     await userEvent.click(submitButton());
-    await screen.findByRole('status');
+    await vi.waitFor(() => expect(onCreated).toHaveBeenCalled());
 
     expect(titleField()).toHaveValue('');
     expect(descriptionField()).toHaveValue('');
@@ -161,14 +158,16 @@ describe('creating', () => {
     expect(submitButton()).toHaveTextContent('Creando…');
 
     resolve(procedureResponse());
-    expect(await screen.findByRole('status')).toBeInTheDocument();
+    await vi.waitFor(() => expect(submitButton()).toBeEnabled());
+    expect(mocks.createProcedure).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('errors', () => {
-  test('403 → only an administrator can, nothing is saved and the data stays', async () => {
+  test('403 → only an administrator can, the list is not told and the data stays', async () => {
+    const onCreated = vi.fn();
     mocks.createProcedure.mockRejectedValue(new ApiError(403));
-    render(<CreateProcedureForm />);
+    render(<CreateProcedureForm onCreated={onCreated} />);
 
     await userEvent.type(titleField(), 'Cierre de caja');
     await userEvent.click(submitButton());
@@ -176,7 +175,7 @@ describe('errors', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(PROCEDURE_MESSAGES.noPermission);
     expect(titleField()).toHaveValue('Cierre de caja');
     expect(submitButton()).toBeEnabled();
-    expect(loadProcedures(ADMIN_ID)).toEqual([]);
+    expect(onCreated).not.toHaveBeenCalled();
   });
 
   test('401 → the session is not valid', async () => {
@@ -214,8 +213,7 @@ describe('errors', () => {
     await userEvent.click(submitButton());
 
     expect(mocks.createProcedure).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole('status')).toHaveTextContent('Procedimiento creado.');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });
 
@@ -227,7 +225,7 @@ describe('coming back to the screen (Activity)', () => {
     </Activity>
   );
 
-  test('coming back does not show an old error or the old notice', async () => {
+  test('coming back does not show an old error', async () => {
     mocks.createProcedure.mockRejectedValue(new ApiError(503));
     const { rerender } = render(form('visible'));
     await userEvent.type(titleField(), 'Cierre de caja');

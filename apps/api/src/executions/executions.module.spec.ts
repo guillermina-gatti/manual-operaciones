@@ -6,12 +6,16 @@ import { PrismaAreasDirectory } from '../documents/adapters/prisma-areas-directo
 import { PrismaUsersDirectory } from '../documents/adapters/prisma-users-directory';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
-import { InMemoryProceduresCatalog } from './adapters/in-memory-procedures-catalog';
+import { PrismaProceduresCatalog } from '../procedures/adapters/prisma-procedures-catalog';
 import { ExecutionService } from './execution.service';
 import { ExecutionsController } from './executions.controller';
 import { ExecutionsModule } from './executions.module';
 import { ExecutionsRepository } from './executions.repository';
+import { AssistantMetricsController } from './metrics/assistant-metrics.controller';
+import { AssistantMetricsRepository } from './metrics/assistant-metrics.repository';
+import { AssistantMetricsService } from './metrics/assistant-metrics.service';
 import { ExecutionMetricsRepository } from './metrics/execution-metrics.repository';
+import { PrismaAssistantMetricsRepository } from './metrics/prisma-assistant-metrics.repository';
 import { PrismaExecutionMetricsRepository } from './metrics/prisma-execution-metrics.repository';
 import { ProcedureMetricsController } from './metrics/procedure-metrics.controller';
 import { ProcedureMetricsService } from './metrics/procedure-metrics.service';
@@ -37,7 +41,7 @@ describe('ExecutionsModule', () => {
     const moduleRef = await compileModule();
 
     expect(moduleRef.get(ProceduresCatalog)).toBeInstanceOf(
-      InMemoryProceduresCatalog,
+      PrismaProceduresCatalog,
     );
     expect(moduleRef.get(UsersDirectory)).toBeInstanceOf(PrismaUsersDirectory);
     expect(moduleRef.get(AreasDirectory)).toBeInstanceOf(PrismaAreasDirectory);
@@ -62,6 +66,20 @@ describe('ExecutionsModule', () => {
     );
     expect(moduleRef.get(ProcedureMetricsController)).toBeInstanceOf(
       ProcedureMetricsController,
+    );
+  });
+
+  it('wires the assistant metrics (HU38) to the Prisma repository', async () => {
+    const moduleRef = await compileModule();
+
+    expect(moduleRef.get(AssistantMetricsRepository)).toBeInstanceOf(
+      PrismaAssistantMetricsRepository,
+    );
+    expect(moduleRef.get(AssistantMetricsService)).toBeInstanceOf(
+      AssistantMetricsService,
+    );
+    expect(moduleRef.get(AssistantMetricsController)).toBeInstanceOf(
+      AssistantMetricsController,
     );
   });
 });

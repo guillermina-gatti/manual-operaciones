@@ -33,6 +33,8 @@ const TWO = [chunk({ chunkId: 'a' }), chunk({ chunkId: 'b', section: 'Plazos', c
 const CASES: Case[] = [
     { name: 'answered con [S2]', rows: TWO, steps: ['El plazo ', 'es de 5 días [S2].'] },
     { name: 'answered sin citas', rows: TWO, steps: ['Hay que pedir ', 'aprobación.'] },
+    // Spec 009 (ajuste del 12/11/2026): citas agrupadas y una que no existe.
+    { name: 'citas agrupadas y una inexistente', rows: TWO, steps: ['Hay que pedir aprobación ', '[S1, S2]. Ver también [S4].'] },
     { name: 'umbral', rows: [chunk({ distance: MAX_COSINE_DISTANCE + 0.1 })], steps: ['nunca'] },
     { name: 'NO_INFO', steps: ['NO_', 'INFO'] },
     { name: 'sin áreas', steps: ['nunca'], user: { id: 'user-1', areaIds: [] } },
@@ -143,6 +145,11 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
         chunk({ chunkId: 'c2', documentId: 'doc-compras', versionId: 'v-compras' }),
         chunk({ chunkId: 'c3', documentId: 'doc-gastos', versionId: 'v-gastos', documentTitle: 'Política de gastos' }),
     ];
+    const ROPA_INTERIOR = [
+        chunk({ chunkId: 'r1', documentId: 'doc-politica', versionId: 'v-politica', documentTitle: 'Política de devoluciones', section: 'Productos sin cambio ni devolución', content: 'Los productos de higiene personal y la ropa interior no tienen cambio ni devolución.' }),
+        chunk({ chunkId: 'r2', documentId: 'doc-promo', versionId: 'v-promo', documentTitle: 'Promoción de verano', section: 'Productos en oferta', content: 'Los productos en oferta también se pueden devolver.' }),
+        chunk({ chunkId: 'r3', documentId: 'doc-promo', versionId: 'v-promo', documentTitle: 'Promoción de verano', section: 'Plazo de devolución', content: 'El cliente puede devolver cualquier producto dentro de los 60 días corridos.' }),
+    ];
     const CONFLICT_CASES: Case[] = [
         { name: 'marca válida', rows: ROWS, steps: ['CONFLICT [S3] [S1]\n', 'Gerente [S1]; director [S3], y [S2].'] },
         { name: 'marca inválida (mismo documento)', rows: ROWS, steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'] },
@@ -162,6 +169,16 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
         { name: 'marca inválida (pasaje que no existe)', rows: ROWS, steps: ['CONFLICT [S1] [S9]\n', 'Gerente [S2].'] },
         { name: 'marca sin explicación', rows: ROWS, steps: ['CONFLICT [S1] [S3]'] },
         { name: 'sin marca', rows: ROWS, steps: ['Lo aprueba ', 'el gerente [S1].'] },
+        // Ajuste del 12/11/2026, caso real: "¿Se puede devolver ropa interior?". La Política (la excepción) y la
+        // Promoción de verano ("cualquier producto") son documentos distintos: CONFLICT entre S1 y S3.
+        {
+            name: 'ropa interior: la Política y la Promoción de verano',
+            rows: ROPA_INTERIOR,
+            steps: [
+                'CONFLICT [S1] [S3]\n',
+                '[S1] dice que la ropa interior no tiene devolución; [S3], que cualquier producto se devuelve en 60 días.',
+            ],
+        },
     ];
 
     beforeEach(() => {
@@ -224,6 +241,11 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
             });
             expect(actualAlerts.recorded).toEqual([
                 { messageId: 'msg-1', question: message, first: ROWS[0], second: ROWS[2] },
+            ]);
+        } else if (c.name.startsWith('ropa interior')) {
+            expect(viaPost).toMatchObject({ status: 'conflict', sources: [{ chunkId: 'r1' }, { chunkId: 'r3' }] });
+            expect(actualAlerts.recorded).toEqual([
+                { messageId: 'msg-1', question: message, first: ROPA_INTERIOR[0], second: ROPA_INTERIOR[2] },
             ]);
         } else {
             expect(actualAlerts.recorded).toEqual([]);

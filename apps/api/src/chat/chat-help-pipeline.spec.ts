@@ -6,9 +6,9 @@ import { FakeEmbeddings, FakeRetrieval, USER, chunk } from './testing/chat-fakes
 describe('prepareChat: ayuda de la plataforma', () => {
     const logger = new Logger('test');
 
-    it('una pregunta de ayuda se responde con el texto fijo, sin buscar ni calcular el embedding', async () => {
+    it('una pregunta de ayuda sin documentos que la respondan se responde con el texto fijo', async () => {
         const embeddings = new FakeEmbeddings();
-        const retrieval = new FakeRetrieval([chunk()]);
+        const retrieval = new FakeRetrieval([]);
 
         const prepared = await prepareChat(embeddings, retrieval, USER, '¿Cómo veo un documento?', logger);
 
@@ -16,18 +16,32 @@ describe('prepareChat: ayuda de la plataforma', () => {
         expect(prepared.outcome.status).toBe('answered');
         expect(prepared.outcome.chunks).toEqual([]);
         expect(prepared.outcome.answer).toContain('/documentos');
-        expect(embeddings.calls).toBe(0);
-        expect(retrieval.calls).toBe(0);
+        expect(retrieval.calls).toBe(1);
     });
 
-    it('una pregunta sobre el contenido de los documentos sigue yendo a la búsqueda', async () => {
+    it('si los documentos sí responden, una pregunta de ayuda va a la búsqueda', async () => {
         const embeddings = new FakeEmbeddings();
         const retrieval = new FakeRetrieval([chunk()]);
 
-        const prepared = await prepareChat(embeddings, retrieval, USER, '¿Cuál es el plazo de devolución?', logger);
+        const prepared = await prepareChat(embeddings, retrieval, USER, '¿Cómo veo un documento?', logger);
 
         expect(prepared.kind).toBe('ready');
-        expect(embeddings.calls).toBe(1);
+        expect(retrieval.calls).toBe(1);
+    });
+
+    it('una pregunta de trabajo con "cómo" va a la búsqueda aunque tenga palabras parecidas a las de la app', async () => {
+        const embeddings = new FakeEmbeddings();
+        const retrieval = new FakeRetrieval([chunk()]);
+
+        const prepared = await prepareChat(
+            embeddings,
+            retrieval,
+            USER,
+            'Pagó con crédito en cuotas, ¿cómo le devuelvo la plata?',
+            logger,
+        );
+
+        expect(prepared.kind).toBe('ready');
         expect(retrieval.calls).toBe(1);
     });
 
@@ -61,5 +75,21 @@ describe('prepareChat: "ayuda" sola', () => {
         expect(prepared.outcome.answer).toContain('Puedo ayudarte con');
         expect(embeddings.calls).toBe(0);
         expect(retrieval.calls).toBe(0);
+    });
+});
+
+describe('prepareChat: preguntas de trabajo reales van a la búsqueda (regresión)', () => {
+    it.each([
+        'Pagó con crédito en cuotas, ¿cómo le devuelvo la plata?',
+        'El producto no tiene la caja original, ¿igual lo acepto?',
+        'Pagó 150.000 pesos en efectivo, ¿se los devuelvo yo?',
+    ])('"%s" se busca en los documentos, sin respuesta de ayuda', async (question) => {
+        const embeddings = new FakeEmbeddings();
+        const retrieval = new FakeRetrieval([chunk()]);
+
+        const prepared = await prepareChat(embeddings, retrieval, USER, question, new Logger('test'));
+
+        expect(prepared.kind).toBe('ready');
+        expect(retrieval.calls).toBe(1);
     });
 });

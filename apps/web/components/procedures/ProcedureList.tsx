@@ -1,58 +1,75 @@
 'use client';
 
-// The home of the procedures screens (HU09): the form to create one, and the list of the ones
-// created in this browser session. The API has no GET for procedures until HU11, so the list is
-// the local copy in sessionStorage, and the screen says so. It has no box of its own: the main of
-// the page lays its parts out.
-import { useId } from 'react';
+// The home of the procedures screens (spec 006, W1 to W3): the list the API gives for this user and,
+// only for an ADMIN, the form to create a procedure. When it creates one, the same screen shows its
+// draft in place of the form (spec 015, D21). It has no box of its own: the main of the page lays its
+// parts out.
+import { useSearchParams } from 'next/navigation';
+import { useId, useState } from 'react';
+import { BUTTON_SECONDARY } from '@/components/documents/design';
 import { LIST_PANEL } from '@/components/documents/list-design';
-import { ScreenState } from '@/components/ui/ScreenState';
-import { removeProcedure, useStoredProcedures } from '@/lib/procedures/session-list';
+import { parsePageParam } from '@/lib/documents/pagination';
 import { useSession } from '@/lib/session';
 import { CreateProcedureForm } from './CreateProcedureForm';
-import { Notice } from './Notice';
-import { ProcedureCard } from './ProcedureCard';
+import { ProcedureCollection } from './ProcedureCollection';
+import { ProcedureEditorById } from './ProcedureEditor';
+import { useProcedureList } from './useProcedureList';
 
-const NOTICE =
-  'Todavía no hay un listado completo de procedimientos; por ahora se ven los que creaste en esta sesión del navegador.';
 const SECTION_TITLE = 'text-xl font-bold';
 
 export function ProcedureList() {
   const { user } = useSession();
-  const procedures = useStoredProcedures(user?.id ?? null);
+  const page = parsePageParam(useSearchParams().get('pagina'));
+  const list = useProcedureList(page);
   const baseId = useId();
+  const isAdmin = user?.role === 'ADMIN';
+  // The draft that was just created, shown in place of the form.
+  const [draftId, setDraftId] = useState<string | null>(null);
 
   return (
     <>
-      <section aria-labelledby={`${baseId}-create`} className={`${LIST_PANEL} flex flex-col gap-5`}>
-        <h2 id={`${baseId}-create`} className={SECTION_TITLE}>
-          Crear un procedimiento
-        </h2>
-        <CreateProcedureForm />
-      </section>
+      {isAdmin && draftId && (
+        <>
+          <button
+            type="button"
+            className={`${BUTTON_SECONDARY} self-start`}
+            onClick={() => {
+              setDraftId(null);
+              list.reload();
+            }}
+          >
+            + Crear otro procedimiento
+          </button>
+          <ProcedureEditorById
+            id={draftId}
+            embedded
+            onChanged={list.reload}
+            onGone={() => {
+              setDraftId(null);
+              list.reload();
+            }}
+          />
+        </>
+      )}
+      {isAdmin && !draftId && (
+        <section aria-labelledby={`${baseId}-create`} className={`${LIST_PANEL} flex flex-col gap-5`}>
+          <h2 id={`${baseId}-create`} className={SECTION_TITLE}>
+            Crear un procedimiento
+          </h2>
+          <CreateProcedureForm
+            onCreated={(id) => {
+              setDraftId(id);
+              list.reload();
+            }}
+          />
+        </section>
+      )}
 
       <section aria-labelledby={`${baseId}-list`} className="flex flex-col gap-4">
         <h2 id={`${baseId}-list`} className={SECTION_TITLE}>
-          Creados en esta sesión
+          Procedimientos
         </h2>
-        <Notice tone="info" role="note">
-          {NOTICE}
-        </Notice>
-
-        {procedures.length === 0 ? (
-          <ScreenState kind="empty" message="Todavía no creaste procedimientos en esta sesión." />
-        ) : (
-          <ul className="grid gap-6 md:grid-cols-2">
-            {procedures.map((procedure) => (
-              <li key={procedure.id} className="min-w-0">
-                <ProcedureCard
-                  procedure={procedure}
-                  onRemove={() => user && removeProcedure(user.id, procedure.id)}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+        <ProcedureCollection list={list} page={page} isAdmin={isAdmin} />
       </section>
     </>
   );

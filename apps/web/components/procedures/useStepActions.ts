@@ -9,7 +9,7 @@ import {
   updateStep,
 } from '@/lib/procedures';
 import type { ProcedureErrorContext, UpdateStepValues } from '@/lib/procedures';
-import type { StoredProcedure, StoredStep } from '@/lib/procedures/session-list';
+import type { EditableProcedure, EditableStep } from '@/lib/procedures/editable';
 import {
   withStepAdded,
   withStepDeleted,
@@ -29,10 +29,10 @@ export interface Failure {
 }
 
 export function useStepActions(
-  procedure: StoredProcedure,
+  procedure: EditableProcedure,
   // The steps in order, as the screen shows them.
-  steps: StoredStep[],
-  onChange: (next: StoredProcedure) => void,
+  steps: EditableStep[],
+  onChange: (next: EditableProcedure) => void,
 ) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
@@ -59,7 +59,7 @@ export function useStepActions(
   async function run(
     kind: Exclude<Busy, null>,
     context: ProcedureErrorContext,
-    action: () => Promise<StoredProcedure>,
+    action: () => Promise<EditableProcedure>,
   ): Promise<boolean> {
     if (busyRef.current) return false;
     busyRef.current = true;
@@ -94,7 +94,7 @@ export function useStepActions(
       ),
     );
 
-  async function edit(step: StoredStep, values: FormValues): Promise<boolean> {
+  async function edit(step: EditableStep, values: FormValues): Promise<boolean> {
     const changes: UpdateStepValues = {};
     if (values.title !== step.title) changes.title = values.title;
     if (values.description !== step.description) changes.description = values.description;
@@ -112,13 +112,13 @@ export function useStepActions(
     return done;
   }
 
-  const remove = (step: StoredStep) =>
+  const remove = (step: EditableStep) =>
     run('step', 'step', async () => {
       await deleteStep(procedure.id, procedure.versionId, step.id);
       return withStepDeleted(procedure, step.id);
     });
 
-  function move(step: StoredStep, direction: Direction) {
+  function move(step: EditableStep, direction: Direction) {
     const stepIds = moveStep(steps, step.id, direction);
     if (!stepIds) return;
     void run('step', 'reorder', async () =>

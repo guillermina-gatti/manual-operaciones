@@ -44,6 +44,22 @@ describe('A-09: pantalla de login real', () => {
     expect(screen.getByRole('textbox', { name: 'Correo electrónico' })).toHaveAttribute('type', 'email');
     expect(screen.getByLabelText('Contraseña')).toHaveAttribute('type', 'password');
     expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeDisabled();
+    expect(screen.getByRole('link', { name: 'Activá tu cuenta' })).toHaveAttribute('href', '/registro');
+  });
+
+  test('permite alternar la visibilidad de la contraseña', async () => {
+    const user = userEvent.setup();
+    render(<LoginForm />);
+    const passwordInput = screen.getByLabelText('Contraseña');
+    const toggleButton = screen.getByRole('button', { name: 'Ver contraseña' });
+
+    expect(passwordInput).toHaveAttribute('type', 'password');
+    await user.click(toggleButton);
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Ocultar contraseña' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Ocultar contraseña' }));
+    expect(passwordInput).toHaveAttribute('type', 'password');
   });
 
   test('inicia sesión con los datos ingresados y dirige a Documentos', async () => {

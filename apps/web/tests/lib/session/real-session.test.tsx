@@ -7,6 +7,7 @@ import {
   loginSession,
   logoutSession,
   refreshSession,
+  registerSession,
   restoreSession,
   SessionProvider,
   useSession,
@@ -16,6 +17,8 @@ const auth = vi.hoisted(() => ({
   login: vi.fn(),
   refresh: vi.fn(),
   logout: vi.fn(),
+  registerWithInvitation: vi.fn(),
+  validateInvitation: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/auth-client', () => auth);
@@ -37,8 +40,12 @@ const token = (sub: string, n: number) => {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -51,6 +58,10 @@ beforeEach(() => {
   auth.logout.mockResolvedValue({ revoked: true });
   auth.login.mockResolvedValue({ accessToken: token(USER.id, 1), user: USER });
   auth.refresh.mockResolvedValue({ accessToken: token(USER.id, 2), user: USER });
+  auth.registerWithInvitation.mockResolvedValue({
+    accessToken: token(USER.id, 1),
+    user: USER,
+  });
   localStorage.clear();
   sessionStorage.clear();
 });
@@ -84,6 +95,244 @@ describe('A-08b: estado real aislado', () => {
     expect(getAuthHeaders()).toEqual({});
     const { result } = renderHook(() => useSession(), { wrapper });
     expect(result.current.user).toBeNull();
+  });
+
+  describe('HU29: registerSession', () => {
+    test('rechaza el registro si ya existe una sesión activa, sin llamar al backend y conservando usuario y token', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      await loginSession(USER.email, 'clave-prueba');
+      expect(getAuthHeaders()).toEqual({ Authorization: `Bearer ${token(USER.id, 1)}` });
+
+      await expect(
+        registerSession('token-43-chars', 'Otro Nombre', 'ClaveNueva123!'),
+      ).rejects.toThrow('Ya existe una sesión activa');
+
+      expect(auth.registerWithInvitation).not.toHaveBeenCalled();
+
+      const { result } = renderHook(() => useSession(), { wrapper });
+      expect(result.current).toEqual({
+        user: { id: USER.id, name: USER.name, role: 'ADMIN' },
+        status: 'ready',
+      });
+      expect(getAuthHeaders()).toEqual({ Authorization: `Bearer ${token(USER.id, 1)}` });
+    });
+
+    test('registro sin sesión y con error permanece sin autenticar en EMPTY_SESSION', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      auth.registerWithInvitation.mockRejectedValueOnce(new Error('invitacion-invalida'));
+      await expect(
+        registerSession('token-invalido', USER.name, 'clave'),
+      ).rejects.toThrow('invitacion-invalida');
+      expect(getAuthHeaders()).toEqual({});
+      const { result } = renderHook(() => useSession(), { wrapper });
+      expect(result.current).toEqual({ user: null, status: 'ready' });
+    });
+
+    test('registro exitoso sin sesión previa establece el nuevo usuario y su token sin segundo login', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const { result } = renderHook(() => useSession(), { wrapper });
+      await act(async () => {
+        await registerSession('token-43-chars', USER.name, 'clave-segura-2026');
+      });
+      expect(auth.registerWithInvitation).toHaveBeenCalledWith(
+        'token-43-chars',
+        USER.name,
+        'clave-segura-2026',
+      );
+      // No debe realizar una llamada extra a login
+      expect(auth.login).not.toHaveBeenCalled();
+      expect(result.current).toEqual({
+        user: { id: USER.id, name: USER.name, role: 'ADMIN' },
+        status: 'ready',
+      });
+      expect(getAuthHeaders()).toEqual({ Authorization: `Bearer ${token(USER.id, 1)}` });
+      expect(localStorage.length).toBe(0);
+      expect(sessionStorage.length).toBe(0);
+    });
+
+    test('login y registro simultáneos no comparten accidentalmente la promesa de ejecución', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const loginGate = deferred<{ accessToken: string; user: typeof USER }>();
+      const registerGate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.login.mockReturnValueOnce(loginGate.promise);
+      auth.registerWithInvitation.mockReturnValueOnce(registerGate.promise);
+
+      const loginTask = loginSession(USER.email, 'clave-login');
+      const registerTask = registerSession('token-43', USER.name, 'clave-reg');
+
+      // No deben compartir la misma promesa
+      expect(loginTask).not.toBe(registerTask);
+
+      loginGate.resolve({ accessToken: token(USER.id, 1), user: USER });
+      await loginTask;
+
+      // El registro que esperaba detrás del login detecta la sesión activa y es rechazado
+      registerGate.resolve({
+        accessToken: token('otro-id', 2),
+        user: { ...USER, id: 'otro-id' },
+      });
+      await expect(registerTask).rejects.toThrow('Ya existe una sesión activa');
+    });
+
+    test('registerSession comparte promesa de ejecución si se invoca concurrentemente (single-flight)', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const gate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.registerWithInvitation.mockReturnValueOnce(gate.promise);
+
+      const first = registerSession('token-43', USER.name, 'clave');
+      const second = registerSession('token-43', USER.name, 'clave');
+
+      expect(first).toBe(second);
+      gate.resolve({ accessToken: token(USER.id, 1), user: USER });
+      await first;
+      expect(auth.registerWithInvitation).toHaveBeenCalledTimes(1);
+    });
+
+    test('logout durante un registerSession en curso no permite que el registro tardío restablezca sesión', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const gate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.registerWithInvitation.mockReturnValueOnce(gate.promise);
+
+      const registerTask = registerSession('token-43', USER.name, 'clave');
+      const closing = logoutSession();
+
+      gate.resolve({ accessToken: token(USER.id, 1), user: USER });
+      await expect(registerTask).rejects.toThrow(
+        'La operación fue reemplazada por otro cambio de sesión.',
+      );
+      await closing;
+
+      expect(getAuthHeaders()).toEqual({});
+      const { result } = renderHook(() => useSession(), { wrapper });
+      expect(result.current).toEqual({ user: null, status: 'ready' });
+    });
+
+    test('registro iniciado primero y login iniciado después: login no envía HTTP hasta que termina el registro y no hay peticiones simultáneas', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const registerGate = deferred<{ accessToken: string; user: typeof USER }>();
+      const loginGate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.registerWithInvitation.mockReturnValueOnce(registerGate.promise);
+      auth.login.mockReturnValueOnce(loginGate.promise);
+
+      const registerTask = registerSession('token-43', USER.name, 'clave-reg');
+      const loginTask = loginSession('segundo@example.com', 'clave-login');
+
+      // Las promesas son distintas
+      expect(loginTask).not.toBe(registerTask);
+
+      // El registro disparó su petición HTTP
+      expect(auth.registerWithInvitation).toHaveBeenCalledTimes(1);
+      // El login NO ha disparado su petición HTTP mientras el registro está en vuelo
+      expect(auth.login).not.toHaveBeenCalled();
+
+      // Completamos el registro
+      registerGate.resolve({ accessToken: token(USER.id, 1), user: USER });
+      await registerTask;
+
+      // Recién tras culminar el registro, el login inicia su petición HTTP
+      await waitFor(() => expect(auth.login).toHaveBeenCalledTimes(1));
+
+      // Resolvemos el login
+      const SECOND_USER = { ...USER, id: '22222222-2222-4222-8222-222222222222', email: 'segundo@example.com' };
+      loginGate.resolve({ accessToken: token(SECOND_USER.id, 2), user: SECOND_USER });
+      await loginTask;
+
+      expect(getAuthHeaders()).toEqual({ Authorization: `Bearer ${token(SECOND_USER.id, 2)}` });
+      const { result } = renderHook(() => useSession(), { wrapper });
+      expect(result.current).toEqual({
+        user: { id: SECOND_USER.id, name: SECOND_USER.name, role: 'ADMIN' },
+        status: 'ready',
+      });
+    });
+
+    test('registro exitoso seguido de login reemplaza correctamente la identidad y el token', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const SECOND_USER = {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Grace Hopper',
+        email: 'grace@example.com',
+        role: 'EMPLOYEE' as const,
+      };
+      auth.login.mockResolvedValueOnce({
+        accessToken: token(SECOND_USER.id, 9),
+        user: SECOND_USER,
+      });
+
+      await registerSession('token-43', USER.name, 'clave-reg');
+      expect(getAuthHeaders()).toEqual({ Authorization: `Bearer ${token(USER.id, 1)}` });
+
+      await loginSession(SECOND_USER.email, 'password123');
+      expect(getAuthHeaders()).toEqual({ Authorization: `Bearer ${token(SECOND_USER.id, 9)}` });
+
+      const { result } = renderHook(() => useSession(), { wrapper });
+      expect(result.current).toEqual({
+        user: { id: SECOND_USER.id, name: SECOND_USER.name, role: 'EMPLOYEE' },
+        status: 'ready',
+      });
+    });
+
+    test('registro fallido seguido de login permite que el login continúe normalmente', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const registerGate = deferred<{ accessToken: string; user: typeof USER }>();
+      const loginGate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.registerWithInvitation.mockReturnValueOnce(registerGate.promise);
+      auth.login.mockReturnValueOnce(loginGate.promise);
+
+      const registerTask = registerSession('token-invalido', USER.name, 'clave');
+      const loginTask = loginSession(USER.email, 'clave-login');
+
+      expect(auth.login).not.toHaveBeenCalled();
+
+      // Falla el registro
+      registerGate.reject(new Error('invitacion-expirada'));
+      await expect(registerTask).rejects.toThrow('invitacion-expirada');
+
+      // El login puede continuar tras el fallo del registro
+      await waitFor(() => expect(auth.login).toHaveBeenCalledTimes(1));
+      loginGate.resolve({ accessToken: token(USER.id, 1), user: USER });
+      await loginTask;
+
+      expect(getAuthHeaders()).toEqual({ Authorization: `Bearer ${token(USER.id, 1)}` });
+      const { result } = renderHook(() => useSession(), { wrapper });
+      expect(result.current).toEqual({
+        user: { id: USER.id, name: USER.name, role: 'ADMIN' },
+        status: 'ready',
+      });
+    });
+
+    test('logout durante el registro con un login esperando detrás: ninguna operación obsoleta restablece una sesión', async () => {
+      auth.refresh.mockRejectedValueOnce(new Error('sin sesion previa'));
+      const registerGate = deferred<{ accessToken: string; user: typeof USER }>();
+      auth.registerWithInvitation.mockReturnValueOnce(registerGate.promise);
+
+      const registerTask = registerSession('token-43', USER.name, 'clave-reg');
+      const loginTask = loginSession(USER.email, 'clave-login');
+
+      // Logout se dispara mientras el registro está en vuelo y el login esperando detrás
+      const closing = logoutSession();
+
+      // El login nunca llegó a llamar HTTP porque el logout lo canceló tras esperar al registro
+      expect(auth.login).not.toHaveBeenCalled();
+
+      // El registro responde tarde
+      registerGate.resolve({ accessToken: token(USER.id, 1), user: USER });
+
+      // Ambas operaciones son rechazadas por ser obsoletas
+      await expect(registerTask).rejects.toThrow(
+        'La operación fue reemplazada por otro cambio de sesión.',
+      );
+      await expect(loginTask).rejects.toThrow(
+        'La operación fue reemplazada por otro cambio de sesión.',
+      );
+
+      await closing;
+
+      // El login nunca envió su HTTP POST
+      expect(auth.login).not.toHaveBeenCalled();
+      expect(getAuthHeaders()).toEqual({});
+      const { result } = renderHook(() => useSession(), { wrapper });
+      expect(result.current).toEqual({ user: null, status: 'ready' });
+    });
   });
 
   test('una renovación mantiene el usuario y sustituye el token', async () => {

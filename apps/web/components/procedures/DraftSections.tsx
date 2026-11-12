@@ -1,37 +1,50 @@
 'use client';
 
-// The two sections that edit the draft (HU09): its title and description, and its steps. They are
-// shown while the version the screen works on is a draft.
+// The two sections that edit the draft (HU09; spec 015, D22 and D23): the "Borrador" card (title,
+// description and areas) and the steps. They are shown while the version the screen works on is a
+// draft. The card waits for the list of areas, because the chips are part of it.
 import { useId } from 'react';
-import { HINT } from '@/components/documents/design';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import { ScreenState } from '@/components/ui/ScreenState';
+import { useApiResource } from '@/lib/api';
+import { areasDirectory } from '@/lib/directory';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import { DraftForm } from './DraftForm';
 import { SECTION, SECTION_TITLE } from './design';
-import { MAX_STEPS, StepsEditor } from './StepsEditor';
+import { Skeleton } from './Skeleton';
+import { StepsEditor } from './StepsEditor';
 
 interface DraftSectionsProps {
-  procedure: StoredProcedure;
-  onChange: (next: StoredProcedure) => void;
+  procedure: EditableProcedure;
+  onChange: (next: EditableProcedure) => void;
   // The draft is gone: leave the screen.
   onGone: () => void;
 }
 
 export function DraftSections({ procedure, onChange, onGone }: DraftSectionsProps) {
   const baseId = useId();
+  const areas = useApiResource('procedure-areas', () => areasDirectory.listAreas());
+
   return (
     <>
       <section aria-labelledby={`${baseId}-draft`} className={SECTION}>
         <h2 id={`${baseId}-draft`} className={SECTION_TITLE}>
           Borrador
         </h2>
-        <DraftForm procedure={procedure} onChange={onChange} onGone={onGone} />
+        {areas.status === 'success' ? (
+          <DraftForm procedure={procedure} areas={areas.data} onChange={onChange} onGone={onGone} />
+        ) : areas.status === 'error' ? (
+          <ScreenState kind="error" message="No pudimos cargar las áreas." onRetry={areas.reload} />
+        ) : (
+          <ScreenState kind="loading" label="Cargando el borrador…">
+            <Skeleton heights={['h-12', 'h-12', 'h-12']} />
+          </ScreenState>
+        )}
       </section>
 
       <section aria-labelledby={`${baseId}-steps`} className={SECTION}>
         <h2 id={`${baseId}-steps`} className={SECTION_TITLE}>
-          Pasos · {procedure.steps.length} de {MAX_STEPS}
+          Pasos
         </h2>
-        <p className={`${HINT} -mt-3`}>La numeración se acomoda sola.</p>
         <StepsEditor procedure={procedure} onChange={onChange} onGone={onGone} />
       </section>
     </>

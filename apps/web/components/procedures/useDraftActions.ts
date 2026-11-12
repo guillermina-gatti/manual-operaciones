@@ -2,11 +2,12 @@
 // discard the draft. One action at a time; every answer of the API gives the new copy of the procedure
 // to onChange.
 import { useLayoutEffect, useRef, useState } from 'react';
-import { describeProcedureError, discardDraft, updateVersion } from '@/lib/procedures';
-import type { UpdateVersionValues } from '@/lib/procedures';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
-import { withDraft } from '@/lib/procedures/snapshot';
-import type { FormValues } from '@/lib/procedures/validate';
+import { describeProcedureError, discardDraft, setAreas, updateVersion } from '@/lib/procedures';
+import type { ProcedureErrorContext } from '@/lib/procedures';
+import type { EditableProcedure } from '@/lib/procedures/editable';
+import { withAreas, withDraft } from '@/lib/procedures/snapshot';
+import { draftChanges } from '@/lib/procedures/draft-changes';
+import type { DraftValues } from '@/lib/procedures/draft-changes';
 
 export interface DraftFailure {
   message: string;
@@ -14,8 +15,8 @@ export interface DraftFailure {
 }
 
 export function useDraftActions(
-  procedure: StoredProcedure,
-  onChange: (next: StoredProcedure) => void,
+  procedure: EditableProcedure,
+  onChange: (next: EditableProcedure) => void,
   onGone: () => void,
 ) {
   const [busy, setBusy] = useState<'save' | 'discard' | null>(null);
@@ -46,7 +47,11 @@ export function useDraftActions(
 
   // Runs one action. After leaving, the hide cleanup already reset the state, and a new action may be
   // running, so only the visit that started it touches the state. Gives the result, or null if it failed.
-  async function run<T>(kind: 'save' | 'discard', action: () => Promise<T>): Promise<{ value: T } | null> {
+  async function run<T>(
+    kind: 'save' | 'discard',
+    context: ProcedureErrorContext,
+    action: () => Promise<T>,
+  ): Promise<{ value: T } | null> {
     busyRef.current = true;
     const visit = visitRef.current;
     setBusy(kind);
@@ -54,7 +59,7 @@ export function useDraftActions(
       return { value: await action() };
     } catch (error) {
       if (visitRef.current === visit) {
-        setFailure(describeProcedureError(error, kind === 'save' ? 'draft' : 'discard'));
+        setFailure(describeProcedureError(error, context));
       }
       return null;
     } finally {
@@ -65,37 +70,43 @@ export function useDraftActions(
     }
   }
 
-  // The values were already checked. Gives back what the API saved, or null if nothing was saved.
-  async function save(values: FormValues): Promise<FormValues | null> {
+  // The values were already checked. Gives back what was saved, or null if nothing was saved. The
+  // version and the areas are two calls: each one gives its answer to the screen as soon as it is
+  // accepted, so if the second fails the first is not lost.
+  async function save(values: DraftValues): Promise<DraftValues | null> {
     if (busyRef.current) return null;
-    // The API asks for at least one field (R5): only what changed is sent.
-    const changes: UpdateVersionValues = {};
-    if (values.title.trim() !== procedure.title) changes.title = values.title.trim();
-    if (values.description.trim() !== (procedure.description ?? '')) {
-      changes.description = values.description.trim();
-    }
-    if (Object.keys(changes).length === 0) {
+    const changes = draftChanges(procedure, values);
+    if (!changes.hasVersion && !changes.areas) {
       setNotice('No hay cambios para guardar.');
       return null;
     }
 
     const visit = visitRef.current;
-    const result = await run('save', () =>
-      updateVersion(procedure.id, procedure.versionId, changes),
-    );
-    if (!result) return null;
-    const updated = result.value;
-    onChange(withDraft(procedure, updated));
+    let current = procedure;
+    if (changes.hasVersion) {
+      const done = await run('save', 'draft', () =>
+        updateVersion(procedure.id, procedure.versionId, changes.version),
+      );
+      if (!done) return null;
+      current = withDraft(current, done.value);
+      onChange(current);
+    }
+    if (changes.areas) {
+      const done = await run('save', 'areas', () => setAreas(procedure.id, values.areaIds));
+      if (!done) return null;
+      current = withAreas(current, done.value.areaIds);
+      onChange(current);
+    }
     if (visitRef.current !== visit) return null;
     setNotice('Cambios guardados.');
-    return { title: updated.title, description: updated.description ?? '' };
+    return { title: current.title, description: current.description ?? '', areaIds: current.areaIds };
   }
 
   // Says whether the draft is gone.
   async function discard(): Promise<boolean> {
     if (busyRef.current) return false;
     clearMessages();
-    const result = await run('discard', () => discardDraft(procedure.id, procedure.versionId));
+    const result = await run('discard', 'discard', () => discardDraft(procedure.id, procedure.versionId));
     if (!result) return false;
     onGone();
     return true;

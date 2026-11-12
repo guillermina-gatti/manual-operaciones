@@ -126,9 +126,12 @@ export interface SearchHit {
 }
 
 // Una página de resultados, en orden de relevancia (R9), y el total de documentos (R7, R10).
+// approximate (R13, 11/11/2026): true si ningún documento tenía todas las palabras y estos tienen
+// alguna, ordenados por cuántas cubren.
 export interface SearchPage {
   data: SearchHit[];
   total: number;
+  approximate: boolean;
 }
 
 // 4. Puerto (Contrato abstracto): Define los métodos obligatorios que debe tener

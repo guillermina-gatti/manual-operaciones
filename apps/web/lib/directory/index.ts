@@ -9,5 +9,6 @@ const legacyNamesDirectory = createFakeUsersDirectory();
 export const usersDirectory = createHttpUsersDirectory(apiClient, legacyNamesDirectory);
 export const areasDirectory = createHttpAreasDirectory(apiClient);
 
+export { displayAreaName, toAreaNameMap } from './areas-directory';
 export type { Area, AreasDirectory } from './areas-directory';
 export type { DirectoryUser, UsersDirectory } from './users-directory';

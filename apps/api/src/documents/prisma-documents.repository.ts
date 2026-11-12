@@ -415,12 +415,19 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
           const [{ nodes }] = await tx.$queryRaw<{ nodes: number }[]>`
             SELECT numnode(${searchQuery(params.text)}) AS nodes
           `;
-          if (nodes === 0) return { data: [], total: 0 };
+          if (nodes === 0) return { data: [], total: 0, approximate: false };
 
-          const rows = await tx.$queryRaw<SearchRow[]>(searchRankingSql(params));
+          let rows = await tx.$queryRaw<SearchRow[]>(searchRankingSql(params));
+          let approximate = false;
+          // R13 (11/11/2026): sin resultados con todas las palabras, con cualquiera de ellas. Con
+          // una sola palabra no hace falta: sería la misma consulta.
+          if (Number(rows[0]?.total ?? 0) === 0 && nodes > 1) {
+            rows = await tx.$queryRaw<SearchRow[]>(searchRankingSql(params, 'any'));
+            approximate = Number(rows[0]?.total ?? 0) > 0;
+          }
           const total = Number(rows[0]?.total ?? 0);
           const hits = rows.filter((row) => row.id !== null);
-          if (hits.length === 0) return { data: [], total };
+          if (hits.length === 0) return { data: [], total, approximate };
 
           const documents = await tx.document.findMany({
             where: { id: { in: hits.map((row) => row.id as string) } },
@@ -438,7 +445,7 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
                 : { markedText: row.marked_text, pageNumber: row.page_number };
             return [{ record, fragment }];
           });
-          return { data, total };
+          return { data, total, approximate };
         },
         {
           isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
@@ -483,6 +490,23 @@ interface SearchRow {
 const searchQuery = (text: string) =>
   Prisma.sql`plainto_tsquery('es_unaccent'::regconfig, ${text})`;
 
+// Spec 004 (R13, 11/11/2026): la misma consulta con cualquiera de las palabras, para cuando con todas no
+// hay resultados. Son los lexemas de plainto_tsquery unidos con "o": las mismas funciones, así que
+// también se calcula como constante y puede usar el índice. Ningún lexema tiene espacios.
+const anyWordQuery = (text: string) =>
+  Prisma.sql`replace(plainto_tsquery('es_unaccent'::regconfig, ${text})::text, ' & ', ' | ')::tsquery`;
+
+// R13: cuántas palabras de la búsqueda (sus lexemas, como los arma plainto_tsquery) tiene un vector.
+// Se compara cada lexema con los del vector, sin volver a leerlos como tsquery.
+const coveredWords = (text: string, vector: Prisma.Sql) =>
+  Prisma.sql`(SELECT count(*)
+               FROM unnest(tsvector_to_array(to_tsvector('es_unaccent'::regconfig, ${text}))) AS w(lexeme)
+               WHERE w.lexeme = ANY(tsvector_to_array(${vector})))`;
+
+// all: todas las palabras (R6, D16), como siempre. any: cualquiera de ellas, ordenadas por cuántas
+// cubren (R13).
+export type SearchMode = 'all' | 'any';
+
 // La misma expresión que el índice chunks_content_fts_es_unaccent_idx: si cambia, deja de usarlo.
 const chunkVector = Prisma.sql`to_tsvector('es_unaccent'::regconfig, c.content)`;
 
@@ -492,8 +516,27 @@ const MARK_START_SQL = Prisma.sql`chr(57344)`;
 const MARK_END_SQL = Prisma.sql`chr(57345)`;
 
 // La consulta del ranking (plan 3.4). Exportada para el test del índice (EXPLAIN).
-export function searchRankingSql({ text, scope, page, limit }: SearchParams): Prisma.Sql {
-  const tsq = searchQuery(text);
+// R13 (11/11/2026): con mode 'any', cualquiera de las palabras, y primero los que cubren más. Con
+// 'all', las piezas de R13 quedan vacías y la consulta es exactamente la de antes.
+export function searchRankingSql(
+  { text, scope, page, limit }: SearchParams,
+  mode: SearchMode = 'all',
+): Prisma.Sql {
+  const any = mode === 'any';
+  const tsq = any ? anyWordQuery(text) : searchQuery(text);
+  const chunkCovered = any
+    ? Prisma.sql`,
+             ${coveredWords(text, chunkVector)} AS chunk_covered`
+    : Prisma.empty;
+  const docCovered = any
+    ? Prisma.sql`,
+             greatest(CASE WHEN v.doc_vector @@ ${tsq}
+                           THEN ${coveredWords(text, Prisma.sql`v.doc_vector`)} ELSE 0 END,
+                      coalesce(b.chunk_covered, 0)) AS covered`
+    : Prisma.empty;
+  const chunkCoveredFirst = any ? Prisma.sql`chunk_covered DESC, ` : Prisma.empty;
+  const coveredFirst = any ? Prisma.sql`covered DESC, ` : Prisma.empty;
+  const coveredFirstOuter = any ? Prisma.sql`p.covered DESC, ` : Prisma.empty;
   const areaIds = scope.areaIds;
 
   // R3: si no es ADMIN, el documento tiene que compartir un área (document_areas decide) y, como
@@ -524,20 +567,20 @@ export function searchRankingSql({ text, scope, page, limit }: SearchParams): Pr
       -- R2 y R7: el fragmento activo de la versión vigente que mejor coincide, uno por documento
       SELECT DISTINCT ON (c.document_id)
              c.document_id, c.id AS chunk_id, c.page_number,
-             ts_rank(${chunkVector}, ${tsq}) AS chunk_rank
+             ts_rank(${chunkVector}, ${tsq}) AS chunk_rank${chunkCovered}
       FROM chunks c
       JOIN visible v ON v.id = c.document_id AND v.version_id = c.document_version_id
       WHERE c.is_active
         AND ${chunkVector} @@ ${tsq}
         ${chunkAreas}
-      ORDER BY c.document_id, chunk_rank DESC, c.chunk_index
+      ORDER BY c.document_id, ${chunkCoveredFirst}chunk_rank DESC, c.chunk_index
     ),
     hits AS (
       -- D16: todas las palabras entre el título y la descripción, o todas en un mismo fragmento
       SELECT v.id, v.created_at, b.chunk_id, b.page_number,
              v.title_vector @@ ${tsq} AS in_title,
              (CASE WHEN v.doc_vector @@ ${tsq} THEN ts_rank(v.doc_vector, ${tsq}) ELSE 0 END)
-               + coalesce(b.chunk_rank, 0) AS relevance
+               + coalesce(b.chunk_rank, 0) AS relevance${docCovered}
       FROM visible v
       LEFT JOIN best_chunk b ON b.document_id = v.id
       WHERE v.doc_vector @@ ${tsq} OR b.chunk_id IS NOT NULL
@@ -555,11 +598,11 @@ export function searchRankingSql({ text, scope, page, limit }: SearchParams): Pr
     LEFT JOIN LATERAL (
       -- R9 y D6: título primero, después relevancia, el más nuevo y el id (orden estable)
       SELECT * FROM hits
-      ORDER BY in_title DESC, relevance DESC, created_at DESC, id DESC
+      ORDER BY ${coveredFirst}in_title DESC, relevance DESC, created_at DESC, id DESC
       LIMIT ${limit} OFFSET ${(page - 1) * limit}
     ) p ON true
     LEFT JOIN chunks c ON c.id = p.chunk_id
-    ORDER BY p.in_title DESC, p.relevance DESC, p.created_at DESC, p.id DESC
+    ORDER BY ${coveredFirstOuter}p.in_title DESC, p.relevance DESC, p.created_at DESC, p.id DESC
   `;
 }
 

@@ -402,8 +402,9 @@ describe('ChatStreamService: la marca de contradicción (spec 011)', () => {
 // nada y se le pide la respuesta otra vez al modelo, una sola vez, con el aviso de esos dos pasajes.
 describe('ChatStreamService: la marca entre pasajes del mismo documento (spec 011, ajuste del 11/11/2026)', () => {
     const ROWS = [
-        chunk({ chunkId: 'c1', documentId: 'doc-devoluciones', section: 'Productos electrónicos' }),
-        chunk({ chunkId: 'c2', documentId: 'doc-devoluciones', section: 'Plazo general' }),
+        // Con las cifras que citan las respuestas: develop verifica que estén en los pasajes citados.
+        chunk({ chunkId: 'c1', documentId: 'doc-devoluciones', section: 'Productos electrónicos', content: 'Los productos electrónicos tienen 7 días para devolverse.' }),
+        chunk({ chunkId: 'c2', documentId: 'doc-devoluciones', section: 'Plazo general', content: 'El plazo general es de 30 días.' }),
     ];
     const SAME_DOCUMENT: LlmStep[] = ['CONFLICT [S1] ', '[S2]\n', 'Electrónica, 7 días [S1]; en general, 30 [S2].'];
     let warn: jest.SpyInstance;
@@ -561,5 +562,37 @@ describe('ChatStreamService: la alerta de contradicción (spec 011)', () => {
         await ask(service);
 
         expect(alerts.recorded).toEqual([]);
+    });
+});
+
+// Spec 009 (ajuste del 12/11/2026): las citas agrupadas. Los delta salen como los manda el modelo; done
+// trae la respuesta con las citas separadas, sin la que no existe, y answered (antes llegaba no_info).
+describe('ChatStreamService: citas agrupadas (spec 009, ajuste del 12/11/2026)', () => {
+    const ROWS = [
+        chunk({ chunkId: 'c1', content: 'Se anota en el remito la cantidad de bultos que faltan.' }),
+        chunk({ chunkId: 'c2', content: 'Se firma con la aclaración "Recibido con faltantes".' }),
+    ];
+
+    beforeEach(() => {
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('"[S1, S2]" y "[S4]": los delta tal cual, y done answered con S1 y S2', async () => {
+        const steps = ['Anotá los bultos y firmá con la aclaración [S1, ', 'S2]. Nota: guardá una copia [S4].'];
+        const { service, repo } = build({ rows: ROWS, steps });
+
+        const sink = await ask(service, 'Faltan dos bultos, ¿qué pongo al firmar el remito?');
+
+        expect(sink.deltas.join('')).toBe(steps.join(''));
+        expect(sink.final).toMatchObject({
+            status: 'answered',
+            answer: 'Anotá los bultos y firmá con la aclaración [S1] [S2]. Nota: guardá una copia.',
+            sources: [{ chunkId: 'c1' }, { chunkId: 'c2' }],
+        });
+        expect(repo.saved[0]).toMatchObject({ status: 'answered', usedChunkIds: ['c1', 'c2'] });
     });
 });

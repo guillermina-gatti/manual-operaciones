@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { UsersModule } from '../users/users.module';
 import { AccessService } from './access.service';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
 import { AuthController } from './auth.controller';
@@ -11,7 +12,7 @@ import { SessionService } from './session.service';
 
 @Global()
 @Module({
-  imports: [JwtModule.register({})],
+  imports: [JwtModule.register({}), UsersModule],
   controllers: [AuthController],
   providers: [
     AuthService,

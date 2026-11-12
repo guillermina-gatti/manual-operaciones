@@ -728,6 +728,7 @@ describe('DocumentQueryService.search', () => {
         },
       ],
       total: 1,
+      approximate: false,
     });
 
     const response = await service.search(empleadoVentas, {
@@ -755,6 +756,7 @@ describe('DocumentQueryService.search', () => {
       total: 1,
       page: 1,
       limit: 20,
+      approximate: false,
     });
     // Lo mismo que el listado: sin storageKey ni checksum.
     expect(JSON.stringify(response)).not.toMatch(/storageKey|checksum/);
@@ -773,6 +775,28 @@ describe('DocumentQueryService.search', () => {
     });
 
     expect(response.data[0].fragment).toBeNull();
+  });
+
+  // Spec 004 (R13, 11/11/2026): la búsqueda aproximada la decide el repositorio; el servicio la pasa.
+  it('R13: con resultados aproximados, responde approximate: true, con los datos en el orden del repositorio', async () => {
+    const other = { ...record, id: '0c000000-0000-4000-8000-0000000000aa', title: 'Otro' };
+    repository.search.mockResolvedValue({
+      data: [
+        { record: other, fragment: null },
+        { record, fragment: null },
+      ],
+      total: 2,
+      approximate: true,
+    });
+
+    const response = await service.search(admin, {
+      q: 'devolver auriculares hace 10 días',
+      page: 1,
+      limit: 20,
+    });
+
+    expect(response).toMatchObject({ total: 2, page: 1, limit: 20, approximate: true });
+    expect(response.data.map((item) => item.id)).toEqual([other.id, record.id]);
   });
 
   it('si el directorio de usuarios falla: 503 y nunca busca sin filtro', async () => {

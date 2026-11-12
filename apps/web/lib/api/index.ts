@@ -6,6 +6,7 @@ import { createConflictAlertsApi } from './conflict-alerts';
 import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
 import { createExecutionsApi } from './executions';
+import { createInvitationsApi } from './invitations';
 import { createMetricsApi } from './metrics';
 import { createMyMetricsApi } from './my-metrics';
 
@@ -107,3 +108,7 @@ export type { ChatFeedbackBody } from './chat-feedback';
 // Spec 011 (HU39): las alertas de documentos contradictorios, con el mismo cliente.
 export const { listConflictAlerts, resolveConflictAlert } = createConflictAlertsApi(apiClient);
 export type { ConflictAlert, ConflictAlertDocument, ConflictAlertPage, ConflictAlertStatus } from './conflict-alerts';
+
+// HU29: Emisión de invitaciones por administradores.
+export const { createInvitation } = createInvitationsApi(apiClient);
+export type { CreateInvitationPayload, CreatedInvitation } from './invitations';

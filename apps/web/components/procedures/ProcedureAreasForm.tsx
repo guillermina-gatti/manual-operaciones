@@ -13,15 +13,15 @@ import { useApiResource } from '@/lib/api';
 import { areasDirectory } from '@/lib/directory';
 import type { Area } from '@/lib/directory';
 import { describeProcedureError, setAreas } from '@/lib/procedures';
-import type { StoredProcedure } from '@/lib/procedures/session-list';
+import type { EditableProcedure } from '@/lib/procedures/editable';
 import { withAreas } from '@/lib/procedures/snapshot';
 import { Notice } from './Notice';
 import { Skeleton } from './Skeleton';
 
 interface ProcedureAreasFormProps {
-  procedure: StoredProcedure;
+  procedure: EditableProcedure;
   // The new copy of the procedure after the API accepted the areas.
-  onChange: (next: StoredProcedure) => void;
+  onChange: (next: EditableProcedure) => void;
 }
 
 export function ProcedureAreasForm(props: ProcedureAreasFormProps) {
