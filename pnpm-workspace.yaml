@@ -6,6 +6,7 @@ overrides:
   tmp: ^0.2.6
   'undici@<7': ^6.29.1
   multer: ^2.5.0
+  fast-uri: ^3.1.9
 allowBuilds:
   '@parcel/watcher': true
   '@prisma/engines': true
