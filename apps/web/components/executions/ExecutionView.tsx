@@ -201,7 +201,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
   }
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid min-w-0 grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(22.5rem,25rem)]">
       <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
         <div className="flex min-w-0 flex-col gap-3">
           <PageHeader
@@ -271,7 +271,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
       {/* The side column: our summary and, below it, the assistant of pair C for the current step
           (spec 010), untouched. The assistant is hidden once the execution is no longer in
           progress (completed or restarted), so screen readers do not announce an empty region. On
-          a phone the column goes below the steps; from lg on, it is on the right. */}
+          narrower screens the column goes below the steps; from xl on (1280 px), it is on the right. */}
       <div className="flex min-w-0 flex-col gap-6">
         <ExecutionSummaryCard execution={execution} summary={summary} />
         <aside data-slot="chat-panel" aria-label="Asistente" hidden={!inProgress} className="min-w-0">

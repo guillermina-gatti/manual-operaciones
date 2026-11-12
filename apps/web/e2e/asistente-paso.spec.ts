@@ -91,3 +91,75 @@ test('E1 y E14: el panel pregunta con el paso actual y empieza otra conversació
   });
   expect(api.unhandled).toEqual([]);
 });
+
+// El ancho del panel (12/11/2026): desde 1280 px, la columna del chat mide entre 360 y 400 px y la tarjeta de
+// la fuente deja el título con espacio (antes quedaba con una letra por renglón). Por debajo, el panel va
+// abajo de los pasos. Solo en el proyecto de escritorio: el ancho de la ventana es parte del caso.
+test.describe('el ancho del panel y de la tarjeta de la fuente', () => {
+  const withSource = (conversationId: string) =>
+    sseReply([
+      ['start', { conversationId }],
+      ['delta', { text: 'No se puede devolver [S1].' }],
+      [
+        'done',
+        {
+          conversationId,
+          messageId: 'msg-1',
+          status: 'answered',
+          answer: 'No se puede devolver [S1].',
+          sources: [
+            {
+              documentId: '33333333-3333-4333-8333-000000000001',
+              documentTitle: 'Política de devoluciones',
+              versionNumber: 1,
+              section: 'Productos sin cambio ni devolución',
+              chunkId: '33333333-3333-4333-8333-000000000002',
+              validFrom: '2026-10-01',
+              url: '',
+            },
+          ],
+        },
+      ],
+    ]);
+
+  async function answerWithSource(page: Page, width: number) {
+    await page.setViewportSize({ width, height: 900 });
+    await mockApi(page, {
+      execution: () => ({ status: 200, body: execution(2) }),
+      chatStream: () => withSource('conv-1'),
+    });
+    await page.goto(`/ejecuciones/${EXECUTION_ID}`);
+    await ask(page, '¿Se puede devolver ropa interior?');
+    const card = assistant(page).getByRole('list', { name: 'Fuentes' }).getByRole('link');
+    await expect(card).toBeVisible();
+    return card;
+  }
+
+  for (const width of [1280, 1440]) {
+    test(`a ${width} px: la columna mide entre 360 y 400 px y el título de la fuente tiene más de 100 px`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'escritorio', 'El ancho de la ventana es parte del caso');
+      const card = await answerWithSource(page, width);
+
+      const column = await assistant(page).boundingBox();
+      expect(column!.width).toBeGreaterThanOrEqual(360);
+      expect(column!.width).toBeLessThanOrEqual(400);
+      // La columna del título: "FUENTE", el número con el título y "Vigente desde…".
+      const title = await card.locator(':scope > span').nth(1).boundingBox();
+      expect(title!.width).toBeGreaterThan(100);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+      expect(overflow).toBe(false);
+    });
+  }
+
+  test('a 1100 px: el panel va abajo de los pasos, a todo el ancho', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'escritorio', 'El ancho de la ventana es parte del caso');
+    await answerWithSource(page, 1100);
+
+    const steps = await page.getByRole('button', { name: 'Terminé este paso' }).boundingBox();
+    const column = await assistant(page).boundingBox();
+    expect(column!.y).toBeGreaterThan(steps!.y);
+    expect(column!.width).toBeGreaterThan(600);
+  });
+});
