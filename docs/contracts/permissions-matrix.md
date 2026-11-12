@@ -39,7 +39,7 @@ Cada usuario posee un rol global y puede pertenecer a múltiples áreas.
 
 | Operación | ADMIN | SUPERVISOR | EMPLOYEE |
 |---|---|---|---|
-| Invitar usuarios | ✅ | ❌ | ❌ |
+| Invitar usuarios (`POST /api/users/invitations`) | ✅ | ❌ | ❌ |
 | Consultar y administrar usuarios | ✅ | ❌ | ❌ |
 | Modificar roles | ✅ | ❌ | ❌ |
 | Asignar o quitar áreas a usuarios | ✅ | ❌ | ❌ |
@@ -50,7 +50,7 @@ Cada usuario posee un rol global y puede pertenecer a múltiples áreas.
 | Consultar datos de su propia cuenta | ✅ | ✅ | ✅ |
 | Iniciar y cerrar su propia sesión | ✅ | ✅ | ✅ |
 
-Todos los accesos requieren autenticación, excepto login, registro por invitación y los endpoints expresamente públicos.
+Todos los accesos requieren autenticación, excepto login (`POST /api/auth/login`), validación y registro por invitación (`POST /api/auth/invitations/validate` y `POST /api/auth/register`, protegidos con rate limiting en Redis; ver [A-14 / HU29](./A-14-invitaciones-y-registro.md)) y los endpoints expresamente públicos.
 
 ### Documentos — Equipo C
 
@@ -220,3 +220,93 @@ El `JwtAuthGuard` resuelve la autenticación; el `RolesGuard` verifica roles. La
 ---
 
 **Regla principal:** ningún usuario debe obtener más permisos por la falta de información o por un fallo de validación. Ante la imposibilidad de verificar una autorización, el acceso debe denegarse de forma segura.
+
+
+## 8. A-SEC.1 — Auditoría de autorización con áreas inactivas
+
+**Fecha:** 10/11/2026
+**Base revisada:** `develop@0e09ca8`
+**Responsable del seguimiento:** Equipo A — Seguridad y Plataforma
+**Estado:** inconsistencia detectada por revisión estática;
+pendiente de reproducción mediante pruebas y corrección.
+
+### 8.1. Regla vigente
+
+Los roles SUPERVISOR y EMPLOYEE solo pueden acceder a
+recursos autorizados mediante áreas activas que tengan asignadas.
+
+Desactivar un área no elimina sus asociaciones históricas,
+pero esas asociaciones no deben otorgar permisos nuevos
+ni mantener accesos que dejaron de estar vigentes.
+
+ADMIN conserva sus permisos globales de consulta según
+la política específica de cada recurso.
+
+### 8.2. Inconsistencia encontrada
+
+En `JwtAuthGuard`, el usuario autenticado recibe solamente
+las pertenencias a áreas activas.
+
+Sin embargo, `document-access.ts` utiliza `viewerFor()`,
+que vuelve a consultar `UsersDirectory.findById()`.
+
+El adaptador `PrismaUsersDirectory` devuelve todas las
+asociaciones de áreas, incluidas las inactivas, para
+preservar las referencias históricas.
+
+Las funciones `canView`, `listWhere` y `searchScope`
+utilizan esos identificadores para determinar el acceso
+a documentos sin distinguir el estado de cada área.
+
+Por lo tanto, el módulo de Documentos puede conceder
+visibilidad mediante asociaciones a áreas desactivadas.
+
+Esta conclusión surge de la inspección del código.
+Todavía debe reproducirse mediante pruebas.
+
+### 8.3. Comportamiento esperado
+
+| Escenario | Resultado esperado |
+|---|---|
+| ADMIN consulta documento histórico | Permitido |
+| EMPLOYEE/SUPERVISOR comparte un área activa | Permitido si el documento está ACTIVE |
+| Solo comparte un área inactiva | Acceso denegado |
+| Comparte un área activa y otra inactiva | Acceso permitido por el área activa |
+| No tiene áreas activas | Sin acceso a documentos restringidos por área |
+| Documento conserva áreas históricas | Las referencias se mantienen |
+| Directorio necesario para autorización no disponible | No conceder acceso por defecto |
+
+### 8.4. Alcance de la corrección
+
+Verificar que las reglas sean consistentes en:
+
+- Listado de documentos.
+- Consulta de detalle.
+- Búsqueda de documentos.
+- Descarga de documentos.
+- Documentos pendientes de revisión.
+- Operaciones que reutilicen la política de visibilidad.
+
+La corrección no debe modificar el contrato histórico
+de `UsersDirectory.findById()` ni `findByIds()`.
+
+### 8.5. Coordinación con Equipo C
+
+Confirmar con el Equipo C que las referencias históricas
+de usuarios y áreas se mantendrán, pero no concederán
+acceso a documentos a usuarios no administradores.
+
+Revisar por separado la validación de responsables nuevos
+cuando la única área compartida esté desactivada.
+
+No modificar unilateralmente los DTO, formularios o
+reglas de edición que pertenecen al Equipo C.
+
+### 8.6. Próximas tareas
+
+- A-SEC.2: incorporar pruebas que reproduzcan el problema.
+- A-SEC.3: corregir la autorización de lectura.
+- A-SEC.4: validar responsables y regresiones.
+
+La implementación se considerará corregida únicamente
+después de superar las pruebas correspondientes.
