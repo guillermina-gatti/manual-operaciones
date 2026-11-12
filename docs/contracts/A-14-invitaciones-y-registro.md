@@ -262,3 +262,59 @@ La elección busca simplificar la integración y minimizar los costos iniciales 
 **A-INV-EMAIL.1:** definición de configuración y contrato.
 
 **Pendiente:** implementación del adaptador, selección mediante configuración, pruebas unitarias, integración y verificación de envío real.
+
+## 7. A-INV-EMAIL — Verificación y despliegue
+
+### Estado de implementación
+
+Se incorporó `ResendInvitationDeliveryService` como adaptador de correo transaccional y se configuró su selección mediante inyección de dependencias en `UsersModule`.
+
+El adaptador local continúa disponible para desarrollo y pruebas. Los entornos no locales requieren la selección explícita de Resend.
+
+### Variables requeridas para producción
+
+```dotenv
+NODE_ENV=production
+INVITATION_EMAIL_PROVIDER=resend
+RESEND_API_KEY=<configurar-como-secreto>
+INVITATION_EMAIL_FROM=PispIAr <invitaciones@dominio-verificado.com>
+FRONTEND_URL=https://frontend-del-proyecto.com
+```
+
+Estos valores son ilustrativos y no deben copiarse literalmente como credenciales ni dominios reales.
+
+### Requisitos previos para habilitar el envío
+
+- Registrar y verificar un dominio remitente en Resend.
+- Crear una API key con permisos de envío.
+- Configurar las variables en el entorno seguro del backend, sin subir secretos a GitHub.
+- Confirmar que `FRONTEND_URL` apunta al frontend público mediante HTTPS.
+- Verificar que `/registro` funciona en el dominio del frontend.
+
+### Validaciones de seguridad
+
+- En desarrollo y test se utiliza exclusivamente el adaptador local.
+- En producción no se permite utilizar el adaptador local.
+- La configuración incompatible produce HTTP 503.
+- Las configuraciones faltantes se rechazan antes de generar invitaciones.
+- La respuesta de producción no expone el enlace ni el token.
+- Las solicitudes al proveedor incorporan una clave de idempotencia derivada del hash del token.
+- Los errores externos se transforman en mensajes seguros.
+- Si falla el envío, el controlador intenta revocar la invitación.
+
+### Limitaciones conocidas
+
+1. Una respuesta exitosa de Resend confirma que el proveedor aceptó la solicitud, pero no garantiza la entrega en la bandeja del destinatario.
+2. Si el proveedor acepta el mensaje y luego se interrumpe la comunicación antes de que el backend reciba la confirmación, el mecanismo de contingencia puede revocar una invitación cuyo correo ya fue emitido.
+3. La idempotencia del proveedor reduce duplicaciones durante su período de retención, pero no resuelve por sí sola las entregas ambiguas.
+4. No se implementaron webhooks de seguimiento de entrega, rebotes ni reenvío automático de invitaciones. Quedan fuera del alcance actual.
+
+### Criterios de cierre
+
+- Pruebas unitarias del adaptador aprobadas.
+- Pruebas de selección del proveedor aprobadas.
+- Pruebas existentes de invitaciones y registro sin regresiones.
+- Compilación y lint correctos.
+- CI del Pull Request en verde.
+- Configuración real de dominio y credenciales documentada como requisito de despliegue.
+- Prueba real de recepción del correo pendiente hasta disponer del dominio y entorno de envío configurados.
