@@ -3,6 +3,7 @@ packages:
 overrides:
   deepmerge-ts: ^8.0.2
   mysql2: ^3.22.0
+  tmp: ^0.2.6
 allowBuilds:
   '@parcel/watcher': true
   '@prisma/engines': true
