@@ -215,3 +215,50 @@ Implementado en la migración [`20261105022235_add_user_invitations`](../../apps
 | `NODE_ENV` | `apps/api` / `apps/web` | Define el entorno de ejecución (`development`, `test`, `production`). `LocalInvitationDeliveryService` solo opera en `development` o `test`; en cualquier otro entorno aplica *fail-closed* (`503`) hasta contar con un proveedor real de correo (`channel: 'email'`, `delivered: true`). |
 | `REDIS_URL` | `apps/api` | Conexión a Redis utilizada por `AuthRateLimiterService` para los límites de login, validación de invitación y registro. |
 | `JWT_SECRET` | `apps/api` | Secreto obligatorio al iniciar el módulo (`AuthService.onModuleInit`) para firmar y verificar los `accessToken` de 15 minutos. |
+
+## 6. A-INV-EMAIL — Entrega real de invitaciones
+
+### Objetivo
+
+Incorporar un proveedor de correo transaccional para enviar invitaciones de registro a usuarios, conservando el mecanismo local de desarrollo y las garantías de seguridad de HU29.
+
+### Proveedor elegido
+
+Se propone **Resend**, mediante su API HTTP, para enviar correos de invitación en producción.
+
+La elección busca simplificar la integración y minimizar los costos iniciales de infraestructura.
+
+### Configuración
+
+| Variable | Descripción |
+|---|---|
+| `INVITATION_EMAIL_PROVIDER` | Selecciona `local` o `resend`. |
+| `RESEND_API_KEY` | Credencial privada para autenticar solicitudes al proveedor. |
+| `INVITATION_EMAIL_FROM` | Dirección remitente autorizada en un dominio verificado. |
+| `FRONTEND_URL` | Dirección base del frontend utilizada para generar el enlace de registro. |
+
+### Reglas de funcionamiento
+
+1. **Desarrollo y test:** el adaptador local conserva el comportamiento actual y puede devolver `invitationUrl`, sin enviar correos externos.
+2. **Producción:** requiere el proveedor `resend` correctamente configurado. No se permite utilizar el canal local.
+3. **Configuración incompleta:** el servicio rechaza la operación antes de crear la invitación, con HTTP 503.
+4. **Entrega por correo:** el mensaje contiene el enlace `/registro#token=...`, generado por el backend.
+5. **Seguridad:** la API nunca devuelve el token ni `invitationUrl` en la respuesta de producción.
+6. **Privacidad:** las credenciales, los tokens y los enlaces completos de invitación no deben registrarse en logs.
+7. **Fallo del proveedor:** debe mantenerse el mecanismo de revocación compensatoria existente, respondiendo HTTP 503.
+8. **Compatibilidad:** no se modifican las reglas actuales de validación, expiración de 48 horas, consumo único ni asignación de roles y áreas.
+
+### Consideraciones de implementación
+
+- `InvitationDeliveryService` continuará siendo la abstracción utilizada por `UsersController`.
+- `LocalInvitationDeliveryService` permanecerá disponible para desarrollo y test.
+- Se incorporará un adaptador específico para Resend.
+- La selección del adaptador se realizará mediante inyección de dependencias de NestJS.
+- Una respuesta exitosa del proveedor acredita la aceptación de la solicitud de envío, no garantiza que el correo haya llegado a la bandeja del destinatario.
+- Las pruebas automatizadas utilizarán proveedores simulados y no requerirán credenciales reales.
+
+### Estado
+
+**A-INV-EMAIL.1:** definición de configuración y contrato.
+
+**Pendiente:** implementación del adaptador, selección mediante configuración, pruebas unitarias, integración y verificación de envío real.
