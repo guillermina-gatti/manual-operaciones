@@ -59,11 +59,13 @@ const SYSTEM_END = `- No inventes datos ni uses conocimiento externo. Si una cif
 // El sistema de cada pedido. Spec 011 (ajuste del 11/11/2026): las reglas de CONFLICT solo con pasajes
 // de dos documentos o más; y, en el segundo pedido después de una marca entre pasajes del mismo
 // documento, un aviso al final.
+// Ajuste del 12/11/2026: el segundo pedido va sin las reglas de CONFLICT, como con un solo documento,
+// así el modelo no puede volver a marcar la contradicción y tiene que responder.
 function systemPrompt(passages: Passage[], options?: LlmRequestOptions): string {
-    const parts = [SYSTEM_START];
-    if (mayConflict(passages)) parts.push(CONFLICT_RULES);
-    parts.push(SYSTEM_END);
     const refs = options?.sameDocumentRefs;
+    const parts = [SYSTEM_START];
+    if (!refs && mayConflict(passages)) parts.push(CONFLICT_RULES);
+    parts.push(SYSTEM_END);
     if (refs) {
         const [x, y] = refs;
         parts.push(

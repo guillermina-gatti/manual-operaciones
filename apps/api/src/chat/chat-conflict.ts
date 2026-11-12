@@ -105,11 +105,20 @@ export const retryNotice = ([x, y]: [number, number]) =>
 export const retryFailedNotice = (error: unknown) =>
     `Falló el segundo pedido al modelo, se responde con el primero: ${String(error)}`;
 
-// La respuesta del segundo pedido, con los tokens de los dos (se guardan sumados).
+export const retryMarkerNotice = 'El segundo pedido volvió con una marca CONFLICT: se responde sin esa línea';
+
+// Ajuste del 12/11/2026: el segundo pedido va sin las reglas de CONFLICT, pero si igual empieza con la
+// marca (válida o no), se saca su línea y queda el resto. Nunca la explicación del primer pedido.
+export function withoutMarkerLine(text: string): string {
+    return startsWithMarker(text) ? splitMarkerLine(text).rest.trim() : text;
+}
+
+// La respuesta del segundo pedido, sin la línea de una marca, con los tokens de los dos (se guardan sumados).
 export function bothAnswers(first: LlmAnswer, second: LlmAnswer): LlmAnswer {
     const sum = (a?: number, b?: number) => (a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0));
     return {
         ...second,
+        text: withoutMarkerLine(second.text),
         inputTokens: sum(first.inputTokens, second.inputTokens),
         outputTokens: sum(first.outputTokens, second.outputTokens),
     };
@@ -131,7 +140,9 @@ export async function answerChecked(
 
     logger.warn(retryNotice(refs));
     try {
-        return bothAnswers(first, await llm.answer(question, prepared.passages, context, retryOptions(refs)));
+        const second = await llm.answer(question, prepared.passages, context, retryOptions(refs));
+        if (startsWithMarker(second.text)) logger.warn(retryMarkerNotice);
+        return bothAnswers(first, second);
     } catch (error) {
         logger.warn(retryFailedNotice(error));
         return first;

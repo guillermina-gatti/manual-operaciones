@@ -166,6 +166,31 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
             steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
             later: [[{ fail: 'quota' }]],
         },
+        // Ajuste del 12/11/2026: si el segundo pedido igual marca, se saca la línea y queda su resto.
+        {
+            name: 'mismo documento: el segundo pedido vuelve a marcar',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [['CONFLICT [S1] [S3]\n', 'No: lo aprueba ', 'el gerente [S1].']],
+        },
+        {
+            name: 'mismo documento: el segundo pedido trae solo la marca',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [['CONFLICT [S1] [S2]']],
+        },
+        // El caso real: el modelo marcó CONFLICT entre S1 y S3, dos pasajes de la misma Política, y
+        // respondía la explicación con viñetas, sin conclusión.
+        {
+            name: 'ropa interior: la marca entre dos pasajes de la Política',
+            rows: [
+                ROPA_INTERIOR[0],
+                ROPA_INTERIOR[1],
+                { ...ROPA_INTERIOR[0], chunkId: 'r4', section: 'Ofertas', content: 'Los productos en oferta solo se cambian por otro talle o color.' },
+            ],
+            steps: ['CONFLICT [S1] [S3]\n', '* [S1] dice que no tiene devolución.\n* [S3] regula las ofertas.'],
+            later: [['No: la ropa interior ', 'no tiene cambio ni devolución [S1].']],
+        },
         { name: 'marca inválida (pasaje que no existe)', rows: ROWS, steps: ['CONFLICT [S1] [S9]\n', 'Gerente [S2].'] },
         { name: 'marca sin explicación', rows: ROWS, steps: ['CONFLICT [S1] [S3]'] },
         { name: 'sin marca', rows: ROWS, steps: ['Lo aprueba ', 'el gerente [S1].'] },
@@ -223,10 +248,23 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
         expect(streamed.repo.saved.map(withoutLatency)).toEqual(actual.repo.saved.map(withoutLatency));
         expect(streamedAlerts.recorded).toEqual(actualAlerts.recorded);
         expect(streamed.llm.options).toEqual(actual.llm.options);
-        if (c.name.startsWith('mismo documento') || c.name === 'marca inválida (mismo documento)') {
+        if (c.name === 'ropa interior: la marca entre dos pasajes de la Política') {
+            expect(actual.llm.options).toEqual([undefined, { sameDocumentRefs: ['S1', 'S3'] }]);
+            expect(viaPost).toMatchObject({
+                status: 'answered',
+                answer: 'No: la ropa interior no tiene cambio ni devolución [S1].',
+                sources: [{ chunkId: 'r1' }],
+            });
+        } else if (c.name.startsWith('mismo documento') || c.name === 'marca inválida (mismo documento)') {
             expect(actual.llm.options).toEqual([undefined, { sameDocumentRefs: ['S1', 'S2'] }]);
         } else {
             expect(actual.llm.options).toEqual([undefined]);
+        }
+        if (c.name === 'mismo documento: el segundo pedido vuelve a marcar') {
+            expect(viaPost).toMatchObject({ status: 'answered', answer: 'No: lo aprueba el gerente [S1].' });
+        }
+        if (c.name === 'mismo documento: el segundo pedido trae solo la marca') {
+            expect(viaPost.status).toBe('no_info');
         }
         if (c.name === 'mismo documento: responde el segundo pedido') {
             expect(viaPost).toMatchObject({ status: 'answered', answer: 'No: lo aprueba el gerente [S1].' });
@@ -242,7 +280,7 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
             expect(actualAlerts.recorded).toEqual([
                 { messageId: 'msg-1', question: message, first: ROWS[0], second: ROWS[2] },
             ]);
-        } else if (c.name.startsWith('ropa interior')) {
+        } else if (c.name === 'ropa interior: la Política y la Promoción de verano') {
             expect(viaPost).toMatchObject({ status: 'conflict', sources: [{ chunkId: 'r1' }, { chunkId: 'r3' }] });
             expect(actualAlerts.recorded).toEqual([
                 { messageId: 'msg-1', question: message, first: ROPA_INTERIOR[0], second: ROPA_INTERIOR[2] },

@@ -438,17 +438,40 @@ describe('ChatStreamService: la marca entre pasajes del mismo documento (spec 01
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('entre S1 y S2, del mismo documento'));
     });
 
-    it('una sola vez: si el segundo vuelve a marcar, se responde su explicación, sin delta', async () => {
-        const { service, llm } = build({ rows: ROWS, steps: SAME_DOCUMENT });
+    // Ajuste del 12/11/2026: si el segundo pedido igual vuelve con la marca, se saca su línea y se responde
+    // el resto del segundo, nunca la explicación del primero.
+    it('una sola vez: si el segundo vuelve a marcar, se saca la línea y sale el resto del segundo', async () => {
+        const { service, llm } = build({
+            rows: ROWS,
+            steps: SAME_DOCUMENT,
+            later: [['CONFLICT [S1] ', '[S2]\n', 'No: la electrónica ', 'tiene 7 días [S1].']],
+        });
 
         const sink = await ask(service);
 
         expect(llm.options).toHaveLength(2);
+        expect(sink.deltas.join('')).toBe('No: la electrónica tiene 7 días [S1].');
+        expect(sink.final).toMatchObject({ status: 'answered', answer: 'No: la electrónica tiene 7 días [S1].' });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('El segundo pedido volvió con una marca CONFLICT'));
+    });
+
+    it('en el segundo pedido se saca también una marca válida, y un resto corto sale al terminar', async () => {
+        const rows = [ROWS[0], ROWS[1], chunk({ chunkId: 'c3', documentId: 'doc-gastos' })];
+        const { service } = build({ rows, steps: SAME_DOCUMENT, later: [['CONFLICT [S1] [S3]\n', 'Sí [S1].']] });
+
+        const sink = await ask(service);
+
+        expect(sink.deltas.join('')).toBe('Sí [S1].');
+        expect(sink.final).toMatchObject({ status: 'answered', answer: 'Sí [S1].', sources: [{ chunkId: 'c1' }] });
+    });
+
+    it('si el segundo trae solo la marca, no hay respuesta: no_info, sin delta', async () => {
+        const { service } = build({ rows: ROWS, steps: SAME_DOCUMENT, later: [['CONFLICT [S1] [S2]']] });
+
+        const sink = await ask(service);
+
         expect(sink.names).toEqual(['start', 'done']);
-        expect(sink.final).toMatchObject({
-            status: 'answered',
-            answer: 'Electrónica, 7 días [S1]; en general, 30 [S2].',
-        });
+        expect(sink.final?.status).toBe('no_info');
     });
 
     it('si falla el segundo pedido, queda el primero (R6), con sus tokens', async () => {

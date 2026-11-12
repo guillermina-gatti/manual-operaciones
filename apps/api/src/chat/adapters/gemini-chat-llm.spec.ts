@@ -449,14 +449,17 @@ describe('GeminiChatLlm: el sistema según los documentos de los pasajes (spec 0
         }
     });
 
-    it('en el segundo pedido, el aviso de los dos pasajes va al final, en answer y en stream', async () => {
-        expect(await systems(ONE_DOCUMENT, { sameDocumentRefs: ['S1', 'S2'] })).toEqual([
-            `${WITHOUT_CONFLICT}\n${NOTICE}`,
-            `${WITHOUT_CONFLICT}\n${NOTICE}`,
-        ]);
-        for (const system of await systems(TWO_DOCUMENTS, { sameDocumentRefs: ['S1', 'S2'] })) {
-            expect(system.endsWith(`\n${NOTICE}`)).toBe(true);
+    // Ajuste del 12/11/2026: el segundo pedido va sin las reglas de CONFLICT también con pasajes de dos
+    // documentos (el caso de la ropa interior), así el modelo no puede volver a marcar la contradicción.
+    it('en el segundo pedido, sin las reglas de CONFLICT y con el aviso al final, en answer y en stream', async () => {
+        for (const passages of [ONE_DOCUMENT, TWO_DOCUMENTS]) {
+            expect(await systems(passages, { sameDocumentRefs: ['S1', 'S2'] })).toEqual([
+                `${WITHOUT_CONFLICT}\n${NOTICE}`,
+                `${WITHOUT_CONFLICT}\n${NOTICE}`,
+            ]);
         }
+        const [first] = await systems(TWO_DOCUMENTS);
+        expect(first).toContain('- CONFLICT solo si');
     });
 
     // Ajuste del 12/11/2026, caso real: "¿Se puede devolver ropa interior?" con la Política de devoluciones

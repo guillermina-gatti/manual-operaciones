@@ -1,0 +1,111 @@
+// ─────────────────────────────────────────────────────────────
+// Pareja C · Documentos (Matías) y fragmentos para el asistente (Guille)
+// Contrato 2: con tablas de otras parejas (users, areas) nos
+// relacionamos solo por ID, sin relaciones de Prisma.
+// ─────────────────────────────────────────────────────────────
+
+enum DocumentStatus {
+  ACTIVE // vigente
+  ARCHIVED // archivado: no se busca ni se muestra a empleados
+}
+
+enum DocumentVersionStatus {
+  CURRENT // la versión vigente del documento
+  REPLACED // reemplazada por una versión más nueva
+}
+
+enum ProcessingStatus {
+  PENDING // guardada, esperando en la cola
+  PROCESSING // el worker la está procesando
+  READY // fragmentos y embeddings listos
+  FAILED // error; se ve en processingError
+}
+
+// HU13 · HU16 · HU37 — dueño: Matías
+model Document {
+  id          String         @id @default(uuid()) @db.Uuid
+  title       String         @db.VarChar(200)
+  description String?        @db.VarChar(1000)
+  status      DocumentStatus @default(ACTIVE)
+  ownerId     String         @map("owner_id") @db.Uuid // responsable (users de A)
+  reviewDate  DateTime?      @map("review_date") @db.Date // HU37: fecha de revisión
+  createdById String         @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  archivedAt  DateTime?      @map("archived_at")
+
+  areas    DocumentArea[]
+  versions DocumentVersion[]
+
+  @@index([status])
+  @@index([reviewDate])
+  @@map("documents")
+}
+
+// HU15 — dueño: Matías
+model DocumentArea {
+  documentId String   @map("document_id") @db.Uuid
+  areaId     String   @map("area_id") @db.Uuid // areas de A
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, areaId])
+  @@index([areaId])
+  @@map("document_areas")
+}
+
+// HU13 · HU16 — dueño: Matías (el worker de Guille actualiza el procesamiento)
+model DocumentVersion {
+  id               String                @id @default(uuid()) @db.Uuid
+  documentId       String                @map("document_id") @db.Uuid
+  versionNumber    Int                   @map("version_number")
+  status           DocumentVersionStatus @default(CURRENT)
+  storageKey       String                @map("storage_key") // documents/{documentId}/{versionId}.pdf
+  originalFileName String                @map("original_file_name") @db.VarChar(255)
+  mimeType         String                @map("mime_type") @db.VarChar(100)
+  sizeBytes        Int                   @map("size_bytes")
+  checksum         String                @db.Char(64) // SHA-256 del archivo
+  processingStatus ProcessingStatus      @default(PENDING) @map("processing_status")
+  processingError  String?               @map("processing_error")
+  processedAt      DateTime?             @map("processed_at")
+  uploadedById     String                @map("uploaded_by_id") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunks   Chunk[]
+
+  @@unique([documentId, versionNumber])
+  @@index([processingStatus])
+  @@map("document_versions")
+}
+
+// HU14 · HU17 — dueña: Guille (columnas acordadas con Matías)
+// El worker inserta las filas; la carga (Matías) actualiza areaIds e isActive.
+model Chunk {
+  id                String   @id @default(uuid()) @db.Uuid
+  documentVersionId String   @map("document_version_id") @db.Uuid
+  documentId        String   @map("document_id") @db.Uuid // copia, para actualizar sin joins
+  chunkIndex        Int      @map("chunk_index") // orden dentro de la versión
+  content           String // texto del fragmento
+  pageNumber        Int?     @map("page_number") // para citar la fuente
+  tokenCount        Int?     @map("token_count")
+  areaIds           String[] @map("area_ids") @db.Uuid // copia de document_areas
+  isActive          Boolean  @default(false) @map("is_active") // true solo si documento ACTIVE + versión CURRENT + READY
+  // La dimensión depende del modelo de embeddings que elija Guille:
+  // 1024 con Amazon Titan Text Embeddings v2 · 768 con Gemini (outputDimensionality).
+  embedding         Unsupported("vector(1024)")?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([documentVersionId, chunkIndex])
+  @@index([documentId])
+  @@index([areaIds], type: Gin)
+  @@map("chunks")
+}
+
+// En la migración se agregan a mano (Prisma no los genera):
+//   CREATE EXTENSION IF NOT EXISTS vector;
+//   CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
+//   CREATE INDEX chunks_content_fts_idx ON chunks USING gin (to_tsvector('spanish', content)); -- HU36
+
+// conversations, messages y message_feedback: los define Guille (HU17, HU25).

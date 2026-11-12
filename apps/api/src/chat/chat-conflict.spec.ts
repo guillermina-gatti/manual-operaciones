@@ -8,6 +8,7 @@ import {
     readConflictMarker,
     recordConflictAlert,
     sameDocumentRefs,
+    withoutMarkerLine,
 } from './chat-conflict';
 import type { Outcome } from './chat-pipeline';
 import { FakeConflictAlertRecorder, FakeLlm, chunk } from './testing/chat-fakes';
@@ -102,6 +103,16 @@ describe('la marca entre pasajes del mismo documento (ajuste del 11/11/2026)', (
         expect(sameDocumentRefs(BODY, CHUNKS)).toBeNull();
     });
 
+    // Ajuste del 12/11/2026: el segundo pedido no responde con una marca; se saca su línea.
+    it('withoutMarkerLine: saca la línea de la marca, sea válida o no, y deja el resto', () => {
+        expect(withoutMarkerLine(`CONFLICT [S1] [S2]\n${BODY}`)).toBe(BODY);
+        expect(withoutMarkerLine(`  CONFLICT [S1] [S3]\n\n${BODY}`)).toBe(BODY);
+        expect(withoutMarkerLine('CONFLICT [S1] [S2]')).toBe('');
+        expect(withoutMarkerLine(BODY)).toBe(BODY);
+        expect(withoutMarkerLine('CONFLICTIVO es el caso [S1].')).toBe('CONFLICTIVO es el caso [S1].');
+        expect(bothAnswers({ text: 'uno', modelName: 'm' }, { text: `CONFLICT [S1] [S2]\n${BODY}`, modelName: 'm' }).text).toBe(BODY);
+    });
+
     it('bothAnswers: el texto y el modelo del segundo, con los tokens sumados', () => {
         const first = { text: 'uno', modelName: 'm', inputTokens: 400, outputTokens: 200 };
         const second = { text: 'dos', modelName: 'm', inputTokens: 420, outputTokens: 60 };
@@ -164,13 +175,15 @@ describe('la marca entre pasajes del mismo documento (ajuste del 11/11/2026)', (
             expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('entre S1 y S2, del mismo documento'));
         });
 
-        it('una sola vez, aunque el segundo vuelva a marcar', async () => {
+        // Ajuste del 12/11/2026: si el segundo vuelve a marcar, se saca la línea y queda su resto.
+        it('una sola vez; si el segundo vuelve a marcar, sin la línea de la marca', async () => {
             const llm = new FakeLlm([`CONFLICT [S1] [S2]\n${BODY}`]);
 
             const answer = await answerChecked(llm, '¿Quién aprueba?', prepared, logger);
 
             expect(llm.options).toHaveLength(2);
-            expect(answer.text).toBe(`CONFLICT [S1] [S2]\n${BODY}`);
+            expect(answer.text).toBe(BODY);
+            expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('El segundo pedido volvió con una marca CONFLICT'));
         });
 
         it('si falla el segundo, queda el primero, y el error en el log', async () => {

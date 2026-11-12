@@ -30,6 +30,7 @@ import {
     checkMarkerLine,
     recordConflictAlert,
     retryFailedNotice,
+    retryMarkerNotice,
     retryNotice,
     retryOptions,
     sameDocumentRefs,
@@ -37,8 +38,10 @@ import {
     startsWithMarker,
 } from './chat-conflict';
 import { buildSearchUrl } from './chat-search-url';
+import { catalogOutcome } from './chat-catalog-outcome';
 import type { ChatEventSink } from './chat-stream.types';
 import { ChatContextStore } from './ports/chat-context-store';
+import { ChatDocumentsCatalog } from './ports/chat-documents-catalog';
 import { ChatLlm, type LlmAnswer, type LlmRequestOptions } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval, type RetrievedChunk } from './ports/chat-retrieval';
@@ -79,6 +82,8 @@ export class ChatStreamService {
         @Optional() private readonly contacts?: ContactDirectory,
         // HU18: para firmar el enlace de cada fuente citada. Opcional, como el anterior.
         @Optional() private readonly storage?: FileStorage,
+        // Listado de documentos por área. Opcional, como el anterior.
+        @Optional() private readonly catalog?: ChatDocumentsCatalog,
     ) { }
 
     // Antes de transmitir (R2): resolver la conversación. 404 si no es del usuario; cualquier otro
@@ -152,6 +157,10 @@ export class ChatStreamService {
         clientSignal: AbortSignal,
         stepContext?: StepContext,
     ): Promise<Outcome> {
+        // Listado de documentos por área: respuesta fija, sin búsqueda ni modelo (igual que POST /api/chat).
+        const listed = await catalogOutcome(this.catalog, user, question, this.logger);
+        if (listed) return listed;
+
         const embeddings = withTimeout(this.embeddings, EMBEDDING_TIMEOUT_MS);
         // Spec 010 (R8): con el paso, el embedding usa su título y la pregunta.
         const searchText = stepContext ? `${stepContext.stepTitle}\n${question}` : question;
@@ -191,11 +200,15 @@ export class ChatStreamService {
             const refs = sameDocumentRefs(llm.text, prepared.chunks);
             if (refs) {
                 this.logger.warn(retryNotice(refs));
-                gate.reset();
+                // Ajuste del 12/11/2026: en el segundo pedido, una marca CONFLICT no cierra el retén: su
+                // línea se saca y sale el resto, como lo deja bothAnswers para finishChat.
+                gate.reset({ dropMarker: true });
                 clearTimeout(idle);
                 idle = setTimeout(cut('El modelo no empezó a responder a tiempo'), FIRST_TEXT_TIMEOUT_MS);
                 try {
-                    llm = bothAnswers(llm, await consume(retryOptions(refs)));
+                    const second = await consume(retryOptions(refs));
+                    if (startsWithMarker(second.text)) this.logger.warn(retryMarkerNotice);
+                    llm = bothAnswers(llm, second);
                 } catch (error) {
                     if (clientSignal.aborted) throw error;
                     this.logger.warn(retryFailedNotice(error));
@@ -237,6 +250,8 @@ function withTimeout(embeddings: EmbeddingProvider, ms: number): EmbeddingProvid
 class MarkerGate {
     private buffer = '';
     private state: 'waiting' | 'open' | 'closed' = 'waiting';
+    // Segundo pedido (ajuste del 12/11/2026): la línea de una marca CONFLICT se saca, sea válida o no.
+    private dropMarker = false;
 
     constructor(
         private readonly chunks: RetrievedChunk[],
@@ -257,9 +272,10 @@ class MarkerGate {
     }
 
     // Para el segundo pedido: vuelve a esperar, sin nada retenido.
-    reset(): void {
+    reset(options: { dropMarker?: boolean } = {}): void {
         this.buffer = '';
         this.state = 'waiting';
+        this.dropMarker = options.dropMarker === true;
     }
 
     // Al terminar el modelo: lo que quedó retenido sale, salvo que sea una marca.
@@ -267,6 +283,9 @@ class MarkerGate {
         if (this.state !== 'waiting') return;
         const text = this.buffer.trimStart();
         if (text) this.decide(text);
+        // Si se sacó la línea de una marca, lo que siguió (aunque sea corto) sale ahora.
+        const rest = this.buffer.trimStart();
+        if (this.state === 'waiting' && rest) this.decide(rest);
     }
 
     private mayStillBeAMarker(text: string): boolean {
@@ -278,6 +297,14 @@ class MarkerGate {
     private decide(text: string): void {
         if (text.startsWith(NO_INFO_MARKER)) {
             this.state = 'closed';
+            return;
+        }
+        if (startsWithMarker(text) && this.dropMarker) {
+            // Sin la línea, lo que sigue pasa por el retén como una respuesta nueva (puede ser NO_INFO).
+            this.dropMarker = false;
+            this.buffer = splitMarkerLine(text).rest;
+            const rest = this.buffer.trimStart();
+            if (rest && !this.mayStillBeAMarker(rest)) this.decide(rest);
             return;
         }
         if (startsWithMarker(text)) {
