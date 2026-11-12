@@ -7,6 +7,7 @@ import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
 import { createExecutionsApi } from './executions';
 import { createInvitationsApi } from './invitations';
+import { createUsersApi } from './users';
 import { createMetricsApi } from './metrics';
 import { createMyMetricsApi } from './my-metrics';
 
@@ -120,3 +121,12 @@ export type {
   InvitationListItem,
   InvitationStatus,
 } from './invitations';
+
+// Gestión administrativa de usuarios (edición de rol, áreas y estado)
+export const { listAdminUsers, updateUser } = createUsersApi(apiClient);
+export { USERS_CHANGED_EVENT, notifyUsersChanged } from './users';
+export type {
+  AdminUserArea,
+  AdminUserItem,
+  UpdateUserPayload,
+} from './users';

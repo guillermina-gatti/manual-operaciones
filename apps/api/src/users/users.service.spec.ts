@@ -111,3 +111,185 @@ describe('UsersService (A-12)', () => {
     await expect(users.listOwnerCandidates([VENTAS])).rejects.toThrow(InternalServerErrorException);
   });
 });
+
+describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
+  let users: UsersService;
+  let mockPrisma: any;
+
+  const adminId = '0b000000-0000-4000-8000-000000000001';
+  const targetUserId = '0b000000-0000-4000-8000-000000000002';
+
+  beforeEach(() => {
+    mockPrisma = {
+      user: {
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        count: jest.fn(),
+        update: jest.fn(),
+      },
+      area: {
+        findMany: jest.fn(),
+      },
+      userArea: {
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
+      },
+      session: {
+        deleteMany: jest.fn(),
+      },
+      $transaction: jest.fn((cb) => cb(mockPrisma)),
+    };
+    users = new UsersService(mockPrisma as unknown as PrismaService);
+  });
+
+  describe('listAllUsersForAdmin', () => {
+    it('devuelve todos los usuarios con sus áreas mapeadas', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([
+        {
+          id: adminId,
+          name: 'Admin',
+          email: 'admin@empresa.com',
+          role: 'ADMIN',
+          isActive: true,
+          createdAt: new Date(),
+          areas: [],
+        },
+        {
+          id: targetUserId,
+          name: 'Empleado',
+          email: 'empleado@empresa.com',
+          role: 'EMPLOYEE',
+          isActive: true,
+          createdAt: new Date(),
+          areas: [{ area: { id: VENTAS, name: 'Ventas' } }],
+        },
+      ]);
+
+      const result = await users.listAllUsersForAdmin();
+      expect(result).toHaveLength(2);
+      expect(result[0].areas).toEqual([]);
+      expect(result[1].areas).toEqual([{ id: VENTAS, name: 'Ventas' }]);
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
+        orderBy: [{ role: 'asc' }, { name: 'asc' }],
+        include: {
+          areas: {
+            include: {
+              area: {
+                select: { id: true, name: true },
+              },
+            },
+          },
+        },
+      });
+    });
+  });
+
+  describe('updateUserByAdmin', () => {
+    const existingEmployee = {
+      id: targetUserId,
+      name: 'Empleado',
+      email: 'empleado@empresa.com',
+      role: 'EMPLOYEE',
+      isActive: true,
+      createdAt: new Date(),
+      areas: [{ area: { id: VENTAS, name: 'Ventas' } }],
+    };
+
+    it('impide la autodesactivación de la cuenta del administrador que ejecuta la acción', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: adminId,
+        role: 'ADMIN',
+        isActive: true,
+        areas: [],
+      });
+      await expect(
+        users.updateUserByAdmin(adminId, adminId, { isActive: false }),
+      ).rejects.toThrow('No podés desactivar tu propia cuenta de administrador');
+    });
+
+    it('impide la auto-remoción del rol de administrador de la cuenta propia', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: adminId,
+        role: 'ADMIN',
+        isActive: true,
+        areas: [],
+      });
+      await expect(
+        users.updateUserByAdmin(adminId, adminId, { role: 'EMPLOYEE', areaIds: [VENTAS] }),
+      ).rejects.toThrow('No podés quitarte tu propio rol de administrador');
+    });
+
+    it('lanza NotFoundException si el usuario no existe', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        users.updateUserByAdmin(adminId, targetUserId, { role: 'SUPERVISOR' }),
+      ).rejects.toThrow('Usuario no encontrado');
+    });
+
+    it('rechaza asignar áreas a un usuario con rol ADMIN', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(existingEmployee);
+      await expect(
+        users.updateUserByAdmin(adminId, targetUserId, { role: 'ADMIN', areaIds: [VENTAS] }),
+      ).rejects.toThrow('Los administradores no deben tener áreas asignadas');
+    });
+
+    it('rechaza dejar a un supervisor/empleado con 0 áreas', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(existingEmployee);
+      await expect(
+        users.updateUserByAdmin(adminId, targetUserId, { role: 'SUPERVISOR', areaIds: [] }),
+      ).rejects.toThrow('Los empleados y supervisores deben tener al menos un área asignada');
+    });
+
+    it('rechaza áreas inactivas o inexistentes', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(existingEmployee);
+      mockPrisma.area.findMany.mockResolvedValue([{ id: VENTAS, isActive: false }]);
+      await expect(
+        users.updateUserByAdmin(adminId, targetUserId, { areaIds: [VENTAS] }),
+      ).rejects.toThrow('Una o más áreas son inexistentes o están inactivas');
+    });
+
+    it('rechaza desactivar o degradar al único administrador activo del sistema', async () => {
+      const existingAdmin = {
+        id: targetUserId,
+        name: 'Segundo Admin',
+        email: 'admin2@empresa.com',
+        role: 'ADMIN',
+        isActive: true,
+        createdAt: new Date(),
+        areas: [],
+      };
+      mockPrisma.user.findUnique.mockResolvedValue(existingAdmin);
+      mockPrisma.user.count.mockResolvedValue(0); // 0 other active admins
+
+      await expect(
+        users.updateUserByAdmin(adminId, targetUserId, { isActive: false }),
+      ).rejects.toThrow('No se puede desactivar ni modificar el rol del único administrador activo del sistema');
+    });
+
+    it('actualiza rol, áreas y estado correctamente dentro de una transacción e invalida sesiones al desactivar', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(existingEmployee);
+      mockPrisma.area.findMany.mockResolvedValue([{ id: OPERACIONES, isActive: true }]);
+      mockPrisma.user.update.mockResolvedValue({
+        ...existingEmployee,
+        role: 'SUPERVISOR',
+        isActive: false,
+        areas: [{ area: { id: OPERACIONES, name: 'Operaciones' } }],
+      });
+
+      const res = await users.updateUserByAdmin(adminId, targetUserId, {
+        role: 'SUPERVISOR',
+        areaIds: [OPERACIONES],
+        isActive: false,
+      });
+
+      expect(res.role).toBe('SUPERVISOR');
+      expect(res.isActive).toBe(false);
+      expect(res.areas).toEqual([{ id: OPERACIONES, name: 'Operaciones' }]);
+      expect(mockPrisma.userArea.deleteMany).toHaveBeenCalledWith({ where: { userId: targetUserId } });
+      expect(mockPrisma.userArea.createMany).toHaveBeenCalledWith({
+        data: [{ userId: targetUserId, areaId: OPERACIONES }],
+      });
+      expect(mockPrisma.session.deleteMany).toHaveBeenCalledWith({ where: { userId: targetUserId } });
+    });
+  });
+});

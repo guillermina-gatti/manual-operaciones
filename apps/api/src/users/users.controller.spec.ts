@@ -44,6 +44,8 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
   let createInvitation: jest.Mock;
   let revokeInvitation: jest.Mock;
   let listInvitations: jest.Mock;
+  let listAllUsersForAdmin: jest.Mock;
+  let updateUserByAdmin: jest.Mock;
   let assertReady: jest.Mock;
   let deliver: jest.Mock;
   let configGet: jest.Mock;
@@ -53,6 +55,8 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     createInvitation = jest.fn();
     revokeInvitation = jest.fn();
     listInvitations = jest.fn();
+    listAllUsersForAdmin = jest.fn();
+    updateUserByAdmin = jest.fn();
     assertReady = jest.fn();
     deliver = jest.fn();
     configGet = jest.fn((key: string) => {
@@ -65,7 +69,14 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [
-        { provide: UsersService, useValue: { listOwnerCandidates } },
+        {
+          provide: UsersService,
+          useValue: {
+            listOwnerCandidates,
+            listAllUsersForAdmin,
+            updateUserByAdmin,
+          },
+        },
         {
           provide: InvitationsService,
           useValue: { createInvitation, revokeInvitation, listInvitations },
@@ -799,6 +810,121 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
 
       expect(res.body).toEqual({ id: validId, revoked: true });
       expect(revokeInvitation).toHaveBeenCalledWith(validId);
+    });
+  });
+
+  describe('GET /api/users/manage (Administración de usuarios)', () => {
+    it('requiere autenticación (401 si no se envía token)', async () => {
+      await http().get('/api/users/manage').expect(401);
+    });
+
+    it('requiere rol ADMIN (403 para SUPERVISOR o EMPLOYEE)', async () => {
+      await http()
+        .get('/api/users/manage')
+        .set(bearer(SPEC_USERS.supervisorVentas))
+        .expect(403);
+    });
+
+    it('devuelve 200 con la lista completa de usuarios para ADMIN', async () => {
+      const mockUsers = [
+        {
+          id: '0b000000-0000-4000-8000-000000000001',
+          name: 'Ana Administradora',
+          email: 'ana@empresa.com',
+          role: 'ADMIN',
+          isActive: true,
+          areas: [],
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      listAllUsersForAdmin.mockResolvedValueOnce(mockUsers);
+
+      const res = await http()
+        .get('/api/users/manage')
+        .set(admin())
+        .expect(200);
+
+      expect(res.body).toEqual(mockUsers);
+      expect(listAllUsersForAdmin).toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /api/users/:id (Modificación de rol, áreas y estado)', () => {
+    const targetUserId = '0b000000-0000-4000-8000-000000000003';
+
+    it('requiere autenticación (401 si no se envía token)', async () => {
+      await http()
+        .patch(`/api/users/${targetUserId}`)
+        .send({ role: 'SUPERVISOR' })
+        .expect(401);
+    });
+
+    it('requiere rol ADMIN (403 para SUPERVISOR)', async () => {
+      await http()
+        .patch(`/api/users/${targetUserId}`)
+        .set(bearer(SPEC_USERS.supervisorVentas))
+        .send({ role: 'SUPERVISOR' })
+        .expect(403);
+    });
+
+    it('devuelve 400 si el UUID de usuario es inválido', async () => {
+      await http()
+        .patch('/api/users/no-es-uuid')
+        .set(admin())
+        .send({ role: 'SUPERVISOR' })
+        .expect(400);
+    });
+
+    it('permite a un ADMIN actualizar el rol y áreas de un usuario', async () => {
+      const updatedUser = {
+        id: targetUserId,
+        name: 'Elena Empleada',
+        email: 'elena@empresa.com',
+        role: 'SUPERVISOR',
+        isActive: true,
+        areas: [{ id: VENTAS, name: 'Ventas' }],
+        createdAt: new Date().toISOString(),
+      };
+      updateUserByAdmin.mockResolvedValueOnce(updatedUser);
+
+      const res = await http()
+        .patch(`/api/users/${targetUserId}`)
+        .set(admin())
+        .send({ role: 'SUPERVISOR', areaIds: [VENTAS] })
+        .expect(200);
+
+      expect(res.body).toEqual(updatedUser);
+      expect(updateUserByAdmin).toHaveBeenCalledWith(
+        SPEC_USERS.admin.id,
+        targetUserId,
+        { role: 'SUPERVISOR', areaIds: [VENTAS] },
+      );
+    });
+
+    it('permite desactivar una cuenta de usuario (isActive: false)', async () => {
+      const deactivatedUser = {
+        id: targetUserId,
+        name: 'Elena Empleada',
+        email: 'elena@empresa.com',
+        role: 'EMPLOYEE',
+        isActive: false,
+        areas: [{ id: VENTAS, name: 'Ventas' }],
+        createdAt: new Date().toISOString(),
+      };
+      updateUserByAdmin.mockResolvedValueOnce(deactivatedUser);
+
+      const res = await http()
+        .patch(`/api/users/${targetUserId}`)
+        .set(admin())
+        .send({ isActive: false })
+        .expect(200);
+
+      expect(res.body).toEqual(deactivatedUser);
+      expect(updateUserByAdmin).toHaveBeenCalledWith(
+        SPEC_USERS.admin.id,
+        targetUserId,
+        { isActive: false },
+      );
     });
   });
 

@@ -7,6 +7,7 @@ import {
   Logger,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Query,
   ServiceUnavailableException,
@@ -17,9 +18,11 @@ import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../common/auth';
 import type { AuthUser } from '../common/auth';
 import { UUID_REGEX } from '../auth/session.service';
+import { AdminUserResponse } from './dto/admin-user.response';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { InvitationListItemResponse } from './dto/invitation-list-item.response';
 import { InvitationResponse } from './dto/invitation.response';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UserCandidateResponse } from './dto/user-candidate.response';
 import { InvitationDeliveryService } from './invitation-delivery.service';
 import { InvitationsService } from './invitations.service';
@@ -276,5 +279,42 @@ export class UsersController {
       throw new NotFoundException('Invitación no encontrada o ya no es revocable');
     }
     return { id, revoked: true };
+  }
+
+  @Get('manage')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Listado completo de usuarios para administración',
+    type: AdminUserResponse,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede gestionar usuarios' })
+  async listAllUsers(): Promise<AdminUserResponse[]> {
+    return this.users.listAllUsersForAdmin();
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario actualizado correctamente',
+    type: AdminUserResponse,
+  })
+  @ApiResponse({ status: 400, description: 'Datos o áreas inválidas' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede editar usuarios' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  @ApiResponse({ status: 409, description: 'No se puede modificar o desactivar al único admin activo o a sí mismo' })
+  async updateUser(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() admin: AuthUser,
+  ): Promise<AdminUserResponse> {
+    if (!UUID_REGEX.test(id)) {
+      throw new BadRequestException('ID de usuario inválido');
+    }
+    return this.users.updateUserByAdmin(admin.id, id, dto);
   }
 }

@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getInitials } from '@/components/navigation/Sidebar';
+import { listAdminUsers, USERS_CHANGED_EVENT } from '@/lib/api';
 import type { SessionUser } from '@/lib/session';
 import {
   DEFAULT_MANAGED_USERS,
@@ -10,6 +11,7 @@ import {
   getUsersUnderCharge,
 } from '@/lib/users/managed-users';
 import type { ManagedUser } from '@/lib/users/managed-users';
+import { EditUserModal } from './EditUserModal';
 
 interface UsersAndRolesViewProps {
   user: SessionUser;
@@ -96,19 +98,86 @@ function BuildingIcon({ className = 'size-4' }: { className?: string }) {
   );
 }
 
+function EditIcon({ className = 'size-3.5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
 export function UsersAndRolesView({ user, catalog = DEFAULT_MANAGED_USERS }: UsersAndRolesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState<'ALL' | 'SUPERVISOR' | 'EMPLOYEE'>('ALL');
+  const [liveUsers, setLiveUsers] = useState<ManagedUser[] | null>(null);
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  const isAdmin = user.role === 'ADMIN';
+  const isSupervisor = user.role === 'SUPERVISOR';
+
+  // Carga de usuarios reales para ADMIN con actualización reactiva
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+
+    async function loadLiveUsers() {
+      try {
+        const users = await listAdminUsers();
+        if (!cancelled && Array.isArray(users)) {
+          const mapped: ManagedUser[] = users.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            isActive: u.isActive,
+            areaIds: u.areas.map((a) => a.id),
+            areaNames:
+              u.areas.length > 0
+                ? u.areas.map((a) => a.name)
+                : u.role === 'ADMIN'
+                ? ['Todas las áreas']
+                : ['Sin áreas asignadas'],
+          }));
+          setLiveUsers(mapped);
+        }
+      } catch {
+        // En caso de error o entorno de tests sin mock HTTP, se preserva catalog
+      }
+    }
+
+    void loadLiveUsers();
+
+    function handleUsersChanged() {
+      void loadLiveUsers();
+    }
+
+    window.addEventListener(USERS_CHANGED_EVENT, handleUsersChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(USERS_CHANGED_EVENT, handleUsersChanged);
+    };
+  }, [isAdmin]);
+
+  const effectiveCatalog = liveUsers ?? catalog;
 
   // Obtener los usuarios bajo cargo de la sesión actual
   const usersUnderCharge = useMemo(
-    () => getUsersUnderCharge(user, catalog),
-    [user, catalog],
+    () => getUsersUnderCharge(user, effectiveCatalog),
+    [user, effectiveCatalog],
   );
 
   const supervisorAreas = useMemo(() => getSupervisorAreas(user), [user]);
-  const isSupervisor = user.role === 'SUPERVISOR';
-  const isAdmin = user.role === 'ADMIN';
 
   // Filtrado por búsqueda y rol
   const filteredUsers = useMemo(() => {
@@ -269,8 +338,12 @@ export function UsersAndRolesView({ user, catalog = DEFAULT_MANAGED_USERS }: Use
                             {u.name}
                           </h2>
                           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[#646F6A]">
-                            <span className="flex size-2 rounded-full bg-emerald-500" />
-                            <span>Activo</span>
+                            <span
+                              className={`flex size-2 rounded-full ${
+                                u.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'
+                              }`}
+                            />
+                            <span>{u.isActive !== false ? 'Activo' : 'Inactivo'}</span>
                           </div>
                         </div>
                       </div>
@@ -298,8 +371,8 @@ export function UsersAndRolesView({ user, catalog = DEFAULT_MANAGED_USERS }: Use
                     </div>
                   </div>
 
-                  {/* Fila inferior: Rol */}
-                  <div className="mt-4 border-t border-[#E6E9E7]/60 pt-3">
+                  {/* Fila inferior: Rol y acción de edición */}
+                  <div className="mt-4 flex items-center justify-between border-t border-[#E6E9E7]/60 pt-3">
                     <span
                       className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${
                         u.role === 'SUPERVISOR'
@@ -315,6 +388,21 @@ export function UsersAndRolesView({ user, catalog = DEFAULT_MANAGED_USERS }: Use
                         ? 'Administrador'
                         : 'Empleado'}
                     </span>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        data-testid={`edit-user-${u.id}`}
+                        onClick={() => {
+                          setEditingUser(u);
+                          setIsEditModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E9E7] bg-white px-2.5 py-1 text-xs font-semibold text-[#646F6A] shadow-2xs transition-colors hover:bg-[#F6F7F6] hover:text-[#0B4233]"
+                      >
+                        <EditIcon className="size-3.5" />
+                        <span>Editar</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -322,6 +410,41 @@ export function UsersAndRolesView({ user, catalog = DEFAULT_MANAGED_USERS }: Use
           </div>
         )}
       </div>
+
+      {isAdmin && (
+        <EditUserModal
+          user={editingUser}
+          currentAdminId={user.id}
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditingUser(null);
+          }}
+          onSuccess={(updated) => {
+            setLiveUsers((prev) => {
+              const current = prev ?? [...catalog];
+              return current.map((item) =>
+                item.id === updated.id
+                  ? {
+                      id: updated.id,
+                      name: updated.name,
+                      email: updated.email,
+                      role: updated.role,
+                      isActive: updated.isActive,
+                      areaIds: updated.areas.map((a) => a.id),
+                      areaNames:
+                        updated.areas.length > 0
+                          ? updated.areas.map((a) => a.name)
+                          : updated.role === 'ADMIN'
+                          ? ['Todas las áreas']
+                          : ['Sin áreas asignadas'],
+                    }
+                  : item,
+              );
+            });
+          }}
+        />
+      )}
     </main>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
 import { UsersAndRolesView } from '@/components/users/UsersAndRolesView';
@@ -20,6 +20,7 @@ describe('UsersAndRolesView component', () => {
     expect(screen.queryByText('Emilio Empleado de Operaciones')).not.toBeInTheDocument();
     expect(screen.queryByText('Sofía Supervisora de Operaciones')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Invitar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Editar/i })).not.toBeInTheDocument();
   });
 
   test('para ADMIN muestra a todo el personal a cargo y el botón para invitar nuevo usuario', () => {
@@ -38,6 +39,28 @@ describe('UsersAndRolesView component', () => {
 
     const inviteLink = screen.getByRole('link', { name: 'Invitar nuevo usuario' });
     expect(inviteLink).toHaveAttribute('href', '/admin/invitaciones');
+
+    // Botones de editar presentes en las tarjetas de usuarios
+    const editButtons = screen.getAllByRole('button', { name: /Editar/i });
+    expect(editButtons.length).toBeGreaterThan(0);
+  });
+
+  test('para ADMIN al hacer clic en Editar abre el modal de edición de usuario', async () => {
+    const admin: SessionUser = {
+      id: FIXTURE_USERS.admin.id,
+      name: 'Ana Administradora',
+      role: 'ADMIN',
+    };
+    const userActor = userEvent.setup();
+
+    render(<UsersAndRolesView user={admin} />);
+
+    const editBtn = screen.getByTestId(`edit-user-${FIXTURE_USERS.empleadoVentas.id}`);
+    await userActor.click(editBtn);
+
+    const modal = screen.getByRole('dialog');
+    expect(within(modal).getByRole('heading', { level: 2, name: 'Editar usuario' })).toBeInTheDocument();
+    expect(within(modal).getByText(FIXTURE_USERS.empleadoVentas.name)).toBeInTheDocument();
   });
 
   test('permite filtrar por término de búsqueda', async () => {
