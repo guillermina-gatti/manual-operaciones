@@ -6,6 +6,15 @@ export interface Passage {
     documentTitle: string;
     section: string | null;
     content: string;
+    // Spec 011 (ajuste del 11/11/2026): el documento del pasaje. Con todos los pasajes de un mismo
+    // documento, el sistema va sin las reglas de CONFLICT. Sin él, se dejan, como antes.
+    documentId?: string;
+}
+
+// Spec 011 (ajuste del 11/11/2026): el segundo pedido, después de una marca CONFLICT entre dos pasajes
+// del mismo documento. sameDocumentRefs son esas dos marcas (por ejemplo, S1 y S2).
+export interface LlmRequestOptions {
+    sameDocumentRefs?: [string, string];
 }
 
 export interface LlmAnswer {
@@ -40,14 +49,25 @@ export interface LlmStream {
 
 export abstract class ChatLlm {
     // Spec 010 (R6): con context, el paso desde el que se pregunta va al prompt como datos.
-    abstract answer(question: string, passages: Passage[], context?: StepContext): Promise<LlmAnswer>;
+    abstract answer(
+        question: string,
+        passages: Passage[],
+        context?: StepContext,
+        options?: LlmRequestOptions,
+    ): Promise<LlmAnswer>;
 
     // No es abstracto, para que las clases que ya extienden ChatLlm sigan compilando: por defecto
     // usa answer y entrega el texto en una sola parte. La señal corta antes de empezar.
-    stream(question: string, passages: Passage[], signal: AbortSignal, context?: StepContext): LlmStream {
+    stream(
+        question: string,
+        passages: Passage[],
+        signal: AbortSignal,
+        context?: StepContext,
+        options?: LlmRequestOptions,
+    ): LlmStream {
         const final = signal.aborted
             ? Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('Pedido cortado'))
-            : this.answer(question, passages, context);
+            : this.answer(question, passages, context, options);
         // Quien solo lee las partes no deja un rechazo sin manejar en final.
         final.catch(() => undefined);
         async function* parts(): AsyncGenerator<string> {

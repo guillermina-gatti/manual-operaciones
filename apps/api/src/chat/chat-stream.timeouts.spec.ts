@@ -20,9 +20,9 @@ import {
     chunk,
 } from './testing/chat-fakes';
 
-function build(steps: LlmStep[], embeddings: 'ok' | 'hang' = 'ok') {
-    const retrieval = new FakeRetrieval([chunk()]);
-    const llm = new FakeLlm(steps);
+function build(steps: LlmStep[], embeddings: 'ok' | 'hang' = 'ok', rows = [chunk()], later: LlmStep[][] = []) {
+    const retrieval = new FakeRetrieval(rows);
+    const llm = new FakeLlm(steps, ...later);
     const repo = new FakeRepository();
     const service = new ChatStreamService(new FakeEmbeddings(embeddings), retrieval, llm, repo);
     return { service, retrieval, llm, repo };
@@ -139,6 +139,43 @@ describe('ChatStreamService: tiempos y corte (spec 009, T06)', () => {
         expect(llm.signals).toHaveLength(0);
         expect(sink.names).toEqual(['start']);
         expect(repo.saved).toHaveLength(0);
+    });
+
+    // Spec 011 (ajuste del 11/11/2026): el segundo pedido, después de una marca entre pasajes del
+    // mismo documento, tiene sus propios 15 s hasta la primera parte. Si no llega, queda el primero.
+    describe('el segundo pedido', () => {
+        const ROWS = [chunk({ chunkId: 'c1' }), chunk({ chunkId: 'c2', section: 'Plazos' })];
+        const SAME_DOCUMENT: LlmStep[] = [{ wait: 10_000 }, 'CONFLICT [S1] [S2]\n', 'Uno [S1], otro [S2].'];
+
+        it('tiene sus propios 15 s hasta la primera parte, y si no llega, se responde el primero', async () => {
+            const { service, llm } = build(SAME_DOCUMENT, 'ok', ROWS, [[{ hang: true }]]);
+            const { sink, running } = await start(service);
+
+            await jest.advanceTimersByTimeAsync(10_000 + FIRST_TEXT_TIMEOUT_MS - 1);
+            expect(llm.signals).toHaveLength(2);
+            expect(llm.signals[1].aborted).toBe(false);
+
+            await jest.advanceTimersByTimeAsync(1);
+            await running;
+
+            expect(llm.signals[1].aborted).toBe(true);
+            expect(sink.names).toEqual(['start', 'done']);
+            expect(sink.final).toMatchObject({ status: 'answered', answer: 'Uno [S1], otro [S2].' });
+        });
+
+        it('si el cliente corta durante el segundo, no hay done ni se guarda', async () => {
+            const { service, repo } = build(SAME_DOCUMENT, 'ok', ROWS, [[{ wait: 5_000 }, 'Respuesta [S1].']]);
+            const client = new AbortController();
+            const { sink, running } = await start(service, client.signal);
+
+            await jest.advanceTimersByTimeAsync(12_000);
+            client.abort();
+            await jest.advanceTimersByTimeAsync(10_000);
+            await running;
+
+            expect(sink.names).toEqual(['start']);
+            expect(repo.saved).toHaveLength(0);
+        });
     });
 
     it('al terminar no quedan temporizadores pendientes', async () => {

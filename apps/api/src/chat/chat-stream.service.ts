@@ -24,13 +24,25 @@ import {
 import { resolveSuggestion } from './chat-contact';
 import { withSignedLinks } from './chat-links';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
-import { CONFLICT_MARKER, checkMarkerLine, recordConflictAlert, splitMarkerLine, startsWithMarker } from './chat-conflict';
+import {
+    CONFLICT_MARKER,
+    bothAnswers,
+    checkMarkerLine,
+    recordConflictAlert,
+    retryFailedNotice,
+    retryMarkerNotice,
+    retryNotice,
+    retryOptions,
+    sameDocumentRefs,
+    splitMarkerLine,
+    startsWithMarker,
+} from './chat-conflict';
 import { buildSearchUrl } from './chat-search-url';
 import { catalogOutcome } from './chat-catalog-outcome';
 import type { ChatEventSink } from './chat-stream.types';
 import { ChatContextStore } from './ports/chat-context-store';
 import { ChatDocumentsCatalog } from './ports/chat-documents-catalog';
-import { ChatLlm } from './ports/chat-llm';
+import { ChatLlm, type LlmAnswer, type LlmRequestOptions } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval, type RetrievedChunk } from './ports/chat-retrieval';
 import { ConflictAlertRecorder } from './ports/conflict-alert-recorder';
@@ -168,15 +180,41 @@ export class ChatStreamService {
         const gate = new MarkerGate(prepared.chunks, (text) => {
             if (!clientSignal.aborted) sink.delta({ text });
         });
-        try {
-            const stream = this.llm.stream(question, prepared.passages, controller.signal, stepContext);
+        // Un pedido al modelo, con sus partes por el retén.
+        const consume = async (options?: LlmRequestOptions): Promise<LlmAnswer> => {
+            const stream = this.llm.stream(question, prepared.passages, controller.signal, stepContext, options);
             for await (const part of stream.textStream) {
                 clearTimeout(idle);
                 idle = setTimeout(cut('El modelo dejó de responder'), IDLE_TIMEOUT_MS);
                 gate.push(part);
             }
-            const llm = await stream.final;
+            const answer = await stream.final;
             gate.end();
+            return answer;
+        };
+        try {
+            let llm = await consume();
+            // Spec 011 (ajuste del 11/11/2026): una marca CONFLICT entre pasajes del mismo documento no
+            // mandó ningún delta (el retén se cerró); se pide otra vez, como answerChecked en POST /api/chat.
+            // Si el segundo falla, queda el primero.
+            const refs = sameDocumentRefs(llm.text, prepared.chunks);
+            if (refs) {
+                this.logger.warn(retryNotice(refs));
+                // Ajuste del 12/11/2026: en el segundo pedido, una marca CONFLICT no cierra el retén: su
+                // línea se saca y sale el resto, como lo deja bothAnswers para finishChat.
+                gate.reset({ dropMarker: true });
+                clearTimeout(idle);
+                idle = setTimeout(cut('El modelo no empezó a responder a tiempo'), FIRST_TEXT_TIMEOUT_MS);
+                try {
+                    const second = await consume(retryOptions(refs));
+                    if (startsWithMarker(second.text)) this.logger.warn(retryMarkerNotice);
+                    llm = bothAnswers(llm, second);
+                } catch (error) {
+                    if (clientSignal.aborted) throw error;
+                    this.logger.warn(retryFailedNotice(error));
+                }
+            }
+            // develop: si no hay respuesta, la ayuda de la plataforma (finishWithHelp), igual que POST /api/chat.
             return finishWithHelp(llm, prepared.chunks, question, this.logger);
         } catch (error) {
             if (!clientSignal.aborted) this.logger.warn(`Falló la llamada al modelo: ${String(error)}`);
@@ -212,6 +250,8 @@ function withTimeout(embeddings: EmbeddingProvider, ms: number): EmbeddingProvid
 class MarkerGate {
     private buffer = '';
     private state: 'waiting' | 'open' | 'closed' = 'waiting';
+    // Segundo pedido (ajuste del 12/11/2026): la línea de una marca CONFLICT se saca, sea válida o no.
+    private dropMarker = false;
 
     constructor(
         private readonly chunks: RetrievedChunk[],
@@ -231,11 +271,21 @@ class MarkerGate {
         this.decide(text);
     }
 
+    // Para el segundo pedido: vuelve a esperar, sin nada retenido.
+    reset(options: { dropMarker?: boolean } = {}): void {
+        this.buffer = '';
+        this.state = 'waiting';
+        this.dropMarker = options.dropMarker === true;
+    }
+
     // Al terminar el modelo: lo que quedó retenido sale, salvo que sea una marca.
     end(): void {
         if (this.state !== 'waiting') return;
         const text = this.buffer.trimStart();
         if (text) this.decide(text);
+        // Si se sacó la línea de una marca, lo que siguió (aunque sea corto) sale ahora.
+        const rest = this.buffer.trimStart();
+        if (this.state === 'waiting' && rest) this.decide(rest);
     }
 
     private mayStillBeAMarker(text: string): boolean {
@@ -249,9 +299,19 @@ class MarkerGate {
             this.state = 'closed';
             return;
         }
+        if (startsWithMarker(text) && this.dropMarker) {
+            // Sin la línea, lo que sigue pasa por el retén como una respuesta nueva (puede ser NO_INFO).
+            this.dropMarker = false;
+            this.buffer = splitMarkerLine(text).rest;
+            const rest = this.buffer.trimStart();
+            if (rest && !this.mayStillBeAMarker(rest)) this.decide(rest);
+            return;
+        }
         if (startsWithMarker(text)) {
             const { line, rest } = splitMarkerLine(text);
-            if (checkMarkerLine(line, this.chunks).ok) {
+            const checked = checkMarkerLine(line, this.chunks);
+            // Ajuste del 11/11/2026: entre pasajes del mismo documento, tampoco sale nada; se pide otra vez.
+            if (checked.ok || checked.sameDocument) {
                 this.state = 'closed';
                 return;
             }
