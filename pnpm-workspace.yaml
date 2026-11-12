@@ -5,6 +5,7 @@ overrides:
   mysql2: ^3.22.0
   tmp: ^0.2.6
   'undici@<7': ^6.29.1
+  multer: ^2.5.0
 allowBuilds:
   '@parcel/watcher': true
   '@prisma/engines': true
