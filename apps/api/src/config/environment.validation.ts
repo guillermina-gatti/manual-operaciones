@@ -1,3 +1,5 @@
+import { resolveHttpSecurityPolicy } from '../http-security';
+
 const MIN_JWT_SECRET_LENGTH = 32;
 const DEFAULT_S3_FORCE_PATH_STYLE = 'false';
 
@@ -17,6 +19,7 @@ export function validateEnvironment(environment: Environment): Environment {
   validatePort(environment);
   validateTimeZone(environment);
   validateProcessingWorker(environment);
+  resolveHttpSecurityPolicy(environment);
   validateDatabase(environment, isProduction);
   validateJwt(environment, isProduction);
   validateRedis(environment, isProduction);
