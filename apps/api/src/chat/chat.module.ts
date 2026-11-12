@@ -8,6 +8,7 @@ import { PrismaChatContextStore } from './adapters/prisma-chat-context-store';
 import { PrismaChatFeedbackRepository } from './adapters/prisma-chat-feedback-repository';
 import { PrismaConflictAlertRecorder } from './adapters/prisma-conflict-alert-recorder';
 import { PrismaContactDirectory } from './adapters/prisma-contact-directory';
+import { PrismaChatDocumentsCatalog } from './adapters/prisma-chat-documents-catalog';
 import { ContactDirectory } from './ports/contact-directory';
 import { PrismaChatRepository } from './adapters/prisma-chat-repository';
 import { PrismaChatRetrieval } from './adapters/prisma-chat-retrieval';
@@ -18,6 +19,7 @@ import { ChatService } from './chat.service';
 import { ChatStreamController } from './chat-stream.controller';
 import { ChatStreamService } from './chat-stream.service';
 import { ChatContextStore } from './ports/chat-context-store';
+import { ChatDocumentsCatalog } from './ports/chat-documents-catalog';
 import { ChatFeedbackRepository } from './ports/chat-feedback-repository';
 import { ConflictAlertRecorder } from './ports/conflict-alert-recorder';
 import { ChatLlm } from './ports/chat-llm';
@@ -37,6 +39,7 @@ import { ChatRetrieval } from './ports/chat-retrieval';
         { provide: ChatContextStore, useClass: PrismaChatContextStore }, // spec 010
         { provide: ConflictAlertRecorder, useClass: PrismaConflictAlertRecorder }, // spec 011
         { provide: ContactDirectory, useClass: PrismaContactDirectory }, // HU19
+        { provide: ChatDocumentsCatalog, useClass: PrismaChatDocumentsCatalog }, // listado de documentos por área
         {
             // El modelo de chat sale de GEMINI_CHAT_MODEL (gemini-2.5-flash por defecto).
             provide: ChatLlm,

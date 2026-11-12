@@ -65,6 +65,14 @@ describe('platformHelpReply · documentos visibles, estados y citas', () => {
         expect(platformHelpReply('como se si la cita es confiable')).toContain('qué documento');
     });
 
+    it('de dónde sale una respuesta, sin nombrar al asistente', () => {
+        expect(platformHelpReply('¿De dónde sale una respuesta?')).toContain('qué documento');
+    });
+
+    it('una consulta de trabajo sobre un documento no es ayuda aunque tenga "de dónde"', () => {
+        expect(platformHelpReply('¿de dónde sale el plazo de devolución?')).toBeNull();
+    });
+
     it('no se pisa con consultas de contenido', () => {
         expect(platformHelpReply('como soluciono un error de caja')).toBeNull();
         expect(platformHelpReply('cual es la fuente de ingresos')).toBeNull();
@@ -107,4 +115,18 @@ describe('platformHelpReply · preguntas de trabajo que no son ayuda (regresión
     ])('%s', (question) => {
         expect(platformHelpReply(question)).toBeNull();
     });
+    it('cómo buscar una respuesta: va a la pantalla del asistente', () => {
+        expect(platformHelpReply('¿cómo busco una respuesta?')).toContain('/asistente');
+        expect(platformHelpReply('¿dónde busco una respuesta?')).toContain('/asistente');
+        expect(platformHelpReply('como pregunto al asistente')).toContain('/asistente');
+    });
+
+    it('la pregunta de origen sigue yendo a su respuesta', () => {
+        expect(platformHelpReply('¿De dónde sale una respuesta?')).toContain('qué documento');
+    });
+
+    it('buscar un dato del trabajo no es ayuda', () => {
+        expect(platformHelpReply('¿cómo busco el plazo de devolución?')).toBeNull();
+    });
+
 });

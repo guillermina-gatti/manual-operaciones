@@ -102,8 +102,14 @@ const TOPICS: Topic[] = [
             'Cada respuesta del asistente muestra al final de qué documento sacó la información: el título, la sección y desde cuándo está vigente, con un enlace al archivo. Si no encuentra nada en tus documentos, te lo dice en lugar de inventar una respuesta.',
     },
     {
+        name: 'buscar-respuesta',
+        all: [['busc', 'encuentr', 'pregunt'], ['respuest', 'asistent', 'chat']],
+        reply:
+            'Para buscar una respuesta, escribí tu pregunta en Asistente (/asistente) con tus palabras, por ejemplo "¿cuánto tarda la entrega de un pedido?". El asistente responde solo con los documentos vigentes de tus áreas y muestra al final de qué documento sacó cada dato. Si no encuentra nada, te muestra los documentos más cercanos y a quién consultar. Para buscar dentro de un documento, usá el buscador de Documentos (/documentos).',
+    },
+    {
         name: 'origen-respuesta',
-        all: [['respuesta', 'contest'], ['sale', 'vien', 'origen', 'donde', 'de'], ['asistent', 'fuente', 'cita', 'chat', ...DOCUMENT]],
+        all: [['respuesta', 'contest'], ['sale', 'vien', 'origen', 'donde', 'de'], ['asistent', 'fuente', 'cita', 'chat', 'respuest', ...DOCUMENT]],
         reply:
             'Cada respuesta del asistente muestra al final de qué documento sacó la información: el título, la sección y desde cuándo está vigente, con un enlace al archivo. Si no encuentra nada en tus documentos, te lo dice en lugar de inventar una respuesta.',
     },

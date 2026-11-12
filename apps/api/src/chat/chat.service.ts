@@ -10,6 +10,7 @@ import { resolveSuggestion } from './chat-contact';
 import { withSignedLinks } from './chat-links';
 import { recordConflictAlert } from './chat-conflict';
 import { type StepContext, openStepContext, rememberConversationStep } from './chat-context';
+import { catalogOutcome } from './chat-catalog-outcome';
 import {
     type ChatUser,
     type Outcome,
@@ -19,6 +20,7 @@ import {
     unavailable,
 } from './chat-pipeline';
 import { ChatContextStore } from './ports/chat-context-store';
+import { ChatDocumentsCatalog } from './ports/chat-documents-catalog';
 import { ChatLlm, type LlmAnswer } from './ports/chat-llm';
 import { ChatRepository } from './ports/chat-repository';
 import { ChatRetrieval } from './ports/chat-retrieval';
@@ -52,6 +54,8 @@ export class ChatService {
         @Optional() private readonly contacts?: ContactDirectory,
         // HU18: para firmar el enlace de cada fuente citada. Opcional: sin él, las fuentes quedan sin enlace.
         @Optional() private readonly storage?: FileStorage,
+        // Listado de documentos por área. Opcional: sin él, esa pregunta sigue como cualquier otra.
+        @Optional() private readonly catalog?: ChatDocumentsCatalog,
     ) { }
 
     async ask(user: ChatUser & { role?: Role }, request: ChatRequest): Promise<ChatResult> {
@@ -78,6 +82,10 @@ export class ChatService {
     }
 
     private async run(user: ChatUser, question: string, stepContext?: StepContext): Promise<Outcome> {
+        // Listado de documentos por área: respuesta fija, sin búsqueda ni modelo.
+        const listed = await catalogOutcome(this.catalog, user, question, this.logger);
+        if (listed) return listed;
+
         const searchText = stepContext ? `${stepContext.stepTitle}\n${question}` : question;
         const prepared = await prepareChat(this.embeddings, this.retrieval, user, question, this.logger, searchText);
         if (prepared.kind === 'done') {
