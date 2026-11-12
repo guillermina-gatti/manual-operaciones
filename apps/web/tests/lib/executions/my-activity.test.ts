@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { formatLastActivity, staleLabel } from '@/lib/executions/my-activity';
+import type { MyProcedureMetrics } from '@/lib/api';
+import {
+  RESUME_SECTION_HREF,
+  areasByProcedure,
+  formatLastActivity,
+  staleLabel,
+} from '@/lib/executions/my-activity';
 
 describe('staleLabel', () => {
   test('says how long without progress, never "abandonada"', () => {
@@ -18,5 +24,39 @@ describe('formatLastActivity', () => {
 
   test('something that is not a date', () => {
     expect(formatLastActivity('ayer')).toBe('—');
+  });
+});
+
+describe('RESUME_SECTION_HREF', () => {
+  test('the "Para retomar" section of Mi actividad', () => {
+    expect(RESUME_SECTION_HREF).toBe('/ejecuciones/mi-actividad#para-retomar');
+  });
+});
+
+describe('areasByProcedure', () => {
+  const procedure = (procedureId: string, areaIds: string[]) =>
+    ({ procedureId, areaIds }) as MyProcedureMetrics;
+  const AREAS = [
+    { id: 'v', name: 'Ventas', isActive: true },
+    { id: 'o', name: 'Operaciones', isActive: false },
+  ];
+
+  test('the names of the directory, in the order of the procedure, keeping "inactive"', () => {
+    const map = areasByProcedure([procedure('p1', ['o', 'v'])], AREAS);
+
+    expect(map.get('p1')).toEqual([
+      { id: 'o', name: 'Operaciones', isActive: false },
+      { id: 'v', name: 'Ventas', isActive: true },
+    ]);
+  });
+
+  test('an unknown area is left out; a procedure without known areas is not there', () => {
+    const map = areasByProcedure(
+      [procedure('p1', ['v', 'x']), procedure('p2', ['x'])],
+      AREAS,
+    );
+
+    expect(map.get('p1')).toEqual([{ id: 'v', name: 'Ventas', isActive: true }]);
+    expect(map.has('p2')).toBe(false);
   });
 });

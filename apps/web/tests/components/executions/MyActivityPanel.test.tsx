@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
   listAreas: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
   searchParams: new URLSearchParams(),
 }));
 
@@ -40,7 +41,8 @@ vi.mock('@/lib/directory', () => ({
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => mocks.searchParams,
-  useRouter: () => ({ push: mocks.push }),
+  usePathname: () => '/ejecuciones/mi-actividad',
+  useRouter: () => ({ push: mocks.push, replace: mocks.replace }),
 }));
 
 const ELENA: SessionState = {
@@ -264,10 +266,15 @@ describe('to resume', () => {
     await loaded();
 
     const cierre = card('Cierre de caja');
-    expect(cierre).toHaveTextContent('Paso 2 de 4:Comparar con el reporte');
-    expect(cierre).toHaveTextContent('Último avance:27 oct 2026, 10:05');
+    expect(cierre).toHaveTextContent('Paso 2 de 4: Comparar con el reporte');
+    // How long ago, with the date and time in the tooltip.
+    expect(cierre).toHaveTextContent('Último avance: hace 1 h 55 min');
+    expect(within(cierre).getByText('hace 1 h 55 min')).toHaveAttribute(
+      'title',
+      '27 oct 2026, 10:05',
+    );
     expect(within(cierre).getByText('En curso')).toBeInTheDocument();
-    expect(within(cierre).getByRole('link', { name: 'Retomar →' })).toHaveAttribute(
+    expect(within(cierre).getByRole('link', { name: 'Continuar' })).toHaveAttribute(
       'href',
       `/ejecuciones/${CURRENT_EXECUTION}`,
     );
@@ -307,17 +314,54 @@ describe('to resume', () => {
 
     const recepcion = card('Recepción de mercadería');
     expect(within(recepcion).getByText('Sin avanzar hace más de 24 h')).toBeInTheDocument();
-    expect(within(recepcion).getByRole('link', { name: 'Retomar →' })).toHaveAttribute(
+    expect(within(recepcion).getByRole('link', { name: 'Continuar' })).toHaveAttribute(
       'href',
       `/ejecuciones/${STALE_EXECUTION}`,
     );
+  });
+
+  test('the section is "para-retomar", named by its heading, for the link of /ejecuciones', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(resume()).toHaveAttribute('id', 'para-retomar');
+    expect(resume()).toHaveClass('scroll-mt-6');
+  });
+
+  test('entering with #para-retomar goes down to it once the list arrives', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState(null, '', '/ejecuciones/mi-actividad#para-retomar');
+    try {
+      render(<MyActivityPanel />);
+      await loaded();
+
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
+      expect(scrollIntoView.mock.contexts[0]).toBe(resume());
+    } finally {
+      window.history.replaceState(null, '', '/');
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+
+  test('without the hash it stays at the top', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      render(<MyActivityPanel />);
+      await loaded();
+
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
   });
 
   test('the link says which procedure it opens', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
-    const links = within(resume()).getAllByRole('link', { name: 'Retomar →' });
+    const links = within(resume()).getAllByRole('link', { name: 'Continuar' });
     expect(links[0]).toHaveAccessibleDescription('Cierre de caja');
     expect(links[1]).toHaveAccessibleDescription('Recepción de mercadería');
   });
@@ -335,6 +379,139 @@ describe('to resume', () => {
     render(<MyActivityPanel />);
 
     expect(await screen.findByText('No tenés ejecuciones sin terminar.')).toBeInTheDocument();
+  });
+});
+
+describe('to resume: the two views (?vista=), as the picker', () => {
+  const resume = () => screen.getByRole('region', { name: 'Para retomar' });
+  const viewButton = (name: 'Lista' | 'Tarjetas') =>
+    within(within(resume()).getByRole('group', { name: 'Vista' })).getByRole('button', {
+      name: `Ver como ${name}`,
+    });
+  const items = () => [...resume().querySelectorAll('li')];
+
+  beforeEach(() => {
+    mocks.listAreas.mockResolvedValue([
+      { id: VENTAS, name: 'Ventas', isActive: true },
+      { id: OPERACIONES, name: 'Operaciones', isActive: true },
+    ]);
+  });
+
+  test('Tarjetas by default: areas and steps, the state on the right, step, time and "Continuar" at the foot', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+    await within(resume()).findAllByText('Ventas');
+
+    expect(viewButton('Tarjetas')).toHaveAttribute('aria-pressed', 'true');
+    const [cierre, recepcion] = items();
+    const [meta, title, body, link] = [...cierre.children];
+    expect(meta).toHaveClass('min-h-7');
+    expect(meta.firstElementChild).toHaveTextContent('Áreas: Ventas4 pasos');
+    expect(meta.lastElementChild).toHaveTextContent('En curso');
+    expect(title).toHaveTextContent('Cierre de caja');
+    expect(body).toHaveTextContent('Paso 2 de 4: Comparar con el reporte');
+    expect(body).toHaveTextContent('Último avance: hace 1 h 55 min');
+    expect(link).toHaveAccessibleName('Continuar');
+    expect(link).toHaveClass('mt-auto');
+    // The stale one: the same places, with its own state.
+    expect(recepcion.firstElementChild!.firstElementChild).toHaveTextContent('Áreas: Operaciones');
+    expect(recepcion.firstElementChild!.lastElementChild).toHaveTextContent(
+      'Sin avanzar hace más de 24 h',
+    );
+    expect(cierre.parentElement).toHaveClass('md:auto-rows-fr');
+  });
+
+  test('choosing Lista keeps the filters of the address', async () => {
+    mocks.searchParams = new URLSearchParams('desde=2026-10-01&hasta=2026-10-27');
+    render(<MyActivityPanel />);
+    await loaded();
+
+    await userEvent.click(viewButton('Lista'));
+
+    expect(mocks.replace).toHaveBeenCalledWith(
+      '/ejecuciones/mi-actividad?desde=2026-10-01&hasta=2026-10-27&vista=lista',
+      { scroll: false },
+    );
+  });
+
+  test('a filter applied in Lista keeps vista=lista', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    render(<MyActivityPanel />);
+    await loaded();
+
+    await areaOptionTexts(user);
+    await user.click(screen.getByRole('option', { name: /^Ventas/ }));
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      `/ejecuciones/mi-actividad?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27&vista=lista`,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(mocks.push).toHaveBeenLastCalledWith('/ejecuciones/mi-actividad?vista=lista');
+  });
+
+  test('without ?vista=, a filter writes no view', async () => {
+    const user = userEvent.setup();
+    render(<MyActivityPanel />);
+    await loaded();
+
+    await areaOptionTexts(user);
+    await user.click(screen.getByRole('option', { name: /^Ventas/ }));
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      `/ejecuciones/mi-actividad?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(mocks.push).toHaveBeenLastCalledWith('/ejecuciones/mi-actividad');
+  });
+
+  test('Lista: the header and four columns per row, with the state and the time together', async () => {
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    render(<MyActivityPanel />);
+    await loaded();
+    await within(resume()).findAllByText('Ventas');
+
+    expect(viewButton('Lista')).toHaveAttribute('aria-pressed', 'true');
+    const header = resume().querySelector('[aria-hidden="true"].md\\:grid')!;
+    expect([...header.children].map((cell) => cell.textContent)).toEqual([
+      'Procedimiento',
+      'Área y pasos',
+      'Estado',
+      '',
+    ]);
+    const [cierre] = items();
+    expect(cierre.children).toHaveLength(4);
+    expect(cierre.children[0]).toHaveTextContent('Cierre de cajaPaso 2 de 4: Comparar con el reporte');
+    expect(cierre.children[1]).toHaveTextContent('Áreas: Ventas4 pasos');
+    expect(cierre.children[2]).toHaveTextContent('En cursoÚltimo avance: hace 1 h 55 min');
+    expect(cierre.children[3]).toHaveAccessibleName('Continuar');
+    expect(cierre.children[3]).toHaveAttribute('href', `/ejecuciones/${CURRENT_EXECUTION}`);
+  });
+
+  test('the anchor still works in Lista', async () => {
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(resume()).toHaveAttribute('id', 'para-retomar');
+  });
+
+  test('a procedure the period does not have: no chip, only its steps', async () => {
+    const answer = myMetricsResponse();
+    mocks.getMyMetrics.mockResolvedValue({ ...answer, procedures: [] });
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const meta = items()[0].firstElementChild!;
+    expect(meta.firstElementChild).toHaveTextContent(/^4 pasos$/);
+  });
+
+  test('without executions to resume, no switch', async () => {
+    mocks.getMyMetrics.mockResolvedValue({ ...myMetricsResponse(), resume: [] });
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(within(resume()).queryByRole('group', { name: 'Vista' })).not.toBeInTheDocument();
   });
 });
 

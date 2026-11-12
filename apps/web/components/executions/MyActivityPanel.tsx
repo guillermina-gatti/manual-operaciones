@@ -17,7 +17,8 @@ import type { ApiResource, MyMetricsResponse } from '@/lib/api';
 import { areasDirectory } from '@/lib/directory';
 import { displayAreaName } from '@/lib/directory/areas-directory';
 import { formatDuration } from '@/lib/executions/format';
-import { MY_ACTIVITY_PATH, staleLabel } from '@/lib/executions/my-activity';
+import { MY_ACTIVITY_PATH, areasByProcedure, staleLabel } from '@/lib/executions/my-activity';
+import { VIEW_PARAM, parseExecutionsView, withExecutionsView } from '@/lib/executions/view';
 import {
   areaOptions,
   metricsHref,
@@ -38,7 +39,12 @@ const STATE_CARD = `${CARD} px-6 sm:px-8`;
 export function MyActivityPanel() {
   const { user } = useSession();
   const today = todayInCompany();
-  const filters = parseMetricsFilters(useSearchParams(), today);
+  const searchParams = useSearchParams();
+  const filters = parseMetricsFilters(searchParams, today);
+  // The view of "Para retomar", the same as the picker of /ejecuciones.
+  const view = parseExecutionsView(searchParams.get(VIEW_PARAM));
+  // Applying or clearing a filter keeps the view; Tarjetas writes nothing.
+  const keepView = (href: string) => withExecutionsView(href, view);
   const query = metricsQuery(filters);
 
   // The key includes the user: switching test users asks again.
@@ -66,12 +72,15 @@ export function MyActivityPanel() {
         areas={options}
         today={today}
         path={MY_ACTIVITY_PATH}
+        keepParams={keepView}
       />
-      <SummarySection filters={filters} state={metrics} />
+      <SummarySection filters={filters} state={metrics} keepView={keepView} />
       {metrics.status === 'success' && (
         <ResumeList
           items={metrics.data.resume}
           staleAfterHours={metrics.data.staleAfterHours}
+          view={view}
+          areasByProcedure={areasByProcedure(metrics.data.procedures, areaList)}
         />
       )}
       {metrics.status === 'success' && metrics.data.procedures.length > 0 && (
@@ -88,21 +97,22 @@ export function MyActivityPanel() {
 interface SectionProps {
   filters: PanelFilters;
   state: ApiResource<MyMetricsResponse>;
+  keepView: (href: string) => string;
 }
 
-function SummarySection({ filters, state }: SectionProps) {
+function SummarySection({ filters, state, keepView }: SectionProps) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-6">
       <h2 id={headingId} className="text-2xl font-bold text-texto">
         Tu resumen
       </h2>
-      <SummaryContent filters={filters} state={state} />
+      <SummaryContent filters={filters} state={state} keepView={keepView} />
     </section>
   );
 }
 
-function SummaryContent({ filters, state }: SectionProps) {
+function SummaryContent({ filters, state, keepView }: SectionProps) {
   if (state.status === 'idle' || state.status === 'loading') {
     return (
       <ScreenState kind="loading" label="Cargando tu actividad…">
@@ -119,7 +129,7 @@ function SummaryContent({ filters, state }: SectionProps) {
         {areaNotFound && (
           <p className="-mt-6 pb-10 text-center">
             <Link
-              href={metricsHref({ ...filters, areaId: null }, MY_ACTIVITY_PATH)}
+              href={keepView(metricsHref({ ...filters, areaId: null }, MY_ACTIVITY_PATH))}
               className={TEXT_LINK}
             >
               Ver todas mis áreas

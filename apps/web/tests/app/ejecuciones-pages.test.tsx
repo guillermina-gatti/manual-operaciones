@@ -20,6 +20,7 @@ vi.mock('next/navigation', () => ({
 // What each page mounts is tested on its own; here, only who gets to see it.
 vi.mock('@/components/executions/ProcedurePicker', () => ({
   ProcedurePicker: () => <p>Selector de procedimientos</p>,
+  PickerSkeleton: () => null,
 }));
 vi.mock('@/components/executions/MyActivityPanel', () => ({
   MyActivityPanel: () => <p>Panel de mi actividad</p>,
@@ -36,22 +37,19 @@ beforeEach(() => {
 });
 
 describe('/ejecuciones', () => {
-  test('an employee has the link to their activity', () => {
+  test('an employee sees the picker, without the link to their activity (it is on the home page)', () => {
     mocks.useSession.mockReturnValue(as('EMPLOYEE'));
     render(<EjecucionesPage />);
 
-    expect(screen.getByRole('link', { name: 'Ver mi actividad →' })).toHaveAttribute(
-      'href',
-      '/ejecuciones/mi-actividad',
-    );
     expect(screen.getByText('Selector de procedimientos')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Ver mi actividad/ })).not.toBeInTheDocument();
   });
 
-  test('another role does not see the link', () => {
+  test('another role does not mount the picker', () => {
     mocks.useSession.mockReturnValue(as('SUPERVISOR'));
     render(<EjecucionesPage />);
 
-    expect(screen.queryByRole('link', { name: 'Ver mi actividad →' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Selector de procedimientos')).not.toBeInTheDocument();
   });
 });
 
