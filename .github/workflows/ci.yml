@@ -1,4 +1,3 @@
-
 name: CI
 
 on:
@@ -98,3 +97,43 @@ jobs:
 
       - name: Run API E2E tests
         run: pnpm --filter api test:e2e
+
+  docker-api:
+    name: Docker API (build y verificación)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build API Docker image
+        run: |
+          docker build \
+            --progress=plain \
+            -f apps/api/Dockerfile \
+            -t pispiar-api:ci .
+
+      - name: Verify non-root user
+        run: |
+          USER_NAME=$(docker image inspect pispiar-api:ci --format '{{.Config.User}}')
+          test "$USER_NAME" = "node"
+
+      - name: Verify compiled API and runtime dependencies
+        run: |
+          docker run --rm --entrypoint node pispiar-api:ci -e '
+            const fs = require("node:fs");
+            for (const file of [
+              "dist/main.js",
+              "dist/generated/prisma/client.js"
+            ]) {
+              if (!fs.existsSync(file)) {
+                throw new Error("Falta archivo: " + file);
+              }
+            }
+            require("bcrypt");
+            require("@prisma/adapter-pg");
+            console.log("API Docker: verificaciones correctas");
+          '

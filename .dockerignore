@@ -1,0 +1,24 @@
+
+# Control de versiones y herramientas locales
+.git
+.github
+.vscode
+capturas
+
+# Dependencias y archivos generados
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/src/generated/prisma
+**/*.tsbuildinfo
+.pnpm-store
+
+# Variables y secretos
+**/.env
+**/.env.*
+!**/.env.example
+
+# Archivos temporales
+**/*.log
+**/.cache
