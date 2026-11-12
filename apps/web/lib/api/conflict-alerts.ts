@@ -36,6 +36,14 @@ export interface ConflictAlertPage {
   limit: number;
 }
 
+export const CONFLICT_ALERTS_CHANGED_EVENT = 'conflict-alerts:changed';
+
+export function notifyConflictAlertsChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(CONFLICT_ALERTS_CHANGED_EVENT));
+  }
+}
+
 export function createConflictAlertsApi(client: ApiClient) {
   return {
     listConflictAlerts(status: ConflictAlertStatus, page: number, limit: number, signal?: AbortSignal) {
@@ -46,12 +54,14 @@ export function createConflictAlertsApi(client: ApiClient) {
     },
 
     // Una nota vacía no se manda: la API la guardaría como null igual.
-    resolveConflictAlert(id: string, note?: string) {
-      return client.request<ConflictAlert>(`/api/conflict-alerts/${encodeURIComponent(id)}/resolve`, {
+    async resolveConflictAlert(id: string, note?: string) {
+      const alert = await client.request<ConflictAlert>(`/api/conflict-alerts/${encodeURIComponent(id)}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(note ? { note } : {}),
       });
+      notifyConflictAlertsChanged();
+      return alert;
     },
   };
 }

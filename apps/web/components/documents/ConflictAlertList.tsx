@@ -7,7 +7,14 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ScreenState } from '@/components/ui/ScreenState';
-import { ApiError, PAGE_SIZE, describeApiError, listConflictAlerts, useApiResource } from '@/lib/api';
+import {
+  ApiError,
+  PAGE_SIZE,
+  describeApiError,
+  listConflictAlerts,
+  notifyConflictAlertsChanged,
+  useApiResource,
+} from '@/lib/api';
 import type { ApiResource, ConflictAlertPage, ConflictAlertStatus } from '@/lib/api';
 import { pageCount, parsePageParam } from '@/lib/documents/pagination';
 import { useSession } from '@/lib/session';
@@ -97,11 +104,13 @@ export function ConflictAlertList() {
           onResolved={() => {
             setResolving(null);
             alerts.reload();
+            notifyConflictAlertsChanged();
           }}
           onConflict={(message) => {
             setResolving(null);
             setNotice(message);
             alerts.reload();
+            notifyConflictAlertsChanged();
           }}
         />
       )}

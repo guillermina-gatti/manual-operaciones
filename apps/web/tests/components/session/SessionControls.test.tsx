@@ -8,9 +8,13 @@ const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
   replace: vi.fn(),
   listConflictAlerts: vi.fn(),
+  pathname: '/',
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: mocks.replace }),
+  usePathname: () => mocks.pathname,
+}));
 vi.mock('@/lib/session', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/session')>()),
   REAL_AUTH_ENABLED: true,
@@ -129,6 +133,50 @@ describe('A-09: estado de sesión en encabezado', () => {
       render(<SessionControls />);
       expect(screen.queryByRole('link', { name: 'Asistente' })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Alertas' })).not.toBeInTheDocument();
+    });
+
+    test('actualiza el badge cuando se resuelve una alerta (evento CONFLICT_ALERTS_CHANGED_EVENT)', async () => {
+      mocks.listConflictAlerts
+        .mockResolvedValueOnce({ data: [], total: 3, openTotal: 3, page: 1, limit: 1 })
+        .mockResolvedValueOnce({ data: [], total: 0, openTotal: 0, page: 1, limit: 1 });
+      mocks.useSession.mockReturnValue({
+        user: { id: 'adm-1', name: 'Ana', role: 'ADMIN' },
+        status: 'ready',
+      });
+      render(<SessionControls />);
+      const badge = await screen.findByTestId('alerts-badge');
+      expect(badge).toHaveTextContent('3');
+
+      window.dispatchEvent(new CustomEvent('conflict-alerts:changed'));
+
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'Alertas: ninguna abierta' })).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('alerts-badge')).not.toBeInTheDocument();
+      expect(mocks.listConflictAlerts).toHaveBeenCalledTimes(2);
+    });
+
+    test('actualiza el badge al navegar entre pantallas', async () => {
+      mocks.listConflictAlerts
+        .mockResolvedValueOnce({ data: [], total: 3, openTotal: 3, page: 1, limit: 1 })
+        .mockResolvedValueOnce({ data: [], total: 0, openTotal: 0, page: 1, limit: 1 });
+      mocks.useSession.mockReturnValue({
+        user: { id: 'adm-1', name: 'Ana', role: 'ADMIN' },
+        status: 'ready',
+      });
+      mocks.pathname = '/documentos/alertas';
+      const { rerender } = render(<SessionControls />);
+      const badge = await screen.findByTestId('alerts-badge');
+      expect(badge).toHaveTextContent('3');
+
+      mocks.pathname = '/documentos';
+      rerender(<SessionControls />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'Alertas: ninguna abierta' })).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('alerts-badge')).not.toBeInTheDocument();
+      expect(mocks.listConflictAlerts).toHaveBeenCalledTimes(2);
     });
   });
 });

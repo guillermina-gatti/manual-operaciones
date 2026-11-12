@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { listConflictAlerts, useApiResource } from '@/lib/api';
+import { usePathname, useRouter } from 'next/navigation';
+import { CONFLICT_ALERTS_CHANGED_EVENT, listConflictAlerts, useApiResource } from '@/lib/api';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { logoutSession } from '@/lib/session/real-session';
 
@@ -11,9 +11,30 @@ const describeOpen = (total: number) =>
   total === 0 ? 'ninguna abierta' : total === 1 ? '1 abierta' : `${total} abiertas`;
 
 function AdminAlertsLink({ userId }: { userId: string }) {
+  const pathname = usePathname();
+  const isFirstRender = useRef(true);
   const open = useApiResource(`conflict-alerts-count:${userId}`, (signal) =>
     listConflictAlerts('OPEN', 1, 1, signal),
   );
+  const { reload } = open;
+
+  useEffect(() => {
+    function onAlertsChanged() {
+      reload();
+    }
+    window.addEventListener(CONFLICT_ALERTS_CHANGED_EVENT, onAlertsChanged);
+    return () => {
+      window.removeEventListener(CONFLICT_ALERTS_CHANGED_EVENT, onAlertsChanged);
+    };
+  }, [reload]);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    reload();
+  }, [pathname, reload]);
 
   const openTotal = open.status === 'success' ? open.data.openTotal : 0;
   const label =
