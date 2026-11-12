@@ -7,23 +7,36 @@ export type CitationSegment = { type: 'text'; text: string } | { type: 'cite'; n
 
 const MARKER = /\[S(\d+)\]/g;
 
-export function linkCitations(answer: string, sourceCount: number): CitationSegment[] {
+// El número de cita de cada marca, calculado sobre la respuesta entera; null si las marcas no coinciden
+// con las fuentes (entonces se quitan). Separado de splitCitations para que el Markdown (párrafos,
+// listas, negritas) pueda partir el texto sin cambiar la numeración.
+export function citationNumbers(answer: string, sourceCount: number): Map<number, number> | null {
   const markers = [...new Set([...answer.matchAll(MARKER)].map((m) => Number(m[1])))].sort((a, b) => a - b);
+  if (markers.length !== sourceCount) return null;
+  return new Map(markers.map((marker, index) => [marker, index + 1]));
+}
 
-  if (markers.length !== sourceCount) {
-    const text = answer.replace(/\s?\[S\d+\]/g, '');
-    return text ? [{ type: 'text', text }] : [];
+// Un pedazo de la respuesta, en texto y citas, con la numeración de citationNumbers.
+export function splitCitations(text: string, numbers: Map<number, number> | null): CitationSegment[] {
+  if (!numbers) {
+    const plain = text.replace(/\s?\[S\d+\]/g, '');
+    return plain ? [{ type: 'text', text: plain }] : [];
   }
 
-  const numberOf = new Map(markers.map((marker, index) => [marker, index + 1]));
   const segments: CitationSegment[] = [];
   let last = 0;
-  for (const match of answer.matchAll(MARKER)) {
+  for (const match of text.matchAll(MARKER)) {
     const start = match.index ?? 0;
-    if (start > last) segments.push({ type: 'text', text: answer.slice(last, start) });
-    segments.push({ type: 'cite', number: numberOf.get(Number(match[1]))! });
+    const number = numbers.get(Number(match[1]));
+    // Una marca que no está en la respuesta entera no puede aparecer en un pedazo; por las dudas, se quita.
+    if (start > last) segments.push({ type: 'text', text: text.slice(last, start) });
+    if (number !== undefined) segments.push({ type: 'cite', number });
     last = start + match[0].length;
   }
-  if (last < answer.length) segments.push({ type: 'text', text: answer.slice(last) });
+  if (last < text.length) segments.push({ type: 'text', text: text.slice(last) });
   return segments;
+}
+
+export function linkCitations(answer: string, sourceCount: number): CitationSegment[] {
+  return splitCitations(answer, citationNumbers(answer, sourceCount));
 }

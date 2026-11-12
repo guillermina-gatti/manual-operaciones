@@ -6,9 +6,10 @@
 // HU25: la valoración, solo en las respuestas que se pueden valorar (answered y conflict).
 // HU19: con no_info, los documentos cercanos y a quién consultar.
 import Link from 'next/link';
-import { linkCitations } from '@/lib/chat/citations';
+import { citationNumbers, splitCitations } from '@/lib/chat/citations';
 import { splitRoutes } from '@/lib/chat/routes';
 import { buildSearchUrl, searchTextOf } from '@/lib/chat/search-url';
+import { AnswerText } from './AnswerText';
 import { ChatFeedback } from './ChatFeedback';
 import { ChatNearestDocuments } from './ChatNearestDocuments';
 import { ChatSources } from './ChatSources';
@@ -58,7 +59,8 @@ export function ChatMessage({ message, onRetry, busy }: ChatMessageProps) {
 function AssistantBody({ message, onRetry, busy }: { message: AssistantMessage } & Omit<ChatMessageProps, 'message'>) {
   switch (message.status) {
     case 'streaming':
-      return message.text ? <p className={TEXT}>{message.text}</p> : <Typing />;
+      // El Markdown se dibuja mientras llega; las marcas [Sn] quedan tal cual hasta done (F3).
+      return message.text ? <AnswerText text={message.text} renderText={(text) => text} /> : <Typing />;
 
     case 'answered':
       return (
@@ -155,27 +157,26 @@ function Feedback({ message }: { message: AssistantMessage }) {
   return message.messageId ? <ChatFeedback messageId={message.messageId} /> : null;
 }
 
-// F4: las marcas [Sn] como citas numeradas que abren el documento de su fuente.
+// F4: las marcas [Sn] como citas numeradas que abren el documento de su fuente. El Markdown (listas,
+// negritas, párrafos, subtítulos) lo dibuja AnswerText; la numeración es la de la respuesta entera.
 function Answer({ message }: { message: AssistantMessage }) {
-  const segments = linkCitations(message.text, message.sources.length);
-  return (
-    <p className={TEXT}>
-      {segments.map((segment, index) => {
-        if (segment.type === 'text') return <TextWithRoutes key={index} text={segment.text} />;
-        const source = message.sources[segment.number - 1];
-        return (
-          <Link
-            key={index}
-            href={`/documentos/${source.documentId}`}
-            aria-label={`Fuente ${segment.number}: ${source.documentTitle}`}
-            className="mx-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-salvia px-1.5 align-middle text-xs font-bold leading-5 text-bosque hover:bg-chip-area"
-          >
-            {segment.number}
-          </Link>
-        );
-      })}
-    </p>
-  );
+  const numbers = citationNumbers(message.text, message.sources.length);
+  const renderText = (text: string) =>
+    splitCitations(text, numbers).map((segment, index) => {
+      if (segment.type === 'text') return <TextWithRoutes key={index} text={segment.text} />;
+      const source = message.sources[segment.number - 1];
+      return (
+        <Link
+          key={index}
+          href={`/documentos/${source.documentId}`}
+          aria-label={`Fuente ${segment.number}: ${source.documentTitle}`}
+          className="mx-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-salvia px-1.5 align-middle text-xs font-bold leading-5 text-bosque hover:bg-chip-area"
+        >
+          {segment.number}
+        </Link>
+      );
+    });
+  return <AnswerText text={message.text} renderText={renderText} />;
 }
 
 // Las rutas de la plataforma ("/documentos", "/metricas"...) que menciona la ayuda van como enlace azul.
