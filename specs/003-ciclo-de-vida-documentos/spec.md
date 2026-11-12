@@ -46,7 +46,7 @@ Esta feature permite al administrador **cambiar las áreas** de un documento, **
 - **R1 · Quién.** Solo un ADMIN puede cambiar áreas, subir versiones o archivar. Sin sesión: 401. Con otro rol: 403.
 - **R2 · Documento inexistente.** Si el documento no existe: 404.
 - **R3 · Áreas válidas.** Las áreas nuevas siguen las mismas reglas que en la carga: al menos una, todas tienen que existir (400 si no).
-- **R4 · Responsable con acceso.** Si después del cambio el responsable ya no comparte ningún área con el documento y no es ADMIN, el cambio se rechaza con 400. El ADMIN puede elegir un responsable nuevo en la misma operación, que tiene que cumplir la misma regla que en la carga (R5 de la spec 001). **11/11/2026 (D6 de la spec 008):** solo cuentan las áreas **activas** del documento; un área inactiva no da acceso (A-SEC).
+- **R4 · Responsable con acceso.** Si después del cambio el responsable ya no comparte ningún área con el documento y no es ADMIN, el cambio se rechaza con 400. El ADMIN puede elegir un responsable nuevo en la misma operación, que tiene que cumplir la misma regla que en la carga (R5 de la spec 001).
 - **R5 · Áreas del asistente.** Al cambiar las áreas, los fragmentos de **todas** las versiones del documento quedan con las áreas nuevas, en la misma operación. Nunca queda un fragmento con las áreas viejas.
 - **R6 · Versión nueva: archivo.** El archivo nuevo sigue las mismas reglas que en la carga: PDF, `.txt` o `.md`, hasta 10 MB, comprobado por contenido (415, 413).
 - **R6b · Versión idéntica.** Si el archivo nuevo es idéntico (misma huella SHA-256) al de la versión vigente del mismo documento, se rechaza con 409 y un mensaje que lo aclara. No se crea ninguna versión.
