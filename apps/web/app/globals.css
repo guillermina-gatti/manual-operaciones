@@ -1,26 +1,65 @@
 @import "tailwindcss";
 
+/* Fuente del diseño: la carga layout.tsx desde @fontsource. Este valor es el fallback si falla. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-jakarta: 'Plus Jakarta Sans', system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/*
+ * Tokens del diseño del equipo.
+ * Uso: bg-bosque, text-texto-suave, border-borde, etc.
+ *
+ * Naranjas:
+ * - naranja-boton (#B8400F): para botones con texto blanco (contraste 5,56:1, cumple AA).
+ * - naranja (#E85114): solo decorativo (logo, barrita del menú activo, círculos, íconos).
+ *   No usar como fondo de texto blanco: da 3,74:1 y no llega a AA.
+ */
+@theme {
+  --color-bosque: #0b4233;
+  --color-bosque-hover: #1f5848;
+  --color-naranja: #e85114;
+  --color-naranja-boton: #b8400f;
+
+  --color-fondo: #f6f7f6;
+  --color-blanco: #ffffff;
+  --color-borde: #e6e9e7;
+  --color-texto: #1e2b27;
+  /* Diseño original: #6B7671. Oscurecido porque sobre fondo daba 4,39:1 (no llega a AA 4,5:1).
+     Con #646F6A: 4,86 sobre fondo, 5,22 sobre blanco, 4,65 sobre salvia. */
+  --color-texto-suave: #646f6a;
+
+  --color-celeste: #d9effa;
+  --color-salvia: #eef3f0;
+
+  --color-chip-area: #e3f4e1;
+  --color-chip-area-texto: #1f6b3a;
+  --color-exito: #18894c;
+  --color-durazno: #fce9e0;
+  /* Diseño original: #C2410C. Oscurecido porque sobre durazno daba 4,41:1 (no llega a AA 4,5:1).
+     Con #B53C0A: 4,94 sobre durazno. */
+  --color-durazno-texto: #b53c0a;
+  --color-rosa-alerta: #fce1e4;
+  --color-rosa-alerta-texto: #b4232c;
+  --color-peligro: #c62828;
+
+  --color-azul-borrador: #3b82f6;
+  --color-gris-reemplazada: #b5ac9a;
+  --color-barro: #9c5a2e;
+  --color-barro-puerta: #5c3420;
+
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background-color: var(--color-fondo);
+    color: var(--color-texto);
+    font-family: var(--font-sans);
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Foco visible: anillo de 2 px naranja. */
+  :focus-visible {
+    outline: 2px solid var(--color-naranja);
+    outline-offset: 2px;
+  }
 }

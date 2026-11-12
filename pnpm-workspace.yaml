@@ -1,11 +1,22 @@
 packages:
   - 'apps/*'
+overrides:
+  deepmerge-ts: ^8.0.2
+  mysql2: ^3.22.0
+  tmp: ^0.2.6
+  'undici@<7': ^6.29.1
+  multer: ^2.5.0
+  fast-uri: ^3.1.9
+  body-parser: ^2.4.0
+  'minimatch@>=7': ^11.0.1
+  glob: ^14.0.2
 allowBuilds:
   '@parcel/watcher': true
   '@prisma/engines': true
   '@scarf/scarf': false
   bcrypt: true
   esbuild: true
+  msgpackr-extract: false
   prisma: true
   sharp: true
   unrs-resolver: true

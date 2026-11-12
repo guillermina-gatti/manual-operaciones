@@ -1,0 +1,602 @@
+   generator client {
+     provider     = "prisma-client"
+     output       = "../src/generated/prisma"
+     moduleFormat = "cjs"
+     // Índices parciales (preview de Prisma 7.10): el de una sola versión CURRENT (spec 003, R8; plan 003, D2).
+     previewFeatures = ["partialIndexes"]
+   }
+
+   datasource db {
+     provider = "postgresql"
+   }
+
+// ─────────────────────────────────────────────────────────────
+// Pareja C · Documentos (Matías) — spec 001, plan 2.1
+// Con tablas de otras parejas (users, areas) nos relacionamos
+// solo por ID, sin relaciones de Prisma ni claves foráneas.
+// Chunk lo agrega Guille (A2). Pendiente: el índice de una sola
+// versión CURRENT por documento va con HU16.
+// ─────────────────────────────────────────────────────────────
+
+enum DocumentStatus {
+  ACTIVE // vigente
+  ARCHIVED // archivado: no se busca ni se muestra a quien no es ADMIN
+}
+
+enum DocumentVersionStatus {
+  CURRENT // la versión vigente del documento
+  REPLACED // reemplazada por una versión más nueva
+}
+
+enum ProcessingStatus {
+  PENDING // guardada, esperando en la cola
+  PROCESSING // el worker la está procesando
+  READY // fragmentos y embeddings listos
+  FAILED // error; se ve en processingError
+}
+
+// HU13 · HU16 · HU37 — dueño: Matías
+model Document {
+  id          String         @id @default(uuid()) @db.Uuid
+  title       String         @db.VarChar(200)
+  description String?        @db.VarChar(1000)
+  status      DocumentStatus @default(ACTIVE)
+  ownerId     String         @map("owner_id") @db.Uuid // responsable (users de A)
+  reviewDate  DateTime       @map("review_date") @db.Date // obligatoria (R4, spec P3)
+  createdById String         @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt  DateTime?      @map("archived_at") @db.Timestamptz(3)
+
+  // Última revisión (spec 005, R8, R10, R11): null si nunca se revisó. Se escriben siempre juntas.
+  lastReviewedAt   DateTime? @map("last_reviewed_at") @db.Timestamptz(3)
+  lastReviewedById String?   @map("last_reviewed_by_id") @db.Uuid // users de A, solo por ID
+
+  areas    DocumentArea[]
+  versions DocumentVersion[]
+
+  // Alertas de contradicción (spec 011): el documento puede ser el A o el B del par.
+  conflictAlertsAsA DocumentConflictAlert[] @relation("ConflictAlertDocumentA")
+  conflictAlertsAsB DocumentConflictAlert[] @relation("ConflictAlertDocumentB")
+
+  @@index([status])
+  @@index([reviewDate])
+  @@index([createdAt]) // orden del listado (R13)
+  @@map("documents")
+}
+
+// HU15 — dueño: Matías
+model DocumentArea {
+  documentId String   @map("document_id") @db.Uuid
+  areaId     String   @map("area_id") @db.Uuid // areas de A
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, areaId])
+  @@index([areaId])
+  @@map("document_areas")
+}
+
+// HU13 · HU16 — dueño: Matías (el worker de Guille actualiza el procesamiento)
+model DocumentVersion {
+  id               String                @id @default(uuid()) @db.Uuid
+  documentId       String                @map("document_id") @db.Uuid
+  versionNumber    Int                   @map("version_number")
+  status           DocumentVersionStatus @default(CURRENT)
+  storageKey       String                @unique @map("storage_key") // documents/{documentId}/{versionId}.{pdf|txt|md}
+  originalFileName String                @map("original_file_name") @db.VarChar(255)
+  mimeType         String                @map("mime_type") @db.VarChar(100) // tipo detectado, no el del navegador
+  sizeBytes        Int                   @map("size_bytes")
+  checksum         String                @db.Char(64) // SHA-256 en hexadecimal, minúsculas
+  processingStatus ProcessingStatus      @default(PENDING) @map("processing_status")
+  processingError  String?               @map("processing_error")
+  processedAt      DateTime?             @map("processed_at") @db.Timestamptz(3)
+  uploadedById     String                @map("uploaded_by_id") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunks   Chunk[]
+
+  // Alertas de contradicción (spec 011): la versión puede ser la del A o la del B del par.
+  conflictAlertsAsA DocumentConflictAlert[] @relation("ConflictAlertVersionA")
+  conflictAlertsAsB DocumentConflictAlert[] @relation("ConflictAlertVersionB")
+
+  @@unique([documentId, versionNumber])
+  // Como máximo una versión CURRENT por documento (spec 003, R8; M4 del plan 001). Declarado acá
+  // y no a mano en el SQL, para que Prisma no lo borre en la próxima migración (plan 003, D1 y D2).
+  @@unique([documentId], map: "document_versions_one_current_idx", where: { status: "CURRENT" })
+  @@index([processingStatus])
+  @@index([checksum]) // duplicados (R8b)
+  @@map("document_versions")
+}
+
+// HU39 — dueño: Matías (spec 011, sección 7.1; plan 011, 1.1)
+// Alertas de documentos que se contradicen. Una por par de versiones (R13, D8).
+// A es el documento de id menor (R11): lo hace cumplir un CHECK escrito a mano en la migración
+// (plan 011, 1.3), igual que la coherencia de la resolución y occurrences >= 1.
+// Los fragmentos y el mensaje van solo por ID: chunks y messages son de Guille (D16).
+enum ConflictAlertStatus {
+  OPEN
+  RESOLVED
+}
+
+model DocumentConflictAlert {
+  id              String              @id @default(uuid()) @db.Uuid
+  documentAId     String              @map("document_a_id") @db.Uuid
+  documentBId     String              @map("document_b_id") @db.Uuid
+  versionAId      String              @map("version_a_id") @db.Uuid
+  versionBId      String              @map("version_b_id") @db.Uuid
+  chunkAId        String              @map("chunk_a_id") @db.Uuid // chunks de Guille, solo por ID
+  chunkBId        String              @map("chunk_b_id") @db.Uuid
+  messageId       String              @map("message_id") @db.Uuid // messages de Guille, solo por ID
+  question        String              @db.VarChar(2000)
+  status          ConflictAlertStatus @default(OPEN)
+  occurrences     Int                 @default(1)
+  firstDetectedAt DateTime            @default(now()) @map("first_detected_at") @db.Timestamptz(3)
+  lastDetectedAt  DateTime            @default(now()) @map("last_detected_at") @db.Timestamptz(3)
+  resolvedAt      DateTime?           @map("resolved_at") @db.Timestamptz(3)
+  resolvedById    String?             @map("resolved_by_id") @db.Uuid // users de A, solo por ID
+  resolutionNote  String?             @map("resolution_note") @db.VarChar(500)
+
+  documentA Document        @relation("ConflictAlertDocumentA", fields: [documentAId], references: [id], onDelete: Cascade)
+  documentB Document        @relation("ConflictAlertDocumentB", fields: [documentBId], references: [id], onDelete: Cascade)
+  versionA  DocumentVersion @relation("ConflictAlertVersionA", fields: [versionAId], references: [id], onDelete: Cascade)
+  versionB  DocumentVersion @relation("ConflictAlertVersionB", fields: [versionBId], references: [id], onDelete: Cascade)
+
+  @@unique([versionAId, versionBId]) // R13: destino del ON CONFLICT del registro
+  @@index([status, lastDetectedAt]) // abiertas y openTotal
+  @@index([status, resolvedAt]) // resueltas
+  @@index([documentAId])
+  @@index([documentBId])
+  @@map("document_conflict_alerts")
+}
+
+// HU14 · HU17 — dueña: Guille (columnas acordadas con Matías)
+// El worker inserta las filas; la carga (Matías) actualiza areaIds e isActive.
+model Chunk {
+  id                String   @id @default(uuid()) @db.Uuid
+  documentVersionId String   @map("document_version_id") @db.Uuid
+  documentId        String   @map("document_id") @db.Uuid // copia, para actualizar sin joins
+  chunkIndex        Int      @map("chunk_index") // orden dentro de la versión
+  content           String // texto del fragmento
+  pageNumber        Int?     @map("page_number") // para citar la fuente
+  section           String?  @db.Text // título de la sección; nulo si el fragmento no tiene título (HU18)
+  tokenCount        Int?     @map("token_count")
+  areaIds           String[] @map("area_ids") @db.Uuid // copia de document_areas
+  isActive          Boolean  @default(false) @map("is_active") // true solo si documento ACTIVE + versión CURRENT + READY
+  // 768 dimensiones: gemini-embedding-001 con outputDimensionality=768
+  // (permite indexar con HNSW, que en pgvector admite hasta 2000).
+  embedding         Unsupported("vector(768)")?
+  // Texto completo en español (título de la sección + contenido), generado por la base. Lo usa la búsqueda por palabras.
+  contentTsv        Unsupported("tsvector")? @map("content_tsv")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([documentVersionId, chunkIndex])
+  @@index([documentId])
+  @@index([areaIds], type: Gin)
+  @@map("chunks")
+}
+
+// En la migración se agregan a mano (Prisma no los genera):
+//   CREATE EXTENSION IF NOT EXISTS vector;
+//   CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
+//   CREATE INDEX chunks_content_fts_idx ON chunks USING gin (to_tsvector('spanish', content)); -- HU36
+//
+// Y en add_document_search (spec 004, búsqueda sin tildes; plan 004, D3 y D15), sin tocar los de Guille:
+//   CREATE EXTENSION IF NOT EXISTS unaccent;
+//   CREATE TEXT SEARCH CONFIGURATION es_unaccent (COPY = pg_catalog.spanish);  -- + ALTER MAPPING
+//   CREATE INDEX chunks_content_fts_es_unaccent_idx ON chunks
+//     USING gin (to_tsvector('es_unaccent'::regconfig, content));
+//
+// Como este esquema no describe los índices, `prisma migrate dev` los trata como sobrantes y agrega
+// DROP INDEX en la próxima migración (plan 003, D1). Por eso, toda migración nueva:
+//   1. se crea con `prisma migrate dev --create-only`;
+//   2. se revisa su migration.sql y se borra cualquier DROP INDEX de chunks_embedding_idx,
+//      chunks_content_fts_idx o chunks_content_fts_es_unaccent_idx antes de aplicarla;
+//   3. se aplica con `prisma migrate deploy` (no con `migrate dev`, que volvería a comparar);
+//   4. el test test/documents/indexes.e2e-spec.ts exige que los tres sigan existiendo.
+
+// ============================================================
+// HU17 · HU25 · HU35 — dueña: Guille (pareja C)
+// Sin relaciones de Prisma hacia users (pareja A): userId es solo un ID, como en Execution.
+// ============================================================
+
+enum ChatStatus {
+  ANSWERED // respondida con fragmentos
+  NO_INFO // sin información suficiente (HU19)
+  CONFLICT // documentos contradictorios (HU39)
+  AI_UNAVAILABLE // el proveedor de IA no respondió (HU36)
+}
+
+// HU17 · HU21 — dueña: Guille
+model Conversation {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @map("user_id") @db.Uuid // users de A, sin relación Prisma
+  procedureVersionId String?  @map("procedure_version_id") @db.Uuid // versión de Mica, opcional (HU21)
+  stepId             String?  @map("step_id") @db.Uuid // paso de Mica, opcional
+  title              String?  @db.VarChar(200)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  messages Message[]
+
+  @@index([userId, updatedAt])
+  @@map("conversations")
+}
+
+// HU17 · HU35 — una fila por consulta
+model Message {
+  id             String     @id @default(uuid()) @db.Uuid
+  conversationId String     @map("conversation_id") @db.Uuid
+  question       String     @map("question") @db.VarChar(2000)
+  answer         String?    @map("answer") @db.Text
+  status         ChatStatus @map("status")
+  usedChunkIds   String[]   @map("used_chunk_ids") @db.Uuid
+  usedVersionIds String[]   @map("used_version_ids") @db.Uuid
+  modelName      String?    @map("model_name") @db.VarChar(100)
+  latencyMs      Int?       @map("latency_ms")
+  inputTokens    Int?       @map("input_tokens")
+  outputTokens   Int?       @map("output_tokens")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  feedback     MessageFeedback?
+
+  @@index([conversationId, createdAt])
+  @@index([status, createdAt])
+  @@map("messages")
+}
+
+// HU25 — dueña: Guille
+model MessageFeedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @unique @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid // users de A, sin relación Prisma
+  useful    Boolean  @map("useful")
+  comment   String?  @map("comment") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_feedback")
+}
+
+// ============================================================
+// EQUIPO A — SEGURIDAD Y PLATAFORMA
+// Responsables: Magalí y Camila
+// A-03 — MODELOS DE USUARIOS Y ÁREAS
+// ============================================================
+
+// ------------------------------------------------------------
+// ROLE
+// ------------------------------------------------------------
+//
+// Un usuario posee un único rol global.
+//
+// ADMIN:
+// Administración general del sistema.
+//
+// SUPERVISOR:
+// Supervisión de las áreas asignadas.
+//
+// EMPLOYEE:
+// Ejecución de procedimientos y consulta de documentación.
+// ------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+  EMPLOYEE
+}
+
+// ------------------------------------------------------------
+// USER
+// ------------------------------------------------------------
+//
+// Representa una cuenta registrada.
+//
+// Los correos se almacenan y consultan siempre normalizados
+// (sin espacios en extremos y en minúsculas).
+//
+// En el MVP, la cuenta se crea al aceptar una invitación
+// válida y definir una contraseña.
+//
+// El backend deberá consultar isActive y el rol vigente
+// en cada petición autenticada.
+// ------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(150)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  areas              UserArea[]
+  sessions           Session[]
+  createdInvitations UserInvitation[] @relation("CreatedInvitations")
+
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+// ------------------------------------------------------------
+// AREA
+// ------------------------------------------------------------
+//
+// Representa un sector organizacional.
+//
+// Ejemplos:
+// Ventas, Administración, Recursos Humanos.
+//
+// Solo ADMIN podrá gestionar áreas.
+//
+// isActive permite desactivar un área sin eliminar
+// necesariamente su información histórica.
+// ------------------------------------------------------------
+
+model Area {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(150)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  users           UserArea[]
+  invitationAreas UserInvitationArea[]
+
+  @@index([isActive])
+  @@map("areas")
+}
+
+// ------------------------------------------------------------
+// USER AREA
+// ------------------------------------------------------------
+//
+// Relación muchos a muchos entre User y Area.
+//
+// Un usuario puede pertenecer a distintas áreas.
+// Un área puede tener múltiples usuarios.
+//
+// La clave compuesta impide duplicar una asignación.
+// ------------------------------------------------------------
+
+model UserArea {
+  userId String @map("user_id") @db.Uuid
+  areaId String @map("area_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  area Area @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@id([userId, areaId])
+  @@index([areaId])
+  @@map("user_areas")
+}
+
+// ------------------------------------------------------------
+// SESSION / REFRESH TOKEN
+// ------------------------------------------------------------
+//
+// Representa una sesión activa o revocada de un usuario.
+// Almacena el hash del refresh token emitido para soportar:
+// - Rotación obligatoria en cada refresco.
+// - Detección de reutilización (familia de tokens).
+// - Revocación individual (logout) o masiva.
+// ------------------------------------------------------------
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  isRevoked    Boolean   @default(false) @map("is_revoked")
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  userAgent    String?   @map("user_agent") @db.VarChar(500)
+  ipAddress    String?   @map("ip_address") @db.VarChar(45)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ============================================================
+// USER INVITATION (HU29)
+// ============================================================
+//
+// Invitación de un solo uso emitida por un ADMIN para que una
+// persona se registre con correo, rol y áreas predefinidas.
+//
+// Los correos se almacenan normalizados (trim y minúsculas).
+// Solo se almacena el hash criptográfico SHA-256 del token opaco.
+// Unicidad: a lo sumo una invitación pendiente (no aceptada ni revocada) por correo.
+// Reemisión: si está vigente rechaza con 409; si venció se revoca atómicamente al reemitir.
+// ============================================================
+
+model UserInvitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @db.VarChar(255)
+  role        Role
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User                 @relation("CreatedInvitations", fields: [createdById], references: [id], onDelete: Restrict)
+  areas     UserInvitationArea[]
+
+  @@unique([email], map: "user_invitations_one_pending_per_email_idx", where: { acceptedAt: null, revokedAt: null })
+  @@index([email])
+  @@index([expiresAt])
+  @@index([createdById])
+  @@map("user_invitations")
+}
+
+model UserInvitationArea {
+  invitationId String @map("invitation_id") @db.Uuid
+  areaId       String @map("area_id") @db.Uuid
+
+  invitation UserInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  area       Area           @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@id([invitationId, areaId])
+  @@index([areaId])
+  @@map("user_invitation_areas")
+}
+
+// ============================================================
+// FUTURAS ENTIDADES DEL EQUIPO A
+// ============================================================
+//
+// AuditLog:
+// Registro de cambios administrativos y operaciones sensibles.
+//
+// Estas entidades se implementarán en etapas posteriores,
+// coordinadas con Camila.
+// ============================================================
+
+// ============================================================
+// EQUIPO B — PROCEDIMIENTOS Y EJECUCIONES
+// HU12 — dueña: Mayra
+// ============================================================
+//
+// Ejecución paso a paso (spec 005). Procedimientos, versiones y
+// pasos son de Mica: se referencian solo por ID, sin relaciones
+// de Prisma hacia sus tablas. userId tampoco tiene relación,
+// para no tocar el modelo User.
+// ------------------------------------------------------------
+
+enum ExecutionStatus {
+  IN_PROGRESS
+  COMPLETED
+  RESTARTED // HU33: closed without finishing, to restart on the current version
+}
+
+model Execution {
+  id                 String          @id @default(uuid()) @db.Uuid
+  userId             String          @map("user_id") @db.Uuid // users de A
+  procedureId        String          @map("procedure_id") @db.Uuid // procedimiento de Mica
+  procedureVersionId String          @map("procedure_version_id") @db.Uuid // versión con la que se inició (CA1)
+  status             ExecutionStatus @default(IN_PROGRESS)
+  startedAt          DateTime        @map("started_at") @db.Timestamptz(3)
+  finishedAt         DateTime?       @map("finished_at") @db.Timestamptz(3)
+
+  steps ExecutionStep[]
+
+  // Una sola ejecución en curso por usuario y procedimiento (índice único parcial).
+  @@unique([userId, procedureId], map: "executions_one_in_progress_idx", where: { status: "IN_PROGRESS" })
+  @@index([userId])
+  @@index([procedureId])
+  @@map("executions")
+}
+
+// La fila se crea cuando el paso se inicia; la duración es finishedAt - startedAt (CA2).
+model ExecutionStep {
+  id          String    @id @default(uuid()) @db.Uuid
+  executionId String    @map("execution_id") @db.Uuid
+  stepId      String    @map("step_id") @db.Uuid // paso de la versión, de Mica
+  stepOrder   Int       @map("step_order")
+  startedAt   DateTime  @map("started_at") @db.Timestamptz(3)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@unique([executionId, stepId])
+  @@unique([executionId, stepOrder])
+  @@map("execution_steps")
+}
+
+// ============================================================
+// EQUIPO B — PROCEDIMIENTOS Y VERSIONES
+// HU09 · HU10 · HU11 — dueña: Micaela (spec 006)
+// ============================================================
+//
+// Borrador = versión en estado DRAFT (a lo sumo una por procedimiento). Al publicar, la
+// anterior pasa a SUPERSEDED y sigue accesible para las ejecuciones (HU32). Cada versión tiene
+// sus propios pasos. Las áreas son del procedimiento. Con users y areas de A, y con las
+// ejecuciones de Mayra, solo nos relacionamos por ID, sin relaciones de Prisma.
+// ------------------------------------------------------------
+
+enum ProcedureVersionStatus {
+  DRAFT // editable; como máximo uno por procedimiento
+  PUBLISHED // inmutable; la más reciente es la vigente
+  SUPERSEDED // reemplazada por una publicada más nueva; sigue legible
+}
+
+model Procedure {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid // responsable (users de A)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  versions ProcedureVersion[]
+  areas    ProcedureArea[]
+
+  @@index([createdAt]) // orden del listado (R16)
+  @@map("procedures")
+}
+
+model ProcedureVersion {
+  id            String                 @id @default(uuid()) @db.Uuid
+  procedureId   String                 @map("procedure_id") @db.Uuid
+  versionNumber Int                    @map("version_number")
+  status        ProcedureVersionStatus @default(DRAFT)
+  title         String                 @db.VarChar(200) // cada versión guarda el suyo (P11)
+  description   String?                @db.VarChar(1000)
+  createdById   String                 @map("created_by_id") @db.Uuid // users de A
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  // Publicación (spec 015, HU32): quién y cuándo publicó, y el cambio crítico con su resumen.
+  publishedAt   DateTime?              @map("published_at") @db.Timestamptz(3)
+  publishedById String?                @map("published_by_id") @db.Uuid // users de A
+  isCritical    Boolean                @default(false) @map("is_critical")
+  changeSummary String?                @map("change_summary") @db.VarChar(300)
+
+  procedure Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  steps     Step[]
+
+  @@unique([procedureId, versionNumber])
+  // Como máximo un borrador por procedimiento (spec 006, R3; plan 006, D2).
+  @@unique([procedureId], map: "procedure_versions_one_draft_idx", where: { status: "DRAFT" })
+  // Como máximo una versión publicada por procedimiento (spec 015, R4 y D5).
+  @@unique([procedureId], map: "procedure_versions_one_published_idx", where: { status: "PUBLISHED" })
+  @@map("procedure_versions")
+}
+
+model Step {
+  id                 String @id @default(uuid()) @db.Uuid
+  procedureVersionId String @map("procedure_version_id") @db.Uuid
+  stepOrder          Int    @map("step_order") // 1..n sin huecos (R7)
+  title              String @db.VarChar(200)
+  description        String @default("") @db.VarChar(2000)
+  // Clave del paso: la genera la base y las copias a otra versión la conservan; une "el mismo
+  // paso" entre versiones para compararlas (spec 015, R7 y D11).
+  stepKey            String @default(dbgenerated("gen_random_uuid()")) @map("step_key") @db.Uuid
+
+  version ProcedureVersion @relation(fields: [procedureVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([procedureVersionId, stepOrder])
+  @@unique([procedureVersionId, stepKey])
+  @@map("steps")
+}
+
+model ProcedureArea {
+  procedureId String    @map("procedure_id") @db.Uuid
+  areaId      String    @map("area_id") @db.Uuid // areas de A
+  procedure   Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+
+  @@id([procedureId, areaId])
+  @@index([areaId])
+  @@map("procedure_areas")
+}
