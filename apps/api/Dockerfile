@@ -36,6 +36,52 @@ RUN pnpm --filter api --prod deploy /workspace/deploy-api --ignore-scripts
 # Reconstruimos bcrypt para que funcione en Linux.
 RUN pnpm --dir /workspace/deploy-api rebuild bcrypt
 
+# A-21B.6b — Dependencias reproducibles del migrador
+FROM node:24-bookworm-slim AS migrator-builder
+
+WORKDIR /workspace
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install --global pnpm@12.11.2
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/migrator/package.json ./apps/migrator/package.json
+
+RUN pnpm install --frozen-lockfile --filter prisma-migrator...
+
+RUN pnpm --filter prisma-migrator --prod deploy /workspace/deploy-migrator
+
+# A-21B.6b — Imagen one-off de migraciones Prisma
+FROM node:24-bookworm-slim AS migrator
+
+ENV NODE_ENV=production
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=migrator-builder --chown=node:node \
+    /workspace/deploy-migrator/node_modules ./node_modules
+
+COPY --from=migrator-builder --chown=node:node \
+    /workspace/deploy-migrator/package.json ./package.json
+
+COPY --chown=node:node apps/api/prisma.config.ts ./prisma.config.ts
+
+COPY --chown=node:node apps/api/prisma/schema.prisma ./prisma/schema.prisma
+
+COPY --chown=node:node apps/api/prisma/migrations ./prisma/migrations
+
+USER node
+
+ENTRYPOINT ["./node_modules/.bin/prisma"]
+CMD ["--help"]
+
 # A-21B.2 — Imagen de ejecución
 FROM node:24-bookworm-slim AS runtime
 
