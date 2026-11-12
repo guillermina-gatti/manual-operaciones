@@ -26,7 +26,16 @@ const hasWord = (tokens: string[], words: string[]) =>
     tokens.some((t) => words.some((w) => t === w || (w.length >= 4 && t.startsWith(w))));
 
 const AREA_WORDS = ['area'];
-const DOCUMENT_WORDS = ['documento', 'manual', 'archivo'];
+const DOCUMENT_WORDS = ['documento', 'manual', 'archivo', 'doc', 'docs'];
+// Palabras que pueden acompañar un pedido vago de documentos ("más o menos algo con doc", "quiero ver archivos").
+const CHOICE_FILLER_WORDS = [
+    'mas', 'o', 'menos', 'algo', 'con', 'quiero', 'ver', 'mostrame', 'muestrame', 'mostrar', 'lista', 'listame',
+    'de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'que', 'hay', 'tengo', 'dame', 'me', 'te',
+    'por', 'y', 'en', 'a', 'para', 'busco', 'buscar', 'necesito', 'sobre', 'area', 'areas', 'cada', 'todos', 'todas',
+    'cuales', 'son', 'mis', 'tipo', 'alguno', 'alguna',
+];
+// Un pedido vago es corto. Con más palabras ya hay un tema, y eso va a la búsqueda.
+const MAX_CHOICE_TOKENS = 8;
 // Pedidos de listado: "cada área", "todas", "cuáles", "lista", "mostrame"...
 const LIST_WORDS = ['cada', 'todas', 'todos', 'cuales', 'lista', 'listar', 'listame', 'listado', 'mostr', 'muestr', 'dame'];
 // Un mensaje largo es casi seguro una consulta sobre el contenido, no un listado.
@@ -39,6 +48,23 @@ export function isCatalogQuestion(question: string): boolean {
     const tokens = tokensOf(question);
     if (tokens.length === 0 || tokens.length > MAX_TOKENS) return false;
     return hasWord(tokens, AREA_WORDS) && hasWord(tokens, DOCUMENT_WORDS) && hasWord(tokens, LIST_WORDS);
+}
+
+// "documento", "más o menos algo con doc", "archivos": pide documentos sin decir de qué área.
+// Hay que preguntar cuál. Si el mensaje nombra un tema o un área, no es esto.
+export function isDocumentChoiceQuestion(question: string): boolean {
+    const tokens = tokensOf(question);
+    if (tokens.length === 0 || tokens.length > MAX_CHOICE_TOKENS) return false;
+    if (!hasWord(tokens, DOCUMENT_WORDS)) return false;
+    return tokens.every((t) => hasWord([t], DOCUMENT_WORDS) || CHOICE_FILLER_WORDS.includes(t));
+}
+
+// "¿De qué área querés ver los documentos: Ventas o Operaciones?". Solo las áreas con documentos.
+export function formatAreaChoice(groups: CatalogGroup[]): string {
+    const names = groups.filter((group) => group.titles.length > 0).map((group) => group.areaName);
+    if (names.length === 0) return NO_CATALOG_TEXT;
+    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} o ${names[names.length - 1]}`;
+    return `¿De qué área querés ver los documentos: ${list}?`;
 }
 
 // "documentos de ventas": una pregunta corta sobre los documentos. Solo es un listado si nombra un área.

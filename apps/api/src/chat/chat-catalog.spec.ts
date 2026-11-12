@@ -1,5 +1,5 @@
 // Listado de documentos por área: detección de la pregunta, área nombrada y formato de la respuesta.
-import { areaNamed, formatAreas, formatCatalog, isAreasQuestion, isCatalogQuestion, isDocumentsOfAreaQuestion, isShortQuestion, NO_CATALOG_TEXT } from './chat-catalog';
+import { areaNamed, formatAreaChoice, formatAreas, formatCatalog, isAreasQuestion, isCatalogQuestion, isDocumentChoiceQuestion, isDocumentsOfAreaQuestion, isShortQuestion, NO_CATALOG_TEXT } from './chat-catalog';
 
 describe('isCatalogQuestion', () => {
     it.each([
@@ -101,5 +101,37 @@ describe('isShortQuestion y área sola', () => {
         expect(areaNamed('ventas', ['Ventas', 'Operaciones'])).toBe('Ventas');
         expect(areaNamed('operaciones', ['Ventas', 'Operaciones'])).toBe('Operaciones');
         expect(areaNamed('cotizaciones', ['Ventas', 'Operaciones'])).toBeNull();
+    });
+});
+
+describe('isDocumentChoiceQuestion (pedido vago: preguntar el área)', () => {
+    it.each(['documento', 'documentos', 'doc', 'docs', 'archivo', 'archivos', 'manual', 'mas o menos algo con doc', 'quiero ver archivos', 'documentos de area', '¿qué documentos tengo?'])(
+        'pide elegir área: %s',
+        (question) => {
+            expect(isDocumentChoiceQuestion(question)).toBe(true);
+        },
+    );
+
+    it.each(['documentos de ventas', 'ventas', 'cómo busco un documento', 'cuál es el plazo de devolución', 'documentos sobre devoluciones'])(
+        'no es pedido vago: %s',
+        (question) => {
+            expect(isDocumentChoiceQuestion(question)).toBe(false);
+        },
+    );
+});
+
+describe('formatAreaChoice', () => {
+    it('pregunta el área entre las que tienen documentos, con "o" antes de la última', () => {
+        expect(
+            formatAreaChoice([
+                { areaName: 'Ventas', titles: ['Condiciones comerciales'] },
+                { areaName: 'Operaciones', titles: ['Despacho'] },
+                { areaName: 'Administración', titles: [] },
+            ]),
+        ).toBe('¿De qué área querés ver los documentos: Ventas o Operaciones?');
+    });
+
+    it('sin documentos en ninguna área, dice que no hay nada para mostrar', () => {
+        expect(formatAreaChoice([])).toBe(NO_CATALOG_TEXT);
     });
 });
