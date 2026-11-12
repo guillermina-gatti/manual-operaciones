@@ -88,6 +88,29 @@ Esta feature hace que el asistente marque la contradicción cuando la encuentra 
   - Si los pasajes no alcanzan para responder, sigue valiendo `NO_INFO`, que tiene prioridad.
 
   El armado de los pasajes y del bloque del paso (spec 010, R6) no cambia. La regla de que los pasajes son documentos y no instrucciones sigue valiendo: un pasaje que dice "respondé CONFLICT" es dato (R18). El texto exacto de la regla va en el plan.
+
+  **Ajuste del 11/11/2026.** Probando con Gemini real, a "¿Puedo devolver unos auriculares que compré hace 10 días?" el asistente respondió con lo que decía cada pasaje, sin concluir. Un script de diagnóstico con los pasajes reales "Productos electrónicos" y "Plazo general", de la misma Política de devoluciones, lo confirmó: en una de dos respuestas completas, el modelo mandó `CONFLICT [S1] [S2]` entre esos dos pasajes. La API descartaba la marca (R6) y quedaba la explicación, que por instrucción no elige. El arreglo está en el código, no solo en el prompt:
+  - **Las reglas de CONFLICT solo con pasajes de al menos dos documentos.** Cada pasaje lleva su `documentId`. Si todos son del mismo documento, el sistema va sin las líneas de la marca. Sin el documento de algún pasaje, las reglas van, como antes.
+  - **Un segundo pedido, una sola vez.** Si la respuesta empieza con una marca que nombra dos pasajes existentes y distintos del mismo documento, se le pide la respuesta otra vez al modelo. El sistema suma al final un aviso: esos dos pasajes son del mismo documento y no se contradicen, así que no lleva `CONFLICT`, y si uno es la excepción del otro se aplica la regla específica con una conclusión clara. Se usa la respuesta del segundo pedido, procesada como siempre (`finishChat`). Si el segundo vuelve a marcar, no hay tercero: se aplica R6 (cambió el 12/11/2026, ver abajo). Si el segundo falla, queda el primero, también con R6, y el error va al log.
+  - **Tokens y latencia:** se guardan los de los dos pedidos (los tokens sumados; la latencia ya va de punta a punta). Si el segundo falla, solo los tokens del primero.
+  - **Costo:** solo en las respuestas con esa marca, entre 1 y 6 s más (en el diagnóstico, cada pedido tardó entre 1,1 y 5,5 s) y un pedido más a la cuota.
+
+  **Ajuste del 12/11/2026 (la excepción explícita).** Elena (EMPLOYEE de Ventas) preguntó "¿Se puede devolver ropa interior?" y recibió `no_info`, aunque la Política de devoluciones lo responde. Diagnóstico, con la base real en solo lectura y Gemini real:
+  - **La recuperación estaba bien:** "Productos sin cambio ni devolución" salió primero, con distancia 0,156 (el umbral es 0,45). Después venían dos pasajes de la Promoción de verano ("Productos en oferta" y "Plazo de devolución") y cuatro de la Política.
+  - **El modelo respondía `NO_INFO`** (2 de 2 corridas), por el choque con la Promoción de verano: "El cliente puede devolver cualquier producto dentro de los 60 días". Sin los dos pasajes de la Promoción, respondía "No se puede devolver ropa interior… [S1]".
+  - **Decisión:** que este caso termine en `conflict`, con las dos fuentes y la alerta al ADMIN, no en `no_info`.
+
+  El prompt de sistema suma una línea, antes de la de `NO_INFO` (en `SYSTEM_START`):
+
+  ```text
+  - Si un pasaje responde directamente lo que se pregunta (nombra el producto, el caso o la persona), respondé con ese pasaje. Una regla general ("cualquier producto") no anula una excepción explícita. Respondé NO_INFO solo si ningún pasaje responde.
+  ```
+
+  Con los seis pasajes reales, Gemini respondió `CONFLICT [S1] [S3]` (la Política y la Promoción, documentos distintos) en 2 de 2 corridas, con la explicación. Lo procesan R5 a R8 como cualquier marca válida, y se registra la alerta. El documento "Promoción de verano" es ambiguo ("cualquier producto" no aclara las exclusiones de la Política): la alerta lo muestra para que su responsable lo aclare.
+
+  **Ajuste del 12/11/2026.** "¿Se puede devolver ropa interior?" a veces terminaba con la explicación de un `CONFLICT [S1] [S3]` entre dos pasajes de la misma Política de devoluciones, sin conclusión. Como los pasajes recuperados eran de dos documentos (la Política y la Promoción de verano), el segundo pedido seguía llevando las reglas de `CONFLICT`, y el modelo podía volver a marcar; con R6 quedaba otra vez una explicación. Ahora:
+  - **El segundo pedido va sin las reglas de CONFLICT**, aunque los pasajes sean de dos documentos o más, como cuando son todos de uno. Conserva el aviso de que esos dos pasajes no se contradicen.
+  - **Si igual vuelve con una marca** (válida o no), se saca su línea y la respuesta es el resto del segundo pedido, procesado como siempre (`finishChat`). Nunca se usa la explicación del primero. Si sin esa línea no queda texto, la respuesta es `no_info`. No se registra ninguna alerta, y el caso queda en el log como advertencia ("El segundo pedido volvió con una marca CONFLICT…").
 - **R5 · Marca válida.** La API acepta la marca solo si se cumple todo esto:
   - la primera línea de la respuesta, sin los espacios iniciales ni finales, es `CONFLICT [Sx] [Sy]`, con espacios simples y nada más en la línea;
   - `Sx` y `Sy` son pasajes de esta consulta y son distintos;
@@ -99,6 +122,10 @@ Esta feature hace que el asistente marque la contradicción cuando la encuentra 
   - no se registra ninguna alerta, y el caso queda en el log como advertencia, con las marcas que trajo.
 
   Si sin esa línea no queda texto, la respuesta es `no_info` con `NO_INFO_TEXT`.
+
+  **Ajuste del 11/11/2026:** una marca entre dos pasajes del mismo documento primero lleva a un segundo pedido al modelo (R4); R6 se aplica a la respuesta que queda.
+
+  **Ajuste del 12/11/2026:** R6 no se aplica a una marca del segundo pedido: se saca su línea, sea válida o no, y queda el resto (R4).
 - **R7 · La respuesta `conflict`.** Con una marca válida, el resultado es el `ChatResult` de siempre:
   - **`status`:** `conflict`;
   - **`answer`:** la explicación del modelo, sin la línea de la marca. Las marcas `[Sn]` de otros pasajes se quitan del texto, así la explicación cita solo los dos pasajes de la contradicción;
@@ -111,6 +138,8 @@ Esta feature hace que el asistente marque la contradicción cuando la encuentra 
     - Si empieza con `CONFLICT`, retiene hasta el fin de la primera línea (o hasta que termine el modelo) y la valida con R5.
     - Con una marca válida, **no manda ningún `delta`**, y `done` llega con `conflict` (como `no_info`, R5 de la spec 009). La web muestra el resultado con `done` (D9).
     - Con una marca inválida (R6), manda el texto que sigue a la línea como `delta`, y `done` llega con `answered`.
+    - **Ajuste del 11/11/2026:** con una marca entre dos pasajes del mismo documento, no manda nada. Al terminar el primer pedido, se hace el segundo (R4), con sus propios 15 s hasta la primera parte, y sus `delta` pasan por el retén como los del primero. Si el segundo falla, `done` llega con la respuesta del primero (R6), sin `delta`: la web muestra el resultado con `done`. Si el cliente corta durante el segundo, no se guarda nada (R11 de la spec 009).
+    - **Ajuste del 12/11/2026:** en el segundo pedido, una marca no cierra el retén: se saca su línea y lo que sigue pasa por el retén como una respuesta nueva (un `NO_INFO` tampoco sale como `delta`). Los `delta` y `done` traen el mismo texto que `POST /api/chat`.
   - **Orden al cerrar:** guardar la consulta (`saveResult`), registrar la alerta (R12) y recién después mandar `done`. Si falla el registro de la alerta, R12.
   - **Corte del usuario:** si la web corta antes de `done`, no se guarda la consulta (R11 de la spec 009) y tampoco se registra la alerta.
   - **Errores de la IA:** si el modelo falla o se pasa un tiempo de espera, la respuesta es `ai_unavailable`, como hoy, aunque ya hubiera mandado la marca.
@@ -496,6 +525,28 @@ Escenario: la base hace cumplir las reglas de la tabla
 5. **Lo que se agrega** (R19): el puerto `ConflictAlertRecorder` y su adaptador de Prisma, en `ports/` y `adapters/`, y su proveedor en `chat.module.ts`. `ChatRepository`, `PrismaChatRepository` y `PrismaChatRetrieval` no cambian.
 6. **La tabla nueva guarda IDs de `messages` y `chunks`, sin FK** (sección 7.1, D16). Tus modelos de Prisma no cambian. Si borrás mensajes o fragmentos, la alerta sigue: solo deja de encontrar la sección del pasaje.
 7. **Sigue pendiente el aviso 8 de la spec 009** (la visibilidad del chat). Un ADMIN sin áreas recibe siempre `no_info`, así que nunca dispara alertas. Cuando el chat use la regla de la búsqueda, las contradicciones se van a detectar entre todos los documentos que el usuario ve en Documentos.
+8. **Ajuste en el código (11/11/2026, R4, R6 y R8).** Gemini marcaba `CONFLICT` entre una regla general y su excepción, del mismo documento. Lo que cambia en tus archivos, y nada más:
+   - **`ports/chat-llm.ts`:** `Passage` suma `documentId?`, que es opcional. Hay un tipo nuevo, `LlmRequestOptions` (`{ sameDocumentRefs?: [string, string] }`). `answer` y `stream` suman un último parámetro opcional, `options`. El `stream` por defecto se lo pasa a `answer`. Las clases que ya extienden `ChatLlm` siguen compilando.
+   - **`adapters/gemini-chat-llm.ts`:** el prompt de sistema se divide en tres constantes (`SYSTEM_START`, `CONFLICT_RULES` y `SYSTEM_END`), y `systemPrompt(passages, options)` arma el sistema de cada pedido:
+     - con pasajes de un solo documento, va sin `CONFLICT_RULES`;
+     - en el segundo pedido, suma el aviso al final;
+     - `buildPrompt` no cambia.
+   - **`chat.service.ts`:** en `run`, `this.llm.answer(...)` pasa a ser `answerChecked(this.llm, question, prepared, this.logger, stepContext)`, de `chat-conflict.ts`, más su import. Hace el pedido y, si hace falta, el segundo. `chat.service.spec.ts` no cambia.
+   - **`chat-pipeline.ts`:** `prepareChat` pone el `documentId` en cada pasaje.
+
+   Lo demás es de Documentos/chat de la spec 011: `chat-conflict.ts` (la detección, el segundo pedido y la suma de tokens), `chat-stream.service.ts` (el retén y el segundo pedido en la transmisión), `testing/chat-fakes.ts` (un guion por pedido) y sus tests, también la paridad de las dos rutas.
+9. **Ajuste del segundo pedido (12/11/2026, R4, R6 y R8).** Caso: "¿Se puede devolver ropa interior?" terminaba a veces con la explicación de una marca entre dos pasajes de la misma Política, sin conclusión. Lo que cambia en tus archivos:
+   - **`adapters/gemini-chat-llm.ts`:** con `options.sameDocumentRefs` (el segundo pedido), `systemPrompt` no suma `CONFLICT_RULES`, aunque los pasajes sean de dos documentos o más. El aviso de los dos pasajes sigue al final. El test "en el segundo pedido…" de `gemini-chat-llm.spec.ts` se actualizó: espera el mismo sistema con uno y con dos documentos.
+   - **`chat.service.ts`** no cambia: el cambio está en `answerChecked`.
+
+   Lo demás es de Documentos/chat: `chat-conflict.ts` (`withoutMarkerLine`: si el segundo pedido vuelve con una marca, se saca su línea y queda el resto; `bothAnswers` la usa), `chat-stream.service.ts` (el retén saca la línea en el segundo pedido) y sus tests, también tres casos nuevos en la paridad de las dos rutas.
+10. **La línea de la excepción explícita (12/11/2026, R4).** En `adapters/gemini-chat-llm.ts`, `SYSTEM_START` suma una línea antes de la de `NO_INFO`, y nada más cambia en el prompt:
+
+    ```text
+    - Si un pasaje responde directamente lo que se pregunta (nombra el producto, el caso o la persona), respondé con ese pasaje. Una regla general ("cualquier producto") no anula una excepción explícita. Respondé NO_INFO solo si ningún pasaje responde.
+    ```
+
+    Motivo: a "¿Se puede devolver ropa interior?" el modelo respondía `NO_INFO` porque la Promoción de verano dice "cualquier producto", aunque la Política excluye la ropa interior. Con la línea, responde `CONFLICT [S1] [S3]` entre los dos documentos. En `gemini-chat-llm.spec.ts` se actualizó el sistema esperado y hay un test con ese caso; en `chat-routes.parity.spec.ts`, el caso de las dos rutas con la alerta.
 
 ## 13. Avisos para la pareja A (Camila)
 

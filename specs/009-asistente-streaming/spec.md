@@ -116,6 +116,8 @@ Esta feature agrega:
 
   La única diferencia es `searchUrl` con `ai_unavailable`, hasta que Guille lo agregue a su ruta. Las dos rutas usan las mismas funciones (R14), y un test compara sus respuestas (sección 9).
 - **R5 · El texto transmitido es la respuesta.** Con `status: answered`, los `delta` unidos forman el `answer` de `done`, salvo los espacios al principio y al final. Con `no_info` o `ai_unavailable` no se manda ningún `delta` después de detectarlo, y la web usa el `answer` de `done`.
+
+  **Ajuste del 12/11/2026 (las citas agrupadas).** El modelo a veces agrupa las citas en un solo corchete: "[S1, S2]" o "[S1; S2]". Caso real, con `gemini-3.5-flash-lite`: "Faltan dos bultos, ¿qué pongo al firmar el remito?". Esas marcas no se reconocían como citas, quedaban como texto, y la verificación de cifras de Guille (`grounding-check.ts`) tomaba el 1 y el 2 como datos sin respaldo en los pasajes: la respuesta terminaba en `no_info`. Ahora `finishChat` (`splitGroupedCitations`, en `chat-pipeline.ts`) las separa en "[S1] [S2]" **antes de validar** las citas (`cleanCitations`) y de verificar las cifras, así cada una se valida sola y cuenta como fuente. También se aplica a la explicación de una contradicción (spec 011). Solo cambia lo que está entre corchetes y con la S en cada marca: "[1, 2]" o "[S1 y S2]" no se tocan, y "[S1][S2]" ya son dos citas. Como lo hace `finishChat`, las dos rutas responden lo mismo (R4); los `delta` traen el texto del modelo tal cual (caso borde en la sección 8).
 - **R6 · La marca `NO_INFO` nunca llega a la web.** El modelo responde exactamente `NO_INFO` cuando los pasajes no alcanzan. La API no manda texto hasta tener, sin los espacios iniciales, al menos tantos caracteres como la marca y comprobar que no empieza con ella, o hasta que termine el modelo. Si empieza con la marca, no manda ningún `delta`, y `done` llega con `no_info`.
 - **R7 · Se guarda igual que hoy.** Cada consulta que llega a `done` deja un mensaje en la conversación, con los mismos datos que guarda `POST /api/chat`: pregunta, respuesta, estado, fragmentos y versiones usados, modelo, tokens y latencia. La latencia se mide hasta `done`. Una consulta cortada por el usuario no se guarda (R11).
 
@@ -217,6 +219,7 @@ Desde `enviando` o `recibiendo` también puede terminar en `cortada` (sin evento
 - **El modelo cita `[S2]` y `[S5]`:** son las citas 1 y 2, en el orden de `sources` (F4).
 - **El modelo cita `[S9]` y hay 6 pasajes:** `sources` no la incluye (como hoy), las marcas no coinciden con las fuentes y la web muestra el texto sin citas y las fuentes debajo (F4).
 - **El modelo no cita ninguna marca:** `sources` trae todos los fragmentos recuperados (como hoy) y la web los muestra debajo, sin citas en el texto.
+- **El modelo agrupa las citas ("[S1, S2]" o "[S1; S2]"):** los `delta` las traen agrupadas, como las mandó el modelo, y el `answer` de `done` las trae separadas ("[S1] [S2]"). Es una excepción a R5: los `delta` unidos pueden diferir del `answer`. La web reemplaza el texto transmitido por el `answer` de `done`, así que la respuesta final muestra las dos citas (ajuste del 12/11/2026, en R5).
 - **La conversación es de otro usuario:** 404 antes de transmitir (R2).
 - **El token vence a mitad de la transmisión:** la transmisión sigue, porque la sesión se validó al empezar.
 - **El proxy de Next (`/api/:path*`) o un proxy intermedio junta los eventos y los manda al final:** se evita con los encabezados de R3. Se verifica en la tarea de verificación con la web y la API reales.
@@ -409,6 +412,10 @@ Va a un archivo nuevo, `apps/api/src/chat/chat-pipeline.ts`, sin cambiar el cód
 11. **El embedding de la pregunta no tiene tiempo de espera** en `POST /api/chat`: si Gemini no responde, el pedido queda colgado. La ruta nueva lo limita a 15 s (R9).
 12. **Citas sin referencia.** `ChatSource` no dice a qué marca `[Sn]` corresponde. La web la deduce por orden (D14); un campo `ref` lo haría seguro.
 13. **Campos sin usar:** `suggestedContact` nunca se arma con `no_info`, y `url` de las fuentes queda vacía (TODO de HU18). **Resuelto el 06/11/2026** (f69ff3a, HU19: `suggestedContact`; 2135204, HU18: `url` firmada). La web no usa `url` a propósito: las fuentes abren el detalle.
+
+### Ajustes
+
+15. **Las citas agrupadas (12/11/2026, R5).** En `chat-pipeline.ts`, `finishChat` separa "[S1, S2]" y "[S1; S2]" en "[S1] [S2]" (`splitGroupedCitations`) antes de `cleanCitations` y de tu verificación de cifras (`unsupportedFigures`, de `grounding-check.ts`), que no cambia. Motivo: con las citas agrupadas, la verificación tomaba el 1 y el 2 como cifras sin respaldo y la respuesta terminaba en `no_info`. Afecta a las dos rutas, también a `POST /api/chat`; los tests están en `chat-grouped-citations.spec.ts` (con el caso real) y en `chat-citation-groups.spec.ts`, que llegó con develop. En streaming, los `delta` pueden traer las citas agrupadas y el `done` separadas (sección 8).
 
 ## 13. Aviso para la pareja A (Camila)
 
