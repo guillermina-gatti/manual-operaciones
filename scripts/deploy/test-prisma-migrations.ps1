@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param()
+param(
+  [ValidateSet('Success', 'ConnectionFailure', 'RecoverySuccess', 'FailureRecovery')]
+  [string]$Mode = 'Success'
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -9,8 +12,11 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $migrationsPath = Join-Path $repoRoot 'apps\api\prisma\migrations'
 $dockerfilePath = Join-Path $repoRoot 'apps\api\Dockerfile'
 $runId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
-$prefix = "pispiar-a21b6c1-$runId"
+$taskSlug = if ($Mode -eq 'Success') { 'a21b6c1' } else { 'a21b6c2' }
+$prefix = "pispiar-$taskSlug-$runId"
 $networkName = "$prefix-net"
+$ownershipCanaryNetwork = "$prefix-ownership-canary"
+$ownershipCanaryRunId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $databaseContainer = "$prefix-db"
 $migratorImage = "$prefix-migrator:local"
 $databaseUser = "migrator_$runId"
@@ -21,16 +27,19 @@ $databasePassword = [Convert]::ToHexString($passwordBytes).ToLowerInvariant()
 $databaseUrl = "postgresql://${databaseUser}:${databasePassword}@database:5432/${databaseName}?schema=public"
 $runLabel = 'io.pispiar.run'
 $taskLabel = 'io.pispiar.task'
-$taskValue = 'A-21B.6c.1'
+$taskValue = if ($Mode -eq 'Success') { 'A-21B.6c.1' } else { 'A-21B.6c.2' }
 $sensitiveValues = @($databaseUrl, $databasePassword, $databaseUser, $databaseName)
 
-$networkCreated = $false
-$databaseCreated = $false
+$networkCreationAttempted = $false
+$ownershipCanaryCreationAttempted = $false
+$databaseCreationAttempted = $false
 $imageCreated = $false
 $ownedTransientContainers = [Collections.Generic.List[string]]::new()
 $cleanupErrors = [Collections.Generic.List[string]]::new()
 $failure = $null
 $cleanupSucceeded = $false
+$connectionFailureObserved = $false
+$ownershipSafetyVerified = $false
 $expectedMigrations = @()
 $firstMigrationMs = 0L
 $secondMigrationMs = 0L
@@ -161,6 +170,44 @@ function Remove-OwnedContainer {
   }
 }
 
+function Remove-NetworkWithOwnership {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][string]$ExpectedRunId
+  )
+
+  if (-not (Test-DockerResource -Type network -Name $Name)) {
+    return
+  }
+  $label = Invoke-DockerCapture @(
+    'network', 'inspect', '--format', "{{ index .Labels `"$script:runLabel`" }}", $Name
+  )
+  if ($label -cne $ExpectedRunId) {
+    throw 'Se rechazó eliminar una red sin el ownership exacto esperado.'
+  }
+  & $script:docker network rm $Name *> $null
+  if ($LASTEXITCODE -ne 0) {
+    throw 'No se pudo eliminar una red propia de la prueba.'
+  }
+}
+
+if ($Mode -eq 'FailureRecovery') {
+  Write-Host 'ESCENARIO=FALLO_DE_CONEXION_Y_CLEANUP'
+  & pwsh -NoProfile -File $PSCommandPath -Mode ConnectionFailure
+  if ($LASTEXITCODE -ne 0) {
+    throw 'El escenario controlado de fallo de conexión no cumplió sus aserciones.'
+  }
+
+  Write-Host 'ESCENARIO=REINTENTO_EN_AMBIENTE_NUEVO'
+  & pwsh -NoProfile -File $PSCommandPath -Mode RecoverySuccess
+  if ($LASTEXITCODE -ne 0) {
+    throw 'El reintento sobre un ambiente nuevo no completó correctamente.'
+  }
+
+  Write-Host 'FAILURE_RECOVERY=OK'
+  return
+}
+
 try {
   $context = Invoke-DockerCapture @('context', 'show')
   Assert-Equal -Actual $context -Expected 'desktop-linux' -Description 'contexto Docker Desktop local'
@@ -188,6 +235,7 @@ try {
 
   foreach ($resource in @(
     @{ Type = 'network'; Name = $networkName },
+    @{ Type = 'network'; Name = $ownershipCanaryNetwork },
     @{ Type = 'container'; Name = $databaseContainer },
     @{ Type = 'image'; Name = $migratorImage }
   )) {
@@ -209,12 +257,14 @@ try {
     throw 'Falló la construcción de la imagen migradora.'
   }
 
+  # Docker puede crear un recurso aunque el comando devuelva un error.
+  $networkCreationAttempted = $true
   [void](Invoke-DockerCapture @(
     'network', 'create', '--internal',
     '--label', "$runLabel=$runId", '--label', "$taskLabel=$taskValue", $networkName
   ))
-  $networkCreated = $true
 
+  $databaseCreationAttempted = $true
   [void](Invoke-DockerWithEnvironment -Arguments @(
     'run', '--detach', '--name', $databaseContainer,
     '--network', $networkName, '--network-alias', 'database',
@@ -227,7 +277,6 @@ try {
     POSTGRES_PASSWORD = $databasePassword
     POSTGRES_DB = $databaseName
   })
-  $databaseCreated = $true
 
   $ready = $false
   for ($attempt = 1; $attempt -le 60; $attempt++) {
@@ -288,7 +337,61 @@ try {
   Assert-Equal -Actual (Invoke-Psql "SELECT to_regclass('public._prisma_migrations') IS NULL;") `
     -Expected 't' -Description 'ausencia de historial Prisma previo'
 
-  Write-Host 'Aplicando migraciones en la base descartable...'
+  if ($Mode -eq 'ConnectionFailure') {
+    Write-Host 'Verificando rechazo de cleanup sin ownership exacto...'
+    $ownershipCanaryCreationAttempted = $true
+    [void](Invoke-DockerCapture @(
+      'network', 'create', '--internal',
+      '--label', "$runLabel=$ownershipCanaryRunId", '--label', "$taskLabel=$taskValue",
+      $ownershipCanaryNetwork
+    ))
+    $ownershipRejectionObserved = $false
+    try {
+      Remove-NetworkWithOwnership -Name $ownershipCanaryNetwork -ExpectedRunId $runId
+    }
+    catch {
+      if ($_.Exception.Message -notmatch 'ownership exacto') {
+        throw
+      }
+      $ownershipRejectionObserved = $true
+    }
+    if (-not $ownershipRejectionObserved -or
+      -not (Test-DockerResource -Type network -Name $ownershipCanaryNetwork)) {
+      throw 'El control de ownership no rechazó la eliminación del recurso canary.'
+    }
+    Remove-NetworkWithOwnership -Name $ownershipCanaryNetwork `
+      -ExpectedRunId $ownershipCanaryRunId
+    $ownershipCanaryCreationAttempted = $false
+    $ownershipSafetyVerified = $true
+
+    Write-Host 'Provocando fallo controlado de autenticación...'
+    $invalidPasswordBytes = [byte[]]::new(24)
+    [Security.Cryptography.RandomNumberGenerator]::Fill($invalidPasswordBytes)
+    $invalidPassword = [Convert]::ToHexString($invalidPasswordBytes).ToLowerInvariant()
+    $invalidDatabaseUrl = "postgresql://${databaseUser}:${invalidPassword}@database:5432/${databaseName}?schema=public"
+    $sensitiveValues += @($invalidPassword, $invalidDatabaseUrl)
+    $failureContainer = "$prefix-connection-failure"
+    $ownedTransientContainers.Add($failureContainer)
+    try {
+      [void](Invoke-DockerWithEnvironment -Arguments @(
+        'run', '--rm', '--name', $failureContainer, '--network', $networkName,
+        '--label', "$runLabel=$runId", '--label', "$taskLabel=$taskValue",
+        '--env', 'DATABASE_URL', $migratorImage, 'migrate', 'deploy'
+      ) -Environment @{ DATABASE_URL = $invalidDatabaseUrl })
+      throw 'El migrador aceptó credenciales intencionalmente inválidas.'
+    }
+    catch {
+      $connectionError = Protect-Text $_.Exception.Message
+      if ($connectionError -notmatch '(?i)(P1000|authentication failed|password authentication failed)') {
+        throw "El fallo del migrador no fue el error de autenticación esperado: $connectionError"
+      }
+      $connectionFailureObserved = $true
+    }
+    Assert-Equal -Actual (Invoke-Psql "SELECT to_regclass('public._prisma_migrations') IS NULL;") `
+      -Expected 't' -Description 'base intacta después del fallo de conexión'
+  }
+  else {
+    Write-Host 'Aplicando migraciones en la base descartable...'
   $firstContainer = "$prefix-migrate-1"
   $ownedTransientContainers.Add($firstContainer)
   $firstStopwatch = [Diagnostics.Stopwatch]::StartNew()
@@ -309,7 +412,7 @@ ORDER BY migration_name;
 '@)
   Assert-LinesEqual -Actual $appliedMigrations -Expected $expectedMigrations `
     -Description 'migraciones aplicadas'
-  Assert-Equal -Actual (Invoke-Psql 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL;') `
+  Assert-Equal -Actual (Invoke-Psql 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL OR checksum = '''' OR applied_steps_count <= 0;') `
     -Expected '0' -Description 'migraciones fallidas o inconclusas'
 
   Assert-LinesEqual -Actual (ConvertTo-Lines (Invoke-Psql "SELECT extname FROM pg_extension WHERE extname IN ('unaccent', 'vector') ORDER BY extname;")) `
@@ -356,6 +459,14 @@ ORDER BY a.attname;
 '@)) -Expected @('content_tsv:tsvector:s', 'embedding:vector(768):') `
     -Description 'tipos vector y tsvector generado'
 
+  $historyBeforeSecondRun = ConvertTo-Lines (Invoke-Psql @'
+SELECT migration_name || '|' || checksum || '|'
+  || (finished_at IS NOT NULL)::text || '|'
+  || (rolled_back_at IS NULL)::text || '|'
+  || applied_steps_count::text
+FROM "_prisma_migrations"
+ORDER BY migration_name;
+'@)
   $secondContainer = "$prefix-migrate-2"
   $ownedTransientContainers.Add($secondContainer)
   $secondStopwatch = [Diagnostics.Stopwatch]::StartNew()
@@ -375,8 +486,19 @@ ORDER BY migration_name;
 '@)
   Assert-LinesEqual -Actual $migrationsAfterSecondRun -Expected $expectedMigrations `
     -Description 'idempotencia del segundo migrate deploy'
-  Assert-Equal -Actual (Invoke-Psql 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL;') `
+  $historyAfterSecondRun = ConvertTo-Lines (Invoke-Psql @'
+SELECT migration_name || '|' || checksum || '|'
+  || (finished_at IS NOT NULL)::text || '|'
+  || (rolled_back_at IS NULL)::text || '|'
+  || applied_steps_count::text
+FROM "_prisma_migrations"
+ORDER BY migration_name;
+'@)
+  Assert-LinesEqual -Actual $historyAfterSecondRun -Expected $historyBeforeSecondRun `
+    -Description 'historial Prisma con nombres, checksums y estado sin cambios'
+  Assert-Equal -Actual (Invoke-Psql 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL OR checksum = '''' OR applied_steps_count <= 0;') `
     -Expected '0' -Description 'estado final del historial Prisma'
+  }
 }
 catch {
   $failure = Protect-Text $_.Exception.Message
@@ -390,7 +512,7 @@ finally {
       $cleanupErrors.Add((Protect-Text $_.Exception.Message))
     }
   }
-  if ($databaseCreated) {
+  if ($databaseCreationAttempted) {
     try {
       Remove-OwnedContainer -Name $databaseContainer
     }
@@ -398,20 +520,18 @@ finally {
       $cleanupErrors.Add((Protect-Text $_.Exception.Message))
     }
   }
-  if ($networkCreated) {
+  if ($ownershipCanaryCreationAttempted) {
     try {
-      if (Test-DockerResource -Type network -Name $networkName) {
-        $label = Invoke-DockerCapture @(
-          'network', 'inspect', '--format', "{{ index .Labels `"$runLabel`" }}", $networkName
-        )
-        if ($label -cne $runId) {
-          throw 'Se rechazó eliminar una red sin ownership de esta corrida.'
-        }
-        & $docker network rm $networkName *> $null
-        if ($LASTEXITCODE -ne 0) {
-          throw 'No se pudo eliminar la red propia de la prueba.'
-        }
-      }
+      Remove-NetworkWithOwnership -Name $ownershipCanaryNetwork `
+        -ExpectedRunId $ownershipCanaryRunId
+    }
+    catch {
+      $cleanupErrors.Add((Protect-Text $_.Exception.Message))
+    }
+  }
+  if ($networkCreationAttempted) {
+    try {
+      Remove-NetworkWithOwnership -Name $networkName -ExpectedRunId $runId
     }
     catch {
       $cleanupErrors.Add((Protect-Text $_.Exception.Message))
@@ -437,6 +557,22 @@ finally {
     }
   }
 
+  foreach ($resource in @(
+    @{ Type = 'container'; Name = $databaseContainer },
+    @{ Type = 'network'; Name = $networkName },
+    @{ Type = 'network'; Name = $ownershipCanaryNetwork },
+    @{ Type = 'image'; Name = $migratorImage }
+  )) {
+    if (Test-DockerResource -Type $resource.Type -Name $resource.Name) {
+      $cleanupErrors.Add("Quedó un recurso propio sin limpiar: $($resource.Type).")
+    }
+  }
+  foreach ($container in $ownedTransientContainers) {
+    if (Test-DockerResource -Type container -Name $container) {
+      $cleanupErrors.Add('Quedó un contenedor transitorio propio sin limpiar.')
+    }
+  }
+
   $cleanupSucceeded = $cleanupErrors.Count -eq 0
   $totalStopwatch.Stop()
 }
@@ -448,11 +584,27 @@ if ($null -ne $failure) {
   throw $failure
 }
 
+if ($Mode -eq 'ConnectionFailure') {
+  if (-not $connectionFailureObserved -or -not $ownershipSafetyVerified) {
+    throw 'El escenario esperado no produjo todas sus evidencias.'
+  }
+  Write-Host 'RESULTADO=FALLO_CONTROLADO_OK'
+  Write-Host 'CONNECTION_FAILURE=EXPECTED'
+  Write-Host 'OWNERSHIP_SAFETY=OK'
+  Write-Host "DURACION_TOTAL_MS=$($totalStopwatch.ElapsedMilliseconds)"
+  Write-Host "LIMPIEZA=$(if ($cleanupSucceeded) { 'OK' } else { 'FALLO' })"
+  return
+}
+
 Write-Host 'RESULTADO=OK'
 Write-Host "MIGRACIONES=$($expectedMigrations.Count)"
 Write-Host 'EXTENSIONES=vector,unaccent'
 Write-Host 'INDICES=HNSW+GIN OK'
 Write-Host 'IDEMPOTENCIA=OK'
+Write-Host 'HISTORIAL_IDEMPOTENTE=NOMBRES+CHECKSUMS+ESTADO OK'
+if ($Mode -eq 'RecoverySuccess') {
+  Write-Host 'RETRY=OK'
+}
 Write-Host "PRIMER_MIGRATE_MS=$firstMigrationMs"
 Write-Host "SEGUNDO_MIGRATE_MS=$secondMigrationMs"
 Write-Host "DURACION_TOTAL_MS=$($totalStopwatch.ElapsedMilliseconds)"
