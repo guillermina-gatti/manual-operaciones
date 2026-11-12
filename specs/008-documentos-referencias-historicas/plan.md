@@ -19,7 +19,7 @@ En este plan, R1 a R13 y F1 a F8 son reglas de esta spec; D1 a D5 y P1 a P9, sus
 | E8 | Las escrituras responden con los nombres | E19 | OwnerField conserva al responsable inactivo |
 | E9 | La web no usa los fixtures ni el catálogo de áreas | E20 | OwnerField permite elegir otro |
 | E10 | Referencia que el directorio no encuentra | E21 | Candidatos solo con las áreas activas |
-| E11 | Carga con responsable inactivo | E22 | La visibilidad no cambia |
+| E11 | Carga con responsable inactivo | E22 | Un área inactiva no da acceso (actualizado el 11/11/2026) |
 
 ## 0. Punto de partida
 
@@ -39,6 +39,7 @@ En este plan, R1 a R13 y F1 a F8 son reglas de esta spec; D1 a D5 y P1 a P9, sus
 - `DocumentUploadService.upload` valida, guarda y responde `toDocumentResponse(record)` (sin `review`). Todo error pasa por `toHttpException` y se audita.
 - `DocumentLifecycleService`: `changeAreas`, `addVersion`, `archive` y `markReviewed` pasan por `run(...)`, que responde `toDocumentResponse(record, reviewFor(actor, record, today))` y audita el fallo. `changeAreas` sale antes, sin validar, si no hay cambios (R11); si no, valida con `assertAreasExist(dto.areaIds)` y `assertOwnerCanSeeDocument(dto.ownerId ?? current.ownerId, dto.areaIds)`, y escribe con `replaceAreas`.
 - `document-access.ts`: `viewerFor` lee las áreas del directorio (todas, también las inactivas), no de la sesión. Por eso un EMPLOYEE de un área inactiva sigue viendo los documentos de esa área (E22), aunque `JwtAuthGuard` le arme la sesión solo con las áreas activas.
+  - **Desde el 11/11/2026 (A-SEC, pareja A):** `viewerFor` autoriza solo las áreas del directorio que también están en la sesión, es decir, las activas. Un EMPLOYEE o SUPERVISOR de un área inactiva ya no ve sus documentos, y el ADMIN ve todos (D3 actualizada; E22 prueba el comportamiento nuevo).
 
 **Auth (pareja A):** un usuario inactivo no inicia sesión (`auth.service.ts`, login), no renueva la sesión (renovación) y no pasa `JwtAuthGuard`, que lee `isActive` de la base en cada pedido. Los tests de integración desactivan usuarios con la base, después de firmar el token del actor (que tiene que seguir activo).
 
@@ -144,7 +145,7 @@ La carga la llama sin `currentAreaIds` (todas son agregadas); el cambio de área
 
 - Carga: `isNew: true`.
 - Cambio de áreas: `isNew: dto.ownerId !== undefined && dto.ownerId !== current.ownerId` (PD7). Sin `ownerId`, o con el mismo, se valida igual el paso 3: el responsable actual, activo o no, tiene que seguir teniendo acceso (R6, P5, E16).
-- `canBeOwner` no cambia: usa las áreas del directorio, que incluyen las inactivas (R10, D3).
+- `canBeOwner` no cambia, pero desde el 11/11/2026 (D6 de la spec) recibe solo las áreas **activas** del documento. `assertAreasCanBeAssigned` las devuelve, de la misma consulta al directorio (PD6), y la carga y el cambio de áreas se las pasan a `assertOwnerCanSeeDocument`. Así un área inactiva no alcanza para ser responsable, igual que con A-SEC no da acceso.
 
 ### 2.3 Orden
 
@@ -216,7 +217,7 @@ El actor de cada pedido (ADMIN o EMPLOYEE) tiene que estar activo, porque `JwtAu
 
 | Suite | Escenarios | ¿Necesita `findByIds`? |
 | --- | --- | --- |
-| `test/documents/assignments.e2e-spec.ts` (nueva) | **E11**, **E12** (400 y nada guardado: ni documento ni archivo); **E13**; **E14** (las áreas no cambian); **E15**; **E16**; **E17** (el responsable no cambia); **E18** (desactivar no cambia `ownerId` ni `areaIds`); **E22** (un EMPLOYEE de Compras inactiva lista el documento); los 400 nuevos quedan en la auditoría | No |
+| `test/documents/assignments.e2e-spec.ts` (nueva) | **E11**, **E12** (400 y nada guardado: ni documento ni archivo); **E13**; **E14** (las áreas no cambian); **E15**; **E16**; **E17** (el responsable no cambia); **E18** (desactivar no cambia `ownerId` ni `areaIds`); **E22** (desde el 11/11/2026: un EMPLOYEE de Compras inactiva no ve el documento, ni en el listado, ni en el detalle, que da 404, ni en la búsqueda; el ADMIN sí, con Compras como referencia inactiva; con Ventas activa, un EMPLOYEE de Ventas lo ve); los 400 nuevos quedan en la auditoría | No |
 | `test/documents/references.e2e-spec.ts` (nueva) | **E1** a **E7** (listado, búsqueda, detalle, área inactiva, revisor solo con `review`, "Por revisar", historial); **E8** (las cinco escrituras responden `owner` y `areas`; "Marcar como revisado" con `lastReviewedBy` del ADMIN); **E10** (un documento con `ownerId` de un usuario que no existe, armado en la base) | **Sí** |
 | Las de las specs 001 a 007 | Pasan con los cambios de los `toStrictEqual` que comparan respuestas enteras (se les suman `owner` y `areas`) | — |
 

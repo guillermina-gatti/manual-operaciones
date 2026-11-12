@@ -2,12 +2,12 @@
 
 - **Spec:** [spec.md](./spec.md) · **Plan:** [plan.md](./plan.md)
 - **Responsable:** Micaela Franco (pareja B)
-- **Estado (27/10/2026):** HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. Siguen T12 en adelante (áreas y visibilidad), sin empezar. Los adjuntos siguen como pregunta abierta para el equipo.
+- **Estado (04/11/2026):** T-WEB (pantallas de prueba de HU09 y HU10 en la web) hecha. HU09 terminada: T01 a T11 hechas, con el e2e de T11 en verde. T-JWT (login real en los tests de procedimientos) hecha. HU10 terminada: T12, T13 y T13b hechas, con los e2e de procedimientos en verde (6 suites, 83 tests) y todos los e2e en verde (27 suites, 397 tests). HU11 (11/11/2026): la API (T14 a T17, con sus commits en esta rama) y las pantallas de la web (T26 a T33) están hechas; los e2e los corre Micaela antes del PR. Sigue T18 (verificación final). Los adjuntos siguen como pregunta abierta para el equipo.
 
 Convenciones:
 
 - Una tarea = un commit, con Conventional Commits y alcance `procedures` (`feat(procedures): …`, `test(procedures): …`, `docs(specs): …`). Las rutas de backend son relativas a `apps/api/`.
-- R1 a R23 son las reglas de la spec; P1 a P17, sus decisiones; E1 a E34, sus escenarios; D1 a D14, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado.
+- R1 a R23 son las reglas de la spec; P1 a P20, sus decisiones; E1 a E38, sus escenarios; D1 a D17, las decisiones del plan. Trazabilidad: regla → escenario → tarea → test → resultado.
 - "Test primero" quiere decir: se escribe el test, se corre y falla; se hace el cambio y pasa.
 - **"Avisar al equipo antes de mergear"** marca las tareas que tocan archivos que usan otras parejas: `schema.prisma`, `prisma/migrations` y `app.module.ts`.
 - **Comandos de Prisma:** `prisma migrate dev`, `prisma migrate deploy` y `prisma generate` los corre Micaela, no el agente. Cuando una tarea cambia `schema.prisma`, el agente hace el cambio, escribe el test y se detiene; Micaela crea la migración con `migrate dev --create-only`, se revisa el SQL juntos (borrando cualquier `DROP INDEX "chunks_..."`) y ella la aplica.
@@ -116,17 +116,25 @@ Convenciones:
 
 ### T12 · Servicio de áreas
 
-- **Qué hace:** asignar el conjunto de áreas con `AreasDirectory.findExistingIds` (existencia, sin repetidos), reemplazando el anterior, sin importar el estado de las versiones.
-- **Cubre:** R11, R12; E17, E18.
-- **Archivos:** `src/procedures/procedure.service.ts`, el repositorio y sus `.spec.ts`.
-- **Verificación, test primero:** área inexistente → 400 sin cambios; repetida → 400; conjunto vacío válido; reemplazo completo; directorio caído → 503.
+- **Qué hace:** asignar el conjunto de áreas con `AreasDirectory.findExistingIds` (existencia), reemplazando el anterior, sin importar el estado de las versiones. `setAreas` en el repositorio, con bloqueo (D15).
+- **Cubre:** R11, R12; E17, E18; D7, D15.
+- **Archivos:** `src/procedures/procedure-areas.service.ts`, `src/procedures/procedures.repository.ts`, `src/procedures/prisma-procedures.repository.ts`, `src/procedures/http-errors.ts` y sus `.spec.ts`.
+- **Verificación, test primero:** área inexistente → 400 sin llamar al repositorio; conjunto vacío válido; reemplazo completo; procedimiento inexistente → 404; no toca versiones ni pasos; dos pedidos simultáneos terminan con uno de los dos conjuntos completos; directorio o base caídos → 503. Los repetidos los rechaza el DTO (T13).
 
 ### T13 · Endpoint de áreas y su integración
 
-- **Qué hace:** `PUT /procedures/:id/areas` en el controlador, con Swagger, y su e2e.
-- **Cubre:** R11, R12; E17, E18, E19.
-- **Archivos:** `src/procedures/procedures.controller.ts`, `test/procedures/areas.e2e-spec.ts`.
-- **Verificación:** asignar y reasignar; 400 con área inexistente; mover un procedimiento publicado de Ventas a Operaciones hace que el EMPLOYEE de Ventas reciba 404 en su pedido siguiente y que el de Operaciones lo vea (E19). Los corre Micaela.
+- **Qué hace:** `PUT /procedures/:id/areas` en el controlador, con Swagger y su DTO (arreglo de UUID, sin repetidos, hasta 100) y su respuesta; `AreasDirectory` en el módulo con el adaptador Prisma; y su e2e.
+- **Cubre:** R11, R12; E17, E18, E19 (la mitad de las áreas; la otra mitad, en T17); P18, P19.
+- **Archivos:** `src/procedures/dto/set-areas.dto.ts`, `src/procedures/dto/areas.response.ts`, `src/procedures/procedures.controller.ts`, `src/procedures/procedures.module.ts`, `test/procedures/areas.e2e-spec.ts` y sus `.spec.ts`.
+- **Verificación:** asignar y reasignar; 400 con área inexistente, repetida o con formato inválido, sin cambios; 401 y 403; 404 con procedimiento inexistente; mover un procedimiento publicado de Ventas a Operaciones deja sus áreas en Operaciones. Los corre Micaela.
+
+### T13b · Áreas inactivas (R11, P13)
+
+- **Qué hace:** usa `AreasDirectory.findByIds` (A-13, PR #30) para saber si las áreas existen y si están activas, en lugar de `findExistingIds`; no crea puerto propio ni modifica el de la Pareja A. El servicio rechaza con 400 las áreas inactivas que el procedimiento no tenía y deja conservar las que ya tenía; el módulo y el Swagger del 400 se actualizan.
+- **Cubre:** R11; E35, E36, E37, E38; P13, P19, P20; D17.
+- **Archivos:** `src/procedures/procedure-areas.service.ts`, `procedures.module.ts` y `procedures.controller.ts` (solo el texto del 400) y sus `.spec.ts`; `test/procedures/area-helpers.ts` y `areas.e2e-spec.ts`.
+- **Verificación, test primero:** inactiva nueva → 400 sin llamar al repositorio; inactiva que ya tenía → se guarda; quitarla → válido; volver a agregarla → 400; procedimiento inexistente con inactiva → 400 y no 404; "no existe" gana sobre "inactiva" en el mensaje; directorio de áreas o base caídos → 503. Las áreas inactivas de los e2e se crean y se borran dentro de cada test, sin tocar el seed ni las fixtures. No se modifica código de otras parejas. Los e2e los corre Micaela.
+- **Estado:** hecha (01/11/2026). Tests unitarios, lint y build en verde; e2e de procedimientos (6 suites, 83 tests) y todos los e2e (27 suites, 397 tests) en verde.
 
 ---
 
@@ -158,7 +166,7 @@ Convenciones:
 - **Qué hace:** e2e de la visibilidad con la aplicación completa: la prueba que pide HU11.
 - **Cubre:** E19 a E27.
 - **Archivos:** `test/procedures/visibility.e2e-spec.ts`.
-- **Verificación:** EMPLOYEE de Ventas ve solo lo de Ventas; el detalle de otra área responde 404, idéntico al de un id inexistente (estado y cuerpo); sin borradores ni reemplazadas; ADMIN ve todo; sin áreas ve lista vacía; 400 con `limit=101`; 403 en la ruta de versiones. Los corre Micaela.
+- **Verificación:** EMPLOYEE de Ventas ve solo lo de Ventas; el detalle de otra área responde 404, idéntico al de un id inexistente (estado y cuerpo); sin borradores ni reemplazadas; ADMIN ve todo; sin áreas ve lista vacía; 400 con `limit=101`; 403 en la ruta de versiones; al pasar un procedimiento de Ventas a Operaciones, el EMPLOYEE de Ventas recibe 404 y el de Operaciones lo ve (E19). Los corre Micaela.
 
 ### T18 · Verificación de HU09, HU10 y HU11
 
@@ -222,3 +230,45 @@ Convenciones:
 
 - **Qué hace:** repite la verificación de T18 incluyendo los adjuntos y deja la spec en estado "implementada".
 - **Verificación:** lint, tests, build y e2e en verde; todos los criterios de aceptación (E1 a E34) con su test; sin cambios fuera de alcance; spec, plan y tareas al día con lo construido.
+
+---
+
+## Pantallas de prueba (web)
+
+### T-WEB · Pantallas de prueba de HU09 y HU10
+
+- **Qué hace:** un front simple, de prueba, para ver HU09 y HU10 en el navegador. `/procedimientos` crea un procedimiento y lista los creados. `/procedimientos/[id]` edita el título y la descripción del borrador, agrega, edita, borra y mueve pasos, descarta el borrador y asigna áreas con `GET /api/areas` (una inactiva se muestra con "(inactiva)" solo si el procedimiento ya la tenía). Solo ADMIN. **Es un front de prueba y no hay GET de procedimientos hasta HU11:** la lista y los datos de cada procedimiento salen de una copia en `sessionStorage` de esta sesión del navegador, y las pantallas lo avisan. Solo archivos nuevos; reutiliza `AreasField`, `RequireRole` y los componentes de `ui/` sin modificarlos.
+- **Cubre:** R2, R5 a R8, R10, R11; E1, E4, E6, E7, E9, E13, E17, E18, E35, E36, E37, vistos desde la web.
+- **Archivos:** `apps/web/lib/api/procedures.ts` y `procedure-errors.ts`; `apps/web/lib/procedures/*`; `apps/web/components/procedures/*`; `apps/web/app/procedimientos/page.tsx` y `[id]/page.tsx`; y sus tests en `apps/web/tests/`.
+- **Verificación:** `pnpm --filter web lint`, `pnpm --filter web test` y `pnpm --filter web build` en verde. La prueba manual contra la API real la hace Micaela. No hay enlace de navegación hacia `/procedimientos`: se entra escribiendo la URL.
+- **Estado:** hecha (04/11/2026). Lint, test (73 archivos, 911 tests) y build de la web en verde.
+- **Actualizada el 10/11/2026 (rediseño con DESIGN.md).** Decisiones, sin cambios de comportamiento de la API ni de `lib/procedures`:
+  - **D-web-1:** la lista de `/procedimientos` pasa a tarjetas con un solo enlace (el título lleva al editor). El botón "Abrir" desaparece; "Quitar de la lista" queda sobre la tarjeta. Cambia el test `ProcedureList.test.tsx` ("each one links to its editor" pasa a buscar el enlace por el título y a comprobar que es el único de la tarjeta).
+  - **D-web-2 (actualizada el 10/11/2026):** el encabezado de `/procedimientos` no tiene botón principal. Se probó un "Crear procedimiento" que llevaba al formulario, pero duplicaba el botón del propio formulario, que está en la misma pantalla, y se sacó (también `CreateProcedureLink`). Cada formulario (crear, borrador, paso, áreas) conserva su botón de envío dentro de su tarjeta, y ese es el principal de cada una.
+  - **D-web-6:** el texto que hay que leer (avisos, etiquetas, campos, datos de las tarjetas) va en 16 px (`text-base`); `text-sm` solo en ayudas y chips, y nunca `text-xs` (DESIGN.md 3). Los botones de solo ícono (subir, bajar, borrar) llevan `px-0!` y el ícono `shrink-0`, para que el padding del botón no lo aplaste.
+  - **D-web-3:** cada procedimiento de la lista muestra un chip con el conteo ("N pasos · N áreas"), sin nombres de área: los nombres llegan con HU11.
+  - **D-web-4:** se vuelve con `BACK_LINK` ("← Volver a procedimientos").
+  - **D-web-5:** las pantallas importan botones, campos y encabezado de `components/documents/design.tsx` y `list-design.tsx` (DESIGN.md 1 y 9); `components/procedures/design.tsx` queda solo con la fila de un paso, su número, la caja de agregar y los íconos.
+  - **Actualizada el 11/11/2026 (HU11):** la copia en `sessionStorage` y su aviso desaparecen (P25): la lista y el editor leen de la API (T26 a T32). Cambian `ProcedureList`, `ProcedureCard` y `ProcedureEditor` (que se parte en `ProcedureEditorBody`); desaparece "Quitar de la lista" y el texto "No tenemos los datos de este procedimiento en esta sesión" pasa a "No se encontró el procedimiento". D-web-3 queda superada: la tarjeta muestra los nombres de las áreas como chips.
+  - **Pendiente:** llevar el foco al primer campo con error después de enviar un formulario con errores (DESIGN.md 8). Es comportamiento nuevo: va con su criterio y su test primero, y no se hizo en este rediseño.
+
+---
+
+## Pantallas de HU11 (web)
+
+Trazabilidad: regla → escenario → tarea → test → resultado. Cada tarea es test primero y un commit chico. Todas son solo del front; `GET /api/procedures` y `GET /api/procedures/:id` ya existen (T16).
+
+| Tarea | Qué hace | Regla | Escenario | Test | Estado |
+| --- | --- | --- | --- | --- | --- |
+| T26 | Cliente de `GET /procedures` y `GET /procedures/:id` (`lib/api/procedure-view.ts`) | W1, W5 | E41, E45 | `tests/lib/api/procedure-view.test.ts` | hecha (11/11/2026) |
+| T27 | Hooks que piden la lista y el detalle (`useProcedureList`, `useProcedureDetail`) | W1, W6, W7 | E41, E46, E47 | `tests/components/procedures/useProcedureDetail.test.tsx` | hecha (11/11/2026) |
+| T28 | Tarjeta de la lista con título, versión, pasos y áreas como chips | W4 | E44 | `tests/components/procedures/ProcedureCard.test.tsx` | hecha (11/11/2026) |
+| T29 | Lista paginada desde la API, por rol; formulario solo para ADMIN; vacía, carga y error | W1, W2, W3, W8, W9 | E41, E42, E43, E48 | `tests/components/procedures/ProcedureList.test.tsx` | hecha (11/11/2026) |
+| T30 | Ficha de solo lectura y estado 404 | W5, W7 | E45, E47 | `tests/components/procedures/ProcedureReadView.test.tsx` | hecha (11/11/2026) |
+| T31 | Páginas `/procedimientos` y `/procedimientos/[id]` por rol | W2, W3, W5, W6 | E42, E43, E45 | `tests/app/procedimientos-pages.test.tsx` | hecha (11/11/2026) |
+| T32 | El editor del ADMIN lee de la API y se elimina la copia de `sessionStorage` (P25) | W1, W6 | E41, E46 | `ProcedureEditor.test.tsx` y los de `components/procedures/` | hecha (11/11/2026) |
+| T33 | Tarjeta "Procedimientos" en el inicio | W10 | E49 | `tests/components/home/HomeView.test.tsx` | hecha (11/11/2026) |
+
+- **Resultado (11/11/2026):** `pnpm --filter web lint`, `pnpm --filter web test` (149 archivos, 1646 tests) y `pnpm --filter web build` (con `API_URL=http://localhost:3000`) en verde; en la API, lint, test (144 suites, 2092 tests) y build en verde, sin cambios en la API.
+- **Verificación:** `pnpm --filter web lint`, `pnpm --filter web test` y `pnpm --filter web build` (con `API_URL=http://localhost:3000`) en verde. La prueba manual con login real la hace Micaela.
+- **Fuera de alcance:** el adaptador de `ProceduresCatalog` no llena los campos opcionales que Mayra dejó como `TODO(HU11)` (`title`, `versionNumber`, `description`); se coordina con ella en otro PR.
