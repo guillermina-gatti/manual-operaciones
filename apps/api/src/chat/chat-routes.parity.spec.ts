@@ -32,6 +32,8 @@ const TWO = [chunk({ chunkId: 'a' }), chunk({ chunkId: 'b', section: 'Plazos', c
 const CASES: Case[] = [
     { name: 'answered con [S2]', rows: TWO, steps: ['El plazo ', 'es de 5 días [S2].'] },
     { name: 'answered sin citas', rows: TWO, steps: ['Hay que pedir ', 'aprobación.'] },
+    // Spec 009 (ajuste del 12/11/2026): citas agrupadas y una que no existe.
+    { name: 'citas agrupadas y una inexistente', rows: TWO, steps: ['Hay que pedir aprobación ', '[S1, S2]. Ver también [S4].'] },
     { name: 'umbral', rows: [chunk({ distance: MAX_COSINE_DISTANCE + 0.1 })], steps: ['nunca'] },
     { name: 'NO_INFO', steps: ['NO_', 'INFO'] },
     { name: 'sin áreas', steps: ['nunca'], user: { id: 'user-1', areaIds: [] } },

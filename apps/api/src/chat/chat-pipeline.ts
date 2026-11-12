@@ -165,7 +165,7 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
         const { first, second, body } = marker;
         return {
             status: 'conflict',
-            answer: keepOnlyRefs(body, refsOf(marker, chunks)),
+            answer: keepOnlyRefs(splitGroupedCitations(body), refsOf(marker, chunks)),
             chunks: [first, second],
             conflict: { first, second },
             llm,
@@ -179,7 +179,9 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
     }
 
     // Sin ninguna cita válida, no hay respuesta que mostrar: no_info (pedido de Mati).
-    const cleaned = cleanCitations(text, chunks.length);
+    // Spec 009 (ajuste del 12/11/2026): las citas agrupadas ("[S1, S2]") se separan antes de validar; si
+    // no, quedaban como texto y la verificación de cifras tomaba el 1 y el 2 como datos sin respaldo.
+    const cleaned = cleanCitations(splitGroupedCitations(text), chunks.length);
     if (cleaned.refs.size === 0) {
         return { status: 'no_info', answer: NO_INFO_TEXT, chunks: [], llm, ...nearestOf(chunks) };
     }
@@ -202,6 +204,17 @@ export function finishChat(llm: LlmAnswer, chunks: RetrievedChunk[], logger?: Pi
 
 // Quita las citas que no corresponden a un fragmento recuperado (por ejemplo [S7] con 3 fragmentos),
 // para que el done traiga la respuesta limpia. Devuelve las citas válidas que quedan.
+// Spec 009 (ajuste del 12/11/2026): "[S1, S2]" o "[S1; S2]" pasan a "[S1] [S2]", así cada una se valida
+// sola (cleanCitations) y cuenta como fuente. "[S1][S2]" ya son dos citas. Solo dentro de corchetes y
+// con la S en cada una: "[1, 2]" o "[S1 y S2]" no se tocan.
+const GROUPED_CITATIONS = /\[\s*S\d+(?:\s*[,;]\s*S\d+)+\s*\]/g;
+
+export function splitGroupedCitations(text: string): string {
+    return text.replace(GROUPED_CITATIONS, (group) =>
+        [...group.matchAll(/S(\d+)/g)].map((m) => `[S${m[1]}]`).join(' '),
+    );
+}
+
 export function cleanCitations(text: string, count: number): { text: string; refs: Set<number> } {
     const refs = new Set<number>();
     const cleaned = text.replace(/\s*\[S(\d+)\]/g, (match, n: string) => {
