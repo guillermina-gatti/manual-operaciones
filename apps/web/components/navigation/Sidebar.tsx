@@ -137,6 +137,26 @@ function UsersIcon({ className = 'size-5' }: { className?: string }) {
   );
 }
 
+function InviteIcon({ className = 'size-5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
+      <line x1="20" y1="8" x2="20" y2="14" />
+      <line x1="23" y1="11" x2="17" y2="11" />
+    </svg>
+  );
+}
+
 function AssistantIcon({ className = 'size-5' }: { className?: string }) {
   return (
     <svg
@@ -209,9 +229,16 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
   {
     id: 'usuarios',
     label: 'Usuarios y roles',
+    href: '/usuarios',
+    roles: ['ADMIN', 'SUPERVISOR'],
+    icon: UsersIcon,
+  },
+  {
+    id: 'invitaciones',
+    label: 'Invitaciones',
     href: '/admin/invitaciones',
     roles: ['ADMIN'],
-    icon: UsersIcon,
+    icon: InviteIcon,
   },
   {
     id: 'asistente',
@@ -221,7 +248,7 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
   },
 ];
 
-function getInitials(name: string): string {
+export function getInitials(name: string): string {
   if (!name) return '?';
   const clean = name.trim().split(/\s+/);
   if (clean.length >= 2) {
@@ -230,7 +257,7 @@ function getInitials(name: string): string {
   return clean[0].slice(0, 2).toUpperCase();
 }
 
-function formatUserRole(user: SessionUser): string {
+export function formatUserRole(user: SessionUser): string {
   if (user.id === FIXTURE_USERS.empleadoVentas.id || user.name.toLowerCase().includes('elena')) {
     return 'Empleada · Ventas';
   }
@@ -315,7 +342,7 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
                     href={item.href}
                     onClick={onNavigate}
                     aria-current={active ? 'page' : undefined}
-                    aria-label={item.id === 'usuarios' ? 'Invitar usuario' : undefined}
+                    aria-label={item.id === 'invitaciones' ? 'Invitar usuario' : undefined}
                     className={`relative flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114] ${
                       active
                         ? 'bg-[#135040] font-semibold text-white'

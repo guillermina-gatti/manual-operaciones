@@ -8,6 +8,7 @@ import { FIXTURE_USERS } from '@/lib/directory/fixtures';
 import { REAL_AUTH_ENABLED } from '@/lib/session';
 import type { Role, SessionUser } from '@/lib/session';
 import { selectDevUser } from '@/lib/session/simulated-session';
+import { formatUserRole, getInitials } from './Sidebar';
 
 interface TopBarProps {
   user: SessionUser;
@@ -142,6 +143,9 @@ export function TopBar({ user, onOpenMobileMenu }: TopBarProps) {
     ROLE_SHORT_NAMES[user.role] ||
     user.name.split(' ')[0];
 
+  const initials = getInitials(user.name);
+  const roleDescription = formatUserRole(user);
+
   return (
     <header className="flex h-16 w-full items-center justify-between border-b border-[#E6E9E7]/60 bg-transparent px-4 sm:px-6">
       {/* Botón hamburguesa en móvil */}
@@ -161,7 +165,7 @@ export function TopBar({ user, onOpenMobileMenu }: TopBarProps) {
 
       <div className="hidden md:block" />
 
-      {/* Acciones superiores derechas: Ver como + Campana de Alertas */}
+      {/* Acciones superiores derechas: Ver como + Campana de Alertas + Perfil de usuario */}
       <div className="flex items-center gap-3">
         {!REAL_AUTH_ENABLED && (
           <div className="relative inline-flex items-center">
@@ -170,7 +174,7 @@ export function TopBar({ user, onOpenMobileMenu }: TopBarProps) {
             </label>
             <div className="flex items-center gap-2 rounded-xl border border-[#E6E9E7] bg-white px-3 py-1.5 text-sm font-medium text-[#1E2B27] shadow-xs">
               <SwapIcon className="size-4 text-[#646F6A]" />
-              <span className="text-[#646F6A]">Ver como:</span>
+              <span className="hidden sm:inline text-[#646F6A]">Ver como:</span>
               <select
                 id="top-dev-switcher"
                 value={user.id}
@@ -199,6 +203,34 @@ export function TopBar({ user, onOpenMobileMenu }: TopBarProps) {
             <BellIcon className="size-5" />
           </button>
         )}
+
+        {/* Perfil de usuario en la barra superior */}
+        <div
+          data-testid="topbar-user-profile"
+          aria-label={`Usuario: ${user.name}, Rol: ${roleDescription}`}
+          className="flex items-center gap-2.5 rounded-full border border-[#E6E9E7] bg-white py-1 pl-1 pr-3 shadow-xs select-none"
+        >
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E85114] text-xs font-bold text-white shadow-xs"
+          >
+            {initials}
+          </span>
+          <div className="flex flex-col text-left">
+            <span
+              className="max-w-[110px] sm:max-w-[170px] truncate text-xs sm:text-sm font-bold leading-tight text-[#1E2B27]"
+              title={user.name}
+            >
+              {user.name}
+            </span>
+            <span
+              className="max-w-[110px] sm:max-w-[170px] truncate text-[11px] leading-tight text-[#646F6A]"
+              title={roleDescription}
+            >
+              {roleDescription}
+            </span>
+          </div>
+        </div>
       </div>
     </header>
   );

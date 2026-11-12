@@ -22,7 +22,7 @@ describe('Sidebar (diseño v2)', () => {
   });
 
   describe('visibilidad de navegación por rol', () => {
-    test('un EMPLOYEE ve Inicio, Documentos, Ejecuciones y Asistente (no ve Procedimientos, Métricas ni Usuarios)', () => {
+    test('un EMPLOYEE ve Inicio, Documentos, Ejecuciones y Asistente (no ve Procedimientos, Métricas, Usuarios ni Invitaciones)', () => {
       const employee: SessionUser = { id: 'emp-1', name: 'Elena Díaz', role: 'EMPLOYEE' };
       render(<Sidebar user={employee} onLogout={onLogout} onNavigate={onNavigate} />);
 
@@ -34,9 +34,10 @@ describe('Sidebar (diseño v2)', () => {
       expect(screen.queryByRole('link', { name: 'Procedimientos' })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Métricas' })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Usuarios y roles' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Invitar usuario' })).not.toBeInTheDocument();
     });
 
-    test('un SUPERVISOR ve Procedimientos y Métricas pero no Usuarios y roles', () => {
+    test('un SUPERVISOR ve Procedimientos, Métricas y Usuarios y roles a cargo, pero no Invitaciones', () => {
       const supervisor: SessionUser = { id: 'sup-1', name: 'Sergio Ruiz', role: 'SUPERVISOR' };
       render(<Sidebar user={supervisor} onLogout={onLogout} onNavigate={onNavigate} />);
 
@@ -45,12 +46,13 @@ describe('Sidebar (diseño v2)', () => {
       expect(screen.getByRole('link', { name: 'Procedimientos' })).toHaveAttribute('href', '/procedimientos');
       expect(screen.getByRole('link', { name: 'Ejecuciones' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Métricas' })).toHaveAttribute('href', '/metricas');
+      expect(screen.getByRole('link', { name: 'Usuarios y roles' })).toHaveAttribute('href', '/usuarios');
       expect(screen.getByRole('link', { name: 'Asistente' })).toBeInTheDocument();
 
-      expect(screen.queryByRole('link', { name: 'Usuarios y roles' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Invitar usuario' })).not.toBeInTheDocument();
     });
 
-    test('un ADMIN ve todos los módulos incluyendo Usuarios y roles', () => {
+    test('un ADMIN ve todos los módulos incluyendo Usuarios y roles e Invitaciones', () => {
       const admin: SessionUser = { id: 'adm-1', name: 'Ana López', role: 'ADMIN' };
       render(<Sidebar user={admin} onLogout={onLogout} onNavigate={onNavigate} />);
 
@@ -59,7 +61,8 @@ describe('Sidebar (diseño v2)', () => {
       expect(screen.getByRole('link', { name: 'Procedimientos' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Ejecuciones' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Métricas' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /Invitar usuario|Usuarios y roles/ })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Usuarios y roles' })).toHaveAttribute('href', '/usuarios');
+      expect(screen.getByRole('link', { name: 'Invitar usuario' })).toHaveAttribute(
         'href',
         '/admin/invitaciones',
       );
