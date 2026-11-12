@@ -39,7 +39,8 @@ jobs:
       - name: Build Web
         run: pnpm --filter web build
         env:
-          API_URL: http://localhost:3000
+          # Host reservado: valida el contrato productivo sin conexión externa.
+          API_URL: https://api.example.invalid
 
   api-e2e:
     name: API E2E (PostgreSQL + Redis)
