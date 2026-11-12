@@ -131,7 +131,7 @@ describe('Integración de autenticación real y autorización en frontend (A-10b
 
       const user = userEvent.setup();
       await user.type(screen.getByLabelText(/correo electrónico/i), 'ana@empresa.com');
-      await user.type(screen.getByLabelText(/contraseña/i), 'password123');
+      await user.type(screen.getByLabelText('Contraseña'), 'password123');
       await user.click(screen.getByRole('button', { name: /iniciar sesión/i }));
 
       // Verifica que el login redirige a la ruta original contenida en returnTo
