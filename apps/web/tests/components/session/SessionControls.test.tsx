@@ -41,7 +41,8 @@ beforeEach(() => {
 describe('A-09: estado de sesión en encabezado', () => {
   test('muestra nombre del usuario real y permite cerrar sesión', () => {
     render(<SessionControls />);
-    expect(screen.getByText(/Ada Lovelace/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Ada Lovelace/)[0]).toBeInTheDocument();
+    expect(screen.getByTestId('topbar-user-profile')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeInTheDocument();
   });
 

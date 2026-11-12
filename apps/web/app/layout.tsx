@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import '@fontsource/plus-jakarta-sans/400.css';
 import '@fontsource/plus-jakarta-sans/500.css';
 import '@fontsource/plus-jakarta-sans/600.css';
@@ -25,8 +26,9 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
     <html lang="es" className="h-full antialiased">
       <body className="h-dvh flex flex-col">
         <SessionProvider>
-          <SessionControls />
-          {children}
+          <Suspense fallback={<div className="flex h-dvh w-full overflow-hidden bg-[#F6F7F6] text-[#1E2B27]">{children}</div>}>
+            <SessionControls>{children}</SessionControls>
+          </Suspense>
           {DevSessionSwitcher && <DevSessionSwitcher />}
         </SessionProvider>
       </body>
