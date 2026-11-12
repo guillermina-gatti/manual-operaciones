@@ -25,12 +25,12 @@ export function ChatSources({ sources, title }: { sources: ChatSource[]; title?:
         <li key={source.chunkId}>
           <Link
             href={`/documentos/${source.documentId}`}
-            className="flex min-h-14 max-w-full items-center gap-3 rounded-xl border border-bosque/70 bg-[#fff6d9] px-3 py-2.5 text-bosque transition-colors hover:bg-[#f2c94c]/30"
+            className="flex min-h-14 max-w-full flex-wrap items-center gap-3 rounded-xl border border-bosque/70 bg-[#fff6d9] px-3 py-2.5 text-bosque transition-colors hover:bg-[#f2c94c]/30"
           >
             <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f2c94c] text-bosque">
               <DocumentIcon />
             </span>
-            <span className="flex min-w-0 flex-1 flex-col break-words">
+            <span className="flex min-w-0 flex-1 basis-40 flex-col break-words">
               <span aria-hidden="true" className="text-[0.7rem] font-extrabold uppercase tracking-wider text-texto-suave">
                 Fuente
               </span>
