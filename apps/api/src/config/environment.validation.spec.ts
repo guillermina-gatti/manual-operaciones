@@ -221,4 +221,22 @@ describe('validateEnvironment', () => {
       }),
     ).not.toThrow();
   });
+
+  it.each(['true', '1', 'proxy.internal', '10.0.0.0/33', '10.0.0.1,,10.0.0.2'])(
+    'rechaza HTTP_TRUSTED_PROXIES=%s',
+    (trustedProxies) => {
+      expect(() =>
+        validateEnvironment({
+          NODE_ENV: 'development',
+          HTTP_TRUSTED_PROXIES: trustedProxies,
+        }),
+      ).toThrow(/HTTP_TRUSTED_PROXIES/);
+    },
+  );
+
+  it.each(['TRUE', '1', 'yes'])('rechaza SWAGGER_ENABLED=%s', (value) => {
+    expect(() =>
+      validateEnvironment({ NODE_ENV: 'development', SWAGGER_ENABLED: value }),
+    ).toThrow(/SWAGGER_ENABLED/);
+  });
 });
