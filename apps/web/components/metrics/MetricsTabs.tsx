@@ -15,10 +15,12 @@ interface MetricsTabsProps {
   section: MetricsSection;
   // The address of each tab, with the filters of the address.
   hrefFor: (section: MetricsSection) => string;
+  // On the right of the tabs, on their line ("Exportar CSV"); below them on a phone.
+  actions?: ReactNode;
   children: ReactNode;
 }
 
-export function MetricsTabs({ section, hrefFor, children }: MetricsTabsProps) {
+export function MetricsTabs({ section, hrefFor, actions, children }: MetricsTabsProps) {
   const id = useId();
   const router = useRouter();
   const tabs = useRef<(HTMLAnchorElement | null)[]>([]);
@@ -50,35 +52,38 @@ export function MetricsTabs({ section, hrefFor, children }: MetricsTabsProps) {
 
   return (
     <div className="flex flex-col gap-8">
-      <div
-        role="tablist"
-        aria-label="Secciones de las métricas"
-        onKeyDown={onKeyDown}
-        className={`${TABS_FRAME} grid grid-cols-2 gap-1 self-stretch rounded-2xl p-1 sm:inline-grid sm:self-start`}
-      >
-        {METRICS_SECTIONS.map((tab, index) => {
-          const selected = tab.id === section;
-          return (
-            <Link
-              key={tab.id}
-              ref={(element) => {
-                tabs.current[index] = element;
-              }}
-              id={tabId(tab.id)}
-              href={hrefFor(tab.id)}
-              scroll={false}
-              role="tab"
-              aria-selected={selected}
-              aria-controls={selected ? panelId : undefined}
-              tabIndex={selected ? 0 : -1}
-              className={`flex min-h-[46px] items-center justify-center rounded-xl px-4 text-center text-sm leading-tight font-bold transition-colors focus-visible:outline-naranja motion-reduce:transition-none sm:px-6 sm:text-base ${
-                selected ? 'bg-bosque text-blanco' : 'text-texto hover:bg-salvia'
-              }`}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div
+          role="tablist"
+          aria-label="Secciones de las métricas"
+          onKeyDown={onKeyDown}
+          className={`${TABS_FRAME} grid grid-cols-2 gap-1 self-stretch rounded-2xl p-1 sm:inline-grid sm:self-start`}
+        >
+          {METRICS_SECTIONS.map((tab, index) => {
+            const selected = tab.id === section;
+            return (
+              <Link
+                key={tab.id}
+                ref={(element) => {
+                  tabs.current[index] = element;
+                }}
+                id={tabId(tab.id)}
+                href={hrefFor(tab.id)}
+                scroll={false}
+                role="tab"
+                aria-selected={selected}
+                aria-controls={selected ? panelId : undefined}
+                tabIndex={selected ? 0 : -1}
+                className={`flex min-h-[46px] items-center justify-center rounded-xl px-4 text-center text-sm leading-tight font-bold transition-colors focus-visible:outline-naranja motion-reduce:transition-none sm:px-6 sm:text-base ${
+                  selected ? 'bg-bosque text-blanco' : 'text-texto hover:bg-salvia'
+                }`}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </div>
+        {actions}
       </div>
       <div
         role="tabpanel"

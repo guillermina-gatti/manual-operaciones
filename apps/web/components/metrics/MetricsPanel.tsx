@@ -28,11 +28,16 @@ import { useSession } from '@/lib/session';
 import { MetricsFiltersForm } from './MetricsFiltersForm';
 import { AreaMetricsSection } from './AreaMetricsSection';
 import { MetricsTabs } from './MetricsTabs';
+import { ExportCsvButton } from './ExportCsvButton';
+import type { ExportState } from './ExportCsvButton';
 import { SectionHeading } from './SectionHeading';
 import { MetricsSummary } from './MetricsSummary';
 import type { PreviousTotals } from './MetricsSummary';
 import { ProcedureTimeTable } from './ProcedureTimeTable';
-import { TeamCMetrics } from './TeamCMetrics';
+import { TeamCMetrics, useTeamCMetrics } from './TeamCMetrics';
+import type { TeamCResources } from './TeamCMetrics';
+import { csvFileName, documentsAndAssistantCsv, proceduresCsv } from '@/lib/metrics/csv';
+import type { MetricsSection } from '@/lib/metrics/section';
 
 // A white card for the states of the section (error, empty), with the design's padding.
 const STATE_CARD = `${CARD} px-6 sm:px-8`;
@@ -74,6 +79,13 @@ export function MetricsPanel() {
   // Without the area names the panel still works: the selector offers only "Todas".
   const areaList = areas.status === 'success' ? areas.data : [];
   const isAdmin = user?.role === 'ADMIN';
+  // The metrics of the second tab, only while it is open.
+  const teamC = useTeamCMetrics(filters, section === 'documentos' ? (user?.id ?? null) : null);
+  const exportState = exportStateFor(section, filters, panelAreaName(filters, areaList, isAdmin), {
+    metrics,
+    areas: areaList,
+    teamC,
+  });
   // The procedures per area come from the API's summary, which ignores the area filter: the
   // selector shows them also with an area chosen. A procedure with two areas counts in each.
   const counts =
@@ -102,6 +114,7 @@ export function MetricsPanel() {
       <MetricsTabs
         section={section}
         hrefFor={(tab) => withMetricsSection(metricsHref(filters), tab)}
+        actions={<ExportCsvButton state={exportState} />}
       >
         {section === 'procedimientos' ? (
           <>
@@ -125,7 +138,7 @@ export function MetricsPanel() {
         ) : (
           <TeamCMetrics
             filters={filters}
-            userId={user?.id ?? null}
+            resources={teamC}
             keepParams={keepSection}
             isAdmin={isAdmin}
           />
@@ -133,6 +146,64 @@ export function MetricsPanel() {
       </MetricsTabs>
     </div>
   );
+}
+
+// "Todas las áreas", "Todas mis áreas" or the name of the area of the filter.
+function panelAreaName(filters: PanelFilters, areas: Area[], isAdmin: boolean): string {
+  if (!filters.areaId) return isAdmin ? 'Todas las áreas' : 'Todas mis áreas';
+  const chosen = areas.find((area) => area.id === filters.areaId);
+  return chosen ? displayAreaName(chosen) : 'Área elegida';
+}
+
+// What "Exportar CSV" can do in the open tab: the file of what it shows, with the filters, or why
+// there is nothing to export yet.
+function exportStateFor(
+  section: MetricsSection,
+  filters: PanelFilters,
+  areaName: string,
+  {
+    metrics,
+    areas,
+    teamC,
+  }: {
+    metrics: ApiResource<ProceduresMetricsResponse>;
+    areas: Area[];
+    teamC: TeamCResources;
+  },
+): ExportState {
+  const loading = { status: 'unavailable', reason: 'Esperá a que carguen los datos.' } as const;
+  const empty = { status: 'unavailable', reason: 'No hay datos para exportar con estos filtros.' } as const;
+  const failed = {
+    status: 'unavailable',
+    reason: 'No se pudieron cargar los datos para exportar.',
+  } as const;
+  const context = () => ({ area: areaName, from: filters.from, to: filters.to, exportedAt: new Date() });
+  const fileName = csvFileName(section, filters.from, filters.to);
+
+  if (section === 'procedimientos') {
+    if (metrics.status === 'error') return failed;
+    if (metrics.status !== 'success') return loading;
+    if (metrics.data.procedures.length === 0) return empty;
+    const data = metrics.data;
+    const names = new Map(areas.map((area) => [area.id, displayAreaName(area)]));
+    return { status: 'ready', fileName, build: () => proceduresCsv(data, names, context()) };
+  }
+
+  const { documents, assistant } = teamC;
+  const pending = [documents, assistant].some(
+    (resource) => resource.status === 'loading' || resource.status === 'idle',
+  );
+  if (pending) return loading;
+  const documentsData = documents.status === 'success' ? documents.data : null;
+  const assistantData = assistant.status === 'success' ? assistant.data : null;
+  if (!documentsData && !assistantData) {
+    return documents.status === 'error' && assistant.status === 'error' ? failed : empty;
+  }
+  return {
+    status: 'ready',
+    fileName,
+    build: () => documentsAndAssistantCsv(documentsData, assistantData, context()),
+  };
 }
 
 interface ProceduresSectionProps {
@@ -153,14 +224,7 @@ function ProceduresSection({
   keepSection,
 }: ProceduresSectionProps) {
   const headingId = useId();
-  const chosen = areas.find((area) => area.id === filters.areaId);
-  const areaName = filters.areaId
-    ? chosen
-      ? displayAreaName(chosen)
-      : 'Área elegida'
-    : isAdmin
-      ? 'Todas las áreas'
-      : 'Todas mis áreas';
+  const areaName = panelAreaName(filters, areas, isAdmin);
 
   // With the numbers, the panel carries its own heading ("Resumen general · Todas las áreas").
   if (state.status === 'success') {

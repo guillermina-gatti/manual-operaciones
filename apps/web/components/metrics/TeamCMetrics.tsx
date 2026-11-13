@@ -4,8 +4,9 @@
 // the filters of the panel. Under the document tiles, the lists of the ones due soon and overdue,
 // from the "Por revisar" list of the API (read only).
 import { listPendingReview, metricsQuery, useApiResource } from '@/lib/api';
-import type { DocumentSummary } from '@/lib/api';
+import type { ApiResource, DocumentSummary } from '@/lib/api';
 import { teamCMetrics } from '@/lib/metrics';
+import type { AssistantMetrics, DocumentMetrics } from '@/lib/metrics';
 import { todayInCompany } from '@/lib/metrics/filters';
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { AssistantMetricsCard } from './AssistantMetricsCard';
@@ -26,17 +27,16 @@ export async function allPendingReview(signal: AbortSignal): Promise<DocumentSum
   return documents;
 }
 
-interface TeamCMetricsProps {
-  filters: PanelFilters;
-  // Without a session nothing is asked for. Part of the key: switching users asks again.
-  userId: string | null;
-  // What the page adds to "Ver todas mis áreas" (the tab of /metricas).
-  keepParams?: (href: string) => string;
-  // An ADMIN gets every document to review; anyone else, only the ones they are responsible for.
-  isAdmin?: boolean;
+export interface TeamCResources {
+  assistant: ApiResource<AssistantMetrics>;
+  documents: ApiResource<DocumentMetrics | null>;
+  toReview: ApiResource<DocumentSummary[]>;
 }
 
-export function TeamCMetrics({ filters, userId, keepParams, isAdmin = false }: TeamCMetricsProps) {
+// The requests of the tab, asked by the panel so "Exportar CSV" can use the same answers. Without a
+// user (or with the tab closed: null) nothing is asked for. The user is part of the key: switching
+// users asks again.
+export function useTeamCMetrics(filters: PanelFilters, userId: string | null): TeamCResources {
   const query = metricsQuery(filters);
   const assistant = useApiResource(
     userId ? `team-c-assistant:${userId}${query}` : null,
@@ -48,6 +48,24 @@ export function TeamCMetrics({ filters, userId, keepParams, isAdmin = false }: T
   );
   // Today's state, whatever the dates: the area is applied by the lists.
   const toReview = useApiResource(userId ? `metrics-review:${userId}` : null, allPendingReview);
+  return { assistant, documents, toReview };
+}
+
+interface TeamCMetricsProps {
+  filters: PanelFilters;
+  resources: TeamCResources;
+  // What the page adds to "Ver todas mis áreas" (the tab of /metricas).
+  keepParams?: (href: string) => string;
+  // An ADMIN gets every document to review; anyone else, only the ones they are responsible for.
+  isAdmin?: boolean;
+}
+
+export function TeamCMetrics({
+  filters,
+  resources: { assistant, documents, toReview },
+  keepParams,
+  isAdmin = false,
+}: TeamCMetricsProps) {
 
   // The tab "Documentos y asistente" names the panel: each part carries its own title.
   return (

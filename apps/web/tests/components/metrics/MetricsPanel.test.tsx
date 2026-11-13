@@ -1302,3 +1302,106 @@ describe('the documents to review', () => {
     expect(mocks.listPendingReview).not.toHaveBeenCalled();
   });
 });
+
+describe('Exportar CSV', () => {
+  const exportButton = () => screen.getByRole('button', { name: 'Exportar CSV' });
+
+  // The file the browser would download: its name and its text.
+  function catchDownload() {
+    const files: { name: string; blob: Blob }[] = [];
+    let last: Blob | null = null;
+    const original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+    URL.createObjectURL = (blob: Blob) => {
+      last = blob;
+      return 'blob:metricas';
+    };
+    URL.revokeObjectURL = () => {};
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        files.push({ name: this.download, blob: last! });
+      });
+    return {
+      files,
+      restore() {
+        click.mockRestore();
+        URL.createObjectURL = original.create;
+        URL.revokeObjectURL = original.revoke;
+      },
+    };
+  }
+
+  test('next to the tabs, disabled with its reason while the numbers load', async () => {
+    mocks.getProcedureMetrics.mockReturnValue(new Promise(() => {}));
+    render(<MetricsPanel />);
+
+    const tablist = screen.getByRole('tablist');
+    expect(tablist.parentElement).toContainElement(exportButton());
+    expect(exportButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(exportButton()).toHaveAccessibleDescription('Esperá a que carguen los datos.');
+  });
+
+  test('without executions there is nothing to export', async () => {
+    mocks.getProcedureMetrics.mockResolvedValue(EMPTY_METRICS);
+    render(<MetricsPanel />);
+
+    await waitFor(() =>
+      expect(exportButton()).toHaveAccessibleDescription(
+        'No hay datos para exportar con estos filtros.',
+      ),
+    );
+  });
+
+  test('procedures: one row per procedure, with the filters in the name and the context', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-14&hasta=2026-10-27`);
+    const download = catchDownload();
+    try {
+      render(<MetricsPanel />);
+      await procedureCard();
+      await waitFor(() => expect(exportButton()).not.toHaveAttribute('aria-disabled'));
+
+      await user.click(exportButton());
+      expect(download.files).toHaveLength(1);
+      const [file] = download.files;
+      expect(file.name).toBe('metricas-procedimientos_2026-10-14_2026-10-27.csv');
+      // UTF-8 with its BOM (Blob.text() drops it when decoding).
+      const bytes = new Uint8Array(await file.blob.arrayBuffer());
+      expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+      const text = await file.blob.text();
+      expect(text.replace(/^\uFEFF/, '').split('\r\n').slice(0, 3)).toEqual([
+        'Área;Ventas',
+        'Desde;2026-10-14',
+        'Hasta;2026-10-27',
+      ]);
+      expect(text).toContain('procedimiento;area;ejecuciones');
+      expect(text).toContain('Cierre de caja;Ventas;');
+      expect(await screen.findByText('Archivo descargado')).toBeInTheDocument();
+    } finally {
+      download.restore();
+    }
+  });
+
+  test('documents and assistant: the counts and the numbers of the assistant', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
+    const download = catchDownload();
+    try {
+      render(<MetricsPanel />);
+      await screen.findByRole('region', { name: 'Asistente' });
+      await waitFor(() => expect(exportButton()).not.toHaveAttribute('aria-disabled'));
+
+      await user.click(exportButton());
+      const [file] = download.files;
+      expect(file.name).toBe('metricas-documentos-y-asistente_2026-10-01_2026-10-27.csv');
+      const text = await file.blob.text();
+      expect(text).toContain('Documentos;Activos;12;');
+      expect(text).toContain('Asistente;Preguntas;9;');
+      // The documents and the assistant were asked for once: the button uses the same answers.
+      expect(mocks.getDocuments).toHaveBeenCalledTimes(1);
+      expect(mocks.getAssistant).toHaveBeenCalledTimes(1);
+    } finally {
+      download.restore();
+    }
+  });
+});
