@@ -87,6 +87,8 @@ export function MyActivityPanel() {
       <SummarySection filters={filters} state={metrics} keepView={keepView} />
       {metrics.status === 'success' && metrics.data.procedures.length > 0 && (
         <RecentProceduresTable
+          // Other filters start the order of the table again.
+          key={metricsHref(filters, MY_ACTIVITY_PATH)}
           procedures={metrics.data.procedures}
           staleAfterHours={metrics.data.staleAfterHours}
           areas={

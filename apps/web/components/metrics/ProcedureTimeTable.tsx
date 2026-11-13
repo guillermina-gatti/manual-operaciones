@@ -1,5 +1,6 @@
 // "Tiempo por procedimiento": how long a complete execution takes, from start to end, slowest
-// first, with the fastest and the slowest completed execution of each procedure.
+// first, with the fastest and the slowest completed execution of each procedure. Every column but
+// the slowest step sorts (components/executions/TableSort.tsx); on the phone, a selector does it.
 //
 // The table of "Tus procedimientos recientes" (Mi actividad), with its frame, head and cells
 // (activity-design.ts). From lg, fixed columns: name | completed 130 | average 190 | fastest 120 |
@@ -9,6 +10,7 @@
 // words only the card needs are hidden from lg.
 import { useId } from 'react';
 import { AreaChips } from '@/components/documents/design';
+import { SortSelect, SortableHeader, useTableSort } from '@/components/executions/TableSort';
 import {
   DONE_FILL,
   DONE_TRACK,
@@ -21,6 +23,7 @@ import {
   TABLE_TH,
 } from '@/components/executions/activity-design';
 import type { DocumentReference, ProcedureMetricsResponse } from '@/lib/api';
+import type { SortColumn } from '@/lib/executions/table-sort';
 import { formatDuration } from '@/lib/executions/format';
 import { formatCount } from '@/lib/metrics/format';
 import { metricsProcedureName } from '@/lib/metrics/procedure-name';
@@ -38,9 +41,31 @@ interface ProcedureTimeTableProps {
 // The slowest row's bar is naranja (an indicator, never text); the others, the green of completed.
 const SLOWEST_FILL = 'bg-naranja';
 
+type TimeColumn = 'procedure' | 'completed' | 'average' | 'fastest' | 'slowest';
+
+const nameOf = (row: ProcedureTimeRow) => metricsProcedureName(row.procedureId, row.title);
+
+// By their values: the name, the count and the times in milliseconds.
+const COLUMNS: readonly SortColumn<ProcedureTimeRow, TimeColumn>[] = [
+  { key: 'procedure', label: 'Procedimiento', value: nameOf, first: 'ascending' },
+  { key: 'completed', label: 'Completadas', value: (row) => row.completed, first: 'descending' },
+  {
+    key: 'average',
+    label: 'Tiempo medio total',
+    value: (row) => row.avgCompletionMs,
+    first: 'descending',
+  },
+  { key: 'fastest', label: 'Más rápida', value: (row) => row.minCompletionMs, first: 'descending' },
+  { key: 'slowest', label: 'Más lenta', value: (row) => row.maxCompletionMs, first: 'descending' },
+];
+
 export function ProcedureTimeTable({ procedures, areas }: ProcedureTimeTableProps) {
   const headingId = useId();
-  const rows = procedureTimeRows(procedures);
+  // The default order: slowest average first.
+  const byAverage = procedureTimeRows(procedures);
+  const { rows, sort, toggle, setSort } = useTableSort(byAverage, COLUMNS, nameOf);
+  // The slowest procedure keeps its orange bar in any order.
+  const slowestId = byAverage[0]?.avgCompletionMs != null ? byAverage[0].procedureId : null;
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
@@ -48,9 +73,19 @@ export function ProcedureTimeTable({ procedures, areas }: ProcedureTimeTableProp
         <SectionHeading id={headingId}>Tiempo por procedimiento</SectionHeading>
         <p className="text-texto-suave">
           Cuánto tarda una ejecución completa, de inicio a fin. Ordenado de mayor a menor tiempo
-          medio.
+          medio<span className="max-lg:hidden">; tocá un encabezado para ordenar por esa columna</span>
+          .
         </p>
       </div>
+
+      {byAverage.length > 1 && (
+        <SortSelect
+          columns={COLUMNS}
+          defaultLabel="Mayor tiempo medio primero (por defecto)"
+          sort={sort}
+          onChange={setSort}
+        />
+      )}
 
       <div className={`${TABLE_FRAME} overflow-hidden`}>
         {rows.length === 0 ? (
@@ -70,33 +105,25 @@ export function ProcedureTimeTable({ procedures, areas }: ProcedureTimeTableProp
             </colgroup>
             <thead className={`${TABLE_HEAD} max-lg:hidden`}>
               <tr>
-                <th scope="col" className={TABLE_TH}>
-                  Procedimiento
-                </th>
-                <th scope="col" className={TABLE_TH}>
-                  Completadas
-                </th>
-                <th scope="col" className={TABLE_TH}>
-                  Tiempo medio total
-                </th>
-                <th scope="col" className={TABLE_TH}>
-                  Más rápida
-                </th>
-                <th scope="col" className={TABLE_TH}>
-                  Más lenta
-                </th>
+                {COLUMNS.map((column) => (
+                  <SortableHeader
+                    key={column.key}
+                    column={column}
+                    sort={sort}
+                    onToggle={toggle}
+                  />
+                ))}
                 <th scope="col" className={TABLE_TH}>
                   Paso que más tarda
                 </th>
               </tr>
             </thead>
             <tbody className="max-lg:block">
-              {rows.map((row, index) => (
+              {rows.map((row) => (
                 <TimeRow
                   key={row.procedureId}
                   row={row}
-                  // Slowest first: the first row with a time is the slowest one.
-                  slowest={index === 0 && row.avgCompletionMs !== null}
+                  slowest={row.procedureId === slowestId}
                   areas={row.areaIds.flatMap((id) => areas.get(id) ?? [])}
                 />
               ))}

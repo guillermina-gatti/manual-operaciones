@@ -114,7 +114,12 @@ export function MetricsPanel() {
               keepSection={keepSection}
             />
             {metrics.status === 'success' && metrics.data.totals.started > 0 && (
-              <ProcedureDetails metrics={metrics.data} areas={areaList} areaId={filters.areaId} />
+              <ProcedureDetails
+                metrics={metrics.data}
+                areas={areaList}
+                areaId={filters.areaId}
+                filtersKey={metricsHref(filters)}
+              />
             )}
           </>
         ) : (
@@ -212,10 +217,13 @@ function ProcedureDetails({
   metrics,
   areas,
   areaId,
+  filtersKey,
 }: {
   metrics: ProceduresMetricsResponse;
   areas: Area[];
   areaId: string | null;
+  // The order of the time table starts again with other filters.
+  filtersKey: string;
 }) {
   // The chips say "(inactiva)" themselves; an area the directory does not send is taken as active.
   const areaRefs = new Map(
@@ -223,7 +231,7 @@ function ProcedureDetails({
   );
   return (
     <>
-      <ProcedureTimeTable procedures={metrics.procedures} areas={areaRefs} />
+      <ProcedureTimeTable key={filtersKey} procedures={metrics.procedures} areas={areaRefs} />
       <AreaMetricsSection
         procedures={metrics.procedures}
         areas={areas}

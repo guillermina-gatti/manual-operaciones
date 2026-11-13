@@ -1,5 +1,6 @@
 // "Tus procedimientos recientes": each procedure the employee started in the period, the most
-// recently started first (the order of the API). Their counts, their average time and the step
+// recently started first (the order of the API). Every column but the slowest step sorts
+// (TableSort.tsx), the last time too; on the phone, a selector does it. Their counts, their average time and the step
 // that takes them longest in the latest version they ran. Only their executions.
 //
 // One table, rearranged (DESIGN.md 6.3): from lg, fixed columns (name | started 96 | completed 150 |
@@ -10,6 +11,7 @@
 import { useId } from 'react';
 import { AreaChips } from '@/components/documents/design';
 import type { DocumentReference, MyProcedureMetrics } from '@/lib/api';
+import type { SortColumn } from '@/lib/executions/table-sort';
 import { formatDuration } from '@/lib/executions/format';
 import { lastActivityParts, shareOf } from '@/lib/executions/my-activity';
 import { formatCount } from '@/lib/metrics/format';
@@ -25,6 +27,7 @@ import {
   TABLE_TD,
   TABLE_TH,
 } from './activity-design';
+import { SortSelect, SortableHeader, useTableSort } from './TableSort';
 
 interface RecentProceduresTableProps {
   procedures: MyProcedureMetrics[];
@@ -33,6 +36,31 @@ interface RecentProceduresTableProps {
   areas: ReadonlyMap<string, DocumentReference>;
 }
 
+type RecentColumn = 'procedure' | 'started' | 'completed' | 'stale' | 'average' | 'last';
+
+const nameOf = (procedure: MyProcedureMetrics) =>
+  metricsProcedureName(procedure.procedureId, procedure.title);
+
+// By their values: the name, the counts, the time in milliseconds and the last start as a moment.
+function recentColumns(staleShort: string): SortColumn<MyProcedureMetrics, RecentColumn>[] {
+  return [
+    { key: 'procedure', label: 'Procedimiento', value: nameOf, first: 'ascending' },
+    { key: 'started', label: 'Empezadas', value: (p) => p.started, first: 'descending' },
+    { key: 'completed', label: 'Completadas', value: (p) => p.completed, first: 'descending' },
+    { key: 'stale', label: staleShort, value: (p) => p.abandoned, first: 'descending' },
+    { key: 'average', label: 'Tiempo medio', value: (p) => p.avgCompletionMs, first: 'descending' },
+    {
+      key: 'last',
+      label: 'Última vez',
+      value: (p) => {
+        const time = Date.parse(p.lastStartedAt);
+        return Number.isNaN(time) ? null : time;
+      },
+      first: 'descending',
+      words: { descending: 'más reciente primero', ascending: 'más vieja primero' },
+    },
+  ];
+}
 
 export function RecentProceduresTable({
   procedures,
@@ -42,6 +70,10 @@ export function RecentProceduresTable({
   const headingId = useId();
   const staleName = `Sin avanzar hace más de ${staleAfterHours} horas`;
   const staleShort = `Sin avanzar +${staleAfterHours} h`;
+  const columns = recentColumns(staleShort);
+  const [procedureColumn, startedColumn, completedColumn, staleColumn, averageColumn, lastColumn] =
+    columns;
+  const { rows, sort, toggle, setSort } = useTableSort(procedures, columns, nameOf);
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -49,9 +81,19 @@ export function RecentProceduresTable({
           Tus procedimientos recientes
         </h2>
         <p className="text-texto-suave">
-          Los que empezaste en el período, del más reciente al más viejo.
+          Los que empezaste en el período, del más reciente al más viejo
+          <span className="max-lg:hidden">; tocá un encabezado para ordenar por esa columna</span>.
         </p>
       </div>
+
+      {procedures.length > 1 && (
+        <SortSelect
+          columns={columns}
+          defaultLabel="Más reciente primero (por defecto)"
+          sort={sort}
+          onChange={setSort}
+        />
+      )}
 
       <div className={`${TABLE_FRAME} overflow-hidden`}>
         <table className="w-full border-collapse text-texto max-lg:block lg:table-fixed">
@@ -67,32 +109,22 @@ export function RecentProceduresTable({
           </colgroup>
           <thead className={`${TABLE_HEAD} max-lg:hidden`}>
             <tr>
-              <th scope="col" className={TABLE_TH}>
-                Procedimiento
-              </th>
-              <th scope="col" className={TABLE_TH}>
-                Empezadas
-              </th>
-              <th scope="col" className={TABLE_TH}>
-                Completadas
-              </th>
-              <th scope="col" className={TABLE_TH}>
+              <SortableHeader column={procedureColumn} sort={sort} onToggle={toggle} />
+              <SortableHeader column={startedColumn} sort={sort} onToggle={toggle} />
+              <SortableHeader column={completedColumn} sort={sort} onToggle={toggle} />
+              <SortableHeader column={staleColumn} sort={sort} onToggle={toggle}>
                 <span aria-hidden="true">{staleShort}</span>
                 <span className="sr-only">{staleName}</span>
-              </th>
-              <th scope="col" className={TABLE_TH}>
-                Tiempo medio
-              </th>
+              </SortableHeader>
+              <SortableHeader column={averageColumn} sort={sort} onToggle={toggle} />
               <th scope="col" className={TABLE_TH}>
                 Paso que más te lleva
               </th>
-              <th scope="col" className={TABLE_TH}>
-                Última vez
-              </th>
+              <SortableHeader column={lastColumn} sort={sort} onToggle={toggle} />
             </tr>
           </thead>
           <tbody className="max-lg:block">
-            {procedures.map((procedure) => (
+            {rows.map((procedure) => (
               <ProcedureRow
                 key={procedure.procedureId}
                 procedure={procedure}

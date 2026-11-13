@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
 import { ProcedureTimeTable } from '@/components/metrics/ProcedureTimeTable';
 import { DATA_CELL } from '@/components/metrics/metrics-design';
@@ -205,5 +206,195 @@ describe('the card on the phone', () => {
       'Más lenta',
       'Paso que más tarda',
     ]);
+  });
+});
+
+describe('sorting by column', () => {
+  const [base] = metricsResponse().procedures;
+  const make = (
+    n: number,
+    title: string,
+    completed: number,
+    avg: number | null,
+    min: number | null,
+    max: number | null,
+  ): ProcedureMetricsResponse => ({
+    ...base,
+    procedureId: `1a000000-0000-4000-8000-00000000009${n}`,
+    title,
+    completed,
+    avgCompletionMs: avg,
+    minCompletionMs: min,
+    maxCompletionMs: max,
+  });
+  // Recepción takes hours, Apertura seconds: as text "8 s" would go before "11 h 54 min".
+  const PROCEDURES = [
+    make(1, 'Cierre de caja', 12, 1_140_000, 720_000, 1_680_000),
+    make(2, 'Recepción de mercadería', 7, 42_840_000, 1_800_000, 80_000_000),
+    make(3, 'Inventario mensual', 0, null, null, null),
+    make(4, 'Apertura del local', 8, 8_000, 5_000, 12_000),
+    make(5, 'Devolución', 3, 1_140_000, 600_000, 1_200_000),
+  ];
+  const order = () =>
+    within(table())
+      .getAllByRole('rowheader')
+      .map((header) => header.querySelector('span')!.textContent);
+  const header = (name: string) => within(table()).getByRole('columnheader', { name: new RegExp(`^${name}`) });
+  const button = (name: string) => within(header(name)).getByRole('button');
+  const DEFAULT = [
+    'Recepción de mercadería',
+    'Cierre de caja',
+    'Devolución',
+    'Apertura del local',
+    'Inventario mensual',
+  ];
+
+  test('by default, the slowest average first; every header but the slowest step sorts', () => {
+    renderTable(PROCEDURES);
+
+    expect(order()).toEqual(DEFAULT);
+    for (const name of ['Procedimiento', 'Completadas', 'Tiempo medio total', 'Más rápida', 'Más lenta']) {
+      expect(header(name)).toHaveAttribute('aria-sort', 'none');
+      expect(button(name)).toBeInTheDocument();
+    }
+    expect(within(header('Paso que más tarda')).queryByRole('button')).not.toBeInTheDocument();
+    expect(header('Paso que más tarda')).not.toHaveAttribute('aria-sort');
+  });
+
+  test('a number: descending, then ascending, then the default; the nulls always last', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    await user.click(button('Más rápida'));
+    expect(header('Más rápida')).toHaveAttribute('aria-sort', 'descending');
+    expect(order()).toEqual([
+      'Recepción de mercadería',
+      'Cierre de caja',
+      'Devolución',
+      'Apertura del local',
+      'Inventario mensual',
+    ]);
+    expect(within(header('Más rápida')).getByTestId('sort-arrow')).toHaveTextContent('▼');
+    expect(within(header('Más rápida')).getByTestId('sort-arrow')).toHaveAttribute('aria-hidden', 'true');
+
+    await user.click(button('Más rápida'));
+    expect(header('Más rápida')).toHaveAttribute('aria-sort', 'ascending');
+    expect(order()).toEqual([
+      'Apertura del local',
+      'Devolución',
+      'Cierre de caja',
+      'Recepción de mercadería',
+      'Inventario mensual',
+    ]);
+    expect(within(header('Más rápida')).getByTestId('sort-arrow')).toHaveTextContent('▲');
+
+    await user.click(button('Más rápida'));
+    expect(header('Más rápida')).toHaveAttribute('aria-sort', 'none');
+    expect(order()).toEqual(DEFAULT);
+  });
+
+  test('the average by its milliseconds, a tie by name; the other arrows go away', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    await user.click(button('Tiempo medio total'));
+    await user.click(button('Tiempo medio total'));
+    expect(order()).toEqual([
+      'Apertura del local',
+      'Cierre de caja',
+      'Devolución',
+      'Recepción de mercadería',
+      'Inventario mensual',
+    ]);
+    await user.click(button('Completadas'));
+    expect(order()).toEqual([
+      'Cierre de caja',
+      'Apertura del local',
+      'Recepción de mercadería',
+      'Devolución',
+      'Inventario mensual',
+    ]);
+    expect(header('Tiempo medio total')).toHaveAttribute('aria-sort', 'none');
+    expect(within(header('Tiempo medio total')).getByTestId('sort-arrow')).toHaveTextContent('');
+  });
+
+  test('the slowest keeps its orange bar in any order', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    await user.click(button('Procedimiento'));
+    expect(order()[0]).toBe('Apertura del local');
+    const slowest = within(rowOf('Recepción de mercadería')).getByTestId('time-bar');
+    expect(slowest.firstElementChild).toHaveClass('bg-naranja');
+    expect(within(rowOf('Apertura del local')).getByTestId('time-bar').firstElementChild).not.toHaveClass('bg-naranja');
+  });
+
+  test('the name: A → Z first, then Z → A', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    await user.click(button('Procedimiento'));
+    expect(header('Procedimiento')).toHaveAttribute('aria-sort', 'ascending');
+    expect(order()).toEqual([
+      'Apertura del local',
+      'Cierre de caja',
+      'Devolución',
+      'Inventario mensual',
+      'Recepción de mercadería',
+    ]);
+    await user.click(button('Procedimiento'));
+    expect(order()[0]).toBe('Recepción de mercadería');
+  });
+
+  test('with the keyboard: Enter and Space on the header', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    button('Más lenta').focus();
+    await user.keyboard('{Enter}');
+    expect(header('Más lenta')).toHaveAttribute('aria-sort', 'descending');
+    await user.keyboard(' ');
+    expect(header('Más lenta')).toHaveAttribute('aria-sort', 'ascending');
+    expect(button('Más lenta')).toHaveFocus();
+  });
+
+  test('on a phone, a native selector with the same orders, above the cards', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    const select = screen.getByRole('combobox', { name: 'Ordenar por' });
+    expect(select.closest('div')).toHaveClass('lg:hidden');
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Mayor tiempo medio primero (por defecto)',
+      'Procedimiento (A → Z)',
+      'Procedimiento (Z → A)',
+      'Completadas (mayor a menor)',
+      'Completadas (menor a mayor)',
+      'Tiempo medio total (mayor a menor)',
+      'Tiempo medio total (menor a mayor)',
+      'Más rápida (mayor a menor)',
+      'Más rápida (menor a mayor)',
+      'Más lenta (mayor a menor)',
+      'Más lenta (menor a mayor)',
+    ]);
+
+    await user.selectOptions(select, 'Completadas (menor a mayor)');
+    expect(order()).toEqual([
+      'Inventario mensual',
+      'Devolución',
+      'Recepción de mercadería',
+      'Apertura del local',
+      'Cierre de caja',
+    ]);
+    // The same state as the headers.
+    expect(header('Completadas')).toHaveAttribute('aria-sort', 'ascending');
+    await user.selectOptions(select, 'Mayor tiempo medio primero (por defecto)');
+    expect(order()).toEqual(DEFAULT);
+  });
+
+  test('a single procedure needs no selector', () => {
+    renderTable([PROCEDURES[0]]);
+
+    expect(screen.queryByRole('combobox', { name: 'Ordenar por' })).not.toBeInTheDocument();
   });
 });

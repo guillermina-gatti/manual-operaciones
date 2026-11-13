@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
 import { RecentProceduresTable } from '@/components/executions/RecentProceduresTable';
 import type { DocumentReference, MyProcedureMetrics } from '@/lib/api';
@@ -139,5 +140,95 @@ describe('the card on the phone', () => {
     expect(cell('Cierre de caja', 2)).toHaveClass('max-lg:order-1');
     expect(cell('Cierre de caja', 4)).toHaveClass('col-span-2', 'max-lg:order-2');
     expect(cell('Cierre de caja', 5)).toHaveClass('col-span-2', 'max-lg:order-3');
+  });
+});
+
+describe('sorting by column', () => {
+  const [base] = myMetricsResponse().procedures;
+  const make = (
+    n: number,
+    title: string,
+    counts: { started: number; completed: number; abandoned: number },
+    avgCompletionMs: number | null,
+    lastStartedAt: string,
+  ): MyProcedureMetrics => ({
+    ...base,
+    procedureId: `1a000000-0000-4000-8000-00000000009${n}`,
+    title,
+    ...counts,
+    inProgress: counts.started - counts.completed - counts.abandoned,
+    avgCompletionMs,
+    lastStartedAt,
+  });
+  // The order of the API: the most recent first.
+  const PROCEDURES = [
+    make(1, 'Cierre de caja', { started: 12, completed: 11, abandoned: 0 }, 1_140_000, '2026-11-13T12:50:00.000Z'),
+    make(2, 'Recepción de mercadería', { started: 9, completed: 8, abandoned: 1 }, 2_700_000, '2026-11-11T14:00:00.000Z'),
+    make(3, 'Inventario', { started: 2, completed: 0, abandoned: 2 }, null, '2026-11-10T11:05:00.000Z'),
+    make(4, 'Apertura del local', { started: 6, completed: 6, abandoned: 0 }, 380_000, '2026-11-12T11:05:00.000Z'),
+  ];
+  const order = () =>
+    within(table())
+      .getAllByRole('rowheader')
+      .map((header) => header.querySelector('span')!.textContent);
+  const header = (name: string) =>
+    within(table()).getByRole('columnheader', { name: new RegExp(`^${name}`) });
+  const DEFAULT = ['Cierre de caja', 'Recepción de mercadería', 'Inventario', 'Apertura del local'];
+
+  test('by default, as the API gives them; the slowest step does not sort', () => {
+    renderTable(PROCEDURES);
+
+    expect(order()).toEqual(DEFAULT);
+    expect(within(header('Paso que más te lleva')).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(header('Sin avanzar hace más de 24 horas')).getByRole('button')).toBeInTheDocument();
+  });
+
+  test('the last time: most recent first, then oldest, then the default', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+    const last = within(header('Última vez')).getByRole('button');
+
+    await user.click(last);
+    expect(header('Última vez')).toHaveAttribute('aria-sort', 'descending');
+    expect(order()).toEqual(['Cierre de caja', 'Apertura del local', 'Recepción de mercadería', 'Inventario']);
+    await user.click(last);
+    expect(order()).toEqual(['Inventario', 'Recepción de mercadería', 'Apertura del local', 'Cierre de caja']);
+    await user.click(last);
+    expect(order()).toEqual(DEFAULT);
+  });
+
+  test('the average time by its value, the one without a time last', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    await user.click(within(header('Tiempo medio')).getByRole('button'));
+    await user.click(within(header('Tiempo medio')).getByRole('button'));
+    expect(header('Tiempo medio')).toHaveAttribute('aria-sort', 'ascending');
+    expect(order()).toEqual(['Apertura del local', 'Cierre de caja', 'Recepción de mercadería', 'Inventario']);
+  });
+
+  test('without progress and started, from more to less', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    await user.click(within(header('Sin avanzar hace más de 24 horas')).getByRole('button'));
+    expect(order().slice(0, 2)).toEqual(['Inventario', 'Recepción de mercadería']);
+    await user.click(within(header('Empezadas')).getByRole('button'));
+    expect(order()).toEqual(['Cierre de caja', 'Recepción de mercadería', 'Apertura del local', 'Inventario']);
+  });
+
+  test('on a phone, the selector, with the default "Más reciente primero"', async () => {
+    const user = userEvent.setup();
+    renderTable(PROCEDURES);
+
+    const select = screen.getByRole('combobox', { name: 'Ordenar por' });
+    expect(select).toHaveDisplayValue('Más reciente primero (por defecto)');
+    const options = within(select).getAllByRole('option').map((option) => option.textContent);
+    expect(options).toContain('Última vez (más vieja primero)');
+    expect(options).toContain('Completadas (mayor a menor)');
+    expect(options.some((option) => option?.startsWith('Paso'))).toBe(false);
+
+    await user.selectOptions(select, 'Procedimiento (A → Z)');
+    expect(order()).toEqual(['Apertura del local', 'Cierre de caja', 'Inventario', 'Recepción de mercadería']);
   });
 });
