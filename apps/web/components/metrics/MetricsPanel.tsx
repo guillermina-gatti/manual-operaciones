@@ -22,6 +22,7 @@ import {
   withAreaHints,
 } from '@/lib/metrics/filters';
 import type { PanelFilters } from '@/lib/metrics/filters';
+import { previousPeriod } from '@/lib/metrics/comparison';
 import { SECTION_PARAM, keepMetricsSection, parseMetricsSection, withMetricsSection } from '@/lib/metrics/section';
 import { useSession } from '@/lib/session';
 import { MetricsFiltersForm } from './MetricsFiltersForm';
@@ -29,6 +30,7 @@ import { AreaMetricsSection } from './AreaMetricsSection';
 import { MetricsTabs } from './MetricsTabs';
 import { SectionHeading } from './SectionHeading';
 import { MetricsSummary } from './MetricsSummary';
+import type { PreviousTotals } from './MetricsSummary';
 import { ProcedureTimeTable } from './ProcedureTimeTable';
 import { TeamCMetrics } from './TeamCMetrics';
 
@@ -51,6 +53,23 @@ export function MetricsPanel() {
   const metrics = useApiResource(user ? `metrics:${user.id}${query}` : null, (signal) =>
     getProcedureMetrics(filters, signal),
   );
+  // The period of the same length right before, with the same area, for "Resumen general". Apart
+  // from the main one: if it fails or takes long, the summary shows without comparing.
+  const previous = previousPeriod(filters.from, filters.to);
+  const previousFilters = previous ? { ...filters, ...previous } : null;
+  const previousMetrics = useApiResource(
+    user && previousFilters && section === 'procedimientos'
+      ? `metrics-previous:${user.id}${metricsQuery(previousFilters)}`
+      : null,
+    (signal) => getProcedureMetrics(previousFilters!, signal),
+  );
+  const previousTotals: PreviousTotals | null = !previous
+    ? null
+    : previousMetrics.status === 'success'
+      ? { status: 'success', period: previous, totals: previousMetrics.data.totals }
+      : previousMetrics.status === 'error'
+        ? { status: 'error', period: previous }
+        : { status: 'loading', period: previous };
   const areas = useApiResource('metrics-areas', () => areasDirectory.listAreas());
   // Without the area names the panel still works: the selector offers only "Todas".
   const areaList = areas.status === 'success' ? areas.data : [];
@@ -90,6 +109,7 @@ export function MetricsPanel() {
               filters={filters}
               areas={areaList}
               state={metrics}
+              previous={previousTotals}
               isAdmin={isAdmin}
               keepSection={keepSection}
             />
@@ -109,11 +129,19 @@ interface ProceduresSectionProps {
   filters: PanelFilters;
   areas: Area[];
   state: ApiResource<ProceduresMetricsResponse>;
+  previous: PreviousTotals | null;
   isAdmin: boolean;
   keepSection: (href: string) => string;
 }
 
-function ProceduresSection({ filters, areas, state, isAdmin, keepSection }: ProceduresSectionProps) {
+function ProceduresSection({
+  filters,
+  areas,
+  state,
+  previous,
+  isAdmin,
+  keepSection,
+}: ProceduresSectionProps) {
   const headingId = useId();
   const chosen = areas.find((area) => area.id === filters.areaId);
   const areaName = filters.areaId
@@ -127,7 +155,12 @@ function ProceduresSection({ filters, areas, state, isAdmin, keepSection }: Proc
   // With the numbers, the panel carries its own heading ("Resumen general · Todas las áreas").
   if (state.status === 'success') {
     return (
-      <MetricsSummary metrics={state.data} areaName={areaName} areaChosen={Boolean(filters.areaId)} />
+      <MetricsSummary
+        metrics={state.data}
+        areaName={areaName}
+        areaChosen={Boolean(filters.areaId)}
+        previous={previous}
+      />
     );
   }
 

@@ -912,7 +912,10 @@ describe('empty and errors', () => {
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));
 
     expect(await procedureCard()).toBeInTheDocument();
-    expect(mocks.getProcedureMetrics).toHaveBeenCalledTimes(2);
+    // The period in view, twice; the period before, asked apart, once.
+    const asked = mocks.getProcedureMetrics.mock.calls.map(([filters]) => filters.from);
+    expect(asked.filter((from) => from === '2026-10-01')).toHaveLength(2);
+    expect(asked.filter((from) => from === '2026-09-04')).toHaveLength(1);
   });
 
   test('an area of someone else offers to see all of theirs, without retry', async () => {
@@ -1180,4 +1183,53 @@ test('the procedure id is never shown', async () => {
   await procedureCard();
 
   expect(document.body.textContent).not.toContain(CIERRE_DE_CAJA);
+});
+
+describe('the period before', () => {
+  const PREVIOUS = { ...metricsResponse().totals, started: 3, completed: 2, abandoned: 0 };
+
+  test('asks for the period of the same length right before, with the same area', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-14&hasta=2026-10-27`);
+    mocks.getProcedureMetrics.mockImplementation(async (filters: { from: string }) =>
+      filters.from === '2026-09-30'
+        ? metricsResponse({ totals: PREVIOUS })
+        : metricsResponse(),
+    );
+    render(<MetricsPanel />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('compared-with')).toHaveTextContent(
+        'Comparado con 30 sep – 13 oct',
+      ),
+    );
+    expect(mocks.getProcedureMetrics).toHaveBeenCalledWith(
+      { areaId: VENTAS, from: '2026-09-30', to: '2026-10-13' },
+      expect.anything(),
+    );
+    expect(screen.getAllByTestId('change').length).toBeGreaterThan(0);
+  });
+
+  test('if it fails, the summary shows the same, without comparing', async () => {
+    mocks.getProcedureMetrics.mockImplementation(async (filters: { from: string }) => {
+      if (filters.from !== '2026-10-01') throw new ApiError(503);
+      return metricsResponse();
+    });
+    render(<MetricsPanel />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('compared-with')).toHaveTextContent(
+        'No se pudo comparar con el período anterior',
+      ),
+    );
+    expect(datum(/^Ejecuciones/)).toBe('5');
+    expect(screen.queryAllByTestId('change')).toHaveLength(0);
+  });
+
+  test('the documents tab does not ask for it', async () => {
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
+    render(<MetricsPanel />);
+
+    await waitFor(() => expect(mocks.getDocuments).toHaveBeenCalled());
+    expect(mocks.getProcedureMetrics).toHaveBeenCalledTimes(1);
+  });
 });

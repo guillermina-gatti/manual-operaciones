@@ -122,17 +122,22 @@ export function HeroDatum({
   label,
   value,
   note,
+  change,
   className = 'flex',
 }: {
   label: ReactNode;
   value: ReactNode;
   // A line under the value, on the phone; next to it from lg ("(11,1 % del total)").
   note?: ReactNode;
+  // How it changed against another period, under the value on its own line (a second dd).
+  change?: ReactNode;
   className?: string;
 }) {
   return (
     <div
-      className={`${className} min-w-0 flex-col gap-1 px-3 first:pl-0 last:pr-0 ${HERO_DIVIDER} lg:flex-row lg:items-baseline lg:justify-between lg:gap-3 lg:px-0 lg:py-3 lg:first:pt-0 lg:last:pb-0`}
+      className={`${className} min-w-0 flex-col gap-1 px-3 first:pl-0 last:pr-0 ${HERO_DIVIDER} lg:flex-row lg:items-baseline lg:justify-between lg:gap-3 lg:px-0 lg:py-3 lg:first:pt-0 lg:last:pb-0 ${
+        change === undefined ? '' : 'lg:flex-wrap lg:gap-y-1'
+      }`}
     >
       <dt className={`text-xs font-semibold sm:text-sm ${HERO_MUTED}`}>{label}</dt>
       <dd className="text-xl font-extrabold whitespace-nowrap tabular-nums lg:text-2xl">
@@ -143,6 +148,7 @@ export function HeroDatum({
           </span>
         )}
       </dd>
+      {change !== undefined && <dd className="lg:basis-full lg:text-right">{change}</dd>}
     </div>
   );
 }

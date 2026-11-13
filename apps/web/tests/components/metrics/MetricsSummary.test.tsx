@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { MetricsSummary } from '@/components/metrics/MetricsSummary';
+import type { PreviousTotals } from '@/components/metrics/MetricsSummary';
 import type { ProceduresMetricsResponse } from '@/lib/api';
 import { metricsResponse } from '../../support/metrics';
 
@@ -167,5 +168,99 @@ describe('the data', () => {
         'En curso: con avance en las últimas 24 h. Abandonadas: sin avanzar hace más de 24 h.',
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe('against the period before', () => {
+  const PERIOD = { from: '2026-10-19', to: '2026-10-31' };
+  const renderWith = (previous: PreviousTotals | null) =>
+    render(
+      <MetricsSummary
+        metrics={metricsResponse({ totals: TOTALS })}
+        areaName="Todas las áreas"
+        areaChosen={false}
+        previous={previous}
+      />,
+    );
+  const changes = () =>
+    screen.getAllByTestId('change').map((change) => ({
+      direction: change.getAttribute('data-direction'),
+      // The words of the desktop; the phone has its short ones.
+      words: change.querySelector('.max-lg\\:hidden')!.textContent,
+      short: change.querySelector('.lg\\:hidden')!.textContent,
+      worse: within(change).queryByTestId('worse-dot') !== null,
+    }));
+
+  test('each number says how it changed, with an arrow and words, never only color', () => {
+    renderWith({
+      status: 'success',
+      period: PERIOD,
+      totals: { started: 24, completed: 23, inProgress: 0, abandoned: 1, avgCompletionMs: 1_050_000 },
+    });
+
+    // The % completed under the headline; then executions, abandoned and the time.
+    expect(changes()).toEqual([
+      // 95,8 % → 92,6 %.
+      { direction: 'down', words: '3,2 puntos de completadas menos', short: '3,2 puntos de completadas menos', worse: false },
+      { direction: 'up', words: '3 más que el período anterior', short: '3 más', worse: false },
+      { direction: 'same', words: 'igual', short: 'igual', worse: false },
+      { direction: 'up', words: '4 min más lento', short: '4 min más lento', worse: true },
+    ]);
+    // The arrow is drawn, but hidden from a screen reader: the words say it.
+    const [, executions] = screen.getAllByTestId('change');
+    expect(executions).toHaveTextContent('▲');
+    expect(within(executions).getByText(/▲/)).toHaveAttribute('aria-hidden', 'true');
+    // 13 px in the light green of the panel, never red or green.
+    expect(executions).toHaveClass('text-[13px]', 'text-[#C9DED3]');
+    // The line under the panel names the period, in 12 px, and describes every change.
+    const line = screen.getByTestId('compared-with');
+    expect(line).toHaveTextContent('Comparado con 19 oct – 31 oct');
+    expect(line).toHaveClass('text-xs');
+    for (const change of screen.getAllByTestId('change')) {
+      expect(change).toHaveAttribute('aria-describedby', line.id);
+    }
+  });
+
+  test('the period before without executions: says so, with no numbers to compare', () => {
+    renderWith({
+      status: 'success',
+      period: PERIOD,
+      totals: { started: 0, completed: 0, inProgress: 0, abandoned: 0, avgCompletionMs: null },
+    });
+
+    expect(screen.queryAllByTestId('change')).toHaveLength(0);
+    expect(screen.getByTestId('compared-with')).toHaveTextContent(
+      'Sin ejecuciones en el período anterior (19 oct – 31 oct)',
+    );
+    expect(hero()).not.toHaveTextContent(/%.*del período anterior|Infinity|NaN/);
+  });
+
+  test('while it comes, empty lines keep the place of the changes', () => {
+    renderWith({ status: 'loading', period: PERIOD });
+
+    expect(screen.getAllByTestId('change-placeholder')).toHaveLength(4);
+    for (const line of screen.getAllByTestId('change-placeholder')) {
+      expect(line).toHaveAttribute('aria-hidden', 'true');
+    }
+    expect(screen.getByTestId('compared-with')).toHaveTextContent('Comparado con 19 oct – 31 oct');
+  });
+
+  test('if it failed, the panel stays, with a quiet line', () => {
+    renderWith({ status: 'error', period: PERIOD });
+
+    expect(screen.queryAllByTestId('change')).toHaveLength(0);
+    expect(screen.queryAllByTestId('change-placeholder')).toHaveLength(0);
+    expect(datum(/^Ejecuciones/)).toBe('27');
+    expect(screen.getByTestId('compared-with')).toHaveTextContent(
+      'No se pudo comparar con el período anterior',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('without dates there is no period before: nothing compared, no line', () => {
+    renderWith(null);
+
+    expect(screen.queryAllByTestId('change')).toHaveLength(0);
+    expect(screen.queryByTestId('compared-with')).not.toBeInTheDocument();
   });
 });
