@@ -11,6 +11,11 @@ import {
   RolesGuard,
 } from '../../common/auth';
 import type { AuthUser } from '../../common/auth';
+import { MyDailyMetricsQueryDto } from './dto/my-daily-metrics.query';
+import {
+  MyDailyMetricsResponse,
+  toMyDailyMetricsResponse,
+} from './dto/my-daily-metrics.response';
 import { ProcedureMetricsQueryDto } from './dto/procedure-metrics.query';
 import {
   MyMetricsResponse,
@@ -62,6 +67,42 @@ export class MyMetricsController {
         from: query.from,
         to: query.to,
       }),
+    );
+  }
+
+  // GET /metrics/me/daily: the viewer's completed executions per day of the last 21 days
+  // and the working days of the current week with progress. Same roles and areas as /me.
+  @Get('me/daily')
+  @ApiResponse({
+    status: 200,
+    description: 'Only the executions of the user of the session',
+    type: MyDailyMetricsResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'areaId no es un UUID o hay parámetros de más (también fechas)',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo los empleados (EMPLOYEE) tienen métricas personales',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'El área no es una de las áreas activas del usuario',
+  })
+  @ApiResponse({
+    status: 503,
+    description:
+      'La base, el catálogo de procedimientos o los directorios de usuarios y áreas no responden',
+  })
+  async daily(
+    @Query() query: MyDailyMetricsQueryDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<MyDailyMetricsResponse> {
+    return toMyDailyMetricsResponse(
+      await this.metrics.daily(user, { areaId: query.areaId }),
     );
   }
 }

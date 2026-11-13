@@ -13,7 +13,7 @@ import {
 import { configureApp } from '../../app.setup';
 import { MyMetricsController } from './my-metrics.controller';
 import { MyMetricsService } from './my-metrics.service';
-import type { MyMetricsView } from './my-metrics.service';
+import type { MyDailyView, MyMetricsView } from './my-metrics.service';
 
 const VENTAS = '0a000000-0000-4000-8000-000000000001';
 const ADMIN = bearer(SPEC_USERS.admin);
@@ -55,10 +55,10 @@ const view: MyMetricsView = {
 
 describe('MyMetricsController (HTTP, service mocked)', () => {
   let app: INestApplication;
-  let service: { mine: jest.Mock };
+  let service: { mine: jest.Mock; daily: jest.Mock };
 
   beforeAll(async () => {
-    service = { mine: jest.fn() };
+    service = { mine: jest.fn(), daily: jest.fn() };
     const moduleRef = await Test.createTestingModule({
       controllers: [MyMetricsController],
       providers: [
@@ -160,5 +160,104 @@ describe('MyMetricsController (HTTP, service mocked)', () => {
       .get('/api/metrics/procedures')
       .set(EMPLOYEE)
       .expect(404);
+  });
+});
+
+describe('MyMetricsController, GET /metrics/me/daily (HTTP, service mocked)', () => {
+  let app: INestApplication;
+  let service: { mine: jest.Mock; daily: jest.Mock };
+
+  const daily: MyDailyView = {
+    windowFrom: '2026-10-17',
+    windowTo: '2026-11-06',
+    days: [
+      {
+        date: '2026-11-06',
+        procedures: [
+          {
+            procedureId: '1a000000-0000-4000-8000-000000000001',
+            title: 'Cierre de caja',
+            completed: 2,
+          },
+        ],
+      },
+    ],
+    week: {
+      from: '2026-11-02',
+      to: '2026-11-06',
+      activeDays: ['2026-11-06'],
+      completedCount: 2,
+    },
+  };
+
+  beforeAll(async () => {
+    service = { mine: jest.fn(), daily: jest.fn() };
+    const moduleRef = await Test.createTestingModule({
+      controllers: [MyMetricsController],
+      providers: [
+        { provide: MyMetricsService, useValue: service },
+        ...realAuthProviders(),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    configureApp(app);
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  const get = (query = '') =>
+    request(app.getHttpServer()).get(`/api/metrics/me/daily${query}`);
+
+  it('200 for EMPLOYEE, with the user of the session and the area', async () => {
+    service.daily.mockResolvedValue(daily);
+
+    const response = await get(`?areaId=${VENTAS}`).set(EMPLOYEE).expect(200);
+
+    expect(service.daily).toHaveBeenCalledWith(SPEC_USERS.empleadoVentas, {
+      areaId: VENTAS,
+    });
+    expect(service.mine).not.toHaveBeenCalled();
+    expect(response.body).toEqual(daily);
+  });
+
+  it('401 without a session', async () => {
+    await get().expect(401);
+
+    expect(service.daily).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['ADMIN', ADMIN],
+    ['SUPERVISOR', SUPERVISOR],
+  ])('403 for %s', async (_role, headers) => {
+    await get().set(headers).expect(403);
+
+    expect(service.daily).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an areaId that is not a UUID', '?areaId=ventas'],
+    ['a date: the server decides the window', '?from=2026-11-01'],
+    ['a today', '?today=2026-11-01'],
+    ['a userId', `?userId=${SPEC_USERS.admin.id}`],
+  ])('400 with %s, without calling the service', async (_case, query) => {
+    await get(query).set(EMPLOYEE).expect(400);
+
+    expect(service.daily).not.toHaveBeenCalled();
+  });
+
+  it('404 when the area is not theirs', async () => {
+    service.daily.mockRejectedValue(
+      new NotFoundException('No se encontró el área'),
+    );
+
+    await get(`?areaId=${VENTAS}`).set(EMPLOYEE).expect(404);
   });
 });

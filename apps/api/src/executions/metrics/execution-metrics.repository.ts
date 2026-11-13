@@ -1,6 +1,7 @@
 /* How the metrics service reads the aggregates of executions, without depending on
 Prisma. A database that does not answer throws ExecutionsRepositoryUnavailableError,
 the same as the executions repository, which the API turns into a 503 */
+import type { DailyAggregates, DailyWindow } from './my-daily-metrics';
 import type { ExecutionAggregate, StepAggregate } from './procedure-metrics';
 
 // Executions started in [from, to); null means no limit on that side. A step still
@@ -41,4 +42,8 @@ export abstract class ExecutionMetricsRepository {
   // Only the executions of userId (personal metrics). userId always comes from the
   // session, never from the request.
   abstract mine(userId: string, window: MetricsWindow): Promise<MyAggregates>;
+
+  // The daily activity of userId (my-daily-metrics.ts): completed executions per company
+  // day and version, the working days of the week with progress and the week's count.
+  abstract daily(userId: string, window: DailyWindow): Promise<DailyAggregates>;
 }
