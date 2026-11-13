@@ -28,11 +28,18 @@ interface DocumentMetricsCardProps {
   // What the page adds to "Ver todas mis áreas" (/metricas keeps its tab). By default nothing.
   keepParams?: (href: string) => string;
   state: ApiResource<DocumentMetrics | null>;
+  // Under the tiles, inside the section: the lists of the documents due soon and overdue.
+  children?: ReactNode;
 }
 
 const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 lg:gap-4';
 
-export function DocumentMetricsCard({ filters, state, keepParams }: DocumentMetricsCardProps) {
+export function DocumentMetricsCard({
+  filters,
+  state,
+  keepParams,
+  children,
+}: DocumentMetricsCardProps) {
   const headingId = useId();
 
   return (
@@ -45,6 +52,7 @@ export function DocumentMetricsCard({ filters, state, keepParams }: DocumentMetr
         </p>
       </div>
       <DocumentMetricsContent filters={filters} state={state} keepParams={keepParams} />
+      {children}
     </section>
   );
 }

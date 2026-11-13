@@ -123,7 +123,12 @@ export function MetricsPanel() {
             )}
           </>
         ) : (
-          <TeamCMetrics filters={filters} userId={user?.id ?? null} keepParams={keepSection} />
+          <TeamCMetrics
+            filters={filters}
+            userId={user?.id ?? null}
+            keepParams={keepSection}
+            isAdmin={isAdmin}
+          />
         )}
       </MetricsTabs>
     </div>

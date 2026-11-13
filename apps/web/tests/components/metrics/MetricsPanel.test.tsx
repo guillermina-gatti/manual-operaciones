@@ -11,6 +11,7 @@ import {
   VENTAS,
   metricsResponse,
 } from '../../support/metrics';
+import { reviewDocument } from '../../support/review-documents';
 
 // Each test mounts the whole panel (summary, time table, area cards and their steps tables) and
 // looks things up by role and accessible name, which is slow in jsdom. Alone a test takes under
@@ -20,6 +21,7 @@ vi.setConfig({ testTimeout: 15_000 });
 
 const mocks = vi.hoisted(() => ({
   getProcedureMetrics: vi.fn(),
+  listPendingReview: vi.fn(),
   getDocuments: vi.fn(),
   getAssistant: vi.fn(),
   useSession: vi.fn(),
@@ -31,6 +33,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProcedureMetrics: mocks.getProcedureMetrics,
+  listPendingReview: mocks.listPendingReview,
 }));
 
 vi.mock('@/lib/metrics', async (importOriginal) => ({
@@ -76,6 +79,7 @@ beforeEach(() => {
   mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(ANA);
   mocks.getProcedureMetrics.mockResolvedValue(metricsResponse());
+  mocks.listPendingReview.mockResolvedValue({ data: [], total: 0, page: 1, limit: 100, isReviewer: true });
   mocks.getAssistant.mockResolvedValue({
     filters: { areaId: null, from: '2026-09-28', to: '2026-10-27' },
     totals: {
@@ -1231,5 +1235,70 @@ describe('the period before', () => {
 
     await waitFor(() => expect(mocks.getDocuments).toHaveBeenCalled());
     expect(mocks.getProcedureMetrics).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the documents to review', () => {
+  test('under the tiles, from "Por revisar", with the area of the panel', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&seccion=documentos`);
+    mocks.listPendingReview.mockResolvedValue({
+      data: [
+        reviewDocument(1, 'Manual de caja', [VENTAS], '2026-10-20', 'OVERDUE'),
+        reviewDocument(2, 'Plan de evacuación', [OPERACIONES], '2026-10-25', 'OVERDUE'),
+        reviewDocument(3, 'Apertura del local', [VENTAS], '2026-11-02', 'DUE_SOON'),
+      ],
+      total: 3,
+      page: 1,
+      limit: 100,
+      isReviewer: true,
+    });
+    render(<MetricsPanel />);
+
+    const documents = await screen.findByRole('region', { name: 'Documentos' });
+    const overdue = await within(documents).findByRole('region', { name: /^Vencidos/ });
+    // Today is 27/10/2026 in Buenos Aires.
+    expect(overdue).toHaveTextContent('Vencidos (1)');
+    expect(overdue).toHaveTextContent('Manual de caja');
+    expect(overdue).toHaveTextContent('venció hace 7 días');
+    expect(overdue).not.toHaveTextContent('Plan de evacuación');
+    expect(within(documents).getByRole('region', { name: /^Vencen pronto/ })).toHaveTextContent(
+      'vence el 2 nov 2026',
+    );
+    expect(mocks.listPendingReview).toHaveBeenCalledWith(1, 100, expect.anything());
+    // An ADMIN sees every document: no note.
+    expect(screen.queryByText(/solo los documentos de los que sos responsable/)).not.toBeInTheDocument();
+  });
+
+  test('asks every page until it has them all', async () => {
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
+    mocks.listPendingReview.mockImplementation(async (page: number) => ({
+      data: [reviewDocument(page, `Documento ${page}`, [VENTAS], '2026-10-20', 'OVERDUE')],
+      total: 2,
+      page,
+      limit: 100,
+      isReviewer: true,
+    }));
+    render(<MetricsPanel />);
+
+    const overdue = await screen.findByRole('region', { name: /^Vencidos/ });
+    await waitFor(() => expect(overdue).toHaveTextContent('Vencidos (2)'));
+    expect(mocks.listPendingReview).toHaveBeenCalledTimes(2);
+  });
+
+  test('a SUPERVISOR is told the lists have only their documents', async () => {
+    mocks.useSession.mockReturnValue(SERGIO);
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
+    render(<MetricsPanel />);
+
+    expect(
+      await screen.findByText('En estas listas están solo los documentos de los que sos responsable.'),
+    ).toBeInTheDocument();
+  });
+
+  test('the procedures tab does not ask for them', async () => {
+    render(<MetricsPanel />);
+
+    await procedureCard();
+    expect(mocks.listPendingReview).not.toHaveBeenCalled();
   });
 });
