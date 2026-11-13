@@ -1,7 +1,8 @@
 'use client';
 
-// "Para retomar": the employee's executions still in progress, of any date (the period does not
-// apply), the most recently moved first. Each one says at which step it is, how long ago it last
+// "Para retomar": every execution of the employee still in progress, whatever the filters (neither
+// the period nor the area apply: Mi actividad asks for them without the area), the most recently
+// moved first. Each one says at which step it is, how long ago it last
 // moved and, if it has been more than 24 h without progress, says so with its text, not only a
 // color. Two views, as the picker of /ejecuciones (the same switch, the same ?vista=): cards with
 // the same structure, or a list with fixed columns.
@@ -10,6 +11,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useRef } from 'react';
 import { AreaChips, CARD, StatusDot } from '@/components/documents/design';
+import { ScreenState } from '@/components/ui/ScreenState';
 import type { DocumentReference, MyResumeItem } from '@/lib/api';
 import { RESUME_SECTION_ID, formatLastActivity, staleLabel } from '@/lib/executions/my-activity';
 import { stepsLabel, timeSince } from '@/lib/executions/picker';
@@ -35,6 +37,10 @@ interface ResumeListProps {
   view?: ExecutionsView;
   // The areas of each procedure, when known (from the procedures of the period and the directory).
   areasByProcedure?: ReadonlyMap<string, DocumentReference[]>;
+  // While they arrive, the section is already there with its skeleton; if they cannot be read, it
+  // says so (with "Reintentar" when it makes sense).
+  loading?: boolean;
+  error?: { message: string; onRetry?: () => void };
 }
 
 export function ResumeList({
@@ -42,6 +48,8 @@ export function ResumeList({
   staleAfterHours,
   view = 'tarjetas',
   areasByProcedure = new Map(),
+  loading = false,
+  error,
 }: ResumeListProps) {
   const headingId = useId();
   const sectionRef = useRef<HTMLElement>(null);
@@ -71,13 +79,21 @@ export function ResumeList({
             Para retomar
           </h2>
           <p className="text-texto-suave">
-            Tus ejecuciones sin terminar, de cualquier fecha. Seguís desde el paso donde quedaste.
+            Todas tus ejecuciones en curso, sin importar el período.
           </p>
         </div>
-        {items.length > 0 && <ExecutionsViewSwitch view={view} />}
+        {!loading && !error && items.length > 0 && <ExecutionsViewSwitch view={view} />}
       </div>
 
-      {items.length === 0 ? (
+      {loading ? (
+        <ScreenState kind="loading" label="Cargando tus ejecuciones en curso…">
+          <ResumeSkeleton />
+        </ScreenState>
+      ) : error ? (
+        <div className={`${CARD} px-6 sm:px-8`}>
+          <ScreenState kind="error" message={error.message} onRetry={error.onRetry} />
+        </div>
+      ) : items.length === 0 ? (
         <p className={`${CARD} px-6 py-10 text-center text-texto-suave`}>
           No tenés ejecuciones sin terminar.
         </p>
@@ -98,6 +114,17 @@ export function ResumeList({
         </ul>
       )}
     </section>
+  );
+}
+
+// Two cards, the shape of what arrives.
+function ResumeSkeleton() {
+  return (
+    <div aria-hidden="true" className={CARD_GRID}>
+      {[1, 2].map((n) => (
+        <div key={n} className="h-48 animate-pulse rounded-2xl bg-borde motion-reduce:animate-none" />
+      ))}
+    </div>
   );
 }
 

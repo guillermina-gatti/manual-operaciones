@@ -76,9 +76,11 @@ afterEach(() => {
 const summary = () => screen.getByRole('region', { name: 'Tu resumen' });
 // The answer arrived: the tiles are there.
 const loaded = () => screen.findByText('Empezadas', { selector: 'dt' });
-// A tile: its label (dt) and, in the same box, its number and its line.
-const tile = (label: string) =>
-  within(summary()).getByText(label, { selector: 'dt' }).parentElement!;
+// A datum of the summary: the value (dd) next to its label (dt).
+const datum = (label: RegExp) =>
+  within(summary())
+    .getAllByRole('term')
+    .find((term) => label.test(term.textContent ?? ''))!.nextElementSibling!.textContent;
 // Opens the area selector and reads the name of each option (without its hint).
 async function areaOptionTexts(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /^Área/ }));
@@ -147,21 +149,29 @@ describe('session', () => {
 });
 
 describe('summary', () => {
-  test('their counts and their average time', async () => {
+  test('the hero: the ring, the headline, the legend and their data', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
-    expect(tile('Empezadas')).toHaveTextContent('5');
-    expect(tile('Completadas')).toHaveTextContent('60,0% del total');
-    expect(tile('En curso')).toHaveTextContent('20,0% del total');
-    expect(tile('Tu tiempo medio')).toHaveTextContent('10 min');
+    expect(within(summary()).getByRole('img', { name: '60,0 % completadas' })).toBeInTheDocument();
+    expect(
+      within(summary()).getByText('Terminaste 3 de los 5 recorridos que empezaste'),
+    ).toBeInTheDocument();
+    expect(within(summary()).getByRole('heading', { level: 2 })).toHaveTextContent(
+      'Tu resumen · 1 oct – 27 oct',
+    );
+    expect(datum(/^Empezadas$/)).toBe('5');
+    expect(datum(/^En curso$/)).toBe('1');
+    expect(datum(/^Tiempo medio/)).toBe('10 min');
+    // The note stays under the panel.
+    expect(screen.getByText(/^En curso: con avance en las últimas 24 h\./)).toBeInTheDocument();
   });
 
   test('says "Sin avanzar hace más de 24 h", never "abandonadas"', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
-    expect(tile('Sin avanzar hace más de 24 h')).toHaveTextContent('20,0% del total');
+    expect(datum(/Sin avanzar hace más de 24 h/)).toBe('1');
     expect(screen.queryByText(/abandonad/i)).not.toBeInTheDocument();
   });
 
@@ -202,7 +212,10 @@ describe('summary', () => {
 describe('errors', () => {
   test('an area that is not theirs offers to see all of them', async () => {
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
-    mocks.getMyMetrics.mockRejectedValue(new ApiError(404, ['No se encontró el área']));
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) => {
+      if (filters.areaId) throw new ApiError(404, ['No se encontró el área']);
+      return myMetricsResponse();
+    });
     render(<MyActivityPanel />);
 
     expect(await screen.findByText('No encontramos esa área entre las tuyas.')).toBeInTheDocument();
@@ -524,9 +537,10 @@ describe('recent procedures', () => {
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
 
-  test('the most recently started first, with its areas', async () => {
+  test('the most recently started first, with its area chips', async () => {
     render(<MyActivityPanel />);
     await loaded();
+    await within(table()).findByText('Ventas');
 
     const names = within(table())
       .getAllByRole('rowheader')
@@ -538,13 +552,14 @@ describe('recent procedures', () => {
     render(<MyActivityPanel />);
     await loaded();
 
+    // The words the card adds on the phone ("completadas", "Tiempo medio"…) are in the DOM too.
     expect(cells('Cierre de caja')).toEqual([
       '4',
-      '3',
-      '0',
-      '10 min',
-      'Paso 2: Comparar con el reporte · 4 min',
-      '27 oct 2026, 09:50',
+      '3 de 4 completadas',
+      'Sin avanzar +24 hSin avanzar hace más de 24 horas0',
+      'Tiempo medio10 min',
+      'Se traba en: Paso 2: Comparar con el reporte4 min',
+      'Última vez: 27 oct 2026, 09:50',
     ]);
   });
 
@@ -554,20 +569,20 @@ describe('recent procedures', () => {
 
     expect(cells('Recepción de mercadería')).toEqual([
       '1',
-      '0',
-      '1',
-      '—',
-      '—',
-      '25 oct 2026, 11:00',
+      '0 de 1 completadas',
+      'Sin avanzar +24 hSin avanzar hace más de 24 horas1',
+      'Tiempo medio—',
+      'Se traba en: —',
+      'Última vez: 25 oct 2026, 11:00',
     ]);
   });
 
-  test('the column says "Sin avanzar hace más de 24 h", never "abandonadas"', async () => {
+  test('the column says "Sin avanzar hace más de 24 horas", never "abandonadas"', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
     expect(
-      within(table()).getByRole('columnheader', { name: 'Sin avanzar hace más de 24 h' }),
+      within(table()).getByRole('columnheader', { name: 'Sin avanzar hace más de 24 horas' }),
     ).toBeInTheDocument();
   });
 
@@ -577,5 +592,99 @@ describe('recent procedures', () => {
 
     await screen.findByText('No empezaste procedimientos en este período.');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('the order and "Para retomar" without filters', () => {
+  test('to resume first, then the filters, the summary and the procedures', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const blocks = [
+      screen.getByRole('region', { name: 'Para retomar' }),
+      screen.getByRole('form', { name: 'Filtros' }),
+      summary(),
+      screen.getByRole('table', { name: 'Tus procedimientos recientes' }),
+    ];
+    for (let i = 1; i < blocks.length; i++) {
+      expect(
+        blocks[i - 1].compareDocumentPosition(blocks[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+
+  test('says it shows every execution in progress, whatever the period', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(
+      within(screen.getByRole('region', { name: 'Para retomar' })).getByText(
+        'Todas tus ejecuciones en curso, sin importar el período.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test('without an area, one request serves both', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(mocks.getMyMetrics).toHaveBeenCalledTimes(1);
+  });
+
+  test('with an area, "Para retomar" comes from an answer without it', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-10&hasta=2026-10-20`);
+    // Only Ventas: the filtered answer leaves out the execution of Operaciones.
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) =>
+      filters.areaId
+        ? myMetricsResponse({ resume: myMetricsResponse().resume.slice(0, 1) })
+        : myMetricsResponse(),
+    );
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(mocks.getMyMetrics).toHaveBeenCalledWith({}, expect.any(AbortSignal));
+    const resume = screen.getByRole('region', { name: 'Para retomar' });
+    await within(resume).findByRole('heading', { name: 'Recepción de mercadería' });
+    expect(within(resume).getByRole('heading', { name: 'Cierre de caja' })).toBeInTheDocument();
+  });
+
+  test('with an area, "Para retomar" stays even if the area is not theirs', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) => {
+      if (filters.areaId) throw new ApiError(404, ['No se encontró el área']);
+      return myMetricsResponse();
+    });
+    render(<MyActivityPanel />);
+
+    const resume = await screen.findByRole('region', { name: 'Para retomar' });
+    expect(await within(resume).findAllByRole('link', { name: /Continuar/ })).toHaveLength(2);
+  });
+
+  test('with an area, if the executions in progress cannot be read, the section says so', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) => {
+      if (!filters.areaId) throw new ApiError(503);
+      return myMetricsResponse();
+    });
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const resume = screen.getByRole('region', { name: 'Para retomar' });
+    await user.click(await within(resume).findByRole('button', { name: 'Reintentar' }));
+    expect(
+      mocks.getMyMetrics.mock.calls.filter(([filters]) => !(filters as { areaId?: string }).areaId),
+    ).toHaveLength(2);
+  });
+
+  test('while they arrive, the section is there with its skeleton', () => {
+    mocks.getMyMetrics.mockReturnValue(new Promise(() => {}));
+    render(<MyActivityPanel />);
+
+    expect(
+      within(screen.getByRole('region', { name: 'Para retomar' })).getByText(
+        'Cargando tus ejecuciones en curso…',
+      ),
+    ).toBeInTheDocument();
   });
 });
