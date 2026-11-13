@@ -16,6 +16,7 @@ import { FeatherBar } from './FeatherBar';
 import { FeatherIcon, LeafIcon, TimerIcon } from './icons';
 import styles from './metrics.module.css';
 import { ProcedureMetricsCard } from './ProcedureMetricsCard';
+import { SectionHeading } from './SectionHeading';
 
 interface AreaMetricsSectionProps {
   procedures: ProcedureMetricsResponse[];
@@ -37,9 +38,7 @@ export function AreaMetricsSection({
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-2xl font-bold text-texto">
-          Detalle por área
-        </h2>
+        <SectionHeading id={headingId}>Detalle por área</SectionHeading>
         <p className="text-texto-suave">
           Dónde se traban: paso a paso de cada procedimiento, cuántas ejecuciones pasaron por cada
           paso y cuánto tardaron.

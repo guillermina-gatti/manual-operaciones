@@ -1,77 +1,130 @@
-// General summary of the metrics panel: five tiles (executions, completed, in progress,
-// abandoned, average time) and the feather bar with their distribution. Every number comes from
-// the API totals or from the procedures, never from the area cards, so a procedure with two
-// areas counts once. Texts stay in ink colors; nothing is told by color alone.
+// "Resumen general": one panel in bosque instead of five tiles, the same as "Tu resumen" of Mi
+// actividad (components/metrics/hero.tsx). The ring with the % completed, the headline, the bar
+// with its legend, and three data on the right: executions, abandoned with their share, and the
+// average time. Every number comes from the API totals, never from the area cards, so a procedure
+// with two areas counts once. Without executions, the empty state, without ring or bar.
 import { useId } from 'react';
-import { CARD } from '@/components/documents/design';
 import type { ProceduresMetricsResponse } from '@/lib/api';
-import { formatDuration } from '@/lib/executions/format';
-import { formatCount, formatPercent } from '@/lib/metrics/format';
-import { outcomeShares } from '@/lib/metrics/summary';
-import { FeatherBar, FeatherLegend } from './FeatherBar';
-import { MetricTiles } from './MetricTiles';
-import type { MetricTile } from './MetricTiles';
-import { ChartIcon, CheckIcon, ClockIcon, CrossIcon, FeatherIcon, TimerIcon } from './icons';
-import styles from './metrics.module.css';
+import { formatCount } from '@/lib/metrics/format';
+import {
+  abandonedCountLabel,
+  completedCountLabel,
+  generalSummaryHeadline,
+  inProgressCountLabel,
+  outcomeShares,
+  spacedPercent,
+} from '@/lib/metrics/summary';
+import { HERO_MUTED, OUTCOME_FILL } from '@/components/executions/activity-design';
+import {
+  CompletedRing,
+  DotLegend,
+  HERO_DATA,
+  HERO_EYEBROW,
+  HERO_GRID,
+  HERO_HEADLINE,
+  HERO_PANEL,
+  HeroDatum,
+  HeroDuration,
+  SegmentedBar,
+} from './hero';
+import type { HeroPart } from './hero';
+import { ABANDONED_FILL, SECTION_MARK } from './metrics-design';
 
-export function MetricsSummary({ metrics }: { metrics: ProceduresMetricsResponse }) {
-  const distributionId = useId();
+interface MetricsSummaryProps {
+  metrics: ProceduresMetricsResponse;
+  // "Todas las áreas", "Todas mis áreas" or the area chosen.
+  areaName: string;
+  // A chosen area: the empty state names it.
+  areaChosen: boolean;
+}
+
+export function MetricsSummary({ metrics, areaName, areaChosen }: MetricsSummaryProps) {
+  const labelId = useId();
   const { totals, staleAfterHours } = metrics;
-  const shares = outcomeShares(totals);
-  const ofTotal = (share: number | null) => `${formatPercent(share)} del total`;
+  const eyebrow = (
+    <h2 className={`${HERO_EYEBROW} flex items-center gap-2`}>
+      <span aria-hidden="true" className={SECTION_MARK} />
+      <span>
+        <span id={labelId}>Resumen general</span> · {areaName}
+      </span>
+    </h2>
+  );
 
-  const tiles: MetricTile[] = [
+  if (totals.started === 0) {
+    return (
+      <section aria-labelledby={labelId} className={`${HERO_PANEL} flex flex-col gap-2`}>
+        {eyebrow}
+        <p className={HERO_HEADLINE}>
+          {areaChosen ? `Sin ejecuciones en ${areaName}` : 'No hay ejecuciones en este período.'}
+        </p>
+        <p className={HERO_MUTED}>
+          {areaChosen
+            ? 'No hay procedimientos ejecutados en este período. Probá con otras fechas.'
+            : 'Probá con otras fechas u otra área.'}
+        </p>
+      </section>
+    );
+  }
+
+  const shares = outcomeShares(totals);
+  const parts: HeroPart[] = [
     {
-      label: 'Ejecuciones',
-      icon: <ChartIcon />,
-      value: formatCount(totals.started),
-      hint: 'en el período elegido',
+      key: 'completed',
+      count: totals.completed,
+      fill: OUTCOME_FILL.completed,
+      text: completedCountLabel(totals.completed),
     },
     {
-      label: 'Completadas',
-      icon: <CheckIcon />,
-      value: formatCount(totals.completed),
-      hint: ofTotal(shares.completed),
-      hintClass: 'font-semibold text-chip-area-texto',
+      key: 'inProgress',
+      count: totals.inProgress,
+      fill: OUTCOME_FILL.inProgress,
+      text: inProgressCountLabel(totals.inProgress),
     },
     {
-      label: 'En curso',
-      icon: <ClockIcon />,
-      value: formatCount(totals.inProgress),
-      hint: ofTotal(shares.inProgress),
-      hintClass: 'font-semibold text-texto',
-    },
-    {
-      label: 'Abandonadas',
-      icon: <CrossIcon />,
-      value: formatCount(totals.abandoned),
-      hint: ofTotal(shares.abandoned),
-      hintClass: 'font-semibold text-rosa-alerta-texto',
-    },
-    {
-      label: 'Tiempo medio',
-      icon: <TimerIcon />,
-      // The exact average of the API, from the sums of every completed execution.
-      value: formatDuration(totals.avgCompletionMs),
-      hint: 'por ejecución completada',
-      small: true,
+      key: 'abandoned',
+      count: totals.abandoned,
+      fill: ABANDONED_FILL,
+      text: abandonedCountLabel(totals.abandoned),
     },
   ];
 
   return (
-    <div className="flex flex-col gap-6">
-      <MetricTiles tiles={tiles} />
+    <div className="flex flex-col gap-3">
+      <section aria-labelledby={labelId} className={HERO_PANEL}>
+        <div className={HERO_GRID}>
+          <CompletedRing share={shares.completed} />
 
-      <section aria-labelledby={distributionId} className={`${CARD} flex flex-col gap-4 p-6 sm:p-8`}>
-        <h3
-          id={distributionId}
-          className={`${styles.palette} flex items-center gap-2 text-xl font-bold text-texto`}
-        >
-          Distribución de ejecuciones
-          <FeatherIcon className={styles.fallingFeather} />
-        </h3>
-        <FeatherBar counts={totals} />
-        <FeatherLegend counts={totals} />
+          <div className="col-start-2 flex min-w-0 flex-col gap-1.5 lg:self-end">
+            {eyebrow}
+            <p className={HERO_HEADLINE}>
+              {generalSummaryHeadline(totals.completed, totals.started)}
+            </p>
+          </div>
+
+          <div className="col-span-2 flex min-w-0 flex-col gap-3 lg:col-span-1 lg:col-start-2 lg:self-start">
+            <SegmentedBar parts={parts} total={totals.started} />
+            <DotLegend label="Ejecuciones del período" parts={parts} />
+          </div>
+
+          <dl className={HERO_DATA}>
+            <HeroDatum label="Ejecuciones" value={formatCount(totals.started)} />
+            <HeroDatum
+              label="Abandonadas"
+              value={formatCount(totals.abandoned)}
+              note={`(${spacedPercent(shares.abandoned)} del total)`}
+            />
+            <HeroDatum
+              label={
+                <>
+                  Tiempo medio
+                  <span className="hidden lg:inline"> por ejecución completada</span>
+                </>
+              }
+              // The exact average of the API, from the sums of every completed execution.
+              value={<HeroDuration ms={totals.avgCompletionMs} />}
+            />
+          </dl>
+        </div>
       </section>
 
       <p className="text-sm text-texto-suave">

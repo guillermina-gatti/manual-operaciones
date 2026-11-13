@@ -26,8 +26,8 @@ import { SECTION_PARAM, keepMetricsSection, parseMetricsSection, withMetricsSect
 import { useSession } from '@/lib/session';
 import { MetricsFiltersForm } from './MetricsFiltersForm';
 import { AreaMetricsSection } from './AreaMetricsSection';
-import { FeatherIcon } from './icons';
 import { MetricsTabs } from './MetricsTabs';
+import { SectionHeading } from './SectionHeading';
 import { MetricsSummary } from './MetricsSummary';
 import { ProcedureTimeTable } from './ProcedureTimeTable';
 import { TeamCMetrics } from './TeamCMetrics';
@@ -124,38 +124,30 @@ function ProceduresSection({ filters, areas, state, isAdmin, keepSection }: Proc
       ? 'Todas las áreas'
       : 'Todas mis áreas';
 
+  // With the numbers, the panel carries its own heading ("Resumen general · Todas las áreas").
+  if (state.status === 'success') {
+    return (
+      <MetricsSummary metrics={state.data} areaName={areaName} areaChosen={Boolean(filters.areaId)} />
+    );
+  }
+
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-6">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 id={headingId} className="text-2xl font-bold text-texto">
-          Resumen general
-        </h2>
+        <SectionHeading id={headingId}>Resumen general</SectionHeading>
         <p className="text-texto-suave">{areaName}</p>
       </div>
-      <ProceduresContent
-        filters={filters}
-        state={state}
-        areaName={areaName}
-        keepSection={keepSection}
-      />
+      <ProceduresState filters={filters} state={state} keepSection={keepSection} />
     </section>
   );
 }
 
-function ProceduresContent({
+// While the numbers load, or when they cannot be read.
+function ProceduresState({
   filters,
   state,
-  areaName,
   keepSection,
-}: Pick<ProceduresSectionProps, 'filters' | 'state' | 'keepSection'> & { areaName: string }) {
-  if (state.status === 'idle' || state.status === 'loading') {
-    return (
-      <ScreenState kind="loading" label="Cargando las métricas…">
-        <MetricsSkeleton />
-      </ScreenState>
-    );
-  }
-
+}: Pick<ProceduresSectionProps, 'filters' | 'state' | 'keepSection'>) {
   if (state.status === 'error') {
     const { message, canRetry, areaNotFound } = describeMetricsError(state.error);
     return (
@@ -175,32 +167,11 @@ function ProceduresContent({
     );
   }
 
-  const metrics = state.data;
-  // A chosen area without executions: the design's dashed box with a big feather.
-  if (metrics.totals.started === 0 && filters.areaId) {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-borde px-6 py-12 text-center">
-        <FeatherIcon className="size-12 text-barro" />
-        <p className="text-lg font-semibold text-texto">Sin ejecuciones en {areaName}</p>
-        <p className="text-texto-suave">
-          No hay procedimientos ejecutados en este período. Probá con otras fechas.
-        </p>
-      </div>
-    );
-  }
-
-  if (metrics.totals.started === 0) {
-    return (
-      <div className={STATE_CARD}>
-        <div className="flex flex-col items-center gap-2 py-12 text-center">
-          <p className="text-lg font-semibold text-texto">No hay ejecuciones en este período.</p>
-          <p className="text-texto-suave">Probá con otras fechas u otra área.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return <MetricsSummary metrics={metrics} />;
+  return (
+    <ScreenState kind="loading" label="Cargando las métricas…">
+      <MetricsSkeleton />
+    </ScreenState>
+  );
 }
 
 // The sections below the summary, only when the period has executions.
@@ -213,10 +184,13 @@ function ProcedureDetails({
   areas: Area[];
   areaId: string | null;
 }) {
-  const areaNames = new Map(areas.map((area) => [area.id, displayAreaName(area)]));
+  // The chips say "(inactiva)" themselves; an area the directory does not send is taken as active.
+  const areaRefs = new Map(
+    areas.map((area) => [area.id, { id: area.id, name: area.name, isActive: area.isActive !== false }]),
+  );
   return (
     <>
-      <ProcedureTimeTable procedures={metrics.procedures} areaNames={areaNames} />
+      <ProcedureTimeTable procedures={metrics.procedures} areas={areaRefs} />
       <AreaMetricsSection
         procedures={metrics.procedures}
         areas={areas}
@@ -227,15 +201,12 @@ function ProcedureDetails({
   );
 }
 
+// The shape of the tab: the summary panel, the table and an area card.
 export function MetricsSkeleton() {
   return (
-    <div aria-hidden="true" className="flex animate-pulse flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <div key={n} className="h-36 rounded-2xl bg-borde last:col-span-2 sm:last:col-span-1" />
-        ))}
-      </div>
-      <div className="h-72 rounded-2xl bg-borde" />
+    <div aria-hidden="true" className="flex animate-pulse flex-col gap-6 motion-reduce:animate-none">
+      <div className="h-56 rounded-3xl bg-borde lg:h-48" />
+      <div className="h-72 rounded-[20px] bg-borde" />
       <div className="h-56 rounded-2xl bg-borde" />
     </div>
   );

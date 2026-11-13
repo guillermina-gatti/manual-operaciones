@@ -111,7 +111,12 @@ const areaCard = (name: string) =>
   screen.getByRole('region', { name: new RegExp(`^${name}$`) });
 const SIN_DATOS = '0a000000-0000-4000-8000-000000000003';
 const summaryHeading = () =>
-  screen.getByRole('heading', { name: 'Resumen general' }).parentElement!;
+  screen.getByRole('heading', { name: /^Resumen general/ }).parentElement!;
+// A datum of the summary panel: the value (dd) next to its label (dt).
+const datum = (label: RegExp) =>
+  within(screen.getByRole('region', { name: 'Resumen general' }))
+    .getAllByRole('term')
+    .find((term) => label.test(term.textContent ?? ''))!.nextElementSibling!.textContent;
 type User = ReturnType<typeof userEvent.setup>;
 const areaButton = () => screen.getByRole('button', { name: /^Área/ });
 // Until the area names arrive, the selector only has "Todas las áreas".
@@ -389,13 +394,12 @@ describe('with data', () => {
     render(<MetricsPanel />);
     await procedureCard();
 
-    const tile = (label: string) => screen.getAllByText(label, { selector: 'dt' })[0].parentElement!;
-    expect(tile('Ejecuciones')).toHaveTextContent('5en el período elegido');
-    expect(tile('Completadas')).toHaveTextContent('360,0% del total');
-    expect(tile('En curso')).toHaveTextContent('120,0% del total');
-    expect(tile('Abandonadas')).toHaveTextContent('120,0% del total');
+    expect(screen.getByRole('img', { name: '60,0 % completadas' })).toBeInTheDocument();
+    expect(screen.getByText('Se completaron 3 de las 5 ejecuciones del período')).toBeInTheDocument();
+    expect(datum(/^Ejecuciones$/)).toBe('5');
+    expect(datum(/^Abandonadas$/)).toBe('1(20,0 % del total)');
     // totals.avgCompletionMs: (12 min × 2 + 5 min × 1) ÷ 3 completed.
-    expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 spor ejecución completada');
+    expect(datum(/^Tiempo medio/)).toBe('9 min 40 s');
     expect(
       screen.getByText(/^En curso: con avance en las últimas 24 h\. Abandonadas: sin avanzar/),
     ).toBeInTheDocument();
@@ -423,20 +427,18 @@ describe('with data', () => {
     render(<MetricsPanel />);
     await procedureCard();
 
-    const tile = screen.getAllByText('Tiempo medio', { selector: 'dt' })[0].parentElement!;
-    expect(tile).toHaveTextContent('2 min 3 s');
+    expect(datum(/^Tiempo medio/)).toBe('2 min 3 s');
   });
 
-  test('the distribution bar tells the counts as text, and the legend only counts', async () => {
+  test('the distribution is told in words by the legend; the bar is decorative', async () => {
     render(<MetricsPanel />);
     await procedureCard();
 
-    const distribution = screen.getByRole('region', { name: 'Distribución de ejecuciones' });
-    expect(within(distribution).getByRole('img')).toHaveAccessibleName(
-      'Distribución: 3 completadas, 1 en curso, 1 abandonadas',
-    );
-    const legend = within(distribution).getAllByRole('listitem').map((item) => item.textContent);
-    expect(legend).toEqual(['Completadas: 3', 'En curso: 1', 'Abandonadas: 1']);
+    const legend = within(screen.getByRole('list', { name: 'Ejecuciones del período' }))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(legend).toEqual(['3 completadas', '1 en curso', '1 abandonada']);
+    expect(screen.getByTestId('outcome-bar')).toHaveAttribute('aria-hidden', 'true');
   });
 
   test('a procedure with two areas counts once in the general summary', async () => {
@@ -454,9 +456,8 @@ describe('with data', () => {
     // It is shown in both area cards…
     expect(await screen.findAllByRole('article', { name: 'Cierre de caja' })).toHaveLength(2);
     // …but the general summary counts it once.
-    const tile = (label: string) => screen.getAllByText(label, { selector: 'dt' })[0].parentElement!;
-    expect(tile('Ejecuciones')).toHaveTextContent('5en el período elegido');
-    expect(tile('Tiempo medio')).toHaveTextContent('9 min 40 s');
+    expect(datum(/^Ejecuciones$/)).toBe('5');
+    expect(datum(/^Tiempo medio/)).toBe('9 min 40 s');
     expect(areaCard('Operaciones')).toHaveTextContent('2 procedimientos · 5 ejecuciones');
   });
 
@@ -468,6 +469,12 @@ describe('with data', () => {
     const names = within(table)
       .getAllByRole('rowheader')
       .map((header) => header.querySelector('span')?.textContent);
+    // Every section title of the tab carries the orange mark.
+    for (const name of ['Tiempo por procedimiento', 'Detalle por área']) {
+      expect(
+        screen.getByRole('heading', { level: 2, name }).querySelector('.bg-naranja'),
+      ).toBeInTheDocument();
+    }
     expect(names).toEqual(['Cierre de caja', 'Recepción de mercadería']);
   });
 
@@ -613,7 +620,7 @@ describe('with data', () => {
     ).toBeInTheDocument();
   });
 
-  test('a chosen area without executions shows the empty feather box', async () => {
+  test('a chosen area without executions says so in the summary panel', async () => {
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
     mocks.getProcedureMetrics.mockResolvedValue(EMPTY_METRICS);
     render(<MetricsPanel />);
@@ -812,7 +819,11 @@ describe('the tabs', () => {
     const headings = within(panel)
       .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent);
-    expect(headings).toEqual(['Resumen general', 'Tiempo por procedimiento', 'Detalle por área']);
+    expect(headings).toEqual([
+      'Resumen general · Todas las áreas',
+      'Tiempo por procedimiento',
+      'Detalle por área',
+    ]);
     expect(screen.queryByRole('article', { name: 'Documentos' })).not.toBeInTheDocument();
     expect(mocks.getDocuments).not.toHaveBeenCalled();
     expect(mocks.getAssistant).not.toHaveBeenCalled();

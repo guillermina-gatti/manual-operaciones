@@ -8,6 +8,7 @@ import { teamCMetrics } from '@/lib/metrics';
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { AssistantMetricsCard } from './AssistantMetricsCard';
 import { DocumentMetricsCard } from './DocumentMetricsCard';
+import { SectionHeading } from './SectionHeading';
 
 interface TeamCMetricsProps {
   filters: PanelFilters;
@@ -32,9 +33,7 @@ export function TeamCMetrics({ filters, userId, keepParams }: TeamCMetricsProps)
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-2xl font-bold text-texto">
-          Documentos y asistente
-        </h2>
+        <SectionHeading id={headingId}>Documentos y asistente</SectionHeading>
         <p className="text-texto-suave">
           Cómo están los documentos y cómo le fue al asistente con las consultas.
         </p>

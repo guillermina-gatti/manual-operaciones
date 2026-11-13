@@ -14,7 +14,17 @@ import { formatDuration } from '@/lib/executions/format';
 import { lastActivityParts, shareOf } from '@/lib/executions/my-activity';
 import { formatCount } from '@/lib/metrics/format';
 import { metricsProcedureName } from '@/lib/metrics/procedure-name';
-import { DONE_FILL, DONE_TRACK, ROW_LINE, SLOW_TAG, TABLE_FRAME, TABLE_HEAD } from './activity-design';
+import {
+  DONE_FILL,
+  DONE_TRACK,
+  ROW_LINE,
+  SLOW_TAG,
+  TABLE_CARD_LABEL,
+  TABLE_FRAME,
+  TABLE_HEAD,
+  TABLE_TD,
+  TABLE_TH,
+} from './activity-design';
 
 interface RecentProceduresTableProps {
   procedures: MyProcedureMetrics[];
@@ -23,11 +33,6 @@ interface RecentProceduresTableProps {
   areas: ReadonlyMap<string, DocumentReference>;
 }
 
-const HEAD = `px-2 py-3 text-left text-xs font-bold tracking-[0.02em] whitespace-nowrap uppercase first:pl-6 last:pr-6`;
-// Desktop: the padding of the row (16 × 24) and 16 px between columns. Card: no padding of its own.
-const CELL = 'lg:px-2 lg:py-4 lg:align-middle lg:first:pl-6 lg:last:pr-6';
-// What only the card says ("Tiempo medio", "Se traba en:"…).
-const CARD_LABEL = 'block text-xs font-semibold tracking-wide text-texto-suave uppercase lg:hidden';
 
 export function RecentProceduresTable({
   procedures,
@@ -62,26 +67,26 @@ export function RecentProceduresTable({
           </colgroup>
           <thead className={`${TABLE_HEAD} max-lg:hidden`}>
             <tr>
-              <th scope="col" className={HEAD}>
+              <th scope="col" className={TABLE_TH}>
                 Procedimiento
               </th>
-              <th scope="col" className={HEAD}>
+              <th scope="col" className={TABLE_TH}>
                 Empezadas
               </th>
-              <th scope="col" className={HEAD}>
+              <th scope="col" className={TABLE_TH}>
                 Completadas
               </th>
-              <th scope="col" className={HEAD}>
+              <th scope="col" className={TABLE_TH}>
                 <span aria-hidden="true">{staleShort}</span>
                 <span className="sr-only">{staleName}</span>
               </th>
-              <th scope="col" className={HEAD}>
+              <th scope="col" className={TABLE_TH}>
                 Tiempo medio
               </th>
-              <th scope="col" className={HEAD}>
+              <th scope="col" className={TABLE_TH}>
                 Paso que más te lleva
               </th>
-              <th scope="col" className={HEAD}>
+              <th scope="col" className={TABLE_TH}>
                 Última vez
               </th>
             </tr>
@@ -117,7 +122,7 @@ function ProcedureRow({ procedure, areas, staleShort, staleName }: ProcedureRowP
     <tr
       className={`border-t ${ROW_LINE} first:border-t-0 lg:transition-colors lg:hover:bg-salvia/60 motion-reduce:transition-none max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-4 max-lg:gap-y-4 max-lg:px-5 max-lg:py-5 lg:first:border-t`}
     >
-      <th scope="row" className={`${CELL} col-span-2 text-left font-normal max-lg:block`}>
+      <th scope="row" className={`${TABLE_TD} col-span-2 text-left font-normal max-lg:block`}>
         <span className="block text-[17px] leading-snug font-bold break-words">
           {metricsProcedureName(procedure.procedureId, procedure.title)}
         </span>
@@ -128,9 +133,9 @@ function ProcedureRow({ procedure, areas, staleShort, staleName }: ProcedureRowP
         )}
       </th>
 
-      <td className={`${CELL} tabular-nums max-lg:hidden`}>{formatCount(procedure.started)}</td>
+      <td className={`${TABLE_TD} tabular-nums max-lg:hidden`}>{formatCount(procedure.started)}</td>
 
-      <td className={`${CELL} col-span-2 max-lg:block`}>
+      <td className={`${TABLE_TD} col-span-2 max-lg:block`}>
         <span className="tabular-nums whitespace-nowrap">
           <strong className="font-bold">{formatCount(procedure.completed)}</strong>{' '}
           <span className="text-texto-suave">de {formatCount(procedure.started)}</span>
@@ -147,22 +152,22 @@ function ProcedureRow({ procedure, areas, staleShort, staleName }: ProcedureRowP
         </span>
       </td>
 
-      <td className={`${CELL} max-lg:order-1 max-lg:block`}>
-        <span className={CARD_LABEL}>
+      <td className={`${TABLE_TD} max-lg:order-1 max-lg:block`}>
+        <span className={TABLE_CARD_LABEL}>
           <span aria-hidden="true">{staleShort}</span>
           <span className="sr-only">{staleName}</span>
         </span>
         <StaleCount count={procedure.abandoned} />
       </td>
 
-      <td className={`${CELL} max-lg:block`}>
-        <span className={CARD_LABEL}>Tiempo medio</span>
+      <td className={`${TABLE_TD} max-lg:block`}>
+        <span className={TABLE_CARD_LABEL}>Tiempo medio</span>
         <span className="text-lg font-bold whitespace-nowrap tabular-nums">
           {formatDuration(procedure.avgCompletionMs)}
         </span>
       </td>
 
-      <td className={`${CELL} col-span-2 max-lg:order-2 max-lg:block`}>
+      <td className={`${TABLE_TD} col-span-2 max-lg:order-2 max-lg:block`}>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="min-w-0 break-words">
             <span className="text-texto-suave lg:hidden">Se traba en: </span>
@@ -172,7 +177,7 @@ function ProcedureRow({ procedure, areas, staleShort, staleName }: ProcedureRowP
         </span>
       </td>
 
-      <td className={`${CELL} col-span-2 max-lg:order-3 max-lg:block`}>
+      <td className={`${TABLE_TD} col-span-2 max-lg:order-3 max-lg:block`}>
         <span className="text-sm text-texto-suave lg:hidden">Última vez: </span>
         {last ? (
           <time dateTime={procedure.lastStartedAt} className="tabular-nums">
