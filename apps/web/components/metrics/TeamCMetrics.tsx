@@ -13,9 +13,11 @@ interface TeamCMetricsProps {
   filters: PanelFilters;
   // Without a session nothing is asked for. Part of the key: switching users asks again.
   userId: string | null;
+  // What the page adds to "Ver todas mis áreas" (the tab of /metricas).
+  keepParams?: (href: string) => string;
 }
 
-export function TeamCMetrics({ filters, userId }: TeamCMetricsProps) {
+export function TeamCMetrics({ filters, userId, keepParams }: TeamCMetricsProps) {
   const headingId = useId();
   const query = metricsQuery(filters);
   const assistant = useApiResource(
@@ -38,8 +40,8 @@ export function TeamCMetrics({ filters, userId }: TeamCMetricsProps) {
         </p>
       </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <DocumentMetricsCard filters={filters} state={documents} />
-        <AssistantMetricsCard filters={filters} state={assistant} />
+        <DocumentMetricsCard filters={filters} state={documents} keepParams={keepParams} />
+        <AssistantMetricsCard filters={filters} state={assistant} keepParams={keepParams} />
       </div>
     </section>
   );

@@ -704,12 +704,11 @@ describe('empty and errors', () => {
 });
 
 describe('metrics of pair C', () => {
-  test('go last, in "Documentos y asistente", documents first', async () => {
+  test('in the "Documentos y asistente" tab, documents first', async () => {
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
     render(<MetricsPanel />);
-    await procedureCard();
+    await screen.findByRole('article', { name: 'Documentos' });
 
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings.at(-1)).toBe('Documentos y asistente');
     const section = screen.getByRole('region', { name: 'Documentos y asistente' });
     const cards = within(section)
       .getAllByRole('heading', { level: 3 })
@@ -718,7 +717,9 @@ describe('metrics of pair C', () => {
   });
 
   test('the assistant card asks with the panel filters and shows the totals', async () => {
-    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
+    mocks.searchParams = new URLSearchParams(
+      `area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15&seccion=documentos`,
+    );
     render(<MetricsPanel />);
 
     const card = await screen.findByRole('article', { name: 'Asistente' });
@@ -739,6 +740,7 @@ describe('metrics of pair C', () => {
 
   test('the assistant card describes an error of its own, without hiding the documents', async () => {
     mocks.getAssistant.mockRejectedValue(new ApiError(503));
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
     render(<MetricsPanel />);
 
     const card = await screen.findByRole('article', { name: 'Asistente' });
@@ -751,6 +753,7 @@ describe('metrics of pair C', () => {
 
   test('without a session the assistant is not asked for', async () => {
     mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
     render(<MetricsPanel />);
 
     await waitFor(() => expect(mocks.getDocuments).not.toHaveBeenCalled());
@@ -758,7 +761,9 @@ describe('metrics of pair C', () => {
   });
 
   test('the documents card asks with the panel filters and shows the totals', async () => {
-    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
+    mocks.searchParams = new URLSearchParams(
+      `area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15&seccion=documentos`,
+    );
     render(<MetricsPanel />);
 
     const card = await screen.findByRole('article', { name: 'Documentos' });
@@ -769,6 +774,154 @@ describe('metrics of pair C', () => {
       { areaId: VENTAS, from: '2026-10-01', to: '2026-10-15' },
       expect.any(AbortSignal),
     );
+  });
+});
+
+describe('the tabs', () => {
+  const tablist = () => screen.getByRole('tablist', { name: 'Secciones de las métricas' });
+  const tab = (name: string) => within(tablist()).getByRole('tab', { name });
+
+  test('two tabs; without the parameter, "Procedimientos" is open', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    expect(within(tablist()).getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Procedimientos',
+      'Documentos y asistente',
+    ]);
+    expect(tab('Procedimientos')).toHaveAttribute('aria-selected', 'true');
+    expect(tab('Documentos y asistente')).toHaveAttribute('aria-selected', 'false');
+    // Only the open tab is in the Tab order.
+    expect(tab('Procedimientos')).toHaveAttribute('tabindex', '0');
+    expect(tab('Documentos y asistente')).toHaveAttribute('tabindex', '-1');
+  });
+
+  test('the panel is named by its tab and the open tab controls it', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const panel = screen.getByRole('tabpanel', { name: 'Procedimientos' });
+    expect(tab('Procedimientos')).toHaveAttribute('aria-controls', panel.id);
+  });
+
+  test('"Procedimientos": summary, time and areas; documents and assistant are not asked for', async () => {
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    const panel = screen.getByRole('tabpanel', { name: 'Procedimientos' });
+    const headings = within(panel)
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual(['Resumen general', 'Tiempo por procedimiento', 'Detalle por área']);
+    expect(screen.queryByRole('article', { name: 'Documentos' })).not.toBeInTheDocument();
+    expect(mocks.getDocuments).not.toHaveBeenCalled();
+    expect(mocks.getAssistant).not.toHaveBeenCalled();
+  });
+
+  test('"Documentos y asistente": only its cards, never the procedures', async () => {
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
+    render(<MetricsPanel />);
+
+    const panel = screen.getByRole('tabpanel', { name: 'Documentos y asistente' });
+    await within(panel).findByRole('article', { name: 'Documentos' });
+    expect(within(panel).getByRole('article', { name: 'Asistente' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Resumen general' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Detalle por área' })).not.toBeInTheDocument();
+    expect(tab('Documentos y asistente')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('the filters stay above the tabs in both', async () => {
+    mocks.searchParams = new URLSearchParams('seccion=documentos');
+    render(<MetricsPanel />);
+
+    const form = screen.getByRole('form', { name: 'Filtros' });
+    expect(form.compareDocumentPosition(tablist()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('each tab is a link with the filters of the address and its ?seccion=', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15`);
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    expect(tab('Documentos y asistente')).toHaveAttribute(
+      'href',
+      `/metricas?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15&seccion=documentos`,
+    );
+    expect(tab('Procedimientos')).toHaveAttribute(
+      'href',
+      `/metricas?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15&seccion=procedimientos`,
+    );
+  });
+
+  test('the arrows move to the other tab and open it; Home and End too', async () => {
+    const user = userEvent.setup();
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    tab('Procedimientos').focus();
+    await user.keyboard('{ArrowRight}');
+    expect(tab('Documentos y asistente')).toHaveFocus();
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      '/metricas?desde=2026-10-01&hasta=2026-10-27&seccion=documentos',
+      { scroll: false },
+    );
+
+    tab('Procedimientos').focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(tab('Documentos y asistente')).toHaveFocus();
+    tab('Procedimientos').focus();
+    await user.keyboard('{End}');
+    expect(mocks.push).toHaveBeenCalledTimes(3);
+    await user.keyboard('{Home}');
+    // Already open: nothing to do.
+    expect(mocks.push).toHaveBeenCalledTimes(3);
+  });
+
+  test('a value that does not exist opens "Procedimientos"', async () => {
+    mocks.searchParams = new URLSearchParams('seccion=otra');
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    expect(tab('Procedimientos')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('applying or clearing the filters keeps ?seccion=', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('desde=2026-10-01&hasta=2026-10-15&seccion=documentos');
+    render(<MetricsPanel />);
+    await areasLoaded('2 áreas');
+
+    await chooseArea(user, 'Ventas');
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      `/metricas?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-15&seccion=documentos`,
+    );
+    // The quick period goes with the area chosen in the selector.
+    await user.click(quickPeriod('Hoy'));
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      `/metricas?area=${VENTAS}&desde=2026-10-27&hasta=2026-10-27&seccion=documentos`,
+    );
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(mocks.push).toHaveBeenLastCalledWith('/metricas?seccion=documentos');
+  });
+
+  test('without ?seccion=, the filters write nothing of it', async () => {
+    const user = userEvent.setup();
+    render(<MetricsPanel />);
+    await procedureCard();
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(mocks.push).toHaveBeenLastCalledWith('/metricas');
+  });
+
+  test('"Ver todas mis áreas" keeps the tab', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&seccion=documentos`);
+    mocks.getDocuments.mockRejectedValue(new ApiError(404, ['No se encontró el área']));
+    render(<MetricsPanel />);
+
+    const documents = await screen.findByRole('article', { name: 'Documentos' });
+    expect(
+      await within(documents).findByRole('link', { name: 'Ver todas mis áreas' }),
+    ).toHaveAttribute('href', '/metricas?desde=2026-10-01&hasta=2026-10-27&seccion=documentos');
   });
 });
 

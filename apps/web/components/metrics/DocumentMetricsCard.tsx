@@ -17,10 +17,12 @@ import { MetricsFacts } from './MetricsFacts';
 
 interface DocumentMetricsCardProps {
   filters: PanelFilters;
+  // What the page adds to "Ver todas mis áreas" (/metricas keeps its tab). By default nothing.
+  keepParams?: (href: string) => string;
   state: ApiResource<DocumentMetrics | null>;
 }
 
-export function DocumentMetricsCard({ filters, state }: DocumentMetricsCardProps) {
+export function DocumentMetricsCard({ filters, state, keepParams }: DocumentMetricsCardProps) {
   const headingId = useId();
 
   return (
@@ -37,12 +39,12 @@ export function DocumentMetricsCard({ filters, state }: DocumentMetricsCardProps
           el período».
         </p>
       </div>
-      <DocumentMetricsContent filters={filters} state={state} />
+      <DocumentMetricsContent filters={filters} state={state} keepParams={keepParams} />
     </article>
   );
 }
 
-function DocumentMetricsContent({ filters, state }: DocumentMetricsCardProps) {
+function DocumentMetricsContent({ filters, state, keepParams = (href) => href }: DocumentMetricsCardProps) {
   if (state.status === 'idle' || state.status === 'loading') {
     return <ScreenState kind="loading" label="Cargando las métricas de documentos…" />;
   }
@@ -55,7 +57,7 @@ function DocumentMetricsContent({ filters, state }: DocumentMetricsCardProps) {
         {areaNotFound && (
           <p className="-mt-6 pb-6 text-center">
             <Link
-              href={metricsHref({ ...filters, areaId: null })}
+              href={keepParams(metricsHref({ ...filters, areaId: null }))}
               className={TEXT_LINK}
             >
               Ver todas mis áreas

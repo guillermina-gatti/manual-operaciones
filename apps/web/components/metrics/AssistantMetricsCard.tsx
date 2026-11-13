@@ -16,10 +16,12 @@ import { MetricsFacts } from './MetricsFacts';
 
 interface AssistantMetricsCardProps {
   filters: PanelFilters;
+  // What the page adds to "Ver todas mis áreas" (/metricas keeps its tab). By default nothing.
+  keepParams?: (href: string) => string;
   state: ApiResource<AssistantMetrics>;
 }
 
-export function AssistantMetricsCard({ filters, state }: AssistantMetricsCardProps) {
+export function AssistantMetricsCard({ filters, state, keepParams }: AssistantMetricsCardProps) {
   const headingId = useId();
 
   return (
@@ -36,12 +38,12 @@ export function AssistantMetricsCard({ filters, state }: AssistantMetricsCardPro
         </p>
         <p className={HINT}>El filtro por área usa las áreas actuales de quien preguntó.</p>
       </div>
-      <AssistantMetricsContent filters={filters} state={state} />
+      <AssistantMetricsContent filters={filters} state={state} keepParams={keepParams} />
     </article>
   );
 }
 
-function AssistantMetricsContent({ filters, state }: AssistantMetricsCardProps) {
+function AssistantMetricsContent({ filters, state, keepParams = (href) => href }: AssistantMetricsCardProps) {
   if (state.status === 'idle' || state.status === 'loading') {
     return <ScreenState kind="loading" label="Cargando las métricas del asistente…" />;
   }
@@ -53,7 +55,7 @@ function AssistantMetricsContent({ filters, state }: AssistantMetricsCardProps) 
         <ScreenState kind="error" message={message} onRetry={canRetry ? state.reload : undefined} />
         {areaNotFound && (
           <p className="-mt-6 pb-6 text-center">
-            <Link href={metricsHref({ ...filters, areaId: null })} className={TEXT_LINK}>
+            <Link href={keepParams(metricsHref({ ...filters, areaId: null }))} className={TEXT_LINK}>
               Ver todas mis áreas
             </Link>
           </p>

@@ -1,8 +1,9 @@
 'use client';
 
-// Procedures metrics panel (HU38): filters, headline numbers, one card per procedure and the
-// metrics of pair C. The API decides which procedures each role sees; the filters live in the
-// address.
+// Procedures metrics panel (HU38): the filters, always on top, and two tabs. "Procedimientos": the
+// headline numbers, the time per procedure and the detail per area. "Documentos y asistente": the
+// metrics of pair C, asked for only when that tab is open. The API decides which procedures each
+// role sees; the filters and the tab live in the address.
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useId } from 'react';
@@ -21,10 +22,12 @@ import {
   withAreaHints,
 } from '@/lib/metrics/filters';
 import type { PanelFilters } from '@/lib/metrics/filters';
+import { SECTION_PARAM, keepMetricsSection, parseMetricsSection, withMetricsSection } from '@/lib/metrics/section';
 import { useSession } from '@/lib/session';
 import { MetricsFiltersForm } from './MetricsFiltersForm';
 import { AreaMetricsSection } from './AreaMetricsSection';
 import { FeatherIcon } from './icons';
+import { MetricsTabs } from './MetricsTabs';
 import { MetricsSummary } from './MetricsSummary';
 import { ProcedureTimeTable } from './ProcedureTimeTable';
 import { TeamCMetrics } from './TeamCMetrics';
@@ -35,10 +38,16 @@ const STATE_CARD = `${CARD} px-6 sm:px-8`;
 export function MetricsPanel() {
   const { user } = useSession();
   const today = todayInCompany();
-  const filters = parseMetricsFilters(useSearchParams(), today);
+  const params = useSearchParams();
+  const filters = parseMetricsFilters(params, today);
   const query = metricsQuery(filters);
+  const section = parseMetricsSection(params.get(SECTION_PARAM));
+  // The filters and "Ver todas mis áreas" keep the tab, as it is written in the address.
+  const keepSection = keepMetricsSection(params.get(SECTION_PARAM));
 
-  // The key includes the user: switching test users asks again.
+  // Both tabs ask for the procedures: the area selector of the filters takes from them the areas a
+  // SUPERVISOR can choose and how many procedures each one has. The key includes the user:
+  // switching test users asks again.
   const metrics = useApiResource(user ? `metrics:${user.id}${query}` : null, (signal) =>
     getProcedureMetrics(filters, signal),
   );
@@ -69,17 +78,29 @@ export function MetricsPanel() {
         filters={filters}
         areas={options}
         today={today}
+        keepParams={keepSection}
       />
-      <ProceduresSection
-        filters={filters}
-        areas={areaList}
-        state={metrics}
-        isAdmin={isAdmin}
-      />
-      {metrics.status === 'success' && metrics.data.totals.started > 0 && (
-        <ProcedureDetails metrics={metrics.data} areas={areaList} areaId={filters.areaId} />
-      )}
-      <TeamCMetrics filters={filters} userId={user?.id ?? null} />
+      <MetricsTabs
+        section={section}
+        hrefFor={(tab) => withMetricsSection(metricsHref(filters), tab)}
+      >
+        {section === 'procedimientos' ? (
+          <>
+            <ProceduresSection
+              filters={filters}
+              areas={areaList}
+              state={metrics}
+              isAdmin={isAdmin}
+              keepSection={keepSection}
+            />
+            {metrics.status === 'success' && metrics.data.totals.started > 0 && (
+              <ProcedureDetails metrics={metrics.data} areas={areaList} areaId={filters.areaId} />
+            )}
+          </>
+        ) : (
+          <TeamCMetrics filters={filters} userId={user?.id ?? null} keepParams={keepSection} />
+        )}
+      </MetricsTabs>
     </div>
   );
 }
@@ -89,9 +110,10 @@ interface ProceduresSectionProps {
   areas: Area[];
   state: ApiResource<ProceduresMetricsResponse>;
   isAdmin: boolean;
+  keepSection: (href: string) => string;
 }
 
-function ProceduresSection({ filters, areas, state, isAdmin }: ProceduresSectionProps) {
+function ProceduresSection({ filters, areas, state, isAdmin, keepSection }: ProceduresSectionProps) {
   const headingId = useId();
   const chosen = areas.find((area) => area.id === filters.areaId);
   const areaName = filters.areaId
@@ -110,7 +132,12 @@ function ProceduresSection({ filters, areas, state, isAdmin }: ProceduresSection
         </h2>
         <p className="text-texto-suave">{areaName}</p>
       </div>
-      <ProceduresContent filters={filters} state={state} areaName={areaName} />
+      <ProceduresContent
+        filters={filters}
+        state={state}
+        areaName={areaName}
+        keepSection={keepSection}
+      />
     </section>
   );
 }
@@ -119,7 +146,8 @@ function ProceduresContent({
   filters,
   state,
   areaName,
-}: Pick<ProceduresSectionProps, 'filters' | 'state'> & { areaName: string }) {
+  keepSection,
+}: Pick<ProceduresSectionProps, 'filters' | 'state' | 'keepSection'> & { areaName: string }) {
   if (state.status === 'idle' || state.status === 'loading') {
     return (
       <ScreenState kind="loading" label="Cargando las métricas…">
@@ -136,7 +164,7 @@ function ProceduresContent({
         {areaNotFound && (
           <p className="-mt-6 pb-10 text-center">
             <Link
-              href={metricsHref({ ...filters, areaId: null })}
+              href={keepSection(metricsHref({ ...filters, areaId: null }))}
               className={TEXT_LINK}
             >
               Ver todas mis áreas
