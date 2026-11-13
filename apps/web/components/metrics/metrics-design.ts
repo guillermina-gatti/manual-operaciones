@@ -20,13 +20,27 @@ export const SECTION_MARK = 'h-[1em] w-1 shrink-0 rounded-full bg-naranja';
 // the columns read as columns.
 export const DATA_CELL = `${TABLE_TD} text-left tabular-nums`;
 
-// "Detalle por área": the head of an area card fades from the green of the table heads to white.
-// The text on it is texto (12,5:1 on #E6EFE9); texto-suave would give 4,45:1 there.
-export const AREA_HEAD = 'bg-linear-to-b from-[#E6EFE9] to-blanco';
-// An open procedure: 5 px of naranja on its left (an indicator) and a pale green background. On
-// #F3F8F5: texto 13,7:1, texto-suave 4,86:1, durazno-texto 5,41:1.
-export const OPEN_PROCEDURE = 'border-l-[5px] border-naranja bg-[#F3F8F5]';
-export const CLOSED_PROCEDURE = 'border-l-[5px] border-transparent';
+// "Detalle por área", flat: no gradient and no orange stripe anywhere.
+// The area card: white, the border of the tables, 24 px of radius and a soft bosque shadow.
+export const AREA_CARD =
+  'overflow-hidden rounded-3xl border border-[#DDE3DE] bg-blanco shadow-[0_4px_16px_rgba(11,66,51,0.06)]';
+// The strip over the procedures: the background and text of the table heads (TABLE_HEAD, 8,2:1).
+// texto-suave would give 4,45:1 on #E6EFE9.
+// A closed procedure row, on hover: pale green (texto-suave on it 4,86:1, durazno-texto 5,41:1).
+export const ROW_HOVER = 'hover:bg-[#F3F8F5]';
+// The open procedure row: solid bosque with white text (11,4:1); its secondary texts are HERO_MUTED
+// (8,1:1) and its abandoned ones, when there are any, a light peach (8,3:1). The completed bar goes
+// light green (RING_STROKE's #7FD1A5, 6,3:1) over white at 22 %.
+export const OPEN_ROW = 'bg-bosque text-blanco';
+export const OPEN_ALERT = 'text-[#FFD2BC]';
+export const OPEN_BAR_TRACK = 'bg-blanco/22';
+export const OPEN_BAR_FILL = 'bg-[#7FD1A5]';
+// The chevron's circle: a gray ring when closed, white at 18 % when open.
+export const CHEVRON_CLOSED = 'border border-[#DDE3DE] text-bosque';
+export const CHEVRON_OPEN = 'border border-transparent bg-blanco/18 text-blanco';
+// The steps table: the border of the tables with 14 px of radius; the last row, pale green.
+export const STEPS_FRAME = 'overflow-hidden rounded-[14px] border border-[#DDE3DE] bg-blanco';
+export const TOTAL_ROW = 'border-t-2 border-bosque bg-[#F3F8F5]';
 
 // The assistant panel: answered, without information, with a contradiction and AI not available.
 // On bosque, as graphics: 6,3:1, 4,7:1, 6,2:1 and 6,6:1.

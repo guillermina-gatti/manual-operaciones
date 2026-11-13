@@ -513,8 +513,11 @@ describe('with data', () => {
     const bar = within(row).getByTestId('completed-bar');
     expect(bar).toHaveAttribute('aria-hidden', 'true');
     expect((bar.firstElementChild as HTMLElement).style.width).toBe('50%');
-    // More than 0 abandoned: bold, the alert color and a dot, not only color.
-    expect(within(row).getByText('1 abandonada')).toHaveClass('font-bold', 'text-durazno-texto');
+    // More than 0 abandoned: bold, an alert color and a dot, not only color. Open, on bosque, the
+    // light peach.
+    expect(within(row).getByTestId('abandoned-alert')).toHaveClass('font-bold', 'text-[#FFD2BC]');
+    // The numbers in bold 16 px.
+    expect(within(row).getByText('4')).toHaveClass('text-base', 'font-bold');
   });
 
   test('the steps table: reached, finished, abandoned and time, with "Mayor tiempo"', async () => {
@@ -539,15 +542,38 @@ describe('with data', () => {
       'Comparar con el reporteMayor tiempo',
     );
     const cells = within(second).getAllByRole('cell').map(shown);
-    expect(cells).toEqual(['2', '4', '2', '1 (25,0%)', '3 min 20 s53% del total']);
-    // Every data column to the left, as in "Tiempo por procedimiento".
-    for (const cell of within(second).getAllByRole('cell').slice(1)) {
+    expect(cells).toEqual(['2', '4', '2', '1 (25,0%)', '3 min 20 s· 53 % del total']);
+    // Every data cell of the table shares the same alignment, footer included.
+    const dataCells = within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .flatMap((tableRow) => within(tableRow).getAllByRole('cell').slice(1));
+    expect(dataCells.length).toBeGreaterThan(0);
+    for (const cell of dataCells) {
       expect(cell).toHaveClass('text-left', 'tabular-nums');
+      expect(cell).not.toHaveClass('text-right');
     }
+    // The step number in a 30 px light green circle; the tag of the slowest step.
+    expect(within(second).getByText('2', { selector: 'span' })).toHaveClass(
+      'size-[30px]',
+      'bg-chip-area',
+    );
+    expect(within(second).getByText('Mayor tiempo')).toHaveClass(
+      'bg-[#FDEBE2]',
+      'text-[#8A3410]',
+      'whitespace-nowrap',
+    );
     // The bar of the slowest step is orange, of its share of the total.
     const bar = within(second).getByTestId('step-time-bar').firstElementChild as HTMLElement;
     expect(bar).toHaveClass('bg-naranja');
     expect(bar.style.width).toBe(`${(200000 / 380000) * 100}%`);
+    // The table in its 14 px frame; the whole procedure under a bosque line, on pale green.
+    expect(table.parentElement).toHaveClass('rounded-[14px]', 'border-[#DDE3DE]');
+    expect(within(table).getByRole('row', { name: /Procedimiento completo/ })).toHaveClass(
+      'border-t-2',
+      'border-bosque',
+      'bg-[#F3F8F5]',
+    );
 
     const first = within(table).getByRole('row', { name: /Contar el efectivo/ });
     expect(within(first).getByTestId('step-time-bar').firstElementChild).toHaveClass(
@@ -558,8 +584,21 @@ describe('with data', () => {
       '4',
       '4',
       '0',
-      '3 min47% del total',
+      '3 min· 47 % del total',
     ]);
+  });
+
+  test('a step card on a phone: "Llegaron: N" and the others, under the description', async () => {
+    render(<MetricsPanel />);
+    const card = await procedureCard();
+
+    const table = within(card).getByRole('table', { name: 'Pasos de Cierre de caja' });
+    const step = within(table).getByRole('row', { name: /Contar el efectivo/ });
+    expect(step).toHaveClass('max-lg:grid');
+    const labels = within(step)
+      .getAllByRole('cell')
+      .map((cell) => cell.querySelector('.lg\\:hidden')?.textContent);
+    expect(labels).toEqual([undefined, 'Llegaron: ', 'Terminaron: ', 'Abandonaron: ', undefined]);
   });
 
   test('a step nobody reached shows "—" instead of a time', async () => {
@@ -628,6 +667,11 @@ describe('with data', () => {
         ],
       });
     };
+    const ventas = async () => {
+      threeInVentas();
+      render(<MetricsPanel />);
+      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+    };
     const row = (name: string) =>
       within(areaCard('Ventas')).getByRole('button', { name: new RegExp(`^${name}`) });
     const openRows = () =>
@@ -640,118 +684,162 @@ describe('with data', () => {
       within(areaCard('Ventas')).getByRole('button', {
         name: /resumen de todos los procedimientos de esta área$/,
       });
+    const VER = 'Ver resumen de todos los procedimientos de esta área';
+    const OCULTAR = 'Ocultar el resumen de todos los procedimientos de esta área';
 
-    test('the area: its name and counts, and the hint to open a procedure', async () => {
-      threeInVentas();
-      render(<MetricsPanel />);
-      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+    test('a flat white card: its name, its counts and the strip over the procedures', async () => {
+      await ventas();
 
-      expect(within(areaCard('Ventas')).getByRole('heading', { level: 3 })).toHaveTextContent(
-        'Ventas',
-      );
-      expect(areaCard('Ventas')).toHaveTextContent('3 procedimientos · 12 ejecuciones');
-      expect(
-        within(areaCard('Ventas')).getByText('Procedimientos (tocá uno para abrirlo)'),
-      ).toBeInTheDocument();
+      const card = areaCard('Ventas');
+      expect(card).toHaveClass('rounded-3xl', 'border-[#DDE3DE]', 'bg-blanco', 'overflow-hidden');
+      expect(within(card).getByRole('heading', { level: 3 })).toHaveTextContent('Ventas');
+      expect(card).toHaveTextContent('3 procedimientos · 12 ejecuciones');
+      const strip = within(card).getByText('Procedimientos · tocá uno para abrirlo');
+      expect(strip).toHaveClass('bg-[#E6EFE9]', 'uppercase', 'text-xs', 'font-bold');
     });
 
-    test('the one with most executions goes first and is the only one open', async () => {
-      threeInVentas();
-      render(<MetricsPanel />);
-      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+    test('no gradient and no orange border in the head or in the open row', async () => {
+      await ventas();
+
+      const card = areaCard('Ventas');
+      const header = card.querySelector('header')!;
+      const openArticle = row('Apertura del local').closest('article')!;
+      for (const element of [card, header, openArticle, row('Apertura del local')]) {
+        expect(element.className).not.toMatch(/gradient|linear|from-\[|border-naranja|border-l-/);
+      }
+      expect(card.innerHTML).not.toMatch(/bg-linear|bg-gradient|border-naranja/);
+    });
+
+    test('by default only the one with most executions is open, and it goes first', async () => {
+      await ventas();
 
       const names = within(areaCard('Ventas'))
         .getAllByRole('article')
-        .map((article) => document.getElementById(article.getAttribute('aria-labelledby')!)!.textContent);
+        .map(
+          (article) =>
+            document.getElementById(article.getAttribute('aria-labelledby')!)!.textContent,
+        );
       expect(names).toEqual(['Apertura del local', 'Cierre de caja', 'Devolución de un producto']);
       expect(openRows()).toEqual(['Apertura del local']);
-      // The closed ones keep their steps hidden.
       const closed = document.getElementById(row('Cierre de caja').getAttribute('aria-controls')!)!;
       expect(closed).not.toBeVisible();
     });
 
-    test('opening one closes the other; opening it again closes it', async () => {
+    test('the open row is solid bosque with white text; the closed ones are not', async () => {
+      await ventas();
+
+      expect(row('Apertura del local')).toHaveClass('bg-bosque', 'text-blanco');
+      expect(within(row('Apertura del local')).getByTestId('chevron')).toHaveClass(
+        'bg-blanco/18',
+      );
+      expect(
+        within(row('Apertura del local')).getByTestId('completed-bar').firstElementChild,
+      ).toHaveClass('bg-[#7FD1A5]');
+      for (const name of ['Cierre de caja', 'Devolución de un producto']) {
+        expect(row(name)).not.toHaveClass('bg-bosque');
+        expect(row(name)).toHaveClass('bg-blanco', 'hover:bg-[#F3F8F5]');
+        expect(within(row(name)).getByTestId('chevron')).toHaveClass('border-[#DDE3DE]');
+      }
+      // Closed, an abandoned one goes in the alert color of the team.
+      expect(within(row('Cierre de caja')).getByTestId('abandoned-alert')).toHaveClass(
+        'text-durazno-texto',
+      );
+    });
+
+    test('several can be open at once; clicking keeps the focus on the row', async () => {
       const user = userEvent.setup();
-      threeInVentas();
-      render(<MetricsPanel />);
-      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+      await ventas();
 
       await user.click(row('Cierre de caja'));
-      expect(openRows()).toEqual(['Cierre de caja']);
+      expect(openRows()).toEqual(['Apertura del local', 'Cierre de caja']);
+      expect(row('Cierre de caja')).toHaveFocus();
       const panel = document.getElementById(row('Cierre de caja').getAttribute('aria-controls')!)!;
       expect(within(panel).getByRole('table', { name: 'Pasos de Cierre de caja' })).toBeVisible();
-      // Open: the orange stripe and the pale green background.
-      expect(row('Cierre de caja').closest('article')).toHaveClass('border-naranja', 'bg-[#F3F8F5]');
 
       await user.click(row('Cierre de caja'));
-      expect(openRows()).toEqual([]);
+      expect(openRows()).toEqual(['Apertura del local']);
+      expect(row('Cierre de caja')).toHaveFocus();
     });
 
-    test('with the keyboard: Tab reaches the row and Enter or Space open it', async () => {
+    test('with the keyboard: Tab goes through the leaf and the rows; Enter and Space toggle', async () => {
       const user = userEvent.setup();
-      threeInVentas();
-      render(<MetricsPanel />);
-      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+      await ventas();
 
-      row('Cierre de caja').focus();
+      leaf().focus();
+      await user.tab();
+      expect(row('Apertura del local')).toHaveFocus();
       await user.keyboard('{Enter}');
-      expect(openRows()).toEqual(['Cierre de caja']);
-      row('Devolución de un producto').focus();
+      expect(openRows()).toEqual([]);
+      await user.tab();
+      expect(row('Cierre de caja')).toHaveFocus();
       await user.keyboard(' ');
-      expect(openRows()).toEqual(['Devolución de un producto']);
+      expect(openRows()).toEqual(['Cierre de caja']);
     });
 
-    test('the leaf opens every procedure with the area summary, and closes them all', async () => {
+    test('the leaf opens and closes them all, with aria-expanded and its name', async () => {
       const user = userEvent.setup();
-      threeInVentas();
-      render(<MetricsPanel />);
-      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+      await ventas();
 
-      expect(leaf()).toHaveAccessibleName(
-        'Ver resumen de todos los procedimientos de esta área',
-      );
+      expect(leaf()).toHaveAccessibleName(VER);
       expect(leaf()).toHaveAttribute('aria-expanded', 'false');
-      await user.click(leaf());
+      expect(leaf()).toHaveClass('size-[46px]', 'border-bosque');
+      expect(leaf().getAttribute('aria-controls')!.split(' ')).toHaveLength(3);
 
-      expect(leaf()).toHaveAccessibleName(
-        'Ocultar resumen de todos los procedimientos de esta área',
-      );
-      expect(leaf()).toHaveAttribute('aria-expanded', 'true');
+      await user.click(leaf());
       expect(openRows()).toEqual([
         'Apertura del local',
         'Cierre de caja',
         'Devolución de un producto',
       ]);
-      // It controls every procedure and the area summary.
-      const controlled = leaf().getAttribute('aria-controls')!.split(' ');
-      expect(controlled).toHaveLength(4);
-      const summary = document.getElementById(controlled.at(-1)!)!;
-      expect(spaces(summary.textContent)).toContain('Completadas 6');
+      expect(leaf()).toHaveAccessibleName(OCULTAR);
+      expect(leaf()).toHaveAttribute('aria-expanded', 'true');
 
       await user.click(leaf());
-      expect(leaf()).toHaveAttribute('aria-expanded', 'false');
       expect(openRows()).toEqual([]);
+      expect(leaf()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('opening every row by hand also marks the leaf as expanded', async () => {
+      const user = userEvent.setup();
+      await ventas();
+
+      await user.click(row('Cierre de caja'));
+      await user.click(row('Devolución de un producto'));
+      expect(leaf()).toHaveAttribute('aria-expanded', 'true');
+      expect(leaf()).toHaveAccessibleName(OCULTAR);
     });
 
     test('the leaf has a tooltip with its name, tied by aria-describedby', async () => {
       const user = userEvent.setup();
-      threeInVentas();
-      render(<MetricsPanel />);
-      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+      await ventas();
 
       const tip = document.getElementById(leaf().getAttribute('aria-describedby')!)!;
       expect(tip).toHaveAttribute('role', 'tooltip');
-      expect(tip).toHaveTextContent('Ver resumen de todos los procedimientos de esta área');
+      expect(tip).toHaveTextContent(VER);
+      // Bosque with white 13 px text, under the button and aligned to its right.
+      expect(tip).toHaveClass('bg-bosque', 'text-blanco', 'text-[13px]', 'right-0', 'top-full');
       // It shows on hover and on keyboard focus, not only with the mouse.
       expect(tip).toHaveClass('group-hover:visible', 'group-has-[:focus-visible]:visible');
 
       await user.click(leaf());
-      expect(tip).toHaveTextContent('Ocultar resumen de todos los procedimientos de esta área');
+      expect(tip).toHaveTextContent(OCULTAR);
 
       // Escape hides it.
       leaf().focus();
       await user.keyboard('{Escape}');
       expect(tip).toHaveClass('hidden');
+    });
+
+    test('on a phone the row stacks: the name and the chevron on top, the data below', async () => {
+      await ventas();
+
+      const button = row('Cierre de caja');
+      expect(button).toHaveClass('grid-cols-[minmax(0,1fr)_36px]');
+      expect(button.className).toContain(
+        'lg:grid-cols-[minmax(0,1fr)_120px_230px_100px_130px_36px]',
+      );
+      expect(within(button).getByTestId('chevron')).toHaveClass('col-start-2', 'row-start-1');
+      expect(within(button).getByText('Cierre de caja')).toHaveClass('col-start-1', 'row-start-1');
     });
   });
 
