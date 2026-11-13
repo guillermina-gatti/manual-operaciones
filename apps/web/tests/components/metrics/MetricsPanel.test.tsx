@@ -136,6 +136,12 @@ const chooseArea = async (user: User, name: string) => {
   await user.click(screen.getByRole('option', { name: new RegExp(`^${name}`) }));
 };
 const spaces = (text: string | null) => text?.replace(/\s/g, ' ');
+// What a cell says without the words only the card shows on a phone.
+const shown = (element: HTMLElement) => {
+  const copy = element.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('.lg\\:hidden').forEach((label) => label.remove());
+  return spaces(copy.textContent);
+};
 const quickPeriod = (label: string) =>
   within(screen.getByRole('group', { name: 'Período rápido' })).getByRole('button', {
     name: label,
@@ -496,16 +502,19 @@ describe('with data', () => {
     ).toBeInTheDocument();
   });
 
-  test('each procedure says its executions and has its feather bar', async () => {
+  test('each procedure is a row that says its executions, with a bar of the completed', async () => {
     render(<MetricsPanel />);
     const card = await procedureCard();
 
-    expect(spaces(card.textContent)).toContain(
-      '4 ejecuciones · 2 completadas (50,0%) · 1 en curso · 1 abandonadas (25,0%)',
+    const row = within(card).getByRole('button', { name: /^Cierre de caja/ });
+    expect(spaces(row.textContent)).toBe(
+      'Cierre de caja4 ejecuciones2 completadas (50,0 %)1 en curso1 abandonada',
     );
-    expect(within(card).getByRole('img', { name: /^Distribución/ })).toHaveAccessibleName(
-      'Distribución: 2 completadas, 1 en curso, 1 abandonadas',
-    );
+    const bar = within(row).getByTestId('completed-bar');
+    expect(bar).toHaveAttribute('aria-hidden', 'true');
+    expect((bar.firstElementChild as HTMLElement).style.width).toBe('50%');
+    // More than 0 abandoned: bold, the alert color and a dot, not only color.
+    expect(within(row).getByText('1 abandonada')).toHaveClass('font-bold', 'text-durazno-texto');
   });
 
   test('the steps table: reached, finished, abandoned and time, with "Mayor tiempo"', async () => {
@@ -529,11 +538,22 @@ describe('with data', () => {
     expect(within(second).getByRole('rowheader')).toHaveTextContent(
       'Comparar con el reporteMayor tiempo',
     );
-    const cells = within(second).getAllByRole('cell').map((cell) => spaces(cell.textContent));
+    const cells = within(second).getAllByRole('cell').map(shown);
     expect(cells).toEqual(['2', '4', '2', '1 (25,0%)', '3 min 20 s53% del total']);
+    // Every data column to the left, as in "Tiempo por procedimiento".
+    for (const cell of within(second).getAllByRole('cell').slice(1)) {
+      expect(cell).toHaveClass('text-left', 'tabular-nums');
+    }
+    // The bar of the slowest step is orange, of its share of the total.
+    const bar = within(second).getByTestId('step-time-bar').firstElementChild as HTMLElement;
+    expect(bar).toHaveClass('bg-naranja');
+    expect(bar.style.width).toBe(`${(200000 / 380000) * 100}%`);
 
     const first = within(table).getByRole('row', { name: /Contar el efectivo/ });
-    expect(within(first).getAllByRole('cell').map((cell) => spaces(cell.textContent))).toEqual([
+    expect(within(first).getByTestId('step-time-bar').firstElementChild).toHaveClass(
+      'bg-[#1B9B5B]',
+    );
+    expect(within(first).getAllByRole('cell').map(shown)).toEqual([
       '1',
       '4',
       '4',
@@ -547,7 +567,7 @@ describe('with data', () => {
     const card = await procedureCard();
 
     const row = within(card).getByRole('row', { name: /Guardar en la caja fuerte/ });
-    const cells = within(row).getAllByRole('cell').map((cell) => cell.textContent);
+    const cells = within(row).getAllByRole('cell').map(shown);
     expect(cells).toEqual(['3', '0', '0', '0', '—']);
   });
 
@@ -561,7 +581,8 @@ describe('with data', () => {
     expect(within(complete).getByRole('rowheader')).toHaveTextContent(
       'Procedimiento completo · de inicio a fin',
     );
-    expect(within(complete).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
+    expect(complete).toHaveClass('border-bosque');
+    expect(within(complete).getAllByRole('cell').map(shown)).toEqual([
       '',
       '3',
       '1',
@@ -586,24 +607,152 @@ describe('with data', () => {
     expect(within(row).getAllByRole('cell').at(-1)).toHaveTextContent('5 min');
   });
 
-  test('the leaf opens and closes the area summary', async () => {
-    const user = userEvent.setup();
-    render(<MetricsPanel />);
-    await procedureCard();
-    await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+  describe('the procedures of an area', () => {
+    // Ventas with three procedures: Cierre de caja (4), Apertura (6) and Devolución (2).
+    const threeInVentas = () => {
+      const answer = metricsResponse();
+      const [cierre] = answer.procedures;
+      const copy = (id: string, title: string, started: number) => ({
+        ...cierre,
+        procedureId: id,
+        title,
+        started,
+        versions: [{ ...cierre.versions[0], procedureVersionId: `${id.slice(0, -1)}9` }],
+      });
+      mocks.getProcedureMetrics.mockResolvedValue({
+        ...answer,
+        procedures: [
+          ...answer.procedures,
+          copy('1a000000-0000-4000-8000-000000000005', 'Apertura del local', 6),
+          copy('1a000000-0000-4000-8000-000000000006', 'Devolución de un producto', 2),
+        ],
+      });
+    };
+    const row = (name: string) =>
+      within(areaCard('Ventas')).getByRole('button', { name: new RegExp(`^${name}`) });
+    const openRows = () =>
+      within(areaCard('Ventas'))
+        .queryAllByRole('button', { expanded: true })
+        .filter((button) => button.closest('article'))
+        .map((button) => button.closest('article')!.getAttribute('aria-labelledby'))
+        .map((id) => document.getElementById(id!)!.textContent);
+    const leaf = () =>
+      within(areaCard('Ventas')).getByRole('button', {
+        name: /resumen de todos los procedimientos de esta área$/,
+      });
 
-    const leaf = within(areaCard('Ventas')).getByRole('button', { name: 'Ver resumen de Ventas' });
-    expect(leaf).toHaveAttribute('aria-expanded', 'false');
-    await user.click(leaf);
+    test('the area: its name and counts, and the hint to open a procedure', async () => {
+      threeInVentas();
+      render(<MetricsPanel />);
+      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
 
-    expect(leaf).toHaveAccessibleName('Ocultar resumen de Ventas');
-    expect(leaf).toHaveAttribute('aria-expanded', 'true');
-    const summary = document.getElementById(leaf.getAttribute('aria-controls')!)!;
-    expect(spaces(summary.textContent)).toContain('Completadas 250,0%');
-    expect(spaces(summary.textContent)).toContain('Tiempo medio 12 min');
+      expect(within(areaCard('Ventas')).getByRole('heading', { level: 3 })).toHaveTextContent(
+        'Ventas',
+      );
+      expect(areaCard('Ventas')).toHaveTextContent('3 procedimientos · 12 ejecuciones');
+      expect(
+        within(areaCard('Ventas')).getByText('Procedimientos (tocá uno para abrirlo)'),
+      ).toBeInTheDocument();
+    });
 
-    await user.click(leaf);
-    expect(leaf).toHaveAttribute('aria-expanded', 'false');
+    test('the one with most executions goes first and is the only one open', async () => {
+      threeInVentas();
+      render(<MetricsPanel />);
+      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+
+      const names = within(areaCard('Ventas'))
+        .getAllByRole('article')
+        .map((article) => document.getElementById(article.getAttribute('aria-labelledby')!)!.textContent);
+      expect(names).toEqual(['Apertura del local', 'Cierre de caja', 'Devolución de un producto']);
+      expect(openRows()).toEqual(['Apertura del local']);
+      // The closed ones keep their steps hidden.
+      const closed = document.getElementById(row('Cierre de caja').getAttribute('aria-controls')!)!;
+      expect(closed).not.toBeVisible();
+    });
+
+    test('opening one closes the other; opening it again closes it', async () => {
+      const user = userEvent.setup();
+      threeInVentas();
+      render(<MetricsPanel />);
+      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+
+      await user.click(row('Cierre de caja'));
+      expect(openRows()).toEqual(['Cierre de caja']);
+      const panel = document.getElementById(row('Cierre de caja').getAttribute('aria-controls')!)!;
+      expect(within(panel).getByRole('table', { name: 'Pasos de Cierre de caja' })).toBeVisible();
+      // Open: the orange stripe and the pale green background.
+      expect(row('Cierre de caja').closest('article')).toHaveClass('border-naranja', 'bg-[#F3F8F5]');
+
+      await user.click(row('Cierre de caja'));
+      expect(openRows()).toEqual([]);
+    });
+
+    test('with the keyboard: Tab reaches the row and Enter or Space open it', async () => {
+      const user = userEvent.setup();
+      threeInVentas();
+      render(<MetricsPanel />);
+      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+
+      row('Cierre de caja').focus();
+      await user.keyboard('{Enter}');
+      expect(openRows()).toEqual(['Cierre de caja']);
+      row('Devolución de un producto').focus();
+      await user.keyboard(' ');
+      expect(openRows()).toEqual(['Devolución de un producto']);
+    });
+
+    test('the leaf opens every procedure with the area summary, and closes them all', async () => {
+      const user = userEvent.setup();
+      threeInVentas();
+      render(<MetricsPanel />);
+      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+
+      expect(leaf()).toHaveAccessibleName(
+        'Ver resumen de todos los procedimientos de esta área',
+      );
+      expect(leaf()).toHaveAttribute('aria-expanded', 'false');
+      await user.click(leaf());
+
+      expect(leaf()).toHaveAccessibleName(
+        'Ocultar resumen de todos los procedimientos de esta área',
+      );
+      expect(leaf()).toHaveAttribute('aria-expanded', 'true');
+      expect(openRows()).toEqual([
+        'Apertura del local',
+        'Cierre de caja',
+        'Devolución de un producto',
+      ]);
+      // It controls every procedure and the area summary.
+      const controlled = leaf().getAttribute('aria-controls')!.split(' ');
+      expect(controlled).toHaveLength(4);
+      const summary = document.getElementById(controlled.at(-1)!)!;
+      expect(spaces(summary.textContent)).toContain('Completadas 6');
+
+      await user.click(leaf());
+      expect(leaf()).toHaveAttribute('aria-expanded', 'false');
+      expect(openRows()).toEqual([]);
+    });
+
+    test('the leaf has a tooltip with its name, tied by aria-describedby', async () => {
+      const user = userEvent.setup();
+      threeInVentas();
+      render(<MetricsPanel />);
+      await waitFor(() => expect(areaCard('Ventas')).toBeInTheDocument());
+
+      const tip = document.getElementById(leaf().getAttribute('aria-describedby')!)!;
+      expect(tip).toHaveAttribute('role', 'tooltip');
+      expect(tip).toHaveTextContent('Ver resumen de todos los procedimientos de esta área');
+      // It shows on hover and on keyboard focus, not only with the mouse.
+      expect(tip).toHaveClass('group-hover:visible', 'group-has-[:focus-visible]:visible');
+
+      await user.click(leaf());
+      expect(tip).toHaveTextContent('Ocultar resumen de todos los procedimientos de esta área');
+
+      // Escape hides it.
+      leaf().focus();
+      await user.keyboard('{Escape}');
+      expect(tip).toHaveClass('hidden');
+    });
   });
 
   test('says how many areas have no executions, with the right plural', async () => {
@@ -714,13 +863,13 @@ describe('metrics of pair C', () => {
   test('in the "Documentos y asistente" tab, documents first', async () => {
     mocks.searchParams = new URLSearchParams('seccion=documentos');
     render(<MetricsPanel />);
-    await screen.findByRole('article', { name: 'Documentos' });
+    await screen.findByRole('region', { name: 'Documentos' });
 
-    const section = screen.getByRole('region', { name: 'Documentos y asistente' });
-    const cards = within(section)
-      .getAllByRole('heading', { level: 3 })
+    const panel = screen.getByRole('tabpanel', { name: 'Documentos y asistente' });
+    const titles = within(panel)
+      .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent);
-    expect(cards).toEqual(['Documentos', 'Asistente']);
+    expect(titles).toEqual(['Documentos', 'Asistente']);
   });
 
   test('the assistant card asks with the panel filters and shows the totals', async () => {
@@ -729,7 +878,7 @@ describe('metrics of pair C', () => {
     );
     render(<MetricsPanel />);
 
-    const card = await screen.findByRole('article', { name: 'Asistente' });
+    const card = await screen.findByRole('region', { name: 'Asistente' });
     const questions = await within(card).findByText('Preguntas', { selector: 'dt' });
     expect(questions.nextSibling).toHaveTextContent('9');
     expect(within(card).getByText('Saludos y ayuda', { selector: 'dt' }).nextSibling).toHaveTextContent(
@@ -750,11 +899,11 @@ describe('metrics of pair C', () => {
     mocks.searchParams = new URLSearchParams('seccion=documentos');
     render(<MetricsPanel />);
 
-    const card = await screen.findByRole('article', { name: 'Asistente' });
+    const card = await screen.findByRole('region', { name: 'Asistente' });
     expect(await within(card).findByRole('alert')).toHaveTextContent(
       /El servicio no está disponible/,
     );
-    const documents = screen.getByRole('article', { name: 'Documentos' });
+    const documents = screen.getByRole('region', { name: 'Documentos' });
     expect(await within(documents).findByText('Activos', { selector: 'dt' })).toBeInTheDocument();
   });
 
@@ -773,10 +922,10 @@ describe('metrics of pair C', () => {
     );
     render(<MetricsPanel />);
 
-    const card = await screen.findByRole('article', { name: 'Documentos' });
+    const card = await screen.findByRole('region', { name: 'Documentos' });
     const active = await within(card).findByText('Activos', { selector: 'dt' });
     expect(active.nextSibling).toHaveTextContent('12');
-    expect(within(card).getByText('Del 01/10/2026 al 15/10/2026')).toBeInTheDocument();
+    expect(within(card).getByText('1 oct – 15 oct')).toBeInTheDocument();
     expect(mocks.getDocuments).toHaveBeenCalledWith(
       { areaId: VENTAS, from: '2026-10-01', to: '2026-10-15' },
       expect.any(AbortSignal),
@@ -824,7 +973,7 @@ describe('the tabs', () => {
       'Tiempo por procedimiento',
       'Detalle por área',
     ]);
-    expect(screen.queryByRole('article', { name: 'Documentos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Documentos' })).not.toBeInTheDocument();
     expect(mocks.getDocuments).not.toHaveBeenCalled();
     expect(mocks.getAssistant).not.toHaveBeenCalled();
   });
@@ -834,8 +983,8 @@ describe('the tabs', () => {
     render(<MetricsPanel />);
 
     const panel = screen.getByRole('tabpanel', { name: 'Documentos y asistente' });
-    await within(panel).findByRole('article', { name: 'Documentos' });
-    expect(within(panel).getByRole('article', { name: 'Asistente' })).toBeInTheDocument();
+    await within(panel).findByRole('region', { name: 'Documentos' });
+    expect(within(panel).getByRole('region', { name: 'Asistente' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Resumen general' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Detalle por área' })).not.toBeInTheDocument();
     expect(tab('Documentos y asistente')).toHaveAttribute('aria-selected', 'true');
@@ -929,7 +1078,7 @@ describe('the tabs', () => {
     mocks.getDocuments.mockRejectedValue(new ApiError(404, ['No se encontró el área']));
     render(<MetricsPanel />);
 
-    const documents = await screen.findByRole('article', { name: 'Documentos' });
+    const documents = await screen.findByRole('region', { name: 'Documentos' });
     expect(
       await within(documents).findByRole('link', { name: 'Ver todas mis áreas' }),
     ).toHaveAttribute('href', '/metricas?desde=2026-10-01&hasta=2026-10-27&seccion=documentos');

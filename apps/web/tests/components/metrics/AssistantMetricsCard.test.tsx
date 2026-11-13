@@ -40,12 +40,19 @@ const failure = (error: unknown, reload = vi.fn()): ApiResource<AssistantMetrics
   reload,
 });
 
-const card = () => screen.getByRole('article', { name: 'Asistente' });
+const card = () => screen.getByRole('region', { name: 'Asistente' });
 const group = (name: string) => within(card()).getByRole('region', { name });
 const terms = (name: string) =>
   within(group(name))
     .getAllByRole('term')
     .map((term) => term.textContent);
+const totals = (values: Partial<AssistantMetrics['totals']>): AssistantMetrics => ({
+  ...ASSISTANT,
+  totals: { ...ASSISTANT.totals, ...values },
+});
+const headline = () => within(group('Consultas')).getByRole('heading').nextElementSibling;
+const segments = () =>
+  [...screen.getByTestId('outcome-bar').children].map((part) => part.getAttribute('data-part'));
 const value = (label: string) => within(card()).getByText(label, { selector: 'dt' }).nextSibling;
 
 describe('AssistantMetricsCard', () => {
@@ -60,21 +67,98 @@ describe('AssistantMetricsCard', () => {
     expect(screen.getByText('Cargando las métricas del asistente…')).toBeInTheDocument();
   });
 
-  test('the questions and the four results, each apart', () => {
+  test('the panel: the period, three data and the four results in the legend', () => {
     render(<AssistantMetricsCard filters={FILTERS} state={success(ASSISTANT)} />);
 
-    expect(terms('Consultas')).toEqual([
-      'Preguntas',
-      'Respondidas',
-      'Sin información',
-      'Con contradicción',
-      'IA no disponible',
-    ]);
+    expect(within(group('Consultas')).getByRole('heading')).toHaveTextContent(
+      'Consultas · 1 oct – 27 oct',
+    );
+    expect(group('Consultas')).toHaveClass('bg-bosque');
+    expect(terms('Consultas')).toEqual(['Preguntas', 'Respondidas', 'IA no disponible']);
     expect(value('Preguntas')).toHaveTextContent('1.250');
     expect(value('Respondidas')).toHaveTextContent('1.100');
-    expect(value('Sin información')).toHaveTextContent('120');
-    expect(value('Con contradicción')).toHaveTextContent('10');
     expect(value('IA no disponible')).toHaveTextContent('20');
+    expect(
+      within(screen.getByRole('list', { name: 'Preguntas por resultado' }))
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['1.100 respondidas', '120 sin información', '10 con contradicción', '20 IA no disponible']);
+  });
+
+  test('the bar: one part per result, of its share of the questions; a 0 is not drawn', () => {
+    const { unmount } = render(<AssistantMetricsCard filters={FILTERS} state={success(ASSISTANT)} />);
+    expect(segments()).toEqual(['answered', 'noInfo', 'conflict', 'aiUnavailable']);
+    expect(screen.getByTestId('outcome-bar')).toHaveAttribute('aria-hidden', 'true');
+    const widths = [...screen.getByTestId('outcome-bar').children].map(
+      (part) => (part as HTMLElement).style.width,
+    );
+    expect(widths).toEqual(['88%', '9.6%', '0.8%', '1.6%']);
+    unmount();
+
+    render(
+      <AssistantMetricsCard
+        filters={FILTERS}
+        state={success(totals({ questions: 5, answered: 5, noInfo: 0, conflict: 0, aiUnavailable: 0 }))}
+      />,
+    );
+    expect(segments()).toEqual(['answered']);
+  });
+
+  test('the headline: some answered, and the AI not available in some', () => {
+    render(<AssistantMetricsCard filters={FILTERS} state={success(ASSISTANT)} />);
+
+    expect(headline()).toHaveTextContent(
+      'El asistente respondió 1.100 de 1.250 preguntas, y la IA no estuvo disponible en 20',
+    );
+  });
+
+  test('the headline: some answered, the AI always available', () => {
+    render(
+      <AssistantMetricsCard
+        filters={FILTERS}
+        state={success(totals({ questions: 12, answered: 8, noInfo: 4, conflict: 0, aiUnavailable: 0 }))}
+      />,
+    );
+
+    expect(headline()).toHaveTextContent(/^El asistente respondió 8 de 12 preguntas$/);
+  });
+
+  test('the headline: every question answered, plural and singular', () => {
+    const { unmount } = render(
+      <AssistantMetricsCard
+        filters={FILTERS}
+        state={success(totals({ questions: 12, answered: 12, noInfo: 0, conflict: 0, aiUnavailable: 0 }))}
+      />,
+    );
+    expect(headline()).toHaveTextContent('El asistente respondió las 12 preguntas');
+    unmount();
+
+    render(
+      <AssistantMetricsCard
+        filters={FILTERS}
+        state={success(totals({ questions: 1, answered: 1, noInfo: 0, conflict: 0, aiUnavailable: 0 }))}
+      />,
+    );
+    expect(headline()).toHaveTextContent('El asistente respondió la única pregunta');
+  });
+
+  test('the headline: the AI was never available, plural and singular', () => {
+    const { unmount } = render(
+      <AssistantMetricsCard
+        filters={FILTERS}
+        state={success(totals({ questions: 3, answered: 0, noInfo: 0, conflict: 0, aiUnavailable: 3 }))}
+      />,
+    );
+    expect(headline()).toHaveTextContent('3 preguntas, y la IA no estuvo disponible para ninguna');
+    unmount();
+
+    render(
+      <AssistantMetricsCard
+        filters={FILTERS}
+        state={success(totals({ questions: 1, answered: 0, noInfo: 0, conflict: 0, aiUnavailable: 1 }))}
+      />,
+    );
+    expect(headline()).toHaveTextContent(/^1 pregunta, y la IA no estuvo disponible$/);
   });
 
   test('small talk goes apart and says it is left out of the other numbers', () => {
@@ -96,6 +180,18 @@ describe('AssistantMetricsCard', () => {
     expect(value('De salida')).toHaveTextContent('98.765');
     expect(value('Útiles')).toHaveTextContent('40');
     expect(value('No útiles')).toHaveTextContent('6');
+    // Useful in green, not useful in the alert tone; each one with its word.
+    expect(within(value('Útiles') as HTMLElement).getByText('40')).toHaveClass('text-chip-area-texto');
+    expect(within(value('No útiles') as HTMLElement).getByText('6')).toHaveClass('text-durazno-texto');
+    expect(within(card()).queryByText('—')).not.toBeInTheDocument();
+  });
+
+  test('four cards under the panel', () => {
+    render(<AssistantMetricsCard filters={FILTERS} state={success(ASSISTANT)} />);
+
+    for (const name of ['Charla social', 'Latencia', 'Tokens', 'Valoraciones']) {
+      expect(group(name)).toBeInTheDocument();
+    }
   });
 
   test('without timed questions the latencies are "—"; zeros are 0', () => {
@@ -119,8 +215,15 @@ describe('AssistantMetricsCard', () => {
 
     expect(value('Mediana (p50)')).toHaveTextContent('—');
     expect(value('p95')).toHaveTextContent('—');
-    expect(value('Preguntas')).toHaveTextContent('0');
+    expect(within(value('p95') as HTMLElement).getByText('—')).toHaveClass('text-texto-suave');
+    expect(within(card()).getByText('Sin respuestas medibles todavía')).toBeInTheDocument();
     expect(value('De entrada')).toHaveTextContent('0');
+    // Without questions, the empty state: no bar and no data in the panel.
+    expect(
+      within(group('Consultas')).getByText('Nadie le preguntó al asistente en este período.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('outcome-bar')).not.toBeInTheDocument();
+    expect(within(group('Consultas')).queryAllByRole('term')).toHaveLength(0);
   });
 
   test('says the area filter uses the current areas of who asked, and shows no cost', () => {

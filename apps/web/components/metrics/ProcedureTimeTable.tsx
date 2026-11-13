@@ -26,6 +26,7 @@ import { formatCount } from '@/lib/metrics/format';
 import { metricsProcedureName } from '@/lib/metrics/procedure-name';
 import { procedureTimeRows } from '@/lib/metrics/procedure-time';
 import type { ProcedureTimeRow } from '@/lib/metrics/procedure-time';
+import { DATA_CELL } from './metrics-design';
 import { SectionHeading } from './SectionHeading';
 
 interface ProcedureTimeTableProps {
@@ -34,8 +35,6 @@ interface ProcedureTimeTableProps {
   areas: ReadonlyMap<string, DocumentReference>;
 }
 
-// Every data cell: to the left and with tabular-nums, so the columns read as columns.
-export const DATA_CELL = `${TABLE_TD} text-left tabular-nums`;
 // The slowest row's bar is naranja (an indicator, never text); the others, the green of completed.
 const SLOWEST_FILL = 'bg-naranja';
 

@@ -2,13 +2,11 @@
 
 // The assistant and documents metrics, behind the teamCMetrics port: both come from the API, with
 // the filters of the panel.
-import { useId } from 'react';
 import { metricsQuery, useApiResource } from '@/lib/api';
 import { teamCMetrics } from '@/lib/metrics';
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { AssistantMetricsCard } from './AssistantMetricsCard';
 import { DocumentMetricsCard } from './DocumentMetricsCard';
-import { SectionHeading } from './SectionHeading';
 
 interface TeamCMetricsProps {
   filters: PanelFilters;
@@ -19,7 +17,6 @@ interface TeamCMetricsProps {
 }
 
 export function TeamCMetrics({ filters, userId, keepParams }: TeamCMetricsProps) {
-  const headingId = useId();
   const query = metricsQuery(filters);
   const assistant = useApiResource(
     userId ? `team-c-assistant:${userId}${query}` : null,
@@ -30,18 +27,11 @@ export function TeamCMetrics({ filters, userId, keepParams }: TeamCMetricsProps)
     (signal) => teamCMetrics.getDocuments(filters, signal),
   );
 
+  // The tab "Documentos y asistente" names the panel: each part carries its own title.
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <SectionHeading id={headingId}>Documentos y asistente</SectionHeading>
-        <p className="text-texto-suave">
-          Cómo están los documentos y cómo le fue al asistente con las consultas.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <DocumentMetricsCard filters={filters} state={documents} keepParams={keepParams} />
-        <AssistantMetricsCard filters={filters} state={assistant} keepParams={keepParams} />
-      </div>
-    </section>
+    <div className="flex min-w-0 flex-col gap-10">
+      <DocumentMetricsCard filters={filters} state={documents} keepParams={keepParams} />
+      <AssistantMetricsCard filters={filters} state={assistant} keepParams={keepParams} />
+    </div>
   );
 }

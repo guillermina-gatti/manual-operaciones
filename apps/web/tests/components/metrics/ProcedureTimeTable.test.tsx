@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
-import { DATA_CELL, ProcedureTimeTable } from '@/components/metrics/ProcedureTimeTable';
+import { ProcedureTimeTable } from '@/components/metrics/ProcedureTimeTable';
+import { DATA_CELL } from '@/components/metrics/metrics-design';
 import type { DocumentReference, ProcedureMetricsResponse } from '@/lib/api';
 import { CIERRE_DE_CAJA, OPERACIONES, VENTAS, metricsResponse } from '../../support/metrics';
 
