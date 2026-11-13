@@ -49,10 +49,52 @@ export interface MyMetricsResponse {
   procedures: MyProcedureMetrics[];
 }
 
+// GET /api/metrics/me/daily (apps/api/src/executions/metrics/dto/my-daily-metrics.response.ts).
+// The server decides the window: the last 21 days up to today and the current week, in the
+// company time zone. Only the area can be sent.
+export interface MyDailyProcedure {
+  procedureId: string;
+  title: string | null;
+  // Executions completed that day.
+  completed: number;
+}
+
+export interface MyDailyDay {
+  date: string; // "YYYY-MM-DD"
+  // Empty on a day without completed executions.
+  procedures: MyDailyProcedure[];
+}
+
+export interface MyDailyWeek {
+  from: string; // Monday
+  to: string; // Friday
+  // Monday to Friday days with a step finished or an execution completed, every area.
+  activeDays: string[];
+  // Executions completed from Monday to Sunday, every area.
+  completedCount: number;
+}
+
+export interface MyDailyActivityResponse {
+  windowFrom: string;
+  windowTo: string; // today
+  // The 21 days, ascending, also the empty ones.
+  days: MyDailyDay[];
+  // The current week; on Saturday and Sunday, the one that just ended.
+  week: MyDailyWeek;
+}
+
 export function createMyMetricsApi(client: ApiClient) {
   return {
     getMyMetrics(filters: MetricsFilters, signal?: AbortSignal) {
       return client.request<MyMetricsResponse>(`/api/metrics/me${metricsQuery(filters)}`, {
+        signal,
+      });
+    },
+
+    // Without an area, every area of the employee. The week never depends on it.
+    getMyDailyActivity(areaId: string | null | undefined, signal?: AbortSignal) {
+      const query = areaId ? `?areaId=${encodeURIComponent(areaId)}` : '';
+      return client.request<MyDailyActivityResponse>(`/api/metrics/me/daily${query}`, {
         signal,
       });
     },

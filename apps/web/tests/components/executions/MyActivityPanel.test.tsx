@@ -12,12 +12,14 @@ import {
   VENTAS,
   myMetricsResponse,
 } from '../../support/my-metrics';
+import { myDailyResponse } from '../../support/my-daily';
 
 // A whole mount (filters, tiles, lists) looked up by role is slow in jsdom; as in MetricsPanel.
 vi.setConfig({ testTimeout: 15_000 });
 
 const mocks = vi.hoisted(() => ({
   getMyMetrics: vi.fn(),
+  getMyDailyActivity: vi.fn(),
   useSession: vi.fn(),
   listAreas: vi.fn(),
   push: vi.fn(),
@@ -28,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getMyMetrics: mocks.getMyMetrics,
+  getMyDailyActivity: mocks.getMyDailyActivity,
 }));
 
 vi.mock('@/lib/session', async (importOriginal) => ({
@@ -62,6 +65,9 @@ beforeEach(() => {
   mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(ELENA);
   mocks.getMyMetrics.mockResolvedValue(myMetricsResponse());
+  mocks.getMyDailyActivity.mockResolvedValue(
+    myDailyResponse({ windowTo: '2026-10-27', week: { from: '2026-10-26', to: '2026-10-30', activeDays: ['2026-10-26'], completedCount: 1 } }),
+  );
   mocks.listAreas.mockResolvedValue([
     { id: VENTAS, name: 'Ventas' },
     { id: OPERACIONES, name: 'Operaciones' },
@@ -596,11 +602,12 @@ describe('recent procedures', () => {
 });
 
 describe('the order and "Para retomar" without filters', () => {
-  test('to resume first, then the filters, the summary and the procedures', async () => {
+  test('the weekly nest first, then to resume, the filters, the summary and the procedures', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
     const blocks = [
+      await screen.findByRole('region', { name: /Tu nido de esta semana/ }),
       screen.getByRole('region', { name: 'Para retomar' }),
       screen.getByRole('form', { name: 'Filtros' }),
       summary(),
@@ -686,5 +693,27 @@ describe('the order and "Para retomar" without filters', () => {
         'Cargando tus ejecuciones en curso…',
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe('the weekly nest', () => {
+  test('the current week of the whole person: asked without the area of the filters', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-10&hasta=2026-10-20`);
+    render(<MyActivityPanel />);
+
+    const nest = await screen.findByRole('region', { name: 'Tu nido de esta semana · 26 – 30 OCT' });
+    expect(within(nest).getByText('1 de 5 días con avance')).toBeInTheDocument();
+    expect(mocks.getMyDailyActivity).toHaveBeenCalledWith(null, expect.any(AbortSignal));
+    expect(mocks.getMyDailyActivity).toHaveBeenCalledTimes(1);
+  });
+
+  test('if it fails, the rest of the page is still there', async () => {
+    mocks.getMyDailyActivity.mockRejectedValue(new ApiError(503));
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(await screen.findByText(/No se pudo cargar tu nido de esta semana/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Para retomar' })).toBeInTheDocument();
+    expect(summary()).toBeInTheDocument();
   });
 });

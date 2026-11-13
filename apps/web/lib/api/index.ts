@@ -95,6 +95,14 @@ export type {
   MyResumeItem,
 } from './my-metrics';
 export { describeMyMetricsError, MY_METRICS_MESSAGES } from './metrics-errors';
+// Its daily activity: GET /api/metrics/me/daily (the weekly nest and the daily chart).
+export const { getMyDailyActivity } = createMyMetricsApi(apiClient);
+export type {
+  MyDailyActivityResponse,
+  MyDailyDay,
+  MyDailyProcedure,
+  MyDailyWeek,
+} from './my-metrics';
 
 // Spec 009 (HU20): POST /api/chat/stream, con el mismo cliente.
 export const { askStream } = createChatApi(apiClient);

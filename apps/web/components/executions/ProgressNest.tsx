@@ -20,7 +20,9 @@ interface ProgressNestProps {
 }
 
 // The mockup: viewBox 0 0 120 72, the dome from y=64 up to y=6.
-const DOME = 'M10 64 C10 22 40 6 60 6 C80 6 110 22 110 64 Z';
+// Shared with the weekly nest of Mi actividad.
+export const NEST_DOME = 'M10 64 C10 22 40 6 60 6 C80 6 110 22 110 64 Z';
+const DOME = NEST_DOME;
 const BASE_Y = 64;
 const LAYERS_HEIGHT = 56; // 5 layers of 11.2
 const SEPARATOR = 1.2;

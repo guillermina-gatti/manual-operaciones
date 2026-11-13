@@ -1,6 +1,7 @@
 'use client';
 
-// The employee's own activity, in this order: what they can resume (every execution in progress,
+// The employee's own activity, in this order: their weekly nest (the current week, never filtered),
+// what they can resume (every execution in progress,
 // whatever the filters), the filters of /metricas (area and period, in the address), the summary of
 // their executions in the period and their procedures. Only their data: the API takes the user from
 // the session.
@@ -25,6 +26,7 @@ import { useSession } from '@/lib/session';
 import { MySummaryHero } from './MySummaryHero';
 import { RecentProceduresTable } from './RecentProceduresTable';
 import { ResumeList } from './ResumeList';
+import { WeeklyNest } from './WeeklyNest';
 
 // A white card for the states of a section (error), with the design's padding.
 const STATE_CARD = `${CARD} px-6 sm:px-8`;
@@ -69,6 +71,7 @@ export function MyActivityPanel() {
 
   return (
     <div className="flex min-w-0 flex-col gap-10">
+      <WeeklyNest />
       <ResumeSection
         state={resumeSource}
         // Without an area, an error of the only answer is already said by the summary.
@@ -205,6 +208,7 @@ function SummaryState({ filters, state, keepView }: SectionProps) {
 export function MyActivitySkeleton() {
   return (
     <div aria-hidden="true" className="flex animate-pulse flex-col gap-10 motion-reduce:animate-none">
+      <div className="h-56 rounded-3xl bg-borde md:h-52" />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
         <div className="h-48 rounded-2xl bg-borde" />
         <div className="h-48 rounded-2xl bg-borde max-md:hidden" />
