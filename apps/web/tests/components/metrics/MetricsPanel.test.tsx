@@ -444,7 +444,9 @@ describe('with data', () => {
       .getAllByRole('listitem')
       .map((item) => item.textContent);
     expect(legend).toEqual(['3 completadas', '1 en curso', '1 abandonada']);
-    expect(screen.getByTestId('outcome-bar')).toHaveAttribute('aria-hidden', 'true');
+    // The bar of the general summary; each area card has its own below.
+    const summary = screen.getByRole('list', { name: 'Ejecuciones del período' }).closest('section')!;
+    expect(within(summary).getByTestId('outcome-bar')).toHaveAttribute('aria-hidden', 'true');
   });
 
   test('a procedure with two areas counts once in the general summary', async () => {

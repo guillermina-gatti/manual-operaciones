@@ -73,13 +73,22 @@ export interface HeroPart {
 }
 
 // Each part of its share of the total; a part with 0 is not drawn. It repeats the legend, so it is
-// decorative.
-export function SegmentedBar({ parts, total }: { parts: HeroPart[]; total: number }) {
+// decorative. The height, radius and track are the ones on bosque unless the caller gives its own
+// (the area summary of /metricas, on white).
+export function SegmentedBar({
+  parts,
+  total,
+  className = 'h-2.5 rounded-full bg-blanco/16',
+}: {
+  parts: HeroPart[];
+  total: number;
+  className?: string;
+}) {
   return (
     <div
       aria-hidden="true"
       data-testid="outcome-bar"
-      className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-blanco/16"
+      className={`flex w-full gap-0.5 overflow-hidden ${className}`}
     >
       {parts
         .filter((part) => part.count > 0)

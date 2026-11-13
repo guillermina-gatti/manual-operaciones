@@ -1,7 +1,7 @@
 'use client';
 
-// "Detalle por área": one flat white card per area with executions, and inside it one row per
-// procedure that opens to its steps. The procedure with most executions opens first; each row
+// "Detalle por área": one flat white card per area with executions: its name, the summary of the
+// whole area (always visible) and one row per procedure that opens to its steps. The procedure with most executions opens first; each row
 // opens on its own, and the leaf of the area opens (or closes) all of them at once, and says so in
 // a tooltip. A procedure with two areas shows up in both cards; the general numbers never come
 // from adding these cards up.
@@ -12,9 +12,12 @@ import type { ProcedureMetricsResponse } from '@/lib/api';
 import type { Area } from '@/lib/directory';
 import { groupByArea } from '@/lib/metrics/by-area';
 import type { AreaGroup } from '@/lib/metrics/by-area';
+import { formatDuration } from '@/lib/executions/format';
 import { formatCount } from '@/lib/metrics/format';
+import { outcomeShares, spacedPercent } from '@/lib/metrics/summary';
+import { SegmentedBar } from './hero';
 import { LeafIcon } from './icons';
-import { AREA_CARD } from './metrics-design';
+import { AREA_BAR, AREA_BAR_FILL, AREA_CARD, SUMMARY_DIVIDER } from './metrics-design';
 import { ProcedureMetricsCard } from './ProcedureMetricsCard';
 import { SectionHeading } from './SectionHeading';
 
@@ -118,6 +121,8 @@ function AreaCard({ group }: { group: AreaGroup }) {
         />
       </header>
 
+      <AreaSummary group={group} />
+
       <p
         className={`${TABLE_HEAD} px-6 py-2.5 text-xs font-bold tracking-[0.04em] uppercase`}
       >
@@ -190,5 +195,99 @@ function LeafToggle({
         {label}
       </span>
     </span>
+  );
+}
+
+// The summary of the whole area, every procedure of it: completed (with their share), in progress,
+// abandoned and the average time of a completed execution, the same numbers the leaf used to show
+// (group.counts, outcomeShares, group.avgCompletionMs). Four in a row from lg, 2 × 2 below; the bar
+// under them repeats them, so it is decorative, and it is not drawn without executions.
+function AreaSummary({ group }: { group: AreaGroup }) {
+  const labelId = useId();
+  const { counts, avgCompletionMs } = group;
+  const shares = outcomeShares(counts);
+  const parts = [
+    { key: 'completed', count: counts.completed, fill: AREA_BAR_FILL.completed, text: null },
+    { key: 'inProgress', count: counts.inProgress, fill: AREA_BAR_FILL.inProgress, text: null },
+    { key: 'abandoned', count: counts.abandoned, fill: AREA_BAR_FILL.abandoned, text: null },
+  ];
+  const abandoned = counts.abandoned > 0;
+
+  return (
+    <div role="group" aria-labelledby={labelId} className="bg-blanco px-6 pb-5">
+      <p
+        id={labelId}
+        className="text-xs font-bold tracking-[0.04em] text-texto-suave uppercase"
+      >
+        Resumen del área
+      </p>
+      <dl
+        data-testid="area-summary-data"
+        className="mt-3 grid grid-cols-2 gap-y-4 lg:grid-cols-4"
+      >
+        <SummaryDatum
+          label={counts.completed === 1 ? 'completada' : 'completadas'}
+          value={formatCount(counts.completed)}
+          note={counts.started > 0 ? `(${spacedPercent(shares.completed)})` : undefined}
+        />
+        <SummaryDatum label="en curso" value={formatCount(counts.inProgress)} />
+        <SummaryDatum
+          label={counts.abandoned === 1 ? 'abandonada' : 'abandonadas'}
+          value={formatCount(counts.abandoned)}
+          alert={abandoned}
+        />
+        <SummaryDatum
+          label={avgCompletionMs === null ? 'Sin completadas todavía' : 'Tiempo medio'}
+          value={formatDuration(avgCompletionMs)}
+        />
+      </dl>
+      {counts.started > 0 && (
+        <SegmentedBar parts={parts} total={counts.started} className={AREA_BAR} />
+      )}
+    </div>
+  );
+}
+
+// The number in bold 22 px and its label under it in 13 px (the label first for a screen reader),
+// both at the top, so the numbers of a row line up even when a label wraps.
+// Between them, the thin line of the rows: from lg before every datum but the first; on the phone,
+// before the second of each row. More than 0 abandoned: the alert color of the team and a dot.
+function SummaryDatum({
+  label,
+  value,
+  note,
+  alert = false,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  alert?: boolean;
+}) {
+  return (
+    <div
+      data-testid="area-summary-datum"
+      className={`flex min-w-0 flex-col-reverse justify-end gap-0.5 px-4 ${SUMMARY_DIVIDER} max-lg:odd:pl-0 max-lg:even:border-l lg:border-l lg:first:border-l-0 lg:first:pl-0`}
+    >
+      <dt className={`text-[13px] ${alert ? 'font-semibold text-durazno-texto' : 'text-texto-suave'}`}>
+        {label}
+      </dt>
+      <dd
+        className={`flex flex-wrap items-baseline gap-x-1.5 text-[22px] leading-tight font-bold tabular-nums ${
+          alert ? 'text-durazno-texto' : 'text-texto'
+        }`}
+      >
+        {alert && (
+          <span
+            aria-hidden="true"
+            data-testid="abandoned-dot"
+            className="size-2 shrink-0 self-center rounded-full bg-current"
+          />
+        )}
+        <span className="whitespace-nowrap">{value}</span>
+        {note && (
+          <span className="text-[13px] font-normal whitespace-nowrap text-texto-suave">{note}</span>
+        )}
+      </dd>
+    </div>
   );
 }
