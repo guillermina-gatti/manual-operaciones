@@ -14,8 +14,12 @@ const candidate = {
 
 function setup() {
   const request = vi.fn().mockResolvedValue([candidate]);
-  const directory = createHttpUsersDirectory({ request } as ApiClient);
-  return { request, directory };
+  const getNames = vi.fn().mockResolvedValue({ [candidate.id]: candidate.name });
+  const directory = createHttpUsersDirectory(
+    { request } as ApiClient,
+    { getNames },
+  );
+  return { request, getNames, directory };
 }
 
 describe('T29: directorio HTTP de candidatos', () => {
@@ -50,25 +54,13 @@ describe('T29: directorio HTTP de candidatos', () => {
     }
   });
 
-  test('getNames consulta GET /api/users/names?ids=... y deduplica IDs', async () => {
-    const { directory, request } = setup();
-    const otherId = FIXTURE_USERS.empleadoVentas.id;
-    request.mockResolvedValueOnce({
+  test('getNames sigue delegado al directorio histórico, no al endpoint de candidatos', async () => {
+    const { directory, request, getNames } = setup();
+    await expect(directory.getNames([candidate.id])).resolves.toEqual({
       [candidate.id]: candidate.name,
-      [otherId]: FIXTURE_USERS.empleadoVentas.name,
     });
-
-    await expect(directory.getNames([candidate.id, otherId, candidate.id])).resolves.toEqual({
-      [candidate.id]: candidate.name,
-      [otherId]: FIXTURE_USERS.empleadoVentas.name,
-    });
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(request).toHaveBeenCalledWith(`/api/users/names?ids=${candidate.id}&ids=${otherId}`);
-  });
-
-  test('getNames con lista vacía devuelve {} sin consultar la API', async () => {
-    const { directory, request } = setup();
-    await expect(directory.getNames([])).resolves.toEqual({});
+    expect(getNames).toHaveBeenCalledTimes(1);
+    expect(getNames).toHaveBeenCalledWith([candidate.id]);
     expect(request).not.toHaveBeenCalled();
   });
 });

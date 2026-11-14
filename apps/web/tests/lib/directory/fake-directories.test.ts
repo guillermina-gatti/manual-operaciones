@@ -1,7 +1,12 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { usersDirectory } from '@/lib/directory';
 import { createFakeAreasDirectory } from '@/lib/directory/fake-areas-directory';
 import { createFakeUsersDirectory } from '@/lib/directory/fake-users-directory';
 import { AREA_IDS, FIXTURE_USERS } from '@/lib/directory/fixtures';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('directorio de áreas simulado', () => {
   test('listAreas devuelve Ventas y Operaciones', async () => {
@@ -38,5 +43,21 @@ describe('directorio de usuarios simulado', () => {
       [FIXTURE_USERS.admin.id]: 'Ana Administradora',
       [FIXTURE_USERS.empleadoOperaciones.id]: 'Emilio Empleado de Operaciones',
     });
+  });
+});
+
+describe('instancias de @/lib/directory', () => {
+  test('A-06.4 sigue pendiente: getNames conserva transitoriamente la demora simulada', async () => {
+    vi.useFakeTimers();
+    const resolved = vi.fn();
+
+    const names = usersDirectory.getNames([FIXTURE_USERS.admin.id]).then(resolved);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(resolved).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await names;
+    expect(resolved).toHaveBeenCalledTimes(1);
   });
 });
