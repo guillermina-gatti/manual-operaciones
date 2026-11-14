@@ -33,6 +33,26 @@ export abstract class InvitationDeliveryService {
   abstract deliver(params: DeliverInvitationParams): Promise<DeliveryResult>;
 }
 
+/**
+ * Canal seguro de contingencia.
+ *
+ * Impide crear invitaciones cuando la selección del
+ * proveedor es incompatible con el entorno.
+ */
+export class UnavailableInvitationDeliveryService extends InvitationDeliveryService {
+  assertReady(): void {
+    throw new ServiceUnavailableException(
+      'El servicio de entrega de invitaciones no está configurado en este entorno',
+    );
+  }
+
+  async deliver(): Promise<DeliveryResult> {
+    throw new ServiceUnavailableException(
+      'El servicio de entrega de invitaciones no está disponible',
+    );
+  }
+}
+
 @Injectable()
 export class LocalInvitationDeliveryService implements InvitationDeliveryService {
   constructor(private readonly configService: ConfigService) {}

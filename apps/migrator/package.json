@@ -1,0 +1,13 @@
+{
+  "name": "prisma-migrator",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "dotenv": "18.0.8",
+    "prisma": "7.10.0"
+  }
+}

@@ -215,3 +215,106 @@ Implementado en la migración [`20261105022235_add_user_invitations`](../../apps
 | `NODE_ENV` | `apps/api` / `apps/web` | Define el entorno de ejecución (`development`, `test`, `production`). `LocalInvitationDeliveryService` solo opera en `development` o `test`; en cualquier otro entorno aplica *fail-closed* (`503`) hasta contar con un proveedor real de correo (`channel: 'email'`, `delivered: true`). |
 | `REDIS_URL` | `apps/api` | Conexión a Redis utilizada por `AuthRateLimiterService` para los límites de login, validación de invitación y registro. |
 | `JWT_SECRET` | `apps/api` | Secreto obligatorio al iniciar el módulo (`AuthService.onModuleInit`) para firmar y verificar los `accessToken` de 15 minutos. |
+
+## 6. A-INV-EMAIL — Entrega real de invitaciones
+
+### Objetivo
+
+Incorporar un proveedor de correo transaccional para enviar invitaciones de registro a usuarios, conservando el mecanismo local de desarrollo y las garantías de seguridad de HU29.
+
+### Proveedor elegido
+
+Se propone **Resend**, mediante su API HTTP, para enviar correos de invitación en producción.
+
+La elección busca simplificar la integración y minimizar los costos iniciales de infraestructura.
+
+### Configuración
+
+| Variable | Descripción |
+|---|---|
+| `INVITATION_EMAIL_PROVIDER` | Selecciona `local` o `resend`. |
+| `RESEND_API_KEY` | Credencial privada para autenticar solicitudes al proveedor. |
+| `INVITATION_EMAIL_FROM` | Dirección remitente autorizada en un dominio verificado. |
+| `FRONTEND_URL` | Dirección base del frontend utilizada para generar el enlace de registro. |
+
+### Reglas de funcionamiento
+
+1. **Desarrollo y test:** el adaptador local conserva el comportamiento actual y puede devolver `invitationUrl`, sin enviar correos externos.
+2. **Producción:** requiere el proveedor `resend` correctamente configurado. No se permite utilizar el canal local.
+3. **Configuración incompleta:** el servicio rechaza la operación antes de crear la invitación, con HTTP 503.
+4. **Entrega por correo:** el mensaje contiene el enlace `/registro#token=...`, generado por el backend.
+5. **Seguridad:** la API nunca devuelve el token ni `invitationUrl` en la respuesta de producción.
+6. **Privacidad:** las credenciales, los tokens y los enlaces completos de invitación no deben registrarse en logs.
+7. **Fallo del proveedor:** debe mantenerse el mecanismo de revocación compensatoria existente, respondiendo HTTP 503.
+8. **Compatibilidad:** no se modifican las reglas actuales de validación, expiración de 48 horas, consumo único ni asignación de roles y áreas.
+
+### Consideraciones de implementación
+
+- `InvitationDeliveryService` continuará siendo la abstracción utilizada por `UsersController`.
+- `LocalInvitationDeliveryService` permanecerá disponible para desarrollo y test.
+- Se incorporará un adaptador específico para Resend.
+- La selección del adaptador se realizará mediante inyección de dependencias de NestJS.
+- Una respuesta exitosa del proveedor acredita la aceptación de la solicitud de envío, no garantiza que el correo haya llegado a la bandeja del destinatario.
+- Las pruebas automatizadas utilizarán proveedores simulados y no requerirán credenciales reales.
+
+### Estado
+
+**A-INV-EMAIL.1:** definición de configuración y contrato.
+
+**Pendiente:** implementación del adaptador, selección mediante configuración, pruebas unitarias, integración y verificación de envío real.
+
+## 7. A-INV-EMAIL — Verificación y despliegue
+
+### Estado de implementación
+
+Se incorporó `ResendInvitationDeliveryService` como adaptador de correo transaccional y se configuró su selección mediante inyección de dependencias en `UsersModule`.
+
+El adaptador local continúa disponible para desarrollo y pruebas. Los entornos no locales requieren la selección explícita de Resend.
+
+### Variables requeridas para producción
+
+```dotenv
+NODE_ENV=production
+INVITATION_EMAIL_PROVIDER=resend
+RESEND_API_KEY=<configurar-como-secreto>
+INVITATION_EMAIL_FROM=PispIAr <invitaciones@dominio-verificado.com>
+FRONTEND_URL=https://frontend-del-proyecto.com
+```
+
+Estos valores son ilustrativos y no deben copiarse literalmente como credenciales ni dominios reales.
+
+### Requisitos previos para habilitar el envío
+
+- Registrar y verificar un dominio remitente en Resend.
+- Crear una API key con permisos de envío.
+- Configurar las variables en el entorno seguro del backend, sin subir secretos a GitHub.
+- Confirmar que `FRONTEND_URL` apunta al frontend público mediante HTTPS.
+- Verificar que `/registro` funciona en el dominio del frontend.
+
+### Validaciones de seguridad
+
+- En desarrollo y test se utiliza exclusivamente el adaptador local.
+- En producción no se permite utilizar el adaptador local.
+- La configuración incompatible produce HTTP 503.
+- Las configuraciones faltantes se rechazan antes de generar invitaciones.
+- La respuesta de producción no expone el enlace ni el token.
+- Las solicitudes al proveedor incorporan una clave de idempotencia derivada del hash del token.
+- Los errores externos se transforman en mensajes seguros.
+- Si falla el envío, el controlador intenta revocar la invitación.
+
+### Limitaciones conocidas
+
+1. Una respuesta exitosa de Resend confirma que el proveedor aceptó la solicitud, pero no garantiza la entrega en la bandeja del destinatario.
+2. Si el proveedor acepta el mensaje y luego se interrumpe la comunicación antes de que el backend reciba la confirmación, el mecanismo de contingencia puede revocar una invitación cuyo correo ya fue emitido.
+3. La idempotencia del proveedor reduce duplicaciones durante su período de retención, pero no resuelve por sí sola las entregas ambiguas.
+4. No se implementaron webhooks de seguimiento de entrega, rebotes ni reenvío automático de invitaciones. Quedan fuera del alcance actual.
+
+### Criterios de cierre
+
+- Pruebas unitarias del adaptador aprobadas.
+- Pruebas de selección del proveedor aprobadas.
+- Pruebas existentes de invitaciones y registro sin regresiones.
+- Compilación y lint correctos.
+- CI del Pull Request en verde.
+- Configuración real de dominio y credenciales documentada como requisito de despliegue.
+- Prueba real de recepción del correo pendiente hasta disponer del dominio y entorno de envío configurados.

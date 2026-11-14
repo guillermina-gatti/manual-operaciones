@@ -8,7 +8,7 @@ async function bootstrap() {
   // Cierre ordenado de conexiones (onModuleDestroy) ante señales SIGINT y SIGTERM.
   app.enableShutdownHooks();
 
-  // Prefijo /api, ValidationPipe y Swagger (src/app.setup.ts).
+  // Política de proxy/cabeceras, prefijo /api, ValidationPipe y Swagger.
   configureApp(app);
 
   await app.listen(process.env.PORT ?? 3000);
