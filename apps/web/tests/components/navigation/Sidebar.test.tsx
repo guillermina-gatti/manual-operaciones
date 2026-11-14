@@ -50,6 +50,7 @@ describe('Sidebar (diseño v2)', () => {
       expect(screen.getByRole('link', { name: 'Asistente' })).toBeInTheDocument();
 
       expect(screen.queryByRole('link', { name: 'Invitar usuario' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Áreas' })).not.toBeInTheDocument();
     });
 
     test('un ADMIN ve todos los módulos incluyendo Usuarios y roles e Invitaciones', () => {
@@ -66,6 +67,7 @@ describe('Sidebar (diseño v2)', () => {
         'href',
         '/admin/invitaciones',
       );
+      expect(screen.getByRole('link', { name: 'Áreas' })).toHaveAttribute('href', '/admin/areas');
       expect(screen.getByRole('link', { name: 'Asistente' })).toBeInTheDocument();
     });
   });

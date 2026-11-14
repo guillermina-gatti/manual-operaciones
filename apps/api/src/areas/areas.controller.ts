@@ -1,8 +1,21 @@
-import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/auth';
+import { JwtAuthGuard, Roles, RolesGuard } from '../common/auth';
+import { UUID_REGEX } from '../auth/session.service';
 import { AreasService } from './areas.service';
 import { AreaResponse } from './dto/area.response';
+import { CreateAreaDto } from './dto/create-area.dto';
+import { UpdateAreaDto } from './dto/update-area.dto';
 
 @ApiTags('areas')
 @ApiBearerAuth()
@@ -27,4 +40,41 @@ export class AreasController {
     }
     return this.areas.list();
   }
+
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 201,
+    description: 'Área creada correctamente',
+    type: AreaResponse,
+  })
+  @ApiResponse({ status: 400, description: 'Datos del área inválidos' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede crear áreas' })
+  @ApiResponse({ status: 409, description: 'Ya existe un área con ese nombre' })
+  create(@Body() dto: CreateAreaDto): Promise<AreaResponse> {
+    return this.areas.create(dto);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Área actualizada correctamente',
+    type: AreaResponse,
+  })
+  @ApiResponse({ status: 400, description: 'ID o datos del área inválidos' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede modificar áreas' })
+  @ApiResponse({ status: 404, description: 'Área no encontrada' })
+  @ApiResponse({ status: 409, description: 'Ya existe un área con ese nombre' })
+  update(@Param('id') id: string, @Body() dto: UpdateAreaDto): Promise<AreaResponse> {
+    if (!UUID_REGEX.test(id)) {
+      throw new BadRequestException('ID de área inválido');
+    }
+    return this.areas.update(id, dto);
+  }
 }
+

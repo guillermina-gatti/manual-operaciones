@@ -193,6 +193,30 @@ function LogoutIcon({ className = 'size-5' }: { className?: string }) {
   );
 }
 
+function BuildingIcon({ className = 'size-5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect width="16" height="20" x="4" y="2" rx="2" ry="2" />
+      <path d="M9 22v-4h6v4" />
+      <path d="M8 6h.01" />
+      <path d="M16 6h.01" />
+      <path d="M8 10h.01" />
+      <path d="M16 10h.01" />
+      <path d="M8 14h.01" />
+      <path d="M16 14h.01" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS: readonly NavItemConfig[] = [
   {
     id: 'inicio',
@@ -239,6 +263,13 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
     href: '/admin/invitaciones',
     roles: ['ADMIN'],
     icon: InviteIcon,
+  },
+  {
+    id: 'areas',
+    label: 'Áreas',
+    href: '/admin/areas',
+    roles: ['ADMIN'],
+    icon: BuildingIcon,
   },
   {
     id: 'asistente',

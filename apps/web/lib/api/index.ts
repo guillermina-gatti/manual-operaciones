@@ -1,5 +1,6 @@
 // Único punto de entrada de lib/api: los componentes importan de '@/lib/api', nunca de un archivo interno.
 import { getAuthHeaders, refreshSession } from '@/lib/session';
+import { createAreasApi } from './areas';
 import { createChatApi } from './chat';
 import { createChatFeedbackApi } from './chat-feedback';
 import { createConflictAlertsApi } from './conflict-alerts';
@@ -130,3 +131,13 @@ export type {
   AdminUserItem,
   UpdateUserPayload,
 } from './users';
+
+// Gestión administrativa de áreas (ABM completo: crear, renombrar, activar/desactivar)
+export const { listAreas: listApiAreas, createArea, updateArea } = createAreasApi(apiClient);
+export { AREAS_CHANGED_EVENT, notifyAreasChanged } from './areas';
+export type {
+  AreaItem,
+  CreateAreaPayload,
+  UpdateAreaPayload,
+} from './areas';
+
