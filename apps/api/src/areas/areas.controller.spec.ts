@@ -14,13 +14,17 @@ const CATALOG = [
 describe('AreasController (HTTP, A-11)', () => {
   let app: INestApplication;
   let list: jest.Mock;
+  let create: jest.Mock;
+  let update: jest.Mock;
 
   beforeAll(async () => {
     list = jest.fn();
+    create = jest.fn();
+    update = jest.fn();
     const moduleRef = await Test.createTestingModule({
       controllers: [AreasController],
       providers: [
-        { provide: AreasService, useValue: { list } },
+        { provide: AreasService, useValue: { list, create, update } },
         ...realAuthProviders(), // JWT real + usuarios autenticados desde DB simulada
       ],
     }).compile();
@@ -80,6 +84,91 @@ describe('AreasController (HTTP, A-11)', () => {
   it('muestra 503 si el servicio reporta indisponibilidad', async () => {
     list.mockRejectedValue(new ServiceUnavailableException('Base indisponible'));
     await http().get('/api/areas').set(bearer(SPEC_USERS.admin)).expect(503);
+  });
+
+  describe('POST /api/areas (Creación de áreas)', () => {
+    it('requiere autenticación (401 si no se envía token)', async () => {
+      await http().post('/api/areas').send({ name: 'Recursos Humanos' }).expect(401);
+    });
+
+    it('requiere rol ADMIN (403 para supervisor o empleado)', async () => {
+      await http()
+        .post('/api/areas')
+        .set(bearer(SPEC_USERS.supervisorVentas))
+        .send({ name: 'Recursos Humanos' })
+        .expect(403);
+    });
+
+    it('rechaza nombres inválidos o vacíos con 400', async () => {
+      await http()
+        .post('/api/areas')
+        .set(bearer(SPEC_USERS.admin))
+        .send({ name: '' })
+        .expect(400);
+    });
+
+    it('permite a un ADMIN crear un área correctamente (201)', async () => {
+      const createdArea = {
+        id: '0a000000-0000-4000-8000-000000000003',
+        name: 'Recursos Humanos',
+        isActive: true,
+      };
+      create.mockResolvedValueOnce(createdArea);
+
+      const res = await http()
+        .post('/api/areas')
+        .set(bearer(SPEC_USERS.admin))
+        .send({ name: 'Recursos Humanos' })
+        .expect(201);
+
+      expect(res.body).toEqual(createdArea);
+      expect(create).toHaveBeenCalledWith({ name: 'Recursos Humanos' });
+    });
+  });
+
+  describe('PATCH /api/areas/:id (Actualización de áreas)', () => {
+    const areaId = '0a000000-0000-4000-8000-000000000001';
+
+    it('requiere autenticación (401 si no se envía token)', async () => {
+      await http().patch(`/api/areas/${areaId}`).send({ name: 'Comercial' }).expect(401);
+    });
+
+    it('requiere rol ADMIN (403 para empleado)', async () => {
+      await http()
+        .patch(`/api/areas/${areaId}`)
+        .set(bearer(SPEC_USERS.empleadoVentas))
+        .send({ name: 'Comercial' })
+        .expect(403);
+    });
+
+    it('rechaza IDs que no sean UUID con 400', async () => {
+      await http()
+        .patch('/api/areas/invalido')
+        .set(bearer(SPEC_USERS.admin))
+        .send({ name: 'Comercial' })
+        .expect(400);
+    });
+
+    it('permite a un ADMIN renombrar y cambiar el estado del área (200)', async () => {
+      const updatedArea = {
+        id: areaId,
+        name: 'Comercial y Ventas',
+        isActive: false,
+      };
+      update.mockResolvedValueOnce(updatedArea);
+
+      const res = await http()
+        .patch(`/api/areas/${areaId}`)
+        .set(bearer(SPEC_USERS.admin))
+        .send({ name: 'Comercial y Ventas', isActive: false })
+        .expect(200);
+
+      expect(res.body).toEqual(updatedArea);
+      expect(update).toHaveBeenCalledWith(areaId, {
+        name: 'Comercial y Ventas',
+        isActive: false,
+      });
+    });
   });
 
   it('publica el esquema HTTP y los códigos esperados en Swagger', async () => {

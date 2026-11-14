@@ -1,5 +1,6 @@
 // Único punto de entrada de lib/api: los componentes importan de '@/lib/api', nunca de un archivo interno.
 import { getAuthHeaders, refreshSession } from '@/lib/session';
+import { createAreasApi } from './areas';
 import { createChatApi } from './chat';
 import { createChatFeedbackApi } from './chat-feedback';
 import { createConflictAlertsApi } from './conflict-alerts';
@@ -7,6 +8,7 @@ import { createApiClient } from './client';
 import { createDocumentsApi } from './documents';
 import { createExecutionsApi } from './executions';
 import { createInvitationsApi } from './invitations';
+import { createUsersApi } from './users';
 import { createMetricsApi } from './metrics';
 import { createMyMetricsApi } from './my-metrics';
 
@@ -95,6 +97,14 @@ export type {
   MyResumeItem,
 } from './my-metrics';
 export { describeMyMetricsError, MY_METRICS_MESSAGES } from './metrics-errors';
+// Its daily activity: GET /api/metrics/me/daily (the weekly nest and the daily chart).
+export const { getMyDailyActivity } = createMyMetricsApi(apiClient);
+export type {
+  MyDailyActivityResponse,
+  MyDailyDay,
+  MyDailyProcedure,
+  MyDailyWeek,
+} from './my-metrics';
 
 // Spec 009 (HU20): POST /api/chat/stream, con el mismo cliente.
 export const { askStream } = createChatApi(apiClient);
@@ -107,8 +117,35 @@ export type { ChatFeedbackBody } from './chat-feedback';
 
 // Spec 011 (HU39): las alertas de documentos contradictorios, con el mismo cliente.
 export const { listConflictAlerts, resolveConflictAlert } = createConflictAlertsApi(apiClient);
+export { CONFLICT_ALERTS_CHANGED_EVENT, notifyConflictAlertsChanged } from './conflict-alerts';
 export type { ConflictAlert, ConflictAlertDocument, ConflictAlertPage, ConflictAlertStatus } from './conflict-alerts';
 
-// HU29: Emisión de invitaciones por administradores.
-export const { createInvitation } = createInvitationsApi(apiClient);
-export type { CreateInvitationPayload, CreatedInvitation } from './invitations';
+// HU29: Emisión y gestión de invitaciones por administradores.
+export const { createInvitation, listInvitations, revokeInvitation } =
+  createInvitationsApi(apiClient);
+export { INVITATIONS_CHANGED_EVENT, notifyInvitationsChanged } from './invitations';
+export type {
+  CreateInvitationPayload,
+  CreatedInvitation,
+  InvitationListItem,
+  InvitationStatus,
+} from './invitations';
+
+// Gestión administrativa de usuarios (edición de rol, áreas y estado)
+export const { listAdminUsers, updateUser } = createUsersApi(apiClient);
+export { USERS_CHANGED_EVENT, notifyUsersChanged } from './users';
+export type {
+  AdminUserArea,
+  AdminUserItem,
+  UpdateUserPayload,
+} from './users';
+
+// Gestión administrativa de áreas (ABM completo: crear, renombrar, activar/desactivar)
+export const { listAreas: listApiAreas, createArea, updateArea } = createAreasApi(apiClient);
+export { AREAS_CHANGED_EVENT, notifyAreasChanged } from './areas';
+export type {
+  AreaItem,
+  CreateAreaPayload,
+  UpdateAreaPayload,
+} from './areas';
+

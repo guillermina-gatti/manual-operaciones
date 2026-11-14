@@ -35,6 +35,7 @@ describe('InvitationsService (HU29)', () => {
       userInvitation: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
@@ -607,6 +608,70 @@ describe('InvitationsService (HU29)', () => {
       ).rejects.toThrow(GoneException);
 
       expect(mockTx.userInvitation.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listInvitations()', () => {
+    it('retorna las invitaciones con el estado calculado correctamente', async () => {
+      const now = new Date();
+      const future = new Date(now.getTime() + 1000000);
+      const past = new Date(now.getTime() - 1000000);
+
+      mockPrisma.userInvitation.findMany.mockResolvedValue([
+        {
+          id: 'inv-1',
+          email: 'pending@empresa.com',
+          role: 'EMPLOYEE',
+          expiresAt: future,
+          acceptedAt: null,
+          revokedAt: null,
+          createdAt: now,
+          areas: [{ areaId: 'area-1', area: { name: 'Ventas' } }],
+          createdBy: { id: 'admin-1', name: 'Ana' },
+        },
+        {
+          id: 'inv-2',
+          email: 'accepted@empresa.com',
+          role: 'SUPERVISOR',
+          expiresAt: future,
+          acceptedAt: now,
+          revokedAt: null,
+          createdAt: now,
+          areas: [{ areaId: 'area-1', area: { name: 'Ventas' } }],
+          createdBy: { id: 'admin-1', name: 'Ana' },
+        },
+        {
+          id: 'inv-3',
+          email: 'revoked@empresa.com',
+          role: 'EMPLOYEE',
+          expiresAt: future,
+          acceptedAt: null,
+          revokedAt: now,
+          createdAt: now,
+          areas: [],
+          createdBy: { id: 'admin-1', name: 'Ana' },
+        },
+        {
+          id: 'inv-4',
+          email: 'expired@empresa.com',
+          role: 'EMPLOYEE',
+          expiresAt: past,
+          acceptedAt: null,
+          revokedAt: null,
+          createdAt: past,
+          areas: [],
+          createdBy: { id: 'admin-1', name: 'Ana' },
+        },
+      ]);
+
+      const result = await service.listInvitations();
+
+      expect(result).toHaveLength(4);
+      expect(result[0].status).toBe('PENDING');
+      expect(result[0].areaNames).toEqual(['Ventas']);
+      expect(result[1].status).toBe('ACCEPTED');
+      expect(result[2].status).toBe('REVOKED');
+      expect(result[3].status).toBe('EXPIRED');
     });
   });
 

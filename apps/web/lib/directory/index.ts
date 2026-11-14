@@ -1,12 +1,9 @@
-// T28 y T29: directorios HTTP con la sesión vigente; A-06.4 (nombres históricos) sigue pendiente.
+// T28, T29 y A-06.4: directorios HTTP con la sesión vigente.
 import { apiClient } from '@/lib/api';
-import { createFakeUsersDirectory } from './fake-users-directory';
 import { createHttpAreasDirectory } from './http-areas-directory';
 import { createHttpUsersDirectory } from './http-users-directory';
 
-// Solo getNames conserva temporalmente los fixtures hasta acordar e implementar A-06.4.
-const legacyNamesDirectory = createFakeUsersDirectory();
-export const usersDirectory = createHttpUsersDirectory(apiClient, legacyNamesDirectory);
+export const usersDirectory = createHttpUsersDirectory(apiClient);
 export const areasDirectory = createHttpAreasDirectory(apiClient);
 
 export { displayAreaName, toAreaNameMap } from './areas-directory';

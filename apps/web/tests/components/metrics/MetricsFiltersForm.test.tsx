@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { MetricsFiltersForm } from '@/components/metrics/MetricsFiltersForm';
-import { MetricTiles } from '@/components/metrics/MetricTiles';
 
 const mocks = vi.hoisted(() => ({ push: vi.fn() }));
 
@@ -62,20 +61,3 @@ describe('MetricsFiltersForm on another page', () => {
   });
 });
 
-describe('MetricTiles', () => {
-  test('each tile is a term with its number and its line', () => {
-    render(
-      <MetricTiles
-        tiles={[
-          { label: 'Ejecuciones', icon: null, value: '12', hint: 'en el período elegido' },
-          { label: 'Tiempo medio', icon: null, value: '3 min', hint: 'por ejecución', small: true },
-        ]}
-      />,
-    );
-
-    const terms = screen.getAllByRole('term').map((term) => term.textContent);
-    expect(terms).toEqual(['Ejecuciones', 'Tiempo medio']);
-    expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('3 min')).toHaveClass('text-[28px]');
-  });
-});

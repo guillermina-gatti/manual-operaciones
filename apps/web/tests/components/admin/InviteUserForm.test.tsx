@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', () => ({
   createInvitation: mocks.createInvitation,
+  notifyInvitationsChanged: vi.fn(),
 }));
 
 vi.mock('@/lib/directory', () => ({

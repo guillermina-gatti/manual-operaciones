@@ -73,6 +73,26 @@ describe('Auth Rate Limiting (E2E)', () => {
     expect(sessionsCount).toBe(0);
   });
 
+  it('no permite evadir el límite por IP falsificando X-Forwarded-For sin proxy confiable', async () => {
+    const user = await sandbox.createUser({ role: 'EMPLOYEE' });
+
+    for (let i = 1; i <= ACCOUNT_IP_MAX_ATTEMPTS; i++) {
+      await http()
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', `198.51.100.${i}`)
+        .send({ email: user.email, password: 'PasswordIncorrecta!' })
+        .expect(401);
+    }
+
+    const response = await http()
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.200')
+      .send({ email: user.email, password: user.password })
+      .expect(429);
+
+    expect(response.body.limitType).toBe('ACCOUNT_IP');
+  });
+
   it('aplica restablecimiento asimétrico tras login exitoso: limpia la clave de cuenta+IP pero preserva el contador global de la IP en Redis', async () => {
     const user = await sandbox.createUser({ role: 'EMPLOYEE' });
 

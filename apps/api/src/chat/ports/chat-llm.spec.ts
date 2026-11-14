@@ -79,4 +79,22 @@ describe('ChatLlm.stream por defecto con contexto (spec 010, R6)', () => {
 
         expect(received).toEqual([context]);
     });
+
+    // Spec 011 (ajuste del 11/11/2026): también las opciones del segundo pedido.
+    it('le pasa las opciones a answer', async () => {
+        const received: unknown[] = [];
+        class RecordingLlm extends ChatLlm {
+            async answer(_q: string, _p: Passage[], _context?: unknown, options?: unknown): Promise<LlmAnswer> {
+                received.push(options);
+                return REPLY;
+            }
+        }
+        const options = { sameDocumentRefs: ['S1', 'S2'] as [string, string] };
+
+        await collect(
+            new RecordingLlm().stream('¿plazo?', PASSAGES, new AbortController().signal, undefined, options).textStream,
+        );
+
+        expect(received).toEqual([options]);
+    });
 });

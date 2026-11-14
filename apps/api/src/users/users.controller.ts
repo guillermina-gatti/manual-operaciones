@@ -2,8 +2,12 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Logger,
+  NotFoundException,
+  Param,
+  Patch,
   Post,
   Query,
   ServiceUnavailableException,
@@ -14,8 +18,11 @@ import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../common/auth';
 import type { AuthUser } from '../common/auth';
 import { UUID_REGEX } from '../auth/session.service';
+import { AdminUserResponse } from './dto/admin-user.response';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
+import { InvitationListItemResponse } from './dto/invitation-list-item.response';
 import { InvitationResponse } from './dto/invitation.response';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UserCandidateResponse } from './dto/user-candidate.response';
 import { InvitationDeliveryService } from './invitation-delivery.service';
 import { InvitationsService } from './invitations.service';
@@ -84,6 +91,33 @@ function resolveFrontendBaseUrl(configService: ConfigService): string {
   return rawUrl.replace(/\/+$/, '');
 }
 
+function parseUuidListQueryParam(
+  query: Record<string, unknown>,
+  paramName: string,
+): string[] {
+  if (
+    Object.keys(query).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(query, paramName)
+  ) {
+    throw new BadRequestException(
+      `${paramName} es obligatorio y no se admiten otros parámetros`,
+    );
+  }
+
+  const raw = query[paramName];
+  const ids: unknown[] = Array.isArray(raw) ? raw : [raw];
+  if (
+    ids.length === 0 ||
+    ids.some((id) => typeof id !== 'string' || !UUID_REGEX.test(id))
+  ) {
+    throw new BadRequestException(
+      `${paramName}: se requiere uno o más UUID válidos, en parámetros repetidos`,
+    );
+  }
+
+  return ids as string[];
+}
+
 @ApiTags('users')
 @ApiBearerAuth()
 @Controller('users')
@@ -112,21 +146,23 @@ export class UsersController {
   @ApiResponse({ status: 503, description: 'La base de datos no responde' })
   listCandidates(@Query() query: Record<string, unknown>): Promise<UserCandidateResponse[]> {
     // Solo areaIds, repetido una vez por UUID; sin CSV, filtros, búsqueda ni paginación.
-    if (Object.keys(query).length !== 1 || !Object.prototype.hasOwnProperty.call(query, 'areaIds')) {
-      throw new BadRequestException('areaIds es obligatorio y no se admiten otros parámetros');
-    }
-
-    const raw = query.areaIds;
-    const ids: unknown[] = Array.isArray(raw) ? raw : [raw];
-    if (
-      ids.length === 0 ||
-      ids.some((id) => typeof id !== 'string' || !UUID_REGEX.test(id))
-    ) {
-      throw new BadRequestException('areaIds: se requiere uno o más UUID válidos, en parámetros repetidos');
-    }
-
+    const ids = parseUuidListQueryParam(query, 'areaIds');
     // No se confía en el frontend: el servicio valida TODOS los IDs contra áreas activas.
-    return this.users.listOwnerCandidates(ids as string[]);
+    return this.users.listOwnerCandidates(ids);
+  }
+
+  @Get('names')
+  @Roles('ADMIN', 'SUPERVISOR', 'EMPLOYEE')
+  @ApiResponse({
+    status: 200,
+    description: 'Mapa { [id]: name } de usuarios solicitados (activos e históricos)',
+  })
+  @ApiResponse({ status: 400, description: 'ids ausente, mal formado o parámetros no admitidos' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación o cuenta solicitante inactiva' })
+  @ApiResponse({ status: 503, description: 'La base de datos no responde' })
+  getNames(@Query() query: Record<string, unknown>): Promise<Record<string, string>> {
+    const ids = parseUuidListQueryParam(query, 'ids');
+    return this.users.getUserNamesByIds(ids);
   }
 
   @Post('invitations')
@@ -237,5 +273,77 @@ export class UsersController {
       createdAt: result.invitation.createdAt,
       invitationUrl: isLocal ? deliveryResult.invitationUrl : undefined,
     };
+  }
+
+  @Get('invitations')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de todas las invitaciones registradas',
+    type: InvitationListItemResponse,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede listar invitaciones' })
+  async listInvitations(): Promise<InvitationListItemResponse[]> {
+    return this.invitationsService.listInvitations();
+  }
+
+  @Delete('invitations/:id')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Invitación revocada correctamente',
+  })
+  @ApiResponse({ status: 400, description: 'ID de invitación inválido' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede revocar invitaciones' })
+  @ApiResponse({ status: 404, description: 'Invitación no encontrada o ya no es revocable' })
+  async revokeInvitation(@Param('id') id: string): Promise<{ id: string; revoked: boolean }> {
+    if (!UUID_REGEX.test(id)) {
+      throw new BadRequestException('ID de invitación inválido');
+    }
+    const revoked = await this.invitationsService.revokeInvitation(id);
+    if (!revoked) {
+      throw new NotFoundException('Invitación no encontrada o ya no es revocable');
+    }
+    return { id, revoked: true };
+  }
+
+  @Get('manage')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Listado completo de usuarios para administración',
+    type: AdminUserResponse,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede gestionar usuarios' })
+  async listAllUsers(): Promise<AdminUserResponse[]> {
+    return this.users.listAllUsersForAdmin();
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario actualizado correctamente',
+    type: AdminUserResponse,
+  })
+  @ApiResponse({ status: 400, description: 'Datos o áreas inválidas' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Solo ADMIN puede editar usuarios' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  @ApiResponse({ status: 409, description: 'No se puede modificar o desactivar al único admin activo o a sí mismo' })
+  async updateUser(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() admin: AuthUser,
+  ): Promise<AdminUserResponse> {
+    if (!UUID_REGEX.test(id)) {
+      throw new BadRequestException('ID de usuario inválido');
+    }
+    return this.users.updateUserByAdmin(admin.id, id, dto);
   }
 }

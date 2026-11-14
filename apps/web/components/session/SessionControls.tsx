@@ -2,47 +2,19 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { listConflictAlerts, useApiResource } from '@/lib/api';
+import { usePathname, useRouter } from 'next/navigation';
+import { Sidebar } from '@/components/navigation/Sidebar';
+import { TopBar } from '@/components/navigation/TopBar';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { logoutSession } from '@/lib/session/real-session';
 
-const describeOpen = (total: number) =>
-  total === 0 ? 'ninguna abierta' : total === 1 ? '1 abierta' : `${total} abiertas`;
-
-function AdminAlertsLink({ userId }: { userId: string }) {
-  const open = useApiResource(`conflict-alerts-count:${userId}`, (signal) =>
-    listConflictAlerts('OPEN', 1, 1, signal),
-  );
-
-  const openTotal = open.status === 'success' ? open.data.openTotal : 0;
-  const label =
-    open.status === 'success' ? `Alertas: ${describeOpen(openTotal)}` : 'Alertas';
-
-  return (
-    <Link
-      href="/documentos/alertas"
-      aria-label={label}
-      className="inline-flex items-center gap-1.5 hover:text-zinc-900 hover:underline dark:hover:text-white"
-    >
-      <span>Alertas</span>
-      {open.status === 'success' && openTotal > 0 && (
-        <span
-          data-testid="alerts-badge"
-          className="inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white shadow-xs dark:bg-amber-600"
-        >
-          {openTotal}
-        </span>
-      )}
-    </Link>
-  );
-}
-
-export function SessionControls() {
+export function SessionControls({ children }: { children?: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, status } = useSession();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const leaving = useRef(false);
 
   async function onLogout() {
@@ -54,7 +26,6 @@ export function SessionControls() {
       await logoutSession();
       router.replace('/login');
     } catch {
-      // A-08b ya limpió el JWT en memoria, pero no podemos asegurar revocación remota.
       setError('Se cerró la sesión local, pero no pudimos confirmar el cierre en el servidor.');
     } finally {
       leaving.current = false;
@@ -62,53 +33,82 @@ export function SessionControls() {
     }
   }
 
-  if (!REAL_AUTH_ENABLED) return null;
+  // Si está en /login o /registro, no se muestra el sidebar ni la barra superior
+  const isAuthPage = pathname === '/login' || pathname === '/registro';
+  if (isAuthPage) {
+    return <>{children}</>;
+  }
 
-  return (
-    <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-      <nav aria-label="Sesión" className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-sm">
-        <div className="flex flex-wrap items-center gap-4">
-          <Link href="/documentos" className="font-bold">PispIAr · Manual de operaciones</Link>
-          {user && (
-            <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
-              <Link href="/asistente" className="hover:text-zinc-900 hover:underline dark:hover:text-white">
-                Asistente
-              </Link>
-              {user.role === 'ADMIN' && (
-                <>
-                  <AdminAlertsLink userId={user.id} />
-                  <Link
-                    href="/admin/invitaciones"
-                    className="hover:text-zinc-900 hover:underline dark:hover:text-white"
-                  >
-                    Invitar usuario
-                  </Link>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-        {status === 'loading' ? (
+  // Sin sesión activa
+  if (!user) {
+    if (status === 'loading') {
+      return (
+        <div className="flex flex-1 items-center justify-center p-8 text-sm text-[#646F6A]">
           <span role="status">Comprobando sesión…</span>
-        ) : user ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <span>Hola, <strong>{user.name}</strong> · {user.role}</span>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => void onLogout()}
-              className="min-h-11 rounded-md border border-zinc-400 px-3 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-600 dark:hover:bg-zinc-800"
-            >
-              {pending ? 'Cerrando…' : 'Cerrar sesión'}
-            </button>
-          </div>
-        ) : (
-          <Link href="/login" className="font-medium text-blue-700 underline dark:text-blue-300">
+        </div>
+      );
+    }
+
+    return (
+      <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <nav aria-label="Sesión" className="mx-auto flex max-w-6xl items-center justify-between text-sm">
+          <Link href="/documentos" className="font-bold">
+            PispIAr · Manual de operaciones
+          </Link>
+          <Link href="/login" className="font-semibold text-[#0B4233] underline">
             Iniciar sesión
           </Link>
+        </nav>
+      </header>
+    );
+  }
+
+  return (
+    <div className="flex h-dvh w-full overflow-hidden bg-[#F6F7F6] text-[#1E2B27]">
+      {/* Sidebar fijo en escritorio */}
+      <div className="hidden md:flex shrink-0">
+        <Sidebar
+          user={user}
+          onLogout={onLogout}
+          pendingLogout={pending}
+        />
+      </div>
+
+      {/* Drawer móvil con overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden" role="dialog" aria-modal="true">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 flex h-full w-64 max-w-[85vw] flex-col shadow-2xl">
+            <Sidebar
+              user={user}
+              onLogout={() => {
+                setMobileMenuOpen(false);
+                void onLogout();
+              }}
+              pendingLogout={pending}
+              onNavigate={() => setMobileMenuOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Área de contenido principal con barra superior */}
+      <div className="flex flex-1 flex-col overflow-y-auto min-w-0">
+        <TopBar
+          user={user}
+          onOpenMobileMenu={() => setMobileMenuOpen(true)}
+        />
+        {error && (
+          <p role="alert" className="mx-4 mt-2 rounded-xl bg-[#FCE1E4] px-4 py-3 text-sm font-semibold text-[#B4232C]">
+            {error}
+          </p>
         )}
-      </nav>
-      {error && <p role="alert" className="mx-auto mt-2 max-w-6xl text-sm text-red-700 dark:text-red-300">{error}</p>}
-    </header>
+        <div className="flex-1">{children}</div>
+      </div>
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/api-error';
-import { createInvitation } from '@/lib/api';
+import { createInvitation, notifyInvitationsChanged } from '@/lib/api';
 import type { CreatedInvitation } from '@/lib/api';
 import { areasDirectory, displayAreaName } from '@/lib/directory';
 import type { Area } from '@/lib/directory';
@@ -99,6 +99,7 @@ export function InviteUserForm() {
         role,
         areaIds: role === 'ADMIN' ? [] : selectedAreaIds,
       });
+      notifyInvitationsChanged?.();
       setCreatedInvitation(response);
       setCopied(false);
     } catch (cause) {

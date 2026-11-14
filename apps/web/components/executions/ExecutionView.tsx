@@ -19,7 +19,7 @@ import {
 } from '@/lib/api';
 import type { ExecutionResponse } from '@/lib/api';
 import { SAMPLE_PROCEDURES, procedureName } from '@/lib/executions/sample-procedures';
-import { summarizeExecution } from '@/lib/executions/summary';
+import { slowestStep, summarizeExecution } from '@/lib/executions/summary';
 import { useSession } from '@/lib/session';
 import { CompletedPanel } from './CompletedPanel';
 import { ExecutionProgress } from './ExecutionProgress';
@@ -130,6 +130,7 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
   // The execution only brings the procedure id; its area comes from the sample procedures.
   const areaName = SAMPLE_PROCEDURES.find((p) => p.id === execution.procedureId)?.areaName;
   const resumed = summary.resumed && !completedHere;
+  const name = procedureName(execution.procedureId, execution.procedureTitle);
 
   async function complete(stepId: string) {
     if (completingRef.current) return;
@@ -200,12 +201,27 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
     }
   }
 
+  const steps = (
+    <StepList
+      execution={execution}
+      completing={completing}
+      onComplete={complete}
+      focusCurrent={completedHere}
+      blocked={critical}
+    />
+  );
+
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    // Completed, the closing takes the whole width: the side column has nothing left to show.
+    <div
+      className={`grid min-w-0 grid-cols-1 gap-8 ${
+        completed ? '' : 'xl:grid-cols-[minmax(0,1fr)_minmax(22.5rem,25rem)]'
+      }`}
+    >
       <article className="flex min-w-0 flex-col gap-6 sm:gap-8">
         <div className="flex min-w-0 flex-col gap-3">
           <PageHeader
-            title={procedureName(execution.procedureId, execution.procedureTitle)}
+            title={name}
             subtitle="Seguí los pasos en orden y marcá cada uno cuando lo termines."
           />
           {(areaName || resumed) && (
@@ -221,7 +237,8 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
           )}
         </div>
 
-        <ExecutionProgress summary={summary} />
+        {/* Completed, the closing shows the whole nest instead. */}
+        {!completed && <ExecutionProgress summary={summary} />}
 
         {showChange && change && (
           <VersionChangeNotice
@@ -248,8 +265,10 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
 
         {completed && (
           <CompletedPanel
-            procedureName={procedureName(execution.procedureId, execution.procedureTitle)}
+            procedureName={name}
+            totalSteps={summary.total}
             totalDurationMs={summary.totalDurationMs}
+            slowestStep={slowestStep(execution.steps)}
           />
         )}
 
@@ -259,21 +278,36 @@ function ExecutionScreen({ initial }: { initial: ExecutionResponse }) {
           </p>
         )}
 
-        <StepList
-          execution={execution}
-          completing={completing}
-          onComplete={complete}
-          focusCurrent={completedHere}
-          blocked={critical}
-        />
+        {completed ? (
+          // The steps stay at hand, folded, so the closing is what the screen shows.
+          <details className="group rounded-2xl border border-borde bg-blanco">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-2xl px-5 py-3 font-semibold text-bosque hover:bg-salvia [&::-webkit-details-marker]:hidden">
+              {summary.finishedCount === 1
+                ? '1 paso hecho'
+                : `${summary.finishedCount} pasos hechos`}
+              <span
+                aria-hidden="true"
+                className="transition-transform group-open:rotate-90 motion-reduce:transition-none"
+              >
+                ▸
+              </span>
+            </summary>
+            <div className="p-3 pt-0 sm:p-4 sm:pt-0">
+              {steps}
+            </div>
+          </details>
+        ) : (
+          steps
+        )}
       </article>
 
       {/* The side column: our summary and, below it, the assistant of pair C for the current step
           (spec 010), untouched. The assistant is hidden once the execution is no longer in
           progress (completed or restarted), so screen readers do not announce an empty region. On
-          a phone the column goes below the steps; from lg on, it is on the right. */}
+          narrower screens the column goes below the steps; from xl on (1280 px), it is on the right. */}
       <div className="flex min-w-0 flex-col gap-6">
-        <ExecutionSummaryCard execution={execution} summary={summary} />
+        {/* Completed, its numbers are in the closing. */}
+        {!completed && <ExecutionSummaryCard execution={execution} summary={summary} />}
         <aside data-slot="chat-panel" aria-label="Asistente" hidden={!inProgress} className="min-w-0">
           <ExecutionChatPanel execution={execution} />
         </aside>

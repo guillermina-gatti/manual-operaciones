@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { InvitationsHistoryTable } from '@/components/admin/InvitationsHistoryTable';
 import { InviteUserForm } from '@/components/admin/InviteUserForm';
 import { RolePermissionsCard } from '@/components/admin/RolePermissionsCard';
 import { RequireRole } from '@/components/session/RequireRole';
@@ -41,6 +42,9 @@ export default function AdminInvitationsPage() {
               <RolePermissionsCard />
             </div>
           </div>
+
+          {/* Historial y revocación de invitaciones emitidas */}
+          <InvitationsHistoryTable />
         </div>
       </main>
     </RequireRole>

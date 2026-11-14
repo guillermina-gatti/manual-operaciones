@@ -12,6 +12,11 @@ import {
   MetricsWindow,
   MyAggregates,
 } from './execution-metrics.repository';
+import type {
+  DailyAggregates,
+  DailyCompletion,
+  DailyWindow,
+} from './my-daily-metrics';
 import type { ExecutionAggregate, StepAggregate } from './procedure-metrics';
 
 // Milliseconds between two timestamps, as a number (epoch is in seconds).
@@ -112,6 +117,78 @@ export function inProgressSql(userId: string): Prisma.Sql {
   `;
 }
 
+// The company day of an instant, as text: AT TIME ZONE turns the timestamptz into the
+// wall clock of the zone (the zone is a parameter, never part of the SQL text).
+const companyDay = (instant: Prisma.Sql, timeZone: string) =>
+  Prisma.sql`to_char(${instant} AT TIME ZONE ${timeZone}::text, 'YYYY-MM-DD')`;
+
+// The user's executions completed in [from, to), per company day and version. Only
+// COMPLETED ones: a RESTARTED or abandoned execution was never completed. Grouped by
+// position, since the day expression carries its own parameter.
+export function dailyCompletionsSql(
+  userId: string,
+  window: DailyWindow,
+): Prisma.Sql {
+  return Prisma.sql`
+    SELECT ${companyDay(Prisma.sql`e.finished_at`, window.timeZone)} AS day,
+           e.procedure_id AS "procedureId",
+           e.procedure_version_id AS "procedureVersionId",
+           count(*)::int AS completed,
+           max(e.finished_at) AS "lastCompletedAt"
+    FROM executions e
+    WHERE e.user_id = ${userId}::uuid
+      AND e.status = 'COMPLETED'
+      AND e.finished_at >= ${window.completed.from}
+      AND e.finished_at < ${window.completed.to}
+    GROUP BY 1, 2, 3
+    ORDER BY 1, 2, 3
+  `;
+}
+
+// The company days of the week with progress: a step finished in one of the user's
+// executions (not RESTARTED, abandoned ones included) or an execution completed.
+export function progressDaysSql(
+  userId: string,
+  window: DailyWindow,
+): Prisma.Sql {
+  const { from, to } = window.progress;
+  return Prisma.sql`
+    SELECT DISTINCT ${companyDay(Prisma.sql`moved.at`, window.timeZone)} AS day
+    FROM (
+      SELECT s.finished_at AS at
+      FROM execution_steps s
+      JOIN executions e ON e.id = s.execution_id
+      WHERE e.user_id = ${userId}::uuid
+        AND e.status <> 'RESTARTED'
+        AND s.finished_at >= ${from}
+        AND s.finished_at < ${to}
+      UNION ALL
+      SELECT e.finished_at AS at
+      FROM executions e
+      WHERE e.user_id = ${userId}::uuid
+        AND e.status = 'COMPLETED'
+        AND e.finished_at >= ${from}
+        AND e.finished_at < ${to}
+    ) moved
+    ORDER BY 1
+  `;
+}
+
+// The user's executions completed from Monday to Sunday, in every area.
+export function weekCompletedSql(
+  userId: string,
+  window: DailyWindow,
+): Prisma.Sql {
+  return Prisma.sql`
+    SELECT count(*)::int AS completed
+    FROM executions e
+    WHERE e.user_id = ${userId}::uuid
+      AND e.status = 'COMPLETED'
+      AND e.finished_at >= ${window.week.from}
+      AND e.finished_at < ${window.week.to}
+  `;
+}
+
 @Injectable()
 export class PrismaExecutionMetricsRepository extends ExecutionMetricsRepository {
   constructor(private readonly prisma: PrismaService) {
@@ -171,6 +248,36 @@ export class PrismaExecutionMetricsRepository extends ExecutionMetricsRepository
       throw unavailableOr(error);
     }
   }
+
+  // The three queries read the same snapshot, like mine.
+  async daily(userId: string, window: DailyWindow): Promise<DailyAggregates> {
+    if (!userId.trim()) {
+      throw new Error('Daily activity needs the id of the user of the session');
+    }
+    try {
+      const [completions, progress, week] = await this.prisma.$transaction(
+        [
+          this.prisma.$queryRaw<DailyCompletion[]>(
+            dailyCompletionsSql(userId, window),
+          ),
+          this.prisma.$queryRaw<{ day: string }[]>(
+            progressDaysSql(userId, window),
+          ),
+          this.prisma.$queryRaw<{ completed: number }[]>(
+            weekCompletedSql(userId, window),
+          ),
+        ],
+        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      );
+      return {
+        completions: completions.map(toDailyCompletion),
+        progressDays: progress.map((row) => row.day),
+        weekCompleted: week[0]?.completed ?? 0,
+      };
+    } catch (error) {
+      throw unavailableOr(error);
+    }
+  }
 }
 
 // A database that does not answer becomes the repository's error (503); anything else
@@ -213,4 +320,12 @@ const toInProgress = (row: InProgressExecution): InProgressExecution => ({
   currentStepId: row.currentStepId,
   currentStepOrder: row.currentStepOrder,
   currentStepStartedAt: row.currentStepStartedAt,
+});
+
+const toDailyCompletion = (row: DailyCompletion): DailyCompletion => ({
+  day: row.day,
+  procedureId: row.procedureId,
+  procedureVersionId: row.procedureVersionId,
+  completed: row.completed,
+  lastCompletedAt: row.lastCompletedAt,
 });

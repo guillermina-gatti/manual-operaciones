@@ -99,22 +99,20 @@ export function TimerIcon({ className }: { className?: string }) {
   );
 }
 
-// The hornero's feather (the bars of the panel have its shape).
-export function FeatherIcon({ className }: { className?: string }) {
-  return (
-    <Icon className={className}>
-      <path d="M12.7 19a2 2 0 0 0 1.4-.6l6.2-6.2a6 6 0 0 0-8.5-8.5l-6.2 6.2A2 2 0 0 0 5 11.3V18a1 1 0 0 0 1 1z" />
-      <path d="M16 8 2 22M17.5 15H9" />
-    </Icon>
-  );
-}
-
 // The leaf of the area summary button.
 export function LeafIcon({ className }: { className?: string }) {
   return (
     <Icon className={className}>
       <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z" />
       <path d="M2 21c0-3 1.9-5.4 5.2-6.1 2.5-.5 4.6-1.6 5.8-3.9" />
+    </Icon>
+  );
+}
+
+export function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <Icon className={className}>
+      <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
     </Icon>
   );
 }

@@ -25,6 +25,7 @@ import {
   MetricsWindow,
   MyAggregates,
 } from './execution-metrics.repository';
+import type { DailyAggregates } from './my-daily-metrics';
 import type { ExecutionAggregate } from './procedure-metrics';
 import { ProcedureMetricsService } from './procedure-metrics.service';
 
@@ -56,6 +57,12 @@ class FakeMetricsRepository extends ExecutionMetricsRepository {
   mine(): Promise<MyAggregates> {
     return Promise.reject(
       new Error('the procedures metrics must not call mine'),
+    );
+  }
+
+  daily(): Promise<DailyAggregates> {
+    return Promise.reject(
+      new Error('the procedures metrics must not call daily'),
     );
   }
 }

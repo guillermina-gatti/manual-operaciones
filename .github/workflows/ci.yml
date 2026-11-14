@@ -1,4 +1,3 @@
-
 name: CI
 
 on:
@@ -40,7 +39,8 @@ jobs:
       - name: Build Web
         run: pnpm --filter web build
         env:
-          API_URL: http://localhost:3000
+          # Host reservado: valida el contrato productivo sin conexión externa.
+          API_URL: https://api.example.invalid
 
   api-e2e:
     name: API E2E (PostgreSQL + Redis)
@@ -98,3 +98,116 @@ jobs:
 
       - name: Run API E2E tests
         run: pnpm --filter api test:e2e
+
+  docker-api:
+    name: Docker API (build y verificación)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build API Docker image
+        run: |
+          docker build \
+            --progress=plain \
+            -f apps/api/Dockerfile \
+            -t pispiar-api:ci .
+
+      - name: Verify non-root user
+        run: |
+          USER_NAME=$(docker image inspect pispiar-api:ci --format '{{.Config.User}}')
+          test "$USER_NAME" = "node"
+
+      - name: Verify compiled API and runtime dependencies
+        run: |
+          docker run --rm --entrypoint node pispiar-api:ci -e '
+            const fs = require("node:fs");
+            for (const file of [
+              "dist/main.js",
+              "dist/generated/prisma/client.js"
+            ]) {
+              if (!fs.existsSync(file)) {
+                throw new Error("Falta archivo: " + file);
+              }
+            }
+            require("bcrypt");
+            require("@prisma/adapter-pg");
+            console.log("API Docker: verificaciones correctas");
+          '
+
+      - name: Build Prisma migrator Docker image
+        run: |
+          docker build \
+            --progress=plain \
+            --target migrator \
+            -f apps/api/Dockerfile \
+            -t pispiar-migrator:ci .
+
+      - name: Verify Prisma migrator image metadata
+        run: |
+          USER_NAME=$(docker image inspect pispiar-migrator:ci --format '{{.Config.User}}')
+          ENTRYPOINT_VALUE=$(docker image inspect pispiar-migrator:ci --format '{{json .Config.Entrypoint}}')
+          DEFAULT_COMMAND=$(docker image inspect pispiar-migrator:ci --format '{{json .Config.Cmd}}')
+          WORKING_DIRECTORY=$(docker image inspect pispiar-migrator:ci --format '{{.Config.WorkingDir}}')
+          test "$USER_NAME" = "node"
+          test "$ENTRYPOINT_VALUE" = '["./node_modules/.bin/prisma"]'
+          test "$DEFAULT_COMMAND" = '["--help"]'
+          test "$WORKING_DIRECTORY" = "/app"
+
+      - name: Verify Prisma migrator files and CLI
+        run: |
+          docker run --rm --network none \
+            -v "$PWD/apps/api/prisma/migrations:/expected-migrations:ro" \
+            --entrypoint node pispiar-migrator:ci -e '
+            const fs = require("node:fs");
+            const requiredFiles = [
+              "node_modules/.bin/prisma",
+              "prisma.config.ts",
+              "prisma/schema.prisma",
+              "prisma/migrations/migration_lock.toml"
+            ];
+            for (const file of requiredFiles) {
+              if (!fs.existsSync(file)) {
+                throw new Error("Falta archivo: " + file);
+              }
+            }
+            const migrationNames = (directory) => fs.readdirSync(directory, { withFileTypes: true })
+              .filter((entry) => entry.isDirectory())
+              .map((entry) => entry.name)
+              .sort();
+            const expectedMigrations = migrationNames("/expected-migrations");
+            const packagedMigrations = migrationNames("prisma/migrations");
+            if (JSON.stringify(packagedMigrations) !== JSON.stringify(expectedMigrations)) {
+              throw new Error(
+                "Migraciones distintas. Esperadas: " + expectedMigrations.join(", ")
+                + "; empaquetadas: " + packagedMigrations.join(", ")
+              );
+            }
+            for (const migration of expectedMigrations) {
+              const expectedSql = `/expected-migrations/${migration}/migration.sql`;
+              const packagedSql = `prisma/migrations/${migration}/migration.sql`;
+              for (const sql of [expectedSql, packagedSql]) {
+                if (!fs.existsSync(sql)) {
+                  throw new Error("Falta archivo: " + sql);
+                }
+              }
+              if (!fs.readFileSync(packagedSql).equals(fs.readFileSync(expectedSql))) {
+                throw new Error("Contenido SQL distinto: " + migration);
+              }
+            }
+            for (const forbidden of [".env", "prisma/seed.ts", "test"]) {
+              if (fs.existsSync(forbidden)) {
+                throw new Error("Archivo no permitido: " + forbidden);
+              }
+            }
+            const prismaVersion = require("./node_modules/prisma/package.json").version;
+            if (prismaVersion !== "7.10.0") {
+              throw new Error("Versión inesperada de Prisma: " + prismaVersion);
+            }
+            console.log(`Migrador Prisma: ${expectedMigrations.length} migraciones verificadas`);
+          '
+          docker run --rm --network none pispiar-migrator:ci --version

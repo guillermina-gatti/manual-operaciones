@@ -7,6 +7,7 @@ import { configureApp } from '../../src/app.setup';
 import { AREA_IDS, FIXTURE_USERS } from '../../src/documents/adapters/fixtures';
 import type { DirectoryUser } from '../../src/documents/ports/users-directory';
 import { InMemoryProceduresCatalog } from '../../src/executions/adapters/in-memory-procedures-catalog';
+import { Clock } from '../../src/executions/ports/clock';
 import { ProceduresCatalog } from '../../src/executions/ports/procedures-catalog';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { signTestJwt } from '../auth/helpers';
@@ -30,13 +31,19 @@ export interface ExecutionsTestApp {
 
 // Boots the whole AppModule. The procedures catalog is an instance owned by the test,
 // so it can move a procedure to another area or publish a version. Prisma points to
-// the test database (test/setup-env.ts).
-export async function createExecutionsTestApp(): Promise<ExecutionsTestApp> {
+// the test database (test/setup-env.ts). With a clock, the app reads the time from it
+// (a suite that needs a fixed "today"); without one, the real time, as before.
+export async function createExecutionsTestApp(
+  options: { clock?: Clock } = {},
+): Promise<ExecutionsTestApp> {
   const catalog = new InMemoryProceduresCatalog();
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ProceduresCatalog)
-    .useValue(catalog)
-    .compile();
+    .useValue(catalog);
+  if (options.clock) {
+    builder = builder.overrideProvider(Clock).useValue(options.clock);
+  }
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication();
   configureApp(app);

@@ -43,6 +43,10 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
   let listOwnerCandidates: jest.Mock;
   let createInvitation: jest.Mock;
   let revokeInvitation: jest.Mock;
+  let listInvitations: jest.Mock;
+  let listAllUsersForAdmin: jest.Mock;
+  let updateUserByAdmin: jest.Mock;
+  let getUserNamesByIds: jest.Mock;
   let assertReady: jest.Mock;
   let deliver: jest.Mock;
   let configGet: jest.Mock;
@@ -51,6 +55,10 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     listOwnerCandidates = jest.fn();
     createInvitation = jest.fn();
     revokeInvitation = jest.fn();
+    listInvitations = jest.fn();
+    listAllUsersForAdmin = jest.fn();
+    updateUserByAdmin = jest.fn();
+    getUserNamesByIds = jest.fn();
     assertReady = jest.fn();
     deliver = jest.fn();
     configGet = jest.fn((key: string) => {
@@ -63,10 +71,18 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [
-        { provide: UsersService, useValue: { listOwnerCandidates } },
+        {
+          provide: UsersService,
+          useValue: {
+            listOwnerCandidates,
+            listAllUsersForAdmin,
+            updateUserByAdmin,
+            getUserNamesByIds,
+          },
+        },
         {
           provide: InvitationsService,
-          useValue: { createInvitation, revokeInvitation },
+          useValue: { createInvitation, revokeInvitation, listInvitations },
         },
         {
           provide: InvitationDeliveryService,
@@ -99,7 +115,10 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     });
 
     revokeInvitation.mockReset();
-    revokeInvitation.mockResolvedValue(undefined);
+    revokeInvitation.mockResolvedValue(true);
+
+    listInvitations.mockReset();
+    listInvitations.mockResolvedValue([]);
 
     assertReady.mockReset();
 
@@ -712,6 +731,236 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
 
         loggerSpy.mockRestore();
       });
+    });
+  });
+
+  describe('GET /api/users/invitations', () => {
+    it('rechaza 401 si no hay token de autenticación', async () => {
+      await http().get('/api/users/invitations').expect(401);
+    });
+
+    it('rechaza 403 si el rol no es ADMIN', async () => {
+      await http()
+        .get('/api/users/invitations')
+        .set(bearer(SPEC_USERS.supervisorVentas))
+        .expect(403);
+    });
+
+    it('devuelve 200 con el listado de invitaciones para ADMIN', async () => {
+      listInvitations.mockResolvedValueOnce([
+        {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          email: 'colaborador@empresa.com',
+          role: 'EMPLOYEE',
+          status: 'PENDING',
+          areaIds: [VENTAS],
+          areaNames: ['Ventas'],
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date().toISOString(),
+          acceptedAt: null,
+          revokedAt: null,
+          createdBy: { id: 'admin-id', name: 'Ana Administradora' },
+        },
+      ]);
+
+      const res = await http()
+        .get('/api/users/invitations')
+        .set(admin())
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].email).toBe('colaborador@empresa.com');
+      expect(res.body[0].status).toBe('PENDING');
+      expect(listInvitations).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('DELETE /api/users/invitations/:id', () => {
+    const validId = '550e8400-e29b-41d4-a716-446655440000';
+
+    it('rechaza 401 si no hay token', async () => {
+      await http().delete(`/api/users/invitations/${validId}`).expect(401);
+    });
+
+    it('rechaza 403 si el rol no es ADMIN', async () => {
+      await http()
+        .delete(`/api/users/invitations/${validId}`)
+        .set(bearer(SPEC_USERS.empleadoVentas))
+        .expect(403);
+    });
+
+    it('rechaza 400 si el ID no es UUID válido', async () => {
+      await http()
+        .delete('/api/users/invitations/invalido')
+        .set(admin())
+        .expect(400);
+    });
+
+    it('devuelve 404 si la invitación no existe o ya no es revocable', async () => {
+      revokeInvitation.mockResolvedValueOnce(false);
+      await http()
+        .delete(`/api/users/invitations/${validId}`)
+        .set(admin())
+        .expect(404);
+    });
+
+    it('devuelve 200 y { id, revoked: true } si se revoca con éxito', async () => {
+      revokeInvitation.mockResolvedValueOnce(true);
+      const res = await http()
+        .delete(`/api/users/invitations/${validId}`)
+        .set(admin())
+        .expect(200);
+
+      expect(res.body).toEqual({ id: validId, revoked: true });
+      expect(revokeInvitation).toHaveBeenCalledWith(validId);
+    });
+  });
+
+  describe('GET /api/users/manage (Administración de usuarios)', () => {
+    it('requiere autenticación (401 si no se envía token)', async () => {
+      await http().get('/api/users/manage').expect(401);
+    });
+
+    it('requiere rol ADMIN (403 para SUPERVISOR o EMPLOYEE)', async () => {
+      await http()
+        .get('/api/users/manage')
+        .set(bearer(SPEC_USERS.supervisorVentas))
+        .expect(403);
+    });
+
+    it('devuelve 200 con la lista completa de usuarios para ADMIN', async () => {
+      const mockUsers = [
+        {
+          id: '0b000000-0000-4000-8000-000000000001',
+          name: 'Ana Administradora',
+          email: 'ana@empresa.com',
+          role: 'ADMIN',
+          isActive: true,
+          areas: [],
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      listAllUsersForAdmin.mockResolvedValueOnce(mockUsers);
+
+      const res = await http()
+        .get('/api/users/manage')
+        .set(admin())
+        .expect(200);
+
+      expect(res.body).toEqual(mockUsers);
+      expect(listAllUsersForAdmin).toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /api/users/:id (Modificación de rol, áreas y estado)', () => {
+    const targetUserId = '0b000000-0000-4000-8000-000000000003';
+
+    it('requiere autenticación (401 si no se envía token)', async () => {
+      await http()
+        .patch(`/api/users/${targetUserId}`)
+        .send({ role: 'SUPERVISOR' })
+        .expect(401);
+    });
+
+    it('requiere rol ADMIN (403 para SUPERVISOR)', async () => {
+      await http()
+        .patch(`/api/users/${targetUserId}`)
+        .set(bearer(SPEC_USERS.supervisorVentas))
+        .send({ role: 'SUPERVISOR' })
+        .expect(403);
+    });
+
+    it('devuelve 400 si el UUID de usuario es inválido', async () => {
+      await http()
+        .patch('/api/users/no-es-uuid')
+        .set(admin())
+        .send({ role: 'SUPERVISOR' })
+        .expect(400);
+    });
+
+    it('permite a un ADMIN actualizar el rol y áreas de un usuario', async () => {
+      const updatedUser = {
+        id: targetUserId,
+        name: 'Elena Empleada',
+        email: 'elena@empresa.com',
+        role: 'SUPERVISOR',
+        isActive: true,
+        areas: [{ id: VENTAS, name: 'Ventas' }],
+        createdAt: new Date().toISOString(),
+      };
+      updateUserByAdmin.mockResolvedValueOnce(updatedUser);
+
+      const res = await http()
+        .patch(`/api/users/${targetUserId}`)
+        .set(admin())
+        .send({ role: 'SUPERVISOR', areaIds: [VENTAS] })
+        .expect(200);
+
+      expect(res.body).toEqual(updatedUser);
+      expect(updateUserByAdmin).toHaveBeenCalledWith(
+        SPEC_USERS.admin.id,
+        targetUserId,
+        { role: 'SUPERVISOR', areaIds: [VENTAS] },
+      );
+    });
+
+    it('permite desactivar una cuenta de usuario (isActive: false)', async () => {
+      const deactivatedUser = {
+        id: targetUserId,
+        name: 'Elena Empleada',
+        email: 'elena@empresa.com',
+        role: 'EMPLOYEE',
+        isActive: false,
+        areas: [{ id: VENTAS, name: 'Ventas' }],
+        createdAt: new Date().toISOString(),
+      };
+      updateUserByAdmin.mockResolvedValueOnce(deactivatedUser);
+
+      const res = await http()
+        .patch(`/api/users/${targetUserId}`)
+        .set(admin())
+        .send({ isActive: false })
+        .expect(200);
+
+      expect(res.body).toEqual(deactivatedUser);
+      expect(updateUserByAdmin).toHaveBeenCalledWith(
+        SPEC_USERS.admin.id,
+        targetUserId,
+        { isActive: false },
+      );
+    });
+  });
+
+  describe('GET /api/users/names (A-06.4)', () => {
+    const id1 = SPEC_USERS.admin.id;
+    const id2 = SPEC_USERS.empleadoVentas.id;
+
+    it('requiere autenticación (401 sin token)', async () => {
+      await http().get(`/api/users/names?ids=${id1}`).expect(401);
+    });
+
+    it.each([SPEC_USERS.admin, SPEC_USERS.supervisorVentas, SPEC_USERS.empleadoVentas])(
+      'permite resolver nombres a cualquier rol autenticado ($role)',
+      async (user) => {
+        getUserNamesByIds.mockResolvedValueOnce({ [id1]: 'Ana Administradora', [id2]: 'Elena Empleada de Ventas' });
+
+        const res = await http()
+          .get(`/api/users/names?ids=${id1}&ids=${id2}`)
+          .set(bearer(user))
+          .expect(200);
+
+        expect(res.body).toEqual({
+          [id1]: 'Ana Administradora',
+          [id2]: 'Elena Empleada de Ventas',
+        });
+        expect(getUserNamesByIds).toHaveBeenCalledWith([id1, id2]);
+      },
+    );
+
+    it('rechaza peticiones sin ids, con UUID inválido o con parámetros extra (400)', async () => {
+      await http().get('/api/users/names').set(bearer(SPEC_USERS.empleadoVentas)).expect(400);
+      await http().get('/api/users/names?ids=invalido').set(bearer(SPEC_USERS.empleadoVentas)).expect(400);
+      await http().get(`/api/users/names?ids=${id1}&extra=1`).set(bearer(SPEC_USERS.empleadoVentas)).expect(400);
     });
   });
 

@@ -23,6 +23,7 @@ interface Case {
     name: string;
     rows?: ReturnType<typeof chunk>[];
     steps: LlmStep[] | null;
+    later?: Array<LlmStep[] | null>; // spec 011 (ajuste del 11/11/2026): los pasos del segundo pedido
     embeddings?: 'ok' | 'fail';
     user?: { id: string; areaIds: string[] };
 }
@@ -45,7 +46,7 @@ function deps(c: Case) {
     return {
         embeddings: new FakeEmbeddings(c.embeddings),
         retrieval: new FakeRetrieval(c.rows ?? [chunk()]),
-        llm: new FakeLlm(c.steps),
+        llm: new FakeLlm(c.steps, ...(c.later ?? [])),
         repo: new FakeRepository(),
     };
 }
@@ -144,11 +145,65 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
         chunk({ chunkId: 'c2', documentId: 'doc-compras', versionId: 'v-compras' }),
         chunk({ chunkId: 'c3', documentId: 'doc-gastos', versionId: 'v-gastos', documentTitle: 'Política de gastos' }),
     ];
+    const ROPA_INTERIOR = [
+        chunk({ chunkId: 'r1', documentId: 'doc-politica', versionId: 'v-politica', documentTitle: 'Política de devoluciones', section: 'Productos sin cambio ni devolución', content: 'Los productos de higiene personal y la ropa interior no tienen cambio ni devolución.' }),
+        chunk({ chunkId: 'r2', documentId: 'doc-promo', versionId: 'v-promo', documentTitle: 'Promoción de verano', section: 'Productos en oferta', content: 'Los productos en oferta también se pueden devolver.' }),
+        chunk({ chunkId: 'r3', documentId: 'doc-promo', versionId: 'v-promo', documentTitle: 'Promoción de verano', section: 'Plazo de devolución', content: 'El cliente puede devolver cualquier producto dentro de los 60 días corridos.' }),
+    ];
     const CONFLICT_CASES: Case[] = [
         { name: 'marca válida', rows: ROWS, steps: ['CONFLICT [S3] [S1]\n', 'Gerente [S1]; director [S3], y [S2].'] },
         { name: 'marca inválida (mismo documento)', rows: ROWS, steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'] },
+        // Ajuste del 11/11/2026: con la marca del mismo documento, un segundo pedido.
+        {
+            name: 'mismo documento: responde el segundo pedido',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [['No: lo aprueba ', 'el gerente [S1].']],
+        },
+        {
+            name: 'mismo documento: falla el segundo pedido',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [[{ fail: 'quota' }]],
+        },
+        // Ajuste del 12/11/2026: si el segundo pedido igual marca, se saca la línea y queda su resto.
+        {
+            name: 'mismo documento: el segundo pedido vuelve a marcar',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [['CONFLICT [S1] [S3]\n', 'No: lo aprueba ', 'el gerente [S1].']],
+        },
+        {
+            name: 'mismo documento: el segundo pedido trae solo la marca',
+            rows: ROWS,
+            steps: ['CONFLICT [S1] [S2]\n', 'Gerente [S2].'],
+            later: [['CONFLICT [S1] [S2]']],
+        },
+        // El caso real: el modelo marcó CONFLICT entre S1 y S3, dos pasajes de la misma Política, y
+        // respondía la explicación con viñetas, sin conclusión.
+        {
+            name: 'ropa interior: la marca entre dos pasajes de la Política',
+            rows: [
+                ROPA_INTERIOR[0],
+                ROPA_INTERIOR[1],
+                { ...ROPA_INTERIOR[0], chunkId: 'r4', section: 'Ofertas', content: 'Los productos en oferta solo se cambian por otro talle o color.' },
+            ],
+            steps: ['CONFLICT [S1] [S3]\n', '* [S1] dice que no tiene devolución.\n* [S3] regula las ofertas.'],
+            later: [['No: la ropa interior ', 'no tiene cambio ni devolución [S1].']],
+        },
+        { name: 'marca inválida (pasaje que no existe)', rows: ROWS, steps: ['CONFLICT [S1] [S9]\n', 'Gerente [S2].'] },
         { name: 'marca sin explicación', rows: ROWS, steps: ['CONFLICT [S1] [S3]'] },
         { name: 'sin marca', rows: ROWS, steps: ['Lo aprueba ', 'el gerente [S1].'] },
+        // Ajuste del 12/11/2026, caso real: "¿Se puede devolver ropa interior?". La Política (la excepción) y la
+        // Promoción de verano ("cualquier producto") son documentos distintos: CONFLICT entre S1 y S3.
+        {
+            name: 'ropa interior: la Política y la Promoción de verano',
+            rows: ROPA_INTERIOR,
+            steps: [
+                'CONFLICT [S1] [S3]\n',
+                '[S1] dice que la ropa interior no tiene devolución; [S3], que cualquier producto se devuelve en 60 días.',
+            ],
+        },
     ];
 
     beforeEach(() => {
@@ -192,6 +247,29 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
         const withoutLatency = ({ latencyMs: _latency, ...rest }: { latencyMs: number }) => rest;
         expect(streamed.repo.saved.map(withoutLatency)).toEqual(actual.repo.saved.map(withoutLatency));
         expect(streamedAlerts.recorded).toEqual(actualAlerts.recorded);
+        expect(streamed.llm.options).toEqual(actual.llm.options);
+        if (c.name === 'ropa interior: la marca entre dos pasajes de la Política') {
+            expect(actual.llm.options).toEqual([undefined, { sameDocumentRefs: ['S1', 'S3'] }]);
+            expect(viaPost).toMatchObject({
+                status: 'answered',
+                answer: 'No: la ropa interior no tiene cambio ni devolución [S1].',
+                sources: [{ chunkId: 'r1' }],
+            });
+        } else if (c.name.startsWith('mismo documento') || c.name === 'marca inválida (mismo documento)') {
+            expect(actual.llm.options).toEqual([undefined, { sameDocumentRefs: ['S1', 'S2'] }]);
+        } else {
+            expect(actual.llm.options).toEqual([undefined]);
+        }
+        if (c.name === 'mismo documento: el segundo pedido vuelve a marcar') {
+            expect(viaPost).toMatchObject({ status: 'answered', answer: 'No: lo aprueba el gerente [S1].' });
+        }
+        if (c.name === 'mismo documento: el segundo pedido trae solo la marca') {
+            expect(viaPost.status).toBe('no_info');
+        }
+        if (c.name === 'mismo documento: responde el segundo pedido') {
+            expect(viaPost).toMatchObject({ status: 'answered', answer: 'No: lo aprueba el gerente [S1].' });
+            expect(actual.repo.saved[0]).toMatchObject({ inputTokens: 20, outputTokens: 10 });
+        }
 
         if (c.name === 'marca válida') {
             expect(viaPost).toMatchObject({
@@ -201,6 +279,11 @@ describe('las dos rutas del chat responden lo mismo con una contradicción (spec
             });
             expect(actualAlerts.recorded).toEqual([
                 { messageId: 'msg-1', question: message, first: ROWS[0], second: ROWS[2] },
+            ]);
+        } else if (c.name === 'ropa interior: la Política y la Promoción de verano') {
+            expect(viaPost).toMatchObject({ status: 'conflict', sources: [{ chunkId: 'r1' }, { chunkId: 'r3' }] });
+            expect(actualAlerts.recorded).toEqual([
+                { messageId: 'msg-1', question: message, first: ROPA_INTERIOR[0], second: ROPA_INTERIOR[2] },
             ]);
         } else {
             expect(actualAlerts.recorded).toEqual([]);
