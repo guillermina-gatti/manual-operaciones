@@ -602,7 +602,7 @@ describe('recent procedures', () => {
 });
 
 describe('the order and "Para retomar" without filters', () => {
-  test('the weekly nest first, then to resume, the filters, the summary and the procedures', async () => {
+  test('the weekly nest first, then to resume, the filters, the summary, the procedures and the chart', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
@@ -612,6 +612,7 @@ describe('the order and "Para retomar" without filters', () => {
       screen.getByRole('form', { name: 'Filtros' }),
       summary(),
       screen.getByRole('table', { name: 'Tus procedimientos recientes' }),
+      screen.getByRole('region', { name: 'Actividad diaria' }),
     ];
     for (let i = 1; i < blocks.length; i++) {
       expect(
@@ -704,7 +705,6 @@ describe('the weekly nest', () => {
     const nest = await screen.findByRole('region', { name: 'Tu nido de esta semana · 26 – 30 OCT' });
     expect(within(nest).getByText('1 de 5 días con avance')).toBeInTheDocument();
     expect(mocks.getMyDailyActivity).toHaveBeenCalledWith(null, expect.any(AbortSignal));
-    expect(mocks.getMyDailyActivity).toHaveBeenCalledTimes(1);
   });
 
   test('if it fails, the rest of the page is still there', async () => {
@@ -714,6 +714,32 @@ describe('the weekly nest', () => {
 
     expect(await screen.findByText(/No se pudo cargar tu nido de esta semana/)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Para retomar' })).toBeInTheDocument();
+    expect(summary()).toBeInTheDocument();
+  });
+});
+
+describe('the daily chart', () => {
+  test('asks with the area of the filters, never with their dates', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-10&hasta=2026-10-20`);
+    render(<MyActivityPanel />);
+
+    const chart = await screen.findByRole('region', { name: 'Actividad diaria' });
+    await within(chart).findByText('Todavía no completaste ejecuciones en los últimos 21 días.');
+    // The nest without the area, the chart with it; neither with dates.
+    expect(mocks.getMyDailyActivity.mock.calls.map(([areaId]) => areaId).sort()).toEqual([
+      VENTAS,
+      null,
+    ]);
+    expect(within(chart).getByText(/Últimos 21 días \(7 oct – 27 oct\)/)).toBeInTheDocument();
+  });
+
+  test('if it fails, the rest of the page is still there', async () => {
+    mocks.getMyDailyActivity.mockRejectedValue(new ApiError(503));
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const chart = screen.getByRole('region', { name: 'Actividad diaria' });
+    expect(await within(chart).findByRole('alert')).toBeInTheDocument();
     expect(summary()).toBeInTheDocument();
   });
 });

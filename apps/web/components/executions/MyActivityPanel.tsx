@@ -1,10 +1,10 @@
 'use client';
 
 // The employee's own activity, in this order: their weekly nest (the current week, never filtered),
-// what they can resume (every execution in progress,
-// whatever the filters), the filters of /metricas (area and period, in the address), the summary of
-// their executions in the period and their procedures. Only their data: the API takes the user from
-// the session.
+// what they can resume (every execution in progress, whatever the filters), the filters of
+// /metricas (area and period, in the address), the summary of their executions in the period, their
+// procedures and, last, their daily activity of the last 21 days (the area of the filters, never
+// their dates). Only their data: the API takes the user from the session.
 //
 // "Para retomar" never depends on the filters. GET /metrics/me does not limit it by period, but it
 // does by area: with an area chosen, the panel asks once more without it, and takes "resume" from
@@ -23,6 +23,7 @@ import { VIEW_PARAM, parseExecutionsView, withExecutionsView } from '@/lib/execu
 import { areaOptions, metricsHref, parseMetricsFilters, todayInCompany, withAreaHints } from '@/lib/metrics/filters';
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { useSession } from '@/lib/session';
+import { DailyActivityChart } from './DailyActivityChart';
 import { MySummaryHero } from './MySummaryHero';
 import { RecentProceduresTable } from './RecentProceduresTable';
 import { ResumeList } from './ResumeList';
@@ -104,6 +105,8 @@ export function MyActivityPanel() {
           }
         />
       )}
+      {/* The area of the filters, never their dates: always the last 21 days. */}
+      <DailyActivityChart areaId={filters.areaId} />
     </div>
   );
 }

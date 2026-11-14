@@ -40,7 +40,5 @@ export const NEST_DAY_EMPTY = 'border-2 border-dashed border-[#B8C7BF]';
 export const CHART_TEXT_STRONG = 'text-[#2C4B41]';
 export const CHART_AXIS_TEXT = '#4F6B60';
 export const CHART_GRID = '#E6E8E4';
-// In the order of the procedures with the most completed executions; the rest go together as
-// "Otros N procedimientos" in the darkest mud of the nest.
-export const CHART_SERIES = ['#E85114', '#0B4233', '#EDA100', '#1BAF7A'] as const;
-export const CHART_OTHERS = '#9A6A45';
+// The colors of the series (naranja, bosque, #EDA100, #1BAF7A and the mud #9A6A45 for "Otros")
+// are in lib/executions/daily-chart.ts, next to the rule that assigns them.
