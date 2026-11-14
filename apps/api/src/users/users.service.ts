@@ -240,4 +240,35 @@ export class UsersService {
       };
     });
   }
+
+  /**
+   * Contrato A-06.4: resuelve un mapa { [id]: name } para los UUID solicitados,
+   * incluyendo usuarios inactivos/históricos, sin exponer otros atributos.
+   */
+  async getUserNamesByIds(ids: string[]): Promise<Record<string, string>> {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) {
+      return {};
+    }
+
+    try {
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, name: true },
+      });
+
+      return Object.fromEntries(users.map((user) => [user.id, user.name]));
+    } catch (error) {
+      this.logger.error({
+        message: 'Fallo al consultar nombres de usuarios',
+        cause: error instanceof Error ? error.message : String(error),
+      });
+      if (isDatabaseUnavailable(error)) {
+        throw new ServiceUnavailableException(
+          'No se pudieron consultar los nombres de usuarios. Intentá de nuevo más tarde.',
+        );
+      }
+      throw new InternalServerErrorException('No se pudieron consultar los nombres de usuarios.');
+    }
+  }
 }

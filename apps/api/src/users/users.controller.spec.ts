@@ -46,6 +46,7 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
   let listInvitations: jest.Mock;
   let listAllUsersForAdmin: jest.Mock;
   let updateUserByAdmin: jest.Mock;
+  let getUserNamesByIds: jest.Mock;
   let assertReady: jest.Mock;
   let deliver: jest.Mock;
   let configGet: jest.Mock;
@@ -57,6 +58,7 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
     listInvitations = jest.fn();
     listAllUsersForAdmin = jest.fn();
     updateUserByAdmin = jest.fn();
+    getUserNamesByIds = jest.fn();
     assertReady = jest.fn();
     deliver = jest.fn();
     configGet = jest.fn((key: string) => {
@@ -75,6 +77,7 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
             listOwnerCandidates,
             listAllUsersForAdmin,
             updateUserByAdmin,
+            getUserNamesByIds,
           },
         },
         {
@@ -925,6 +928,39 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
         targetUserId,
         { isActive: false },
       );
+    });
+  });
+
+  describe('GET /api/users/names (A-06.4)', () => {
+    const id1 = SPEC_USERS.admin.id;
+    const id2 = SPEC_USERS.empleadoVentas.id;
+
+    it('requiere autenticación (401 sin token)', async () => {
+      await http().get(`/api/users/names?ids=${id1}`).expect(401);
+    });
+
+    it.each([SPEC_USERS.admin, SPEC_USERS.supervisorVentas, SPEC_USERS.empleadoVentas])(
+      'permite resolver nombres a cualquier rol autenticado ($role)',
+      async (user) => {
+        getUserNamesByIds.mockResolvedValueOnce({ [id1]: 'Ana Administradora', [id2]: 'Elena Empleada de Ventas' });
+
+        const res = await http()
+          .get(`/api/users/names?ids=${id1}&ids=${id2}`)
+          .set(bearer(user))
+          .expect(200);
+
+        expect(res.body).toEqual({
+          [id1]: 'Ana Administradora',
+          [id2]: 'Elena Empleada de Ventas',
+        });
+        expect(getUserNamesByIds).toHaveBeenCalledWith([id1, id2]);
+      },
+    );
+
+    it('rechaza peticiones sin ids, con UUID inválido o con parámetros extra (400)', async () => {
+      await http().get('/api/users/names').set(bearer(SPEC_USERS.empleadoVentas)).expect(400);
+      await http().get('/api/users/names?ids=invalido').set(bearer(SPEC_USERS.empleadoVentas)).expect(400);
+      await http().get(`/api/users/names?ids=${id1}&extra=1`).set(bearer(SPEC_USERS.empleadoVentas)).expect(400);
     });
   });
 

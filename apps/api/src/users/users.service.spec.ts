@@ -292,4 +292,36 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
       expect(mockPrisma.session.deleteMany).toHaveBeenCalledWith({ where: { userId: targetUserId } });
     });
   });
+
+  describe('getUserNamesByIds (A-06.4)', () => {
+    it('devuelve {} sin consultar la base si la lista de IDs está vacía', async () => {
+      await expect(users.getUserNamesByIds([])).resolves.toEqual({});
+      expect(mockPrisma.user.findMany).not.toHaveBeenCalled();
+    });
+
+    it('deduplica IDs y consulta nombres sin filtrar por isActive ni exponer otros campos', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: adminId, name: 'Ana Administradora' },
+        { id: targetUserId, name: 'Usuario Histórico Inactivo' },
+      ]);
+
+      const result = await users.getUserNamesByIds([adminId, targetUserId, adminId]);
+
+      expect(result).toEqual({
+        [adminId]: 'Ana Administradora',
+        [targetUserId]: 'Usuario Histórico Inactivo',
+      });
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
+        where: { id: { in: [adminId, targetUserId] } },
+        select: { id: true, name: true },
+      });
+    });
+
+    it('devuelve 503 si la base de datos no está disponible', async () => {
+      mockPrisma.user.findMany.mockRejectedValue(
+        new Prisma.PrismaClientInitializationError('No responde', '7.10.0'),
+      );
+      await expect(users.getUserNamesByIds([adminId])).rejects.toThrow(ServiceUnavailableException);
+    });
+  });
 });

@@ -91,6 +91,33 @@ function resolveFrontendBaseUrl(configService: ConfigService): string {
   return rawUrl.replace(/\/+$/, '');
 }
 
+function parseUuidListQueryParam(
+  query: Record<string, unknown>,
+  paramName: string,
+): string[] {
+  if (
+    Object.keys(query).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(query, paramName)
+  ) {
+    throw new BadRequestException(
+      `${paramName} es obligatorio y no se admiten otros parámetros`,
+    );
+  }
+
+  const raw = query[paramName];
+  const ids: unknown[] = Array.isArray(raw) ? raw : [raw];
+  if (
+    ids.length === 0 ||
+    ids.some((id) => typeof id !== 'string' || !UUID_REGEX.test(id))
+  ) {
+    throw new BadRequestException(
+      `${paramName}: se requiere uno o más UUID válidos, en parámetros repetidos`,
+    );
+  }
+
+  return ids as string[];
+}
+
 @ApiTags('users')
 @ApiBearerAuth()
 @Controller('users')
@@ -119,21 +146,23 @@ export class UsersController {
   @ApiResponse({ status: 503, description: 'La base de datos no responde' })
   listCandidates(@Query() query: Record<string, unknown>): Promise<UserCandidateResponse[]> {
     // Solo areaIds, repetido una vez por UUID; sin CSV, filtros, búsqueda ni paginación.
-    if (Object.keys(query).length !== 1 || !Object.prototype.hasOwnProperty.call(query, 'areaIds')) {
-      throw new BadRequestException('areaIds es obligatorio y no se admiten otros parámetros');
-    }
-
-    const raw = query.areaIds;
-    const ids: unknown[] = Array.isArray(raw) ? raw : [raw];
-    if (
-      ids.length === 0 ||
-      ids.some((id) => typeof id !== 'string' || !UUID_REGEX.test(id))
-    ) {
-      throw new BadRequestException('areaIds: se requiere uno o más UUID válidos, en parámetros repetidos');
-    }
-
+    const ids = parseUuidListQueryParam(query, 'areaIds');
     // No se confía en el frontend: el servicio valida TODOS los IDs contra áreas activas.
-    return this.users.listOwnerCandidates(ids as string[]);
+    return this.users.listOwnerCandidates(ids);
+  }
+
+  @Get('names')
+  @Roles('ADMIN', 'SUPERVISOR', 'EMPLOYEE')
+  @ApiResponse({
+    status: 200,
+    description: 'Mapa { [id]: name } de usuarios solicitados (activos e históricos)',
+  })
+  @ApiResponse({ status: 400, description: 'ids ausente, mal formado o parámetros no admitidos' })
+  @ApiResponse({ status: 401, description: 'Sin autenticación o cuenta solicitante inactiva' })
+  @ApiResponse({ status: 503, description: 'La base de datos no responde' })
+  getNames(@Query() query: Record<string, unknown>): Promise<Record<string, string>> {
+    const ids = parseUuidListQueryParam(query, 'ids');
+    return this.users.getUserNamesByIds(ids);
   }
 
   @Post('invitations')
