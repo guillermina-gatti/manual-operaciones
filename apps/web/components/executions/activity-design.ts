@@ -7,6 +7,12 @@
 //   texto-suave (5,2:1): the gray #7A8F87 gives 3,4:1 and does not reach AA.
 // The bar colors are not text: on bosque they are well over 3:1.
 
+// --- The page -------------------------------------------------------------------------------------
+
+// Between the sections of Mi actividad, and between its header and the first one. In a module
+// without 'use client', so the page (a server component) can use it.
+export const MY_ACTIVITY_SECTION_GAP = 'gap-[26px]';
+
 // --- "Tu resumen" (on bosque) ----------------------------------------------------------------------
 
 // Secondary text on bosque: the label of the period, the legend, the names of the data.

@@ -743,3 +743,51 @@ describe('the daily chart', () => {
     expect(summary()).toBeInTheDocument();
   });
 });
+
+describe('the final order of the page', () => {
+  // Every section, top to bottom, as the page shows them.
+  const sections = async () => [
+    await screen.findByRole('region', { name: /Tu nido de esta semana/ }),
+    screen.getByRole('region', { name: 'Para retomar' }),
+    screen.getByRole('form', { name: 'Filtros' }),
+    summary(),
+    screen.getByRole('table', { name: 'Tus procedimientos recientes' }),
+    screen.getByRole('region', { name: 'Actividad diaria' }),
+  ];
+
+  test('nest, to resume, filters, summary, recent procedures and the chart, 26 px apart', async () => {
+    const { container } = render(<MyActivityPanel />);
+    await loaded();
+
+    const blocks = await sections();
+    for (let i = 1; i < blocks.length; i++) {
+      expect(
+        blocks[i - 1].compareDocumentPosition(blocks[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    expect(container.firstElementChild).toHaveClass('flex-col', 'gap-[26px]');
+    expect(container.firstElementChild).not.toHaveClass('gap-10');
+  });
+
+  test('with ?vista=lista and #para-retomar: the list view, and the page goes down to it, past the nest', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    window.history.replaceState(null, '', '/ejecuciones/mi-actividad?vista=lista#para-retomar');
+    try {
+      render(<MyActivityPanel />);
+      await loaded();
+
+      const blocks = await sections();
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
+      expect(scrollIntoView.mock.contexts[0]).toBe(blocks[1]);
+      expect(within(blocks[1]).getByRole('button', { name: 'Ver como Lista' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    } finally {
+      window.history.replaceState(null, '', '/');
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+});

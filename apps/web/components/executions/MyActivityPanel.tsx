@@ -23,6 +23,7 @@ import { VIEW_PARAM, parseExecutionsView, withExecutionsView } from '@/lib/execu
 import { areaOptions, metricsHref, parseMetricsFilters, todayInCompany, withAreaHints } from '@/lib/metrics/filters';
 import type { PanelFilters } from '@/lib/metrics/filters';
 import { useSession } from '@/lib/session';
+import { MY_ACTIVITY_SECTION_GAP } from './activity-design';
 import { DailyActivityChart } from './DailyActivityChart';
 import { MySummaryHero } from './MySummaryHero';
 import { RecentProceduresTable } from './RecentProceduresTable';
@@ -71,7 +72,7 @@ export function MyActivityPanel() {
   );
 
   return (
-    <div className="flex min-w-0 flex-col gap-10">
+    <div className={`flex min-w-0 flex-col ${MY_ACTIVITY_SECTION_GAP}`}>
       <WeeklyNest />
       <ResumeSection
         state={resumeSource}
@@ -91,8 +92,9 @@ export function MyActivityPanel() {
       <SummarySection filters={filters} state={metrics} keepView={keepView} />
       {metrics.status === 'success' && metrics.data.procedures.length > 0 && (
         <RecentProceduresTable
-          // Other filters start the order of the table again.
-          key={metricsHref(filters, MY_ACTIVITY_PATH)}
+          // Other filters start the order of the table again. Prefixed: the filters form, its
+          // sibling, already uses the address as its key.
+          key={`table:${metricsHref(filters, MY_ACTIVITY_PATH)}`}
           procedures={metrics.data.procedures}
           staleAfterHours={metrics.data.staleAfterHours}
           areas={
@@ -210,7 +212,10 @@ function SummaryState({ filters, state, keepView }: SectionProps) {
 // The whole page while it loads (the fallback of the page): the same blocks, in the same order.
 export function MyActivitySkeleton() {
   return (
-    <div aria-hidden="true" className="flex animate-pulse flex-col gap-10 motion-reduce:animate-none">
+    <div
+      aria-hidden="true"
+      className={`flex animate-pulse flex-col ${MY_ACTIVITY_SECTION_GAP} motion-reduce:animate-none`}
+    >
       <div className="h-56 rounded-3xl bg-borde md:h-52" />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
         <div className="h-48 rounded-2xl bg-borde" />
@@ -219,6 +224,7 @@ export function MyActivitySkeleton() {
       <div className="h-44 rounded-2xl bg-borde" />
       <div className="h-56 rounded-3xl bg-borde lg:h-48" />
       <div className="h-64 rounded-[20px] bg-borde" />
+      <div className="h-80 rounded-3xl bg-borde" />
     </div>
   );
 }

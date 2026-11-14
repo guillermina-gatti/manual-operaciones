@@ -65,6 +65,16 @@ describe('/ejecuciones/mi-actividad', () => {
     ).toHaveAttribute('href', '/ejecuciones');
   });
 
+  test('the title and subtitle first, then the panel, 26 px apart', () => {
+    mocks.useSession.mockReturnValue(as('EMPLOYEE'));
+    render(<MiActividadPage />);
+
+    const title = screen.getByRole('heading', { level: 1, name: 'Mi actividad' });
+    const panel = screen.getByText('Panel de mi actividad');
+    expect(title.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('main')).toHaveClass('gap-[26px]');
+  });
+
   test.each(['ADMIN', 'SUPERVISOR'] as const)('%s does not mount the panel', (role) => {
     mocks.useSession.mockReturnValue(as(role));
     render(<MiActividadPage />);
