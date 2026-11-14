@@ -5,6 +5,7 @@ import nextConfig from '@/next.config';
 
 test('resuelve el atajo @/ de tsconfig.json', () => {
   expect(nextConfig.cacheComponents).toBe(true);
+  expect(nextConfig.output).toBe('standalone');
 });
 
 test('renderiza un botón en el DOM simulado', () => {
