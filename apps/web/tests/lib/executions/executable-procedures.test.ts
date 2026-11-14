@@ -27,10 +27,13 @@ const item = (
 });
 
 describe('executableProcedures', () => {
-  test('a published version with steps: its id, the title of the version and the areas', () => {
+  test('a published version with steps: its id, title, areas, steps and description', () => {
     expect(executableProcedures([item('a')])).toEqual([
-      { id: 'a', title: 'Procedimiento a', areas: [VENTAS] },
+      { id: 'a', title: 'Procedimiento a', areas: [VENTAS], stepCount: 4, description: null },
     ]);
+    expect(executableProcedures([item('b', { description: 'Cómo cerrar' })])[0]).toMatchObject({
+      description: 'Cómo cerrar',
+    });
   });
 
   test('leaves out a draft and a version without steps, keeping the order', () => {

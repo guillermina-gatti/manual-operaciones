@@ -33,6 +33,9 @@ interface MetricsFiltersFormProps {
   today: string;
   // The page the filters go to; /metricas unless another page reuses them.
   path?: string;
+  // What the page adds to each address the filters go to (Mi actividad keeps its ?vista=). By
+  // default nothing: /metricas has no other parameters.
+  keepParams?: (href: string) => string;
 }
 
 export const FILTER_MESSAGES = {
@@ -45,6 +48,7 @@ export function MetricsFiltersForm({
   areas,
   today,
   path = METRICS_PATH,
+  keepParams = (href) => href,
 }: MetricsFiltersFormProps) {
   const router = useRouter();
   const id = useId();
@@ -60,7 +64,7 @@ export function MetricsFiltersForm({
     if (!from || !to) return setError(FILTER_MESSAGES.missingDates);
     // "YYYY-MM-DD" sorts like the dates it represents.
     if (from > to) return setError(FILTER_MESSAGES.fromAfterTo);
-    router.push(metricsHref({ areaId: areaId || null, from, to }, path));
+    router.push(keepParams(metricsHref({ areaId: areaId || null, from, to }, path)));
   }
 
   // An area applies at once, with the dates loaded in the form. If they are not valid (an
@@ -70,17 +74,24 @@ export function MetricsFiltersForm({
     setAreaId(value);
     const datesOk = Boolean(from && to && from <= to);
     router.push(
-      metricsHref({
-        areaId: value || null,
-        from: datesOk ? from : filters.from,
-        to: datesOk ? to : filters.to,
-      }, path),
+      keepParams(
+        metricsHref(
+          {
+            areaId: value || null,
+            from: datesOk ? from : filters.from,
+            to: datesOk ? to : filters.to,
+          },
+          path,
+        ),
+      ),
     );
   }
 
   // A quick period applies at once, with the area chosen in the selector.
   function applyQuickPeriod(period: QuickPeriod) {
-    router.push(metricsHref({ areaId: areaId || null, ...quickPeriodRange(period, today) }, path));
+    router.push(
+      keepParams(metricsHref({ areaId: areaId || null, ...quickPeriodRange(period, today) }, path)),
+    );
   }
 
   // Changing a date by hand leaves no quick period marked.
@@ -191,7 +202,7 @@ export function MetricsFiltersForm({
         </p>
         <button
           type="button"
-          onClick={() => router.push(path)}
+          onClick={() => router.push(keepParams(path))}
           className={`${TEXT_LINK} min-h-11 self-start underline sm:self-auto`}
         >
           Limpiar filtros

@@ -32,3 +32,18 @@ export function summarizeExecution(execution: ExecutionResponse): ExecutionSumma
         : null,
   };
 }
+
+// The finished step that took longest, from the durations the API gives; the first one on a tie.
+// null when no step has a duration: the screen then says nothing instead of guessing.
+export function slowestStep(
+  steps: readonly ExecutionStepResponse[],
+): (ExecutionStepResponse & { durationMs: number }) | null {
+  let slowest: (ExecutionStepResponse & { durationMs: number }) | null = null;
+  for (const step of steps) {
+    if (step.durationMs === null || !Number.isFinite(step.durationMs)) continue;
+    if (slowest === null || step.durationMs > slowest.durationMs) {
+      slowest = { ...step, durationMs: step.durationMs };
+    }
+  }
+  return slowest;
+}

@@ -2,11 +2,15 @@ import { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { ExecutionsRepositoryUnavailableError } from '../executions.repository';
 import type { MetricsWindow } from './execution-metrics.repository';
+import type { DailyWindow } from './my-daily-metrics';
 import {
   PrismaExecutionMetricsRepository,
+  dailyCompletionsSql,
   executionAggregatesSql,
   inProgressSql,
+  progressDaysSql,
   stepAggregatesSql,
+  weekCompletedSql,
 } from './prisma-execution-metrics.repository';
 
 const PROCEDURE_ID = '1a000000-0000-4000-8000-000000000001';
@@ -154,6 +158,78 @@ describe('personal metrics: only the executions of one user', () => {
     expect(text).toContain('ORDER BY s.started_at DESC, e.id');
     expect(text).not.toContain('e.started_at >=');
     expect(sql.values).toEqual([USER_ID]);
+  });
+});
+
+const ZONE = 'America/Argentina/Buenos_Aires';
+const DAILY: DailyWindow = {
+  timeZone: ZONE,
+  completed: {
+    from: new Date('2026-10-24T03:00:00.000Z'),
+    to: new Date('2026-11-14T03:00:00.000Z'),
+  },
+  progress: {
+    from: new Date('2026-11-09T03:00:00.000Z'),
+    to: new Date('2026-11-14T03:00:00.000Z'),
+  },
+  week: {
+    from: new Date('2026-11-09T03:00:00.000Z'),
+    to: new Date('2026-11-16T03:00:00.000Z'),
+  },
+};
+
+describe('daily activity SQL', () => {
+  it('completions: only COMPLETED ones of the user, by the company day they were completed', () => {
+    const sql = dailyCompletionsSql(USER_ID, DAILY);
+    const text = oneLine(sql);
+
+    expect(text).toContain(
+      "SELECT to_char(e.finished_at AT TIME ZONE ?::text, 'YYYY-MM-DD') AS day",
+    );
+    expect(text).toContain(
+      "WHERE e.user_id = ?::uuid AND e.status = 'COMPLETED' AND e.finished_at >= ? AND e.finished_at < ? GROUP BY 1, 2, 3",
+    );
+    // The zone and the limits are parameters, never part of the text.
+    expect(sql.values).toEqual([
+      ZONE,
+      USER_ID,
+      DAILY.completed.from,
+      DAILY.completed.to,
+    ]);
+    expect(text).not.toContain(ZONE);
+  });
+
+  it('progress: a finished step of a non RESTARTED execution, or a completed execution', () => {
+    const sql = progressDaysSql(USER_ID, DAILY);
+    const text = oneLine(sql);
+
+    expect(text).toContain(
+      "SELECT DISTINCT to_char(moved.at AT TIME ZONE ?::text, 'YYYY-MM-DD') AS day",
+    );
+    expect(text).toContain(
+      "WHERE e.user_id = ?::uuid AND e.status <> 'RESTARTED' AND s.finished_at >= ? AND s.finished_at < ?",
+    );
+    expect(text).toContain(
+      "UNION ALL SELECT e.finished_at AS at FROM executions e WHERE e.user_id = ?::uuid AND e.status = 'COMPLETED'",
+    );
+    expect(sql.values).toEqual([
+      ZONE,
+      USER_ID,
+      DAILY.progress.from,
+      DAILY.progress.to,
+      USER_ID,
+      DAILY.progress.from,
+      DAILY.progress.to,
+    ]);
+  });
+
+  it('the week: completed ones from Monday to Sunday, without areas', () => {
+    const sql = weekCompletedSql(USER_ID, DAILY);
+
+    expect(oneLine(sql)).toContain(
+      "SELECT count(*)::int AS completed FROM executions e WHERE e.user_id = ?::uuid AND e.status = 'COMPLETED'",
+    );
+    expect(sql.values).toEqual([USER_ID, DAILY.week.from, DAILY.week.to]);
   });
 });
 
@@ -316,6 +392,63 @@ describe('PrismaExecutionMetricsRepository', () => {
       prisma.$transaction.mockRejectedValue(bug);
 
       await expect(repository.mine(USER_ID, WINDOW)).rejects.toBe(bug);
+    });
+  });
+
+  describe('daily', () => {
+    const COMPLETION = {
+      day: '2026-11-12',
+      procedureId: PROCEDURE_ID,
+      procedureVersionId: VERSION_ID,
+      completed: 2,
+      lastCompletedAt: LAST,
+    };
+
+    it("runs the user's three queries in one repeatable read transaction", async () => {
+      prisma.$transaction.mockResolvedValue([
+        [{ ...COMPLETION, userId: 'not mapped' }],
+        [{ day: '2026-11-09' }, { day: '2026-11-12' }],
+        [{ completed: 5 }],
+      ]);
+
+      const daily = await repository.daily(USER_ID, DAILY);
+
+      const [queries, options] = prisma.$transaction.mock.calls[0] as [
+        Prisma.Sql[],
+        unknown,
+      ];
+      expect(queries.map(oneLine)).toEqual([
+        oneLine(dailyCompletionsSql(USER_ID, DAILY)),
+        oneLine(progressDaysSql(USER_ID, DAILY)),
+        oneLine(weekCompletedSql(USER_ID, DAILY)),
+      ]);
+      expect(queries.every((query) => query.values.includes(USER_ID))).toBe(
+        true,
+      );
+      expect(options).toEqual({ isolationLevel: 'RepeatableRead' });
+      expect(daily).toEqual({
+        completions: [COMPLETION],
+        progressDays: ['2026-11-09', '2026-11-12'],
+        weekCompleted: 5,
+      });
+    });
+
+    it.each(['', '   '])(
+      'without a user id (%p) fails without reading anyone else',
+      async (userId) => {
+        await expect(repository.daily(userId, DAILY)).rejects.toThrow(
+          'Daily activity needs the id of the user of the session',
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it('translates a database that is down', async () => {
+      prisma.$transaction.mockRejectedValue(knownError('P1001'));
+
+      await expect(repository.daily(USER_ID, DAILY)).rejects.toBeInstanceOf(
+        ExecutionsRepositoryUnavailableError,
+      );
     });
   });
 });

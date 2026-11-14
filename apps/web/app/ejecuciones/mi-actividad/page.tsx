@@ -6,6 +6,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { BACK_LINK, PageHeader } from '@/components/documents/design';
+import { MY_ACTIVITY_SECTION_GAP } from '@/components/executions/activity-design';
 import { MyActivityPanel, MyActivitySkeleton } from '@/components/executions/MyActivityPanel';
 import { RequireRole } from '@/components/session/RequireRole';
 import { ScreenState } from '@/components/ui/ScreenState';
@@ -16,8 +17,8 @@ export const metadata: Metadata = {
 
 export default function MiActividadPage() {
   return (
-    // The same frame as /ejecuciones and /metricas.
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
+    // The same frame as /ejecuciones and /metricas; 26 px between the header and each section.
+    <main className={`mx-auto flex w-full max-w-6xl flex-col ${MY_ACTIVITY_SECTION_GAP} px-4 py-8`}>
       <Link href="/ejecuciones" className={BACK_LINK}>
         ← Volver a Ejecutar un procedimiento
       </Link>

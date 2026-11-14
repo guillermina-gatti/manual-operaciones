@@ -27,7 +27,10 @@ const failure = (error: unknown, reload = vi.fn()): ApiResource<DocumentMetrics 
   reload,
 });
 
-const card = () => screen.getByRole('article', { name: 'Documentos' });
+const card = () => screen.getByRole('region', { name: 'Documentos' });
+const tiles = () => [...card().querySelectorAll('dl > div')] as HTMLElement[];
+const tile = (label: string) =>
+  within(card()).getByText(label, { selector: 'dt' }).parentElement as HTMLElement;
 const value = (label: string) => within(card()).getByText(label, { selector: 'dt' }).nextSibling;
 
 describe('DocumentMetricsCard', () => {
@@ -42,25 +45,63 @@ describe('DocumentMetricsCard', () => {
     expect(screen.getByText('Cargando las métricas de documentos…')).toBeInTheDocument();
   });
 
-  test('shows the current state and the documents uploaded in the period', () => {
+  test('six tiles: the current state and the documents uploaded in the period', () => {
     render(<DocumentMetricsCard filters={FILTERS} state={success(DOCUMENTS)} />);
 
-    const current = within(card()).getByRole('region', { name: 'Estado actual' });
-    expect(within(current).getAllByRole('term').map((term) => term.textContent)).toEqual([
+    expect(within(card()).getAllByRole('term').map((term) => term.textContent)).toEqual([
       'Activos',
       'Al día',
       'Vencen pronto',
       'Vencidos',
       'Con error de procesamiento',
+      'Cargados en el período',
     ]);
     expect(value('Activos')).toHaveTextContent('1.284');
     expect(value('Al día')).toHaveTextContent('1.200');
     expect(value('Vencen pronto')).toHaveTextContent('80');
     expect(value('Vencidos')).toHaveTextContent('4');
-    expect(value('Con error de procesamiento')).toHaveTextContent('2');
+    expect(value('Con error de procesamiento')).toHaveTextContent(/^2/);
+    // Under the uploaded ones, the dates they count.
+    expect(value('Cargados en el período')).toHaveTextContent('91 oct – 27 oct');
+  });
 
-    const period = within(card()).getByRole('region', { name: 'Del 01/10/2026 al 27/10/2026' });
-    expect(within(period).getByText('Cargados en el período').nextSibling).toHaveTextContent('9');
+  test('a grid of 6 columns, 3 on a tablet and 2 on a phone', () => {
+    render(<DocumentMetricsCard filters={FILTERS} state={success(DOCUMENTS)} />);
+
+    expect(card().querySelector('dl')).toHaveClass(
+      'grid-cols-2',
+      'sm:grid-cols-3',
+      'lg:grid-cols-6',
+    );
+    expect(tiles()).toHaveLength(6);
+  });
+
+  test('each tile with the stripe of its state, the same colors as /documentos', () => {
+    render(<DocumentMetricsCard filters={FILTERS} state={success(DOCUMENTS)} />);
+
+    const stripe = (label: string) => tile(label).querySelector('[data-testid="tile-stripe"]');
+    expect(stripe('Activos')).toHaveClass('bg-bosque');
+    expect(stripe('Al día')).toHaveClass('bg-exito');
+    expect(stripe('Vencen pronto')).toHaveClass('bg-naranja');
+    expect(stripe('Vencidos')).toHaveClass('bg-peligro');
+    expect(stripe('Con error de procesamiento')).toHaveClass('bg-peligro');
+    expect(stripe('Cargados en el período')).toHaveClass('bg-bosque');
+    expect(stripe('Activos')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  test('with processing errors, "Revisar" and no link; without them, no tag', () => {
+    const { unmount } = render(<DocumentMetricsCard filters={FILTERS} state={success(DOCUMENTS)} />);
+    expect(within(tile('Con error de procesamiento')).getByText('Revisar')).toBeInTheDocument();
+    expect(within(card()).queryByRole('link')).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <DocumentMetricsCard
+        filters={FILTERS}
+        state={success({ ...DOCUMENTS, totals: { ...DOCUMENTS.totals, processingFailed: 0 } })}
+      />,
+    );
+    expect(within(card()).queryByText('Revisar')).not.toBeInTheDocument();
   });
 
   test('says the totals are the current state and the dates only change «Cargados»', () => {
@@ -81,7 +122,7 @@ describe('DocumentMetricsCard', () => {
     render(<DocumentMetricsCard filters={FILTERS} state={success(zeros)} />);
 
     const values = within(card()).getAllByRole('definition').map((dd) => dd.textContent);
-    expect(values).toEqual(['0', '0', '0', '0', '0', '0']);
+    expect(values).toEqual(['0', '0', '0', '0', '0', '01 oct – 27 oct']);
     expect(card().textContent).not.toContain('—');
   });
 

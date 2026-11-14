@@ -9,6 +9,9 @@ export interface ExecutableProcedure {
   id: string;
   title: string; // of the current version
   areas: ProcedureAreaView[];
+  stepCount: number;
+  // Of the current version; null when it has none.
+  description: string | null;
 }
 
 // The listing shows the current version, or the draft when there is none (only an ADMIN gets
@@ -16,7 +19,13 @@ export interface ExecutableProcedure {
 export function executableProcedures(items: readonly ProcedureListItem[]): ExecutableProcedure[] {
   return items
     .filter((item) => item.version.status === 'PUBLISHED' && item.version.stepCount > 0)
-    .map((item) => ({ id: item.id, title: item.version.title, areas: item.areas }));
+    .map((item) => ({
+      id: item.id,
+      title: item.version.title,
+      areas: item.areas,
+      stepCount: item.version.stepCount,
+      description: item.version.description,
+    }));
 }
 
 export interface ListErrorDescription {

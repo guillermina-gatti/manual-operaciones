@@ -26,6 +26,7 @@ import {
   MetricsWindow,
   MyAggregates,
 } from './execution-metrics.repository';
+import type { DailyAggregates, DailyWindow } from './my-daily-metrics';
 import type { ExecutionAggregate } from './procedure-metrics';
 import { MyMetricsService } from './my-metrics.service';
 
@@ -58,6 +59,20 @@ class FakeMetricsRepository extends ExecutionMetricsRepository {
     return this.failure
       ? Promise.reject(this.failure)
       : Promise.resolve(this.mineResult);
+  }
+
+  readonly dailyCalls: { userId: string; window: DailyWindow }[] = [];
+  dailyResult: DailyAggregates = {
+    completions: [],
+    progressDays: [],
+    weekCompleted: 0,
+  };
+
+  daily(userId: string, window: DailyWindow): Promise<DailyAggregates> {
+    this.dailyCalls.push({ userId, window });
+    return this.failure
+      ? Promise.reject(this.failure)
+      : Promise.resolve(this.dailyResult);
   }
 }
 
@@ -335,5 +350,137 @@ describe('MyMetricsService', () => {
       expect(failure).toBeInstanceOf(InternalServerErrorException);
       expect(logError).toHaveBeenCalled();
     });
+  });
+});
+
+describe('MyMetricsService.daily', () => {
+  let users: UsersDirectory;
+  let areas: AreasDirectory;
+  let catalog: InMemoryProceduresCatalog;
+  let repository: FakeMetricsRepository;
+  // NOW is Friday 6 November 2026, 12:00 in Buenos Aires.
+  const build = () =>
+    new MyMetricsService(users, areas, catalog, repository, new FixedClock());
+  const completion = (
+    day: string,
+    procedureId: string,
+    procedureVersionId: string,
+    completed: number,
+  ) => ({
+    day,
+    procedureId,
+    procedureVersionId,
+    completed,
+    lastCompletedAt: new Date(`${day}T15:00:00.000Z`),
+  });
+
+  beforeEach(() => {
+    users = new InMemoryUsersDirectory();
+    areas = new InMemoryAreasDirectory();
+    catalog = new InMemoryProceduresCatalog();
+    repository = new FakeMetricsRepository(MINE);
+    repository.dailyResult = {
+      completions: [
+        completion('2026-11-05', PROCEDURE_IDS.cierreDeCaja, CIERRE_V2, 2),
+        completion(
+          '2026-11-05',
+          PROCEDURE_IDS.recepcionMercaderia,
+          RECEPCION_V1,
+          1,
+        ),
+      ],
+      progressDays: ['2026-11-05', '2026-11-02', '2026-11-05'],
+      weekCompleted: 4,
+    };
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('asks only for the user of the session, with Buenos Aires days', async () => {
+    await build().daily(ELENA, {});
+
+    expect(repository.dailyCalls).toEqual([
+      {
+        userId: FIXTURE_USERS.empleadoVentas.id,
+        window: {
+          timeZone: 'America/Argentina/Buenos_Aires',
+          completed: {
+            from: new Date('2026-10-17T03:00:00.000Z'),
+            to: new Date('2026-11-07T03:00:00.000Z'),
+          },
+          progress: {
+            from: new Date('2026-11-02T03:00:00.000Z'),
+            to: new Date('2026-11-07T03:00:00.000Z'),
+          },
+          week: {
+            from: new Date('2026-11-02T03:00:00.000Z'),
+            to: new Date('2026-11-09T03:00:00.000Z'),
+          },
+        },
+      },
+    ]);
+  });
+
+  it('21 days up to today, also the empty ones; only the procedures of their areas', async () => {
+    const view = await build().daily(ELENA, {});
+
+    expect(view.windowFrom).toBe('2026-10-17');
+    expect(view.windowTo).toBe('2026-11-06');
+    expect(view.days).toHaveLength(21);
+    expect(view.days.find((d) => d.date === '2026-11-05')?.procedures).toEqual([
+      {
+        procedureId: PROCEDURE_IDS.cierreDeCaja,
+        title: 'Cierre de caja',
+        completed: 2,
+      },
+    ]);
+    expect(view.days.find((d) => d.date === '2026-11-04')?.procedures).toEqual(
+      [],
+    );
+  });
+
+  it('the week is the whole person: the days with progress and the count, without the area', async () => {
+    const view = await build().daily(ELENA, { areaId: AREA_IDS.ventas });
+
+    expect(view.week).toEqual({
+      from: '2026-11-02',
+      to: '2026-11-06',
+      activeDays: ['2026-11-02', '2026-11-05'],
+      completedCount: 4,
+    });
+  });
+
+  it('several procedures of their areas on the same day: the most completed first', async () => {
+    catalog.assignAreas(PROCEDURE_IDS.recepcionMercaderia, [AREA_IDS.ventas]);
+
+    const view = await build().daily(ELENA, {});
+
+    expect(
+      view.days
+        .find((d) => d.date === '2026-11-05')
+        ?.procedures.map((p) => [p.title, p.completed]),
+    ).toEqual([
+      ['Cierre de caja', 2],
+      ['Recepción de mercadería', 1],
+    ]);
+  });
+
+  it('an area that is not theirs is a 404, without reading their executions', async () => {
+    await expect(
+      build().daily(ELENA, { areaId: AREA_IDS.operaciones }),
+    ).rejects.toThrow(new NotFoundException('No se encontró el área'));
+    expect(repository.dailyCalls).toEqual([]);
+  });
+
+  it('the database down is a 503', async () => {
+    repository.failure = new ExecutionsRepositoryUnavailableError('down');
+
+    await expect(build().daily(ELENA, {})).rejects.toThrow(
+      ServiceUnavailableException,
+    );
   });
 });

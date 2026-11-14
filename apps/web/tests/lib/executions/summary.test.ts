@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { summarizeExecution } from '@/lib/executions/summary';
+import { slowestStep, summarizeExecution } from '@/lib/executions/summary';
 import { execution } from '../../support/executions';
 
 describe('summarizeExecution', () => {
@@ -40,5 +40,31 @@ describe('summarizeExecution', () => {
       // 4 steps of 3 minutes each.
       totalDurationMs: 12 * 60_000,
     });
+  });
+});
+
+describe('slowestStep', () => {
+  const steps = (durations: (number | null)[]) =>
+    execution(4).steps.map((step, i) => ({ ...step, durationMs: durations[i] }));
+
+  test('the finished step with the longest duration', () => {
+    expect(slowestStep(steps([60_000, 300_000, 120_000, 180_000]))).toMatchObject({
+      order: 2,
+      title: 'Contar los comprobantes de tarjeta',
+      durationMs: 300_000,
+    });
+  });
+
+  test('on a tie, the first one', () => {
+    expect(slowestStep(steps([180_000, 60_000, 180_000, 60_000]))?.order).toBe(1);
+  });
+
+  test('skips the steps without a duration', () => {
+    expect(slowestStep(steps([null, 60_000, null, 30_000]))?.order).toBe(2);
+  });
+
+  test('no duration at all: null', () => {
+    expect(slowestStep(steps([null, null, null, null]))).toBeNull();
+    expect(slowestStep([])).toBeNull();
   });
 });
