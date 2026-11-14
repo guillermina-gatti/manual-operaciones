@@ -13,28 +13,28 @@ interface CreateAreaModalProps {
 }
 
 export function CreateAreaModal({ isOpen, onClose, onSuccess }: CreateAreaModalProps) {
+  if (!isOpen) return null;
+
+  return <CreateAreaModalForm onClose={onClose} onSuccess={onSuccess} />;
+}
+
+function CreateAreaModalForm({
+  onClose,
+  onSuccess,
+}: Omit<CreateAreaModalProps, 'isOpen'>) {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setName('');
-      setError(null);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && isOpen && !saving) {
+      if (e.key === 'Escape' && !saving) {
         onClose();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, saving, onClose]);
-
-  if (!isOpen) return null;
+  }, [saving, onClose]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -95,18 +95,24 @@ export function AreasManagementView() {
   const [editingArea, setEditingArea] = useState<AreaItem | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  async function loadAreas() {
-    try {
-      const data = await listApiAreas();
-      setAreas(data);
-    } catch {
-      // Ignorar o mantener estado previo si falla la conexión
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadAreas() {
+      try {
+        const data = await listApiAreas();
+        if (!cancelled) {
+          setAreas(data);
+        }
+      } catch {
+        // Ignorar o mantener estado previo si falla la conexión
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
     void loadAreas();
 
     function handleAreasChanged() {
@@ -114,7 +120,10 @@ export function AreasManagementView() {
     }
 
     window.addEventListener(AREAS_CHANGED_EVENT, handleAreasChanged);
-    return () => window.removeEventListener(AREAS_CHANGED_EVENT, handleAreasChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AREAS_CHANGED_EVENT, handleAreasChanged);
+    };
   }, []);
 
   const filteredAreas = useMemo(() => {

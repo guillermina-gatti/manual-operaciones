@@ -14,30 +14,32 @@ interface EditAreaModalProps {
 }
 
 export function EditAreaModal({ area, isOpen, onClose, onSuccess }: EditAreaModalProps) {
-  const [name, setName] = useState('');
-  const [isActive, setIsActive] = useState(true);
+  if (!isOpen || !area) return null;
+
+  return <EditAreaModalForm key={area.id} area={area} onClose={onClose} onSuccess={onSuccess} />;
+}
+
+interface EditAreaModalFormProps {
+  area: AreaItem;
+  onClose: () => void;
+  onSuccess: (updated: AreaItem) => void;
+}
+
+function EditAreaModalForm({ area, onClose, onSuccess }: EditAreaModalFormProps) {
+  const [name, setName] = useState(area.name);
+  const [isActive, setIsActive] = useState(area.isActive);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (area) {
-      setName(area.name);
-      setIsActive(area.isActive);
-      setError(null);
-    }
-  }, [area]);
-
-  useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && isOpen && !saving) {
+      if (e.key === 'Escape' && !saving) {
         onClose();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, saving, onClose]);
-
-  if (!isOpen || !area) return null;
+  }, [saving, onClose]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

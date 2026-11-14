@@ -32,15 +32,8 @@ export function EditUserModal({
   onClose,
   onSuccess,
 }: EditUserModalProps) {
-  const [role, setRole] = useState<Role>('EMPLOYEE');
-  const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
-  const [isActive, setIsActive] = useState<boolean>(true);
   const [areas, setAreas] = useState<Area[]>([]);
   const [loadingAreas, setLoadingAreas] = useState<boolean>(true);
-  const [saving, setSaving] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const isSelf = user ? user.id === currentAdminId : false;
 
   useEffect(() => {
     let cancelled = false;
@@ -62,28 +55,58 @@ export function EditUserModal({
     };
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      setRole(user.role);
-      setIsActive(user.isActive ?? true);
-      const initialAreaIds = user.areaIds ?? user.areas?.map((a) => a.id) ?? [];
-      setSelectedAreaIds(initialAreaIds);
-      setError(null);
-    }
-  }, [user]);
+  if (!isOpen || !user) return null;
+
+  return (
+    <EditUserModalForm
+      key={user.id}
+      user={user}
+      currentAdminId={currentAdminId}
+      areas={areas}
+      loadingAreas={loadingAreas}
+      onClose={onClose}
+      onSuccess={onSuccess}
+    />
+  );
+}
+
+interface EditUserModalFormProps {
+  user: NonNullable<EditUserModalProps['user']>;
+  currentAdminId: string;
+  areas: Area[];
+  loadingAreas: boolean;
+  onClose: () => void;
+  onSuccess: (updated: AdminUserItem) => void;
+}
+
+function EditUserModalForm({
+  user,
+  currentAdminId,
+  areas,
+  loadingAreas,
+  onClose,
+  onSuccess,
+}: EditUserModalFormProps) {
+  const [role, setRole] = useState<Role>(user.role);
+  const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>(
+    () => user.areaIds ?? user.areas?.map((a) => a.id) ?? [],
+  );
+  const [isActive, setIsActive] = useState<boolean>(user.isActive ?? true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isSelf = user.id === currentAdminId;
 
   // Manejo de tecla Escape
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && isOpen && !saving) {
+      if (e.key === 'Escape' && !saving) {
         onClose();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, saving, onClose]);
-
-  if (!isOpen || !user) return null;
+  }, [saving, onClose]);
 
   function toggleArea(areaId: string) {
     setSelectedAreaIds((prev) =>
