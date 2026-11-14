@@ -22,6 +22,8 @@ import {
   staleBefore,
   toMetricsPeriod,
 } from './metrics-period';
+import { buildDailyDays, buildDailyWeek, dailyPlan } from './my-daily-metrics';
+import type { DailyDay, DailyWeek } from './my-daily-metrics';
 import {
   buildMyProcedures,
   buildResume,
@@ -41,6 +43,15 @@ export interface MyMetricsView {
   // Every execution in progress they can open again, whatever the period.
   resume: MyResumeItem[];
   procedures: MyProcedure[];
+}
+
+// GET /metrics/me/daily: the last 21 days (the chart, with the area filter) and the
+// working days of the week with progress (the nest, the whole person).
+export interface MyDailyView {
+  windowFrom: string;
+  windowTo: string;
+  days: DailyDay[];
+  week: DailyWeek;
 }
 
 // The same answer for an area that is not the viewer's, an inactive one and one that
@@ -69,6 +80,48 @@ export class MyMetricsService {
     } catch (error) {
       throw toHttpException(error, this.logger, 'metrics');
     }
+  }
+
+  async daily(
+    user: AuthUser,
+    query: { areaId?: string },
+  ): Promise<MyDailyView> {
+    try {
+      return await this.buildDaily(user, query);
+    } catch (error) {
+      throw toHttpException(error, this.logger, 'metrics');
+    }
+  }
+
+  // The same areas and 404 as mine. No dates in the query: the window is always the
+  // last 21 days up to today, and the week the current one, in the company time zone.
+  private async buildDaily(
+    user: AuthUser,
+    { areaId }: { areaId?: string },
+  ): Promise<MyDailyView> {
+    const viewerAreaIds = await activeAreaIdsOf(
+      this.users,
+      this.areas,
+      user.id,
+    );
+    const areaIds = myAreaScope(viewerAreaIds, areaId);
+    if (!areaIds) throw areaNotFound();
+
+    const plan = dailyPlan(this.clock.now(), this.timeZone);
+    const aggregates = await this.metrics.daily(user.id, plan.window);
+    const versions = await findVisibleVersions(
+      this.catalog,
+      this.logger,
+      aggregates.completions.map((c) => c.procedureVersionId),
+      { all: false, areaIds },
+    );
+
+    return {
+      windowFrom: plan.days[0],
+      windowTo: plan.days[plan.days.length - 1],
+      days: buildDailyDays(plan.days, aggregates.completions, versions),
+      week: buildDailyWeek(plan, aggregates),
+    };
   }
 
   private async build(

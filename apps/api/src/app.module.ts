@@ -14,11 +14,14 @@ import { UsersModule } from './users/users.module';
 import { ProcessingModule } from './processing/processing.module';
 import { ChatModule } from './chat/chat.module';
 import { HealthController } from './health/health.controller';
+import { ReadinessService } from './health/readiness.service';
+import { validateEnvironment } from './config/environment.validation';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validateEnvironment,
     }),
     PrismaModule,
     RedisModule,
@@ -32,6 +35,6 @@ import { HealthController } from './health/health.controller';
     ChatModule,
   ],
   controllers: [AppController, HealthController],
-  providers: [AppService],
+  providers: [AppService, ReadinessService],
 })
 export class AppModule {}

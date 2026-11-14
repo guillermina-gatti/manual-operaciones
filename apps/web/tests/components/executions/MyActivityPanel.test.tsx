@@ -12,21 +12,25 @@ import {
   VENTAS,
   myMetricsResponse,
 } from '../../support/my-metrics';
+import { myDailyResponse } from '../../support/my-daily';
 
 // A whole mount (filters, tiles, lists) looked up by role is slow in jsdom; as in MetricsPanel.
 vi.setConfig({ testTimeout: 15_000 });
 
 const mocks = vi.hoisted(() => ({
   getMyMetrics: vi.fn(),
+  getMyDailyActivity: vi.fn(),
   useSession: vi.fn(),
   listAreas: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
   searchParams: new URLSearchParams(),
 }));
 
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getMyMetrics: mocks.getMyMetrics,
+  getMyDailyActivity: mocks.getMyDailyActivity,
 }));
 
 vi.mock('@/lib/session', async (importOriginal) => ({
@@ -40,7 +44,8 @@ vi.mock('@/lib/directory', () => ({
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => mocks.searchParams,
-  useRouter: () => ({ push: mocks.push }),
+  usePathname: () => '/ejecuciones/mi-actividad',
+  useRouter: () => ({ push: mocks.push, replace: mocks.replace }),
 }));
 
 const ELENA: SessionState = {
@@ -60,6 +65,9 @@ beforeEach(() => {
   mocks.searchParams = new URLSearchParams();
   mocks.useSession.mockReturnValue(ELENA);
   mocks.getMyMetrics.mockResolvedValue(myMetricsResponse());
+  mocks.getMyDailyActivity.mockResolvedValue(
+    myDailyResponse({ windowTo: '2026-10-27', week: { from: '2026-10-26', to: '2026-10-30', activeDays: ['2026-10-26'], completedCount: 1 } }),
+  );
   mocks.listAreas.mockResolvedValue([
     { id: VENTAS, name: 'Ventas' },
     { id: OPERACIONES, name: 'Operaciones' },
@@ -74,9 +82,11 @@ afterEach(() => {
 const summary = () => screen.getByRole('region', { name: 'Tu resumen' });
 // The answer arrived: the tiles are there.
 const loaded = () => screen.findByText('Empezadas', { selector: 'dt' });
-// A tile: its label (dt) and, in the same box, its number and its line.
-const tile = (label: string) =>
-  within(summary()).getByText(label, { selector: 'dt' }).parentElement!;
+// A datum of the summary: the value (dd) next to its label (dt).
+const datum = (label: RegExp) =>
+  within(summary())
+    .getAllByRole('term')
+    .find((term) => label.test(term.textContent ?? ''))!.nextElementSibling!.textContent;
 // Opens the area selector and reads the name of each option (without its hint).
 async function areaOptionTexts(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /^Área/ }));
@@ -145,21 +155,29 @@ describe('session', () => {
 });
 
 describe('summary', () => {
-  test('their counts and their average time', async () => {
+  test('the hero: the ring, the headline, the legend and their data', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
-    expect(tile('Empezadas')).toHaveTextContent('5');
-    expect(tile('Completadas')).toHaveTextContent('60,0% del total');
-    expect(tile('En curso')).toHaveTextContent('20,0% del total');
-    expect(tile('Tu tiempo medio')).toHaveTextContent('10 min');
+    expect(within(summary()).getByRole('img', { name: '60,0 % completadas' })).toBeInTheDocument();
+    expect(
+      within(summary()).getByText('Terminaste 3 de los 5 recorridos que empezaste'),
+    ).toBeInTheDocument();
+    expect(within(summary()).getByRole('heading', { level: 2 })).toHaveTextContent(
+      'Tu resumen · 1 oct – 27 oct',
+    );
+    expect(datum(/^Empezadas$/)).toBe('5');
+    expect(datum(/^En curso$/)).toBe('1');
+    expect(datum(/^Tiempo medio/)).toBe('10 min');
+    // The note stays under the panel.
+    expect(screen.getByText(/^En curso: con avance en las últimas 24 h\./)).toBeInTheDocument();
   });
 
   test('says "Sin avanzar hace más de 24 h", never "abandonadas"', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
-    expect(tile('Sin avanzar hace más de 24 h')).toHaveTextContent('20,0% del total');
+    expect(datum(/Sin avanzar hace más de 24 h/)).toBe('1');
     expect(screen.queryByText(/abandonad/i)).not.toBeInTheDocument();
   });
 
@@ -200,7 +218,10 @@ describe('summary', () => {
 describe('errors', () => {
   test('an area that is not theirs offers to see all of them', async () => {
     mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
-    mocks.getMyMetrics.mockRejectedValue(new ApiError(404, ['No se encontró el área']));
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) => {
+      if (filters.areaId) throw new ApiError(404, ['No se encontró el área']);
+      return myMetricsResponse();
+    });
     render(<MyActivityPanel />);
 
     expect(await screen.findByText('No encontramos esa área entre las tuyas.')).toBeInTheDocument();
@@ -264,10 +285,15 @@ describe('to resume', () => {
     await loaded();
 
     const cierre = card('Cierre de caja');
-    expect(cierre).toHaveTextContent('Paso 2 de 4:Comparar con el reporte');
-    expect(cierre).toHaveTextContent('Último avance:27 oct 2026, 10:05');
+    expect(cierre).toHaveTextContent('Paso 2 de 4: Comparar con el reporte');
+    // How long ago, with the date and time in the tooltip.
+    expect(cierre).toHaveTextContent('Último avance: hace 1 h 55 min');
+    expect(within(cierre).getByText('hace 1 h 55 min')).toHaveAttribute(
+      'title',
+      '27 oct 2026, 10:05',
+    );
     expect(within(cierre).getByText('En curso')).toBeInTheDocument();
-    expect(within(cierre).getByRole('link', { name: 'Retomar →' })).toHaveAttribute(
+    expect(within(cierre).getByRole('link', { name: 'Continuar' })).toHaveAttribute(
       'href',
       `/ejecuciones/${CURRENT_EXECUTION}`,
     );
@@ -307,17 +333,54 @@ describe('to resume', () => {
 
     const recepcion = card('Recepción de mercadería');
     expect(within(recepcion).getByText('Sin avanzar hace más de 24 h')).toBeInTheDocument();
-    expect(within(recepcion).getByRole('link', { name: 'Retomar →' })).toHaveAttribute(
+    expect(within(recepcion).getByRole('link', { name: 'Continuar' })).toHaveAttribute(
       'href',
       `/ejecuciones/${STALE_EXECUTION}`,
     );
+  });
+
+  test('the section is "para-retomar", named by its heading, for the link of /ejecuciones', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(resume()).toHaveAttribute('id', 'para-retomar');
+    expect(resume()).toHaveClass('scroll-mt-6');
+  });
+
+  test('entering with #para-retomar goes down to it once the list arrives', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState(null, '', '/ejecuciones/mi-actividad#para-retomar');
+    try {
+      render(<MyActivityPanel />);
+      await loaded();
+
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
+      expect(scrollIntoView.mock.contexts[0]).toBe(resume());
+    } finally {
+      window.history.replaceState(null, '', '/');
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+
+  test('without the hash it stays at the top', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      render(<MyActivityPanel />);
+      await loaded();
+
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
   });
 
   test('the link says which procedure it opens', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
-    const links = within(resume()).getAllByRole('link', { name: 'Retomar →' });
+    const links = within(resume()).getAllByRole('link', { name: 'Continuar' });
     expect(links[0]).toHaveAccessibleDescription('Cierre de caja');
     expect(links[1]).toHaveAccessibleDescription('Recepción de mercadería');
   });
@@ -338,6 +401,139 @@ describe('to resume', () => {
   });
 });
 
+describe('to resume: the two views (?vista=), as the picker', () => {
+  const resume = () => screen.getByRole('region', { name: 'Para retomar' });
+  const viewButton = (name: 'Lista' | 'Tarjetas') =>
+    within(within(resume()).getByRole('group', { name: 'Vista' })).getByRole('button', {
+      name: `Ver como ${name}`,
+    });
+  const items = () => [...resume().querySelectorAll('li')];
+
+  beforeEach(() => {
+    mocks.listAreas.mockResolvedValue([
+      { id: VENTAS, name: 'Ventas', isActive: true },
+      { id: OPERACIONES, name: 'Operaciones', isActive: true },
+    ]);
+  });
+
+  test('Tarjetas by default: areas and steps, the state on the right, step, time and "Continuar" at the foot', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+    await within(resume()).findAllByText('Ventas');
+
+    expect(viewButton('Tarjetas')).toHaveAttribute('aria-pressed', 'true');
+    const [cierre, recepcion] = items();
+    const [meta, title, body, link] = [...cierre.children];
+    expect(meta).toHaveClass('min-h-7');
+    expect(meta.firstElementChild).toHaveTextContent('Áreas: Ventas4 pasos');
+    expect(meta.lastElementChild).toHaveTextContent('En curso');
+    expect(title).toHaveTextContent('Cierre de caja');
+    expect(body).toHaveTextContent('Paso 2 de 4: Comparar con el reporte');
+    expect(body).toHaveTextContent('Último avance: hace 1 h 55 min');
+    expect(link).toHaveAccessibleName('Continuar');
+    expect(link).toHaveClass('mt-auto');
+    // The stale one: the same places, with its own state.
+    expect(recepcion.firstElementChild!.firstElementChild).toHaveTextContent('Áreas: Operaciones');
+    expect(recepcion.firstElementChild!.lastElementChild).toHaveTextContent(
+      'Sin avanzar hace más de 24 h',
+    );
+    expect(cierre.parentElement).toHaveClass('md:auto-rows-fr');
+  });
+
+  test('choosing Lista keeps the filters of the address', async () => {
+    mocks.searchParams = new URLSearchParams('desde=2026-10-01&hasta=2026-10-27');
+    render(<MyActivityPanel />);
+    await loaded();
+
+    await userEvent.click(viewButton('Lista'));
+
+    expect(mocks.replace).toHaveBeenCalledWith(
+      '/ejecuciones/mi-actividad?desde=2026-10-01&hasta=2026-10-27&vista=lista',
+      { scroll: false },
+    );
+  });
+
+  test('a filter applied in Lista keeps vista=lista', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    render(<MyActivityPanel />);
+    await loaded();
+
+    await areaOptionTexts(user);
+    await user.click(screen.getByRole('option', { name: /^Ventas/ }));
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      `/ejecuciones/mi-actividad?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27&vista=lista`,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(mocks.push).toHaveBeenLastCalledWith('/ejecuciones/mi-actividad?vista=lista');
+  });
+
+  test('without ?vista=, a filter writes no view', async () => {
+    const user = userEvent.setup();
+    render(<MyActivityPanel />);
+    await loaded();
+
+    await areaOptionTexts(user);
+    await user.click(screen.getByRole('option', { name: /^Ventas/ }));
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      `/ejecuciones/mi-actividad?area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(mocks.push).toHaveBeenLastCalledWith('/ejecuciones/mi-actividad');
+  });
+
+  test('Lista: the header and four columns per row, with the state and the time together', async () => {
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    render(<MyActivityPanel />);
+    await loaded();
+    await within(resume()).findAllByText('Ventas');
+
+    expect(viewButton('Lista')).toHaveAttribute('aria-pressed', 'true');
+    const header = resume().querySelector('[aria-hidden="true"].md\\:grid')!;
+    expect([...header.children].map((cell) => cell.textContent)).toEqual([
+      'Procedimiento',
+      'Área y pasos',
+      'Estado',
+      '',
+    ]);
+    const [cierre] = items();
+    expect(cierre.children).toHaveLength(4);
+    expect(cierre.children[0]).toHaveTextContent('Cierre de cajaPaso 2 de 4: Comparar con el reporte');
+    expect(cierre.children[1]).toHaveTextContent('Áreas: Ventas4 pasos');
+    expect(cierre.children[2]).toHaveTextContent('En cursoÚltimo avance: hace 1 h 55 min');
+    expect(cierre.children[3]).toHaveAccessibleName('Continuar');
+    expect(cierre.children[3]).toHaveAttribute('href', `/ejecuciones/${CURRENT_EXECUTION}`);
+  });
+
+  test('the anchor still works in Lista', async () => {
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(resume()).toHaveAttribute('id', 'para-retomar');
+  });
+
+  test('a procedure the period does not have: no chip, only its steps', async () => {
+    const answer = myMetricsResponse();
+    mocks.getMyMetrics.mockResolvedValue({ ...answer, procedures: [] });
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const meta = items()[0].firstElementChild!;
+    expect(meta.firstElementChild).toHaveTextContent(/^4 pasos$/);
+  });
+
+  test('without executions to resume, no switch', async () => {
+    mocks.getMyMetrics.mockResolvedValue({ ...myMetricsResponse(), resume: [] });
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(within(resume()).queryByRole('group', { name: 'Vista' })).not.toBeInTheDocument();
+  });
+});
+
 describe('recent procedures', () => {
   const table = () => screen.getByRole('table', { name: 'Tus procedimientos recientes' });
   const rowOf = (name: string) =>
@@ -347,9 +543,10 @@ describe('recent procedures', () => {
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
 
-  test('the most recently started first, with its areas', async () => {
+  test('the most recently started first, with its area chips', async () => {
     render(<MyActivityPanel />);
     await loaded();
+    await within(table()).findByText('Ventas');
 
     const names = within(table())
       .getAllByRole('rowheader')
@@ -361,13 +558,14 @@ describe('recent procedures', () => {
     render(<MyActivityPanel />);
     await loaded();
 
+    // The words the card adds on the phone ("completadas", "Tiempo medio"…) are in the DOM too.
     expect(cells('Cierre de caja')).toEqual([
       '4',
-      '3',
-      '0',
-      '10 min',
-      'Paso 2: Comparar con el reporte · 4 min',
-      '27 oct 2026, 09:50',
+      '3 de 4 completadas',
+      'Sin avanzar +24 hSin avanzar hace más de 24 horas0',
+      'Tiempo medio10 min',
+      'Se traba en: Paso 2: Comparar con el reporte4 min',
+      'Última vez: 27 oct 2026, 09:50',
     ]);
   });
 
@@ -377,20 +575,20 @@ describe('recent procedures', () => {
 
     expect(cells('Recepción de mercadería')).toEqual([
       '1',
-      '0',
-      '1',
-      '—',
-      '—',
-      '25 oct 2026, 11:00',
+      '0 de 1 completadas',
+      'Sin avanzar +24 hSin avanzar hace más de 24 horas1',
+      'Tiempo medio—',
+      'Se traba en: —',
+      'Última vez: 25 oct 2026, 11:00',
     ]);
   });
 
-  test('the column says "Sin avanzar hace más de 24 h", never "abandonadas"', async () => {
+  test('the column says "Sin avanzar hace más de 24 horas", never "abandonadas"', async () => {
     render(<MyActivityPanel />);
     await loaded();
 
     expect(
-      within(table()).getByRole('columnheader', { name: 'Sin avanzar hace más de 24 h' }),
+      within(table()).getByRole('columnheader', { name: 'Sin avanzar hace más de 24 horas' }),
     ).toBeInTheDocument();
   });
 
@@ -400,5 +598,229 @@ describe('recent procedures', () => {
 
     await screen.findByText('No empezaste procedimientos en este período.');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('the order and "Para retomar" without filters', () => {
+  test('the weekly nest first, then to resume, the filters, the summary, the procedures and the chart', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const blocks = [
+      await screen.findByRole('region', { name: /Tu nido de esta semana/ }),
+      screen.getByRole('region', { name: 'Para retomar' }),
+      screen.getByRole('form', { name: 'Filtros' }),
+      summary(),
+      screen.getByRole('table', { name: 'Tus procedimientos recientes' }),
+      screen.getByRole('region', { name: 'Actividad diaria' }),
+    ];
+    for (let i = 1; i < blocks.length; i++) {
+      expect(
+        blocks[i - 1].compareDocumentPosition(blocks[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+
+  test('says it shows every execution in progress, whatever the period', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(
+      within(screen.getByRole('region', { name: 'Para retomar' })).getByText(
+        'Todas tus ejecuciones en curso, sin importar el período.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test('without an area, one request serves both', async () => {
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(mocks.getMyMetrics).toHaveBeenCalledTimes(1);
+  });
+
+  test('with an area, "Para retomar" comes from an answer without it', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-10&hasta=2026-10-20`);
+    // Only Ventas: the filtered answer leaves out the execution of Operaciones.
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) =>
+      filters.areaId
+        ? myMetricsResponse({ resume: myMetricsResponse().resume.slice(0, 1) })
+        : myMetricsResponse(),
+    );
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(mocks.getMyMetrics).toHaveBeenCalledWith({}, expect.any(AbortSignal));
+    const resume = screen.getByRole('region', { name: 'Para retomar' });
+    await within(resume).findByRole('heading', { name: 'Recepción de mercadería' });
+    expect(within(resume).getByRole('heading', { name: 'Cierre de caja' })).toBeInTheDocument();
+  });
+
+  test('with an area, "Para retomar" stays even if the area is not theirs', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) => {
+      if (filters.areaId) throw new ApiError(404, ['No se encontró el área']);
+      return myMetricsResponse();
+    });
+    render(<MyActivityPanel />);
+
+    const resume = await screen.findByRole('region', { name: 'Para retomar' });
+    expect(await within(resume).findAllByRole('link', { name: /Continuar/ })).toHaveLength(2);
+  });
+
+  test('with an area, if the executions in progress cannot be read, the section says so', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}`);
+    mocks.getMyMetrics.mockImplementation(async (filters: { areaId?: string | null }) => {
+      if (!filters.areaId) throw new ApiError(503);
+      return myMetricsResponse();
+    });
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const resume = screen.getByRole('region', { name: 'Para retomar' });
+    await user.click(await within(resume).findByRole('button', { name: 'Reintentar' }));
+    expect(
+      mocks.getMyMetrics.mock.calls.filter(([filters]) => !(filters as { areaId?: string }).areaId),
+    ).toHaveLength(2);
+  });
+
+  test('while they arrive, the section is there with its skeleton', () => {
+    mocks.getMyMetrics.mockReturnValue(new Promise(() => {}));
+    render(<MyActivityPanel />);
+
+    expect(
+      within(screen.getByRole('region', { name: 'Para retomar' })).getByText(
+        'Cargando tus ejecuciones en curso…',
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('the weekly nest', () => {
+  test('the current week of the whole person: asked without the area of the filters', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-10&hasta=2026-10-20`);
+    render(<MyActivityPanel />);
+
+    const nest = await screen.findByRole('region', { name: 'Tu nido de esta semana · 26 – 30 OCT' });
+    expect(within(nest).getByText('1 de 5 días con avance')).toBeInTheDocument();
+    expect(mocks.getMyDailyActivity).toHaveBeenCalledWith(null, expect.any(AbortSignal));
+  });
+
+  test('if it fails, the rest of the page is still there', async () => {
+    mocks.getMyDailyActivity.mockRejectedValue(new ApiError(503));
+    render(<MyActivityPanel />);
+    await loaded();
+
+    expect(await screen.findByText(/No se pudo cargar tu nido de esta semana/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Para retomar' })).toBeInTheDocument();
+    expect(summary()).toBeInTheDocument();
+  });
+});
+
+describe('the daily chart', () => {
+  test('asks with the area of the filters, never with their dates', async () => {
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-10&hasta=2026-10-20`);
+    render(<MyActivityPanel />);
+
+    const chart = await screen.findByRole('region', { name: 'Actividad diaria' });
+    await within(chart).findByText('Todavía no completaste ejecuciones en los últimos 21 días.');
+    // The nest without the area, the chart with it; neither with dates.
+    expect(mocks.getMyDailyActivity.mock.calls.map(([areaId]) => areaId).sort()).toEqual([
+      VENTAS,
+      null,
+    ]);
+    expect(within(chart).getByText(/Últimos 21 días \(7 oct – 27 oct\)/)).toBeInTheDocument();
+  });
+
+  test('if it fails, the rest of the page is still there', async () => {
+    mocks.getMyDailyActivity.mockRejectedValue(new ApiError(503));
+    render(<MyActivityPanel />);
+    await loaded();
+
+    const chart = screen.getByRole('region', { name: 'Actividad diaria' });
+    expect(await within(chart).findByRole('alert')).toBeInTheDocument();
+    expect(summary()).toBeInTheDocument();
+  });
+});
+
+describe('the final order of the page', () => {
+  // Every section, top to bottom, as the page shows them.
+  const sections = async () => [
+    await screen.findByRole('region', { name: /Tu nido de esta semana/ }),
+    screen.getByRole('region', { name: 'Para retomar' }),
+    screen.getByRole('form', { name: 'Filtros' }),
+    summary(),
+    screen.getByRole('table', { name: 'Tus procedimientos recientes' }),
+    screen.getByRole('region', { name: 'Actividad diaria' }),
+  ];
+
+  test('nest, to resume, filters, summary, recent procedures and the chart, 26 px apart', async () => {
+    const { container } = render(<MyActivityPanel />);
+    await loaded();
+
+    const blocks = await sections();
+    for (let i = 1; i < blocks.length; i++) {
+      expect(
+        blocks[i - 1].compareDocumentPosition(blocks[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    expect(container.firstElementChild).toHaveClass('flex-col', 'gap-[26px]');
+    expect(container.firstElementChild).not.toHaveClass('gap-10');
+  });
+
+  test('with ?vista=lista and #para-retomar: the list view, and the page goes down to it, past the nest', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    mocks.searchParams = new URLSearchParams('vista=lista');
+    window.history.replaceState(null, '', '/ejecuciones/mi-actividad?vista=lista#para-retomar');
+    try {
+      render(<MyActivityPanel />);
+      await loaded();
+
+      const blocks = await sections();
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
+      expect(scrollIntoView.mock.contexts[0]).toBe(blocks[1]);
+      expect(within(blocks[1]).getByRole('button', { name: 'Ver como Lista' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    } finally {
+      window.history.replaceState(null, '', '/');
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+});
+
+describe('the order of the recent procedures and the filters', () => {
+  test('other filters start the order again; the same ones keep it', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('desde=2026-10-01&hasta=2026-10-27');
+    const { rerender } = render(<MyActivityPanel />);
+    await loaded();
+    const table = () => screen.getByRole('table', { name: 'Tus procedimientos recientes' });
+    const header = () => within(table()).getByRole('columnheader', { name: /^Procedimiento/ });
+    const order = () =>
+      within(table())
+        .getAllByRole('rowheader')
+        .map((row) => row.querySelector('span')!.textContent);
+    const initial = order();
+
+    await user.click(within(header()).getByRole('button'));
+    await user.click(within(header()).getByRole('button'));
+    expect(header()).toHaveAttribute('aria-sort', 'descending');
+    const sorted = order();
+    expect(sorted).not.toEqual(initial);
+
+    // The same filters (another render): the order stays.
+    rerender(<MyActivityPanel />);
+    expect(header()).toHaveAttribute('aria-sort', 'descending');
+    expect(order()).toEqual(sorted);
+
+    // Another area: back to the default order.
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`);
+    rerender(<MyActivityPanel />);
+    await waitFor(() => expect(header()).toHaveAttribute('aria-sort', 'none'));
+    expect(order()).toEqual(initial);
   });
 });

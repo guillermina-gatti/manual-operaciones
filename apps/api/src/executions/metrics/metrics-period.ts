@@ -49,10 +49,20 @@ export function staleBefore(now: Date): Date {
 }
 
 function nextDay(date: string): string {
+  return addDays(date, 1);
+}
+
+// The calendar day `days` after (or before, when negative) a "YYYY-MM-DD" day.
+export function addDays(date: string, days: number): string {
   const [year, month, day] = date.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day) + DAY_MS)
+  return new Date(Date.UTC(year, month - 1, day) + days * DAY_MS)
     .toISOString()
     .slice(0, 10);
+}
+
+// "YYYY-MM-DD" of an instant in the company time zone: "today" is the company's day.
+export function companyDate(instant: Date, timeZone: string): string {
+  return localDate(instant.getTime(), timeZone);
 }
 
 // The first instant of the day in the time zone. Usually midnight; on a day that

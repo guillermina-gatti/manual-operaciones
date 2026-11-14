@@ -8,6 +8,7 @@ import {
   describeMyMetricsError,
 } from '@/lib/api/metrics-errors';
 import { createMyMetricsApi } from '@/lib/api/my-metrics';
+import { myDailyResponse } from '../../support/my-daily';
 import { VENTAS, myMetricsResponse } from '../../support/my-metrics';
 
 describe('getMyMetrics', () => {
@@ -36,6 +37,28 @@ describe('getMyMetrics', () => {
     await createMyMetricsApi({ request }).getMyMetrics({});
 
     expect(request).toHaveBeenCalledWith('/api/metrics/me', { signal: undefined });
+  });
+});
+
+describe('getMyDailyActivity', () => {
+  test('asks for /api/metrics/me/daily with the area and the abort signal, never dates nor a user', async () => {
+    const answer = myDailyResponse();
+    const request = vi.fn().mockResolvedValue(answer);
+    const signal = new AbortController().signal;
+
+    const result = await createMyMetricsApi({ request }).getMyDailyActivity(VENTAS, signal);
+
+    expect(result).toBe(answer);
+    expect(request).toHaveBeenCalledWith(`/api/metrics/me/daily?areaId=${VENTAS}`, { signal });
+    expect(request.mock.calls[0][0]).not.toMatch(/user|from|to=/);
+  });
+
+  test.each([null, undefined, ''])('without an area (%p), the plain path', async (areaId) => {
+    const request = vi.fn().mockResolvedValue(myDailyResponse());
+
+    await createMyMetricsApi({ request }).getMyDailyActivity(areaId);
+
+    expect(request).toHaveBeenCalledWith('/api/metrics/me/daily', { signal: undefined });
   });
 });
 
