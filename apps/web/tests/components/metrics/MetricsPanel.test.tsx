@@ -1405,3 +1405,35 @@ describe('Exportar CSV', () => {
     }
   });
 });
+
+describe('the order of the time table and the filters', () => {
+  test('other filters start the order again; the same ones keep it', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('desde=2026-10-01&hasta=2026-10-27');
+    const { rerender } = render(<MetricsPanel />);
+    await procedureCard();
+    const table = () => screen.getByRole('table', { name: 'Tiempo por procedimiento' });
+    const header = () => within(table()).getByRole('columnheader', { name: /^Procedimiento/ });
+    const order = () =>
+      within(table())
+        .getAllByRole('rowheader')
+        .map((row) => row.querySelector('span')!.textContent);
+    const initial = order();
+
+    await user.click(within(header()).getByRole('button'));
+    await user.click(within(header()).getByRole('button'));
+    expect(header()).toHaveAttribute('aria-sort', 'descending');
+    const sorted = order();
+
+    // The same filters (another render): the order stays.
+    rerender(<MetricsPanel />);
+    expect(header()).toHaveAttribute('aria-sort', 'descending');
+    expect(order()).toEqual(sorted);
+
+    // Other dates: back to the default order.
+    mocks.searchParams = new URLSearchParams('desde=2026-10-05&hasta=2026-10-27');
+    rerender(<MetricsPanel />);
+    await waitFor(() => expect(header()).toHaveAttribute('aria-sort', 'none'));
+    expect(order()).toEqual(initial);
+  });
+});

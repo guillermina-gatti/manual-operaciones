@@ -791,3 +791,36 @@ describe('the final order of the page', () => {
     }
   });
 });
+
+describe('the order of the recent procedures and the filters', () => {
+  test('other filters start the order again; the same ones keep it', async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams('desde=2026-10-01&hasta=2026-10-27');
+    const { rerender } = render(<MyActivityPanel />);
+    await loaded();
+    const table = () => screen.getByRole('table', { name: 'Tus procedimientos recientes' });
+    const header = () => within(table()).getByRole('columnheader', { name: /^Procedimiento/ });
+    const order = () =>
+      within(table())
+        .getAllByRole('rowheader')
+        .map((row) => row.querySelector('span')!.textContent);
+    const initial = order();
+
+    await user.click(within(header()).getByRole('button'));
+    await user.click(within(header()).getByRole('button'));
+    expect(header()).toHaveAttribute('aria-sort', 'descending');
+    const sorted = order();
+    expect(sorted).not.toEqual(initial);
+
+    // The same filters (another render): the order stays.
+    rerender(<MyActivityPanel />);
+    expect(header()).toHaveAttribute('aria-sort', 'descending');
+    expect(order()).toEqual(sorted);
+
+    // Another area: back to the default order.
+    mocks.searchParams = new URLSearchParams(`area=${VENTAS}&desde=2026-10-01&hasta=2026-10-27`);
+    rerender(<MyActivityPanel />);
+    await waitFor(() => expect(header()).toHaveAttribute('aria-sort', 'none'));
+    expect(order()).toEqual(initial);
+  });
+});
