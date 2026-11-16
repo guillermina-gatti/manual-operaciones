@@ -189,7 +189,7 @@ export class ProcessingService {
 
       if (processOptions.isLastAttempt) {
         await this.repository.markFailed(versionId, message, claimToken);
-        return 'failed';
+        throw error;
       }
 
       await this.repository.releaseClaim(versionId, claimToken);

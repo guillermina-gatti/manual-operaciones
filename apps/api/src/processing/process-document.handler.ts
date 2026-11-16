@@ -1,7 +1,7 @@
 /* Manejador del trabajo process-document (plan 5.1, 5.3 y M2-B.3). Decide la respuesta para BullMQ:
    - versión inexistente: reintenta; en el último intento descarta sin error (A3);
    - archivo que no existe o sin texto: FAILED (protegido por claimToken) + UnrecoverableError;
-   - error transitorio: libera el claim y reintenta; en el último intento, FAILED;
+   - error transitorio: libera el claim y reintenta; en el último intento, FAILED + UnrecoverableError;
    - claim perdido: devuelve 'stale' sin reintentar ni marcar FAILED. */
 import { UnrecoverableError } from 'bullmq';
 import { StoredFileNotFoundError } from '../storage/file-storage';
@@ -43,6 +43,7 @@ export class ProcessDocumentHandler {
 
       const message = error instanceof Error ? error.message : String(error);
       if (
+        lastAttempt ||
         error instanceof EmptyDocumentError ||
         error instanceof StoredFileNotFoundError
       ) {

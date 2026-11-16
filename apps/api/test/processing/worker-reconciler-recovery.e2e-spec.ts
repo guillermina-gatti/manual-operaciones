@@ -2,7 +2,7 @@
    Valida BullMQ 6.4.0, Redis 7 (DB 1, prefijo test:e2e:), PostgreSQL 16 (manual_e2e_test),
    ProcessingService, ProcessDocumentHandler, PrismaProcessingRepository y ProcessingReconcilerService. */
 import { randomUUID } from 'node:crypto';
-import { Queue, Worker } from 'bullmq';
+import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import { AREA_IDS } from '../../src/documents/adapters/fixtures';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import {
@@ -167,16 +167,18 @@ describe('Worker–Redis–PostgreSQL Recovery (E2E real)', () => {
     };
 
     const worker = spawnWorker(reader);
-    const exhausted = new Promise<string>((resolve) => {
-      worker.on('completed', (_job, result) => {
-        if (result === 'failed') resolve(result);
+    const exhausted = new Promise<void>((resolve) => {
+      worker.on('failed', (_job, err) => {
+        if (err instanceof UnrecoverableError) resolve();
       });
     });
 
     await bullQueue.enqueue(seeded.versionId);
-    const outcome = await exhausted;
+    await exhausted;
 
-    expect(outcome).toBe('failed');
+    const failedJob = await queue.getJob(seeded.versionId);
+    expect(failedJob).toBeDefined();
+    expect(await failedJob!.getState()).toBe('failed');
     expect(timestamps).toHaveLength(5);
     expect(new Set(tokens).size).toBe(5);
     // Backoff exponencial real: ~2s, ~4s, ~8s, ~16s (creciente)

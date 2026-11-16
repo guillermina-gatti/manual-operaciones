@@ -100,7 +100,7 @@ describe('ProcessDocumentHandler', () => {
     } as unknown as EmbeddingProvider;
     const { repo, handler } = setup({ embeddings });
 
-    await expect(handler.handle(job(4))).resolves.toBe('failed');
+    await expect(handler.handle(job(4))).rejects.toBeInstanceOf(UnrecoverableError);
     expect(repo.failures.get(VERSION_ID)).toBe('cuota agotada');
   });
 
