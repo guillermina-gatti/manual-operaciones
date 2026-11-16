@@ -16,7 +16,37 @@ services:
     networks:
       - internal
 
-  # 2. Backend NestJS: arranca únicamente si el migrador completó exitosamente (código 0).
+  # 2. Redis OSS 7 interno: rate limiting y cola BullMQ (sin puertos expuestos al host).
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    mem_limit: 512m
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        umask 077
+        printf 'requirepass "%s"\n' "$$REDIS_PASSWORD" > /tmp/redis-auth.conf
+        exec redis-server /tmp/redis-auth.conf \
+          --appendonly yes \
+          --appendfsync everysec \
+          --save 300 10 \
+          --maxmemory 256mb \
+          --maxmemory-policy noeviction
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD es obligatoria}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD es obligatoria}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - internal
+
+  # 3. Backend NestJS: arranca únicamente si migrator finalizó y Redis está saludable.
   api:
     build:
       context: .
@@ -26,12 +56,14 @@ services:
     depends_on:
       migrator:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
-      REDIS_URL: ${REDIS_URL}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD es obligatoria}@redis:6379
       REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-}
       S3_BUCKET: ${S3_BUCKET}
       AWS_REGION: ${AWS_REGION}
@@ -115,3 +147,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  redis_data:

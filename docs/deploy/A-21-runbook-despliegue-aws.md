@@ -30,21 +30,23 @@ Navegador (HTTPS 443 / HTTP 80)
   ▼
 AWS EC2 (Docker Compose - red bridge 'internal' 172.28.0.0/16)
   │
-  └─► caddy (172.28.0.10) — TLS Let's Encrypt automático + redirección 80 → 443
-        ├─ /api/* ──► api:3000 (NestJS + BullMQ Worker)
-        └─ /*     ──► web:3001 (Next.js standalone)
+  ├─► caddy (172.28.0.10) — TLS Let's Encrypt automático + redirección 80 → 443
+  │     ├─ /api/* ──► api:3000 (NestJS + BullMQ Worker)
+  │     └─ /*     ──► web:3001 (Next.js standalone)
+  │                     │
+  └─► redis:6379 ◄──────┤  (Redis OSS 7 en contenedor, red 'internal', sin puertos al host)
                         │
-        ┌───────────────┼───────────────┬───────────────┐
-        ▼               ▼               ▼               ▼
-   RDS PostgreSQL   ElastiCache       AWS S3         AWS SES (HU30)
-   16 + pgvector     Redis 7       (IAM Profile)   [BLOQUEADO: H-IMP-02]
+        ┌───────────────┼───────────────┐
+        ▼               ▼               ▼
+   RDS PostgreSQL     AWS S3         AWS SES (HU30)
+   16 + pgvector   (IAM Profile)   [BLOQUEADO: H-IMP-02]
    [H-IMP-01 CA]
 ```
 
 | Componente | Tecnología | Estado en repositorio | Archivo de referencia |
 |---|---|---|---|
 | **Proxy inverso y TLS** | Caddy `2-alpine` (`nip.io` + Let's Encrypt) | `[VERIFICADO]` sintaxis | [`Caddyfile`](../../Caddyfile) |
-| **Orquestación** | Docker Compose (`migrator`, `api`, `web`, `caddy`) | `[VERIFICADO]` sintaxis y TLS estricto (M5.3.2); prueba RDS real `[PENDIENTE]` | [`docker-compose.prod.yml`](../../docker-compose.prod.yml) |
+| **Orquestación** | Docker Compose (`migrator`, `redis`, `api`, `web`, `caddy`) | `[VERIFICADO]` sintaxis y TLS estricto (M5.3.2); prueba RDS real `[PENDIENTE]` | [`docker-compose.prod.yml`](../../docker-compose.prod.yml) |
 | **Frontend** | Next.js `16.4.1` (`output: "standalone"`, puerto `3001`) | `[VERIFICADO]` build y HTTP | [`apps/web/Dockerfile`](../../apps/web/Dockerfile) |
 | **Backend / Worker** | NestJS + BullMQ (puerto `3000`) | `[VERIFICADO]` build y artefactos | [`apps/api/Dockerfile`](../../apps/api/Dockerfile) |
 | **Migrador** | Prisma CLI `7.10.0` (one-off) | `[VERIFICADO]` build y aislamiento | [`apps/migrator/package.json`](../../apps/migrator/package.json) |
@@ -84,16 +86,15 @@ No se asume de antemano que una región sea más económica ni se estiman precio
 
 ## 5. Red, Security Groups y Conectividad Privada `[PENDIENTE]`
 
-Crear (o reutilizar en la región elegida) una **VPC** con subnets públicas (para EC2) y subnets privadas (para RDS y ElastiCache), configurando tres Security Groups diferenciados:
+Crear (o reutilizar en la región elegida) una **VPC** con subnets públicas (para EC2) y subnets privadas en al menos 2 Availability Zones (DB Subnet Group para RDS), configurando dos Security Groups diferenciados (Redis corre dentro de la red privada `internal` de Docker Compose sin puertos expuestos al host):
 
 | Security Group | Recurso | Reglas de Entrada (Inbound) | Reglas de Salida (Outbound) |
 |---|---|---|---|
 | **`SG-EC2`** | Instancia EC2 | `80/tcp` desde `0.0.0.0/0` (HTTP + ACME HTTP-01)<br>`443/tcp` desde `0.0.0.0/0` (HTTPS)<br>`22/tcp` restringido a IPs autorizadas (o EC2 Instance Connect) | `0.0.0.0/0` (necesario para Let's Encrypt, Gemini, SES, apt/docker) |
 | **`SG-RDS`** | RDS PostgreSQL | `5432/tcp` **únicamente** desde origen `SG-EC2` | Por defecto |
-| **`SG-Redis`** | ElastiCache Redis | `6379/tcp` **únicamente** desde origen `SG-EC2` | Por defecto |
 
 > [!CAUTION]
-> **Prohibido** exponer `5432`, `6379`, `3000` o `3001` a `0.0.0.0/0`. Tanto RDS como ElastiCache deben tener acceso público deshabilitado (`Publicly Accessible = No`).
+> **Prohibido** exponer `5432`, `6379`, `3000` o `3001` a `0.0.0.0/0`. RDS debe tener acceso público deshabilitado (`Publicly Accessible = No`) y el servicio `redis` en `docker-compose.prod.yml` no debe declarar sección `ports`.
 
 ---
 
@@ -147,11 +148,14 @@ sha256sum ./certs/rds-global-bundle.pem
 > **H-IMP-01 permanece `[PENDIENTE]` hasta la validación contra RDS real:**
 > La configuración quedó implementada y validada en entorno TLS aislado (`M5.3.1-B` / `M5.3.2`), pero **no debe declararse cerrada ni lista para producción** hasta comprobar la conexión TLS real contra la instancia Amazon RDS provisionada (tanto `migrator` como `api`).
 
-### 6.3. Amazon ElastiCache Redis
-* **Motor:** Redis OSS `7.x` (o Valkey compatible).
-* **Topología obligatoria:** **Cluster Mode Disabled** (nodo único o replication group sin sharding). *Motivo:* BullMQ ejecuta scripts Lua multi-key que fallan en Redis Cluster Mode.
-* **Política de memoria:** `maxmemory-policy = noeviction` (para no perder jobs de BullMQ ni sesiones/rate-limiting por evicción).
-* **Red:** Subred privada (`SG-Redis`). Si se habilita *Encryption in-transit*, usar esquema `rediss://` en `REDIS_URL`.
+### 6.3. Redis OSS 7 en Docker Compose (Arquitectura Intermedia — M2-A)
+* **Imagen y ciclo de vida:** `redis:7.4.12-alpine` (etiqueta de versión fijada), `restart: unless-stopped`, conectado exclusivamente a la red bridge `internal` **sin publicación de puertos al host**.
+* **Topología y política de memoria:** Nodo único (Cluster Mode Disabled nativo, compatible con scripts Lua multi-key de BullMQ y `AuthRateLimiterService`) con `--maxmemory 256mb` y `--maxmemory-policy noeviction` (evita evicción de jobs de BullMQ o contadores de rate limiting).
+* **Límite de contenedor (`mem_limit: 512m`):** `maxmemory` limita únicamente los datos administrados por Redis, **no** el consumo total del proceso (binario, buffers de clientes, fragmentación y *fork* Copy-on-Write durante reescrituras AOF). El techo de `512m` en el contenedor da margen para picos de reescritura sin desplazar a `api` ni `web`.
+* **Persistencia AOF/RDB:** `--appendonly yes`, `--appendfsync everysec` y snapshots RDB `--save 300 10` sobre el volumen nombrado `redis_data:/data`.
+  * *Nota operativa:* `appendfsync everysec` **no elimina** el riesgo de pérdida de escrituras (ante caída abrupta o bloqueo de I/O puede perderse al menos ~1 segundo de escrituras recientes, o quedar el AOF truncado al final requiriendo reparación con `redis-check-aof`). Si se pierde estado en Redis o el volumen `redis_data`, las sesiones siguen intactas en PostgreSQL y los contadores de rate limiting se reinician, pero los documentos que hubieran quedado en `PENDING` requieren el reconciliador planificado para **M2-B**.
+* **Autenticación y healthcheck:** `requirepass` se carga desde `/tmp/redis-auth.conf` (`umask 077`) generado al arrancar a partir de `REDIS_PASSWORD` (generada exclusivamente con `openssl rand -hex 24` en `.env` con `chmod 600`), evitando exponer la contraseña en `Cmd` o argumentos visibles de procesos (`ps`). El healthcheck ejecuta `redis-cli ping` autenticándose mediante `REDISCLI_AUTH` en el entorno del contenedor. `api` declara `depends_on: redis: condition: service_healthy`.
+  * *Nota de seguridad sobre el daemon Docker:* Aunque la contraseña no se expone en `ps` ni `Cmd`, las variables de entorno del contenedor (`REDIS_PASSWORD`, `REDISCLI_AUTH`, `REDIS_URL`, `DATABASE_URL`, `JWT_SECRET`) siguen siendo visibles mediante `docker inspect` para cualquier usuario con acceso al daemon/socket Docker. El acceso al daemon Docker debe considerarse acceso privilegiado a los secretos del despliegue.
 
 ### 6.4. Amazon S3
 * Crear bucket privado en la misma `AWS_REGION` que la EC2 (`Block all public access = ON`, cifrado SSE-S3 activado).
@@ -230,7 +234,8 @@ chmod 600 .env
   * `API_URL=https://<ELASTIC_IP>.nip.io` (obligatoria durante `docker compose build web`). Queda compilada en los manifiestos de `.next/` para el rewrite de Next.js. **Si cambia la IP de la EC2, es obligatorio reconstruir el contenedor `web`.**
   * Ningún secreto debe incluirse en `ARG` de build ni llevar prefijo `NEXT_PUBLIC_`.
 * **Runtime (`api` y `migrator`):**
-  * `DATABASE_URL=postgresql://<USUARIO>:<PASSWORD>@<RDS_ENDPOINT>:5432/<DB_NAME>?sslmode=verify-full&sslaccept=strict` (sin `sslrootcert` ni `sslcert`), `NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem` (`api`), `SSL_CERT_FILE=/etc/ssl/certs/rds-global-bundle.pem` (`migrator`), `JWT_SECRET` ($\ge 32$ caracteres aleatorios generados con `openssl rand -base64 36`), `REDIS_URL`, `S3_BUCKET`, `AWS_REGION`, `HTTP_TRUSTED_PROXIES=172.28.0.10`, `FRONTEND_URL=https://<ELASTIC_IP>.nip.io`, `PUBLIC_DOMAIN=<ELASTIC_IP>.nip.io`.
+  * `DATABASE_URL=postgresql://<USUARIO>:<PASSWORD>@<RDS_ENDPOINT>:5432/<DB_NAME>?sslmode=verify-full&sslaccept=strict` (sin `sslrootcert` ni `sslcert`), `NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem` (`api`), `SSL_CERT_FILE=/etc/ssl/certs/rds-global-bundle.pem` (`migrator`), `JWT_SECRET` ($\ge 32$ caracteres aleatorios generados con `openssl rand -base64 36`), `REDIS_PASSWORD` (generada exclusivamente con `openssl rand -hex 24`), `S3_BUCKET`, `AWS_REGION`, `HTTP_TRUSTED_PROXIES=172.28.0.10`, `FRONTEND_URL=https://<ELASTIC_IP>.nip.io`, `PUBLIC_DOMAIN=<ELASTIC_IP>.nip.io`.
+  * `docker-compose.prod.yml` construye automáticamente `REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379` para `api` usando la red interna Docker.
   * `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` se dejan **vacías** para usar el IAM Instance Profile de la EC2.
   * Consultar la matriz completa de validaciones en [A-21B.7a](./A-21B.7a-auditoria-configuracion-produccion.md).
 
@@ -325,7 +330,11 @@ curl -fsS https://<ELASTIC_IP>.nip.io/api/health/ready
 docker compose -f docker-compose.prod.yml ps
 
 # Logs en tiempo real por servicio
-docker compose -f docker-compose.prod.yml logs -f --tail=100 caddy api web
+docker compose -f docker-compose.prod.yml logs -f --tail=100 caddy api web redis
+
+# Verificar conectividad y salud de Redis desde la red interna (sin exponer secretos)
+docker compose -f docker-compose.prod.yml ps redis
+curl -fsS https://<ELASTIC_IP>.nip.io/api/health/ready
 
 # Inspeccionar logs de migraciones
 docker compose -f docker-compose.prod.yml logs migrator
@@ -336,7 +345,7 @@ docker compose -f docker-compose.prod.yml logs migrator
 * **CA no confiable (`unable to get local issuer certificate` en `migrator` o `unable to verify the first certificate` en `api`):** verificar que `./certs/rds-global-bundle.pem` corresponde al bundle oficial de Amazon RDS, que está montado `:ro` en `/etc/ssl/certs/rds-global-bundle.pem`, y que `SSL_CERT_FILE` (`migrator`) / `NODE_EXTRA_CA_CERTS` (`api`) apuntan a esa ruta. **Nunca desactivar la verificación TLS (`sslmode=disable` o `no-verify`).**
 * **Hostname no coincide con el certificado (`hostname mismatch` en `migrator` o `Hostname/IP does not match certificate's altnames` en `api`):** comprobar que `DATABASE_URL` usa el endpoint DNS oficial de Amazon RDS (`*.rds.amazonaws.com`), y no una IP ni un alias distinto.
 * **Bundle ausente o vacío en el host (`EISDIR`, `Could not read provided CA certificate` o fallo al leer `/etc/ssl/certs/rds-global-bundle.pem`):** si `./certs/rds-global-bundle.pem` es un directorio creado automáticamente por Docker, detener los contenedores (`docker compose -f docker-compose.prod.yml down`), eliminar ese directorio vacío, descargar nuevamente el archivo oficial de AWS (`test -f` y `test -s`) y verificar permisos legibles (`chmod 644`).
-* **Fallo general de conexión desde `migrator` o `api` / HTTP `503` en `/api/health/ready`:** revisar conectividad de red / Security Groups (`SG-EC2` → `SG-RDS` puerto `5432`, `SG-EC2` → `SG-Redis` puerto `6379`) y confirmar que `DATABASE_URL` mantiene `?sslmode=verify-full&sslaccept=strict`.
+* **Fallo general de conexión desde `migrator` o `api` / HTTP `503` en `/api/health/ready`:** revisar conectividad de red / Security Groups (`SG-EC2` → `SG-RDS` puerto `5432`), verificar que el servicio `redis` está `healthy` en `docker compose -f docker-compose.prod.yml ps`, confirmar que `REDIS_PASSWORD` coincide en `.env` y que `DATABASE_URL` mantiene `?sslmode=verify-full&sslaccept=strict`.
 * **Error S3 (`503` al subir/descargar PDF):** verificar que la EC2 tiene asociado el IAM Role y que `HttpPutResponseHopLimit = 2` está configurado en IMDSv2.
 * **Caddy no emite certificado HTTPS:** verificar puertos `80` y `443` abiertos a `0.0.0.0/0` en `SG-EC2` y que `PUBLIC_DOMAIN` coincide con `<ELASTIC_IP>.nip.io`.
 * **HTTP `503` al crear invitación:** esperado mientras permanezca abierto **H-IMP-02** (falta de `INVITATION_EMAIL_FROM`, identidad no verificada en la región SES efectiva, falta de permiso `ses:SendEmail` en IAM, restricción de SES Sandbox o timeout ambiguo de 10s en `client.send()`).
@@ -348,7 +357,7 @@ docker compose -f docker-compose.prod.yml logs migrator
 ### Backups y recuperación de datos
 * **RDS PostgreSQL:** habilitar backups automáticos diarios en RDS y tomar un **snapshot manual previo** antes de cada release con nuevas migraciones.
 * **S3:** activar versionado de objetos en el bucket S3 si se requiere recuperación ante borrados accidentales.
-* **Caddy:** respaldar o preservar el volumen `caddy_data`.
+* **Caddy y Redis:** respaldar o preservar los volúmenes nombrados `caddy_data` y `redis_data` (no ejecutar `docker compose down -v` en producción). Ante reinicio ordenado de EC2 o del contenedor, Redis recarga el estado desde `redis_data:/data`, aunque ante caídas abruptas AOF (`everysec`) puede perder escrituras recientes o requerir verificación del archivo. Si se pierde estado o el volumen `redis_data`, las sesiones siguen en PostgreSQL, los contadores de rate limiting se reinician y los jobs `PENDING` previos requerirán el reconciliador planificado en **M2-B**.
 
 ### Rollback de aplicación (`web` / `api`)
 Si un despliegue sin cambios destructivos de esquema falla:
@@ -376,8 +385,8 @@ Para detener o dar de baja los recursos al finalizar demostraciones y evitar cos
 * [ ] Cotizaciones de `us-east-1` vs `sa-east-1` revisadas en AWS Pricing Calculator y región aprobada.
 * [ ] **Validado H-IMP-01 contra RDS real:** bundle oficial `global-bundle.pem` descargado (`test -f` y `test -s`), montado `:ro` en `migrator` (`SSL_CERT_FILE`) y `api` (`NODE_EXTRA_CA_CERTS`), y conexión TLS `sslmode=verify-full&sslaccept=strict` comprobada en ambos servicios.
 * [ ] **Resuelto H-IMP-02:** Adaptador AWS SES verificado en despliegue real, `INVITATION_EMAIL_FROM` definido, identidad remitente verificada en la región SES efectiva (`AWS_SES_REGION` / fallback `AWS_REGION`), permiso mínimo `ses:SendEmail` en IAM Instance Profile, alcance sandbox/Production Access confirmado y prueba real de envío y recepción completada (o aprobado explícitamente operar sin invitaciones por correo).
-* [ ] Elastic IP asociada, `HttpPutResponseHopLimit = 2` en EC2, `SG-EC2` (`80/443`), `SG-RDS` (`5432`) y `SG-Redis` (`6379`) configurados.
-* [ ] `.env` creado con `chmod 600`, `API_URL=https://<EIP>.nip.io`, `FRONTEND_URL=https://<EIP>.nip.io` y `HTTP_TRUSTED_PROXIES=172.28.0.10`.
+* [ ] Elastic IP asociada, `HttpPutResponseHopLimit = 2` en EC2, `SG-EC2` (`80/443`) y `SG-RDS` (`5432`) configurados (sin `SG-Redis` ni puertos `6379` publicados).
+* [ ] `.env` creado con `chmod 600`, `REDIS_PASSWORD` generada (`openssl rand -hex 24`), `API_URL=https://<EIP>.nip.io`, `FRONTEND_URL=https://<EIP>.nip.io` y `HTTP_TRUSTED_PROXIES=172.28.0.10`.
 * [ ] `migrator` completado con código `0` y los 5 índices críticos preservados.
 * [ ] Primer `ADMIN` creado con `bootstrap-admin.js` vía TTY interactivo.
 * [ ] `/api/health/live` (`200`), `/api/health/ready` (`200`), TLS Let's Encrypt, login real y subida/descarga S3 verificados.
