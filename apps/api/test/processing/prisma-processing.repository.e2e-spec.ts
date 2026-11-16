@@ -110,4 +110,114 @@ describe('PrismaProcessingRepository (e2e)', () => {
     const chunks = await prisma.chunk.findMany({ where: { documentVersionId: seeded.versionId } });
     expect(chunks[0].areaIds).toEqual([AREA_IDS.operaciones]);
   });
+
+  describe('M2-B.2 claims, leases y fencing', () => {
+    it('adquiere el claim sobre PENDING y rechaza un segundo claim mientras el lease está vigente', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+
+      const first = await repo.claimForProcessing(seeded.versionId, 180);
+      const second = await repo.claimForProcessing(seeded.versionId, 180);
+
+      expect(first.acquired).toBe(true);
+      expect(second).toEqual({ acquired: false, reason: 'already_claimed' });
+
+      const row = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(row.processingStatus).toBe('PROCESSING');
+      expect(row.processingStartedAt).not.toBeNull();
+      expect(row.leaseExpiresAt).not.toBeNull();
+      if (first.acquired) {
+        expect(row.claimToken).toBe(first.claimToken);
+      }
+    });
+
+    it('dos claims concurrentes sobre la misma versión: solo uno adquiere el control', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+
+      const [a, b] = await Promise.all([
+        repo.claimForProcessing(seeded.versionId, 180),
+        repo.claimForProcessing(seeded.versionId, 180),
+      ]);
+
+      const acquiredCount = [a, b].filter((r) => r.acquired).length;
+      expect(acquiredCount).toBe(1);
+    });
+
+    it('recupera una versión PROCESSING con lease vencido generando nuevo token y nuevo processingStartedAt', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const first = await repo.claimForProcessing(seeded.versionId, 180);
+      expect(first.acquired).toBe(true);
+      const before = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+
+      // Simular vencimiento del lease en reloj de PostgreSQL
+      await prisma.$executeRaw`
+        UPDATE document_versions
+           SET lease_expires_at = now() - interval '5 seconds'
+         WHERE id = ${seeded.versionId}::uuid`;
+
+      const second = await repo.claimForProcessing(seeded.versionId, 180);
+      expect(second.acquired).toBe(true);
+      if (first.acquired && second.acquired) {
+        expect(second.claimToken).not.toBe(first.claimToken);
+      }
+      const after = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(after.processingStartedAt!.getTime()).toBeGreaterThanOrEqual(before.processingStartedAt!.getTime());
+    });
+
+    it('heartbeat válido renueva el lease; con token incorrecto o lease vencido no modifica el registro', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const claim = await repo.claimForProcessing(seeded.versionId, 60);
+      if (!claim.acquired) throw new Error('Expected claim');
+
+      const before = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(await repo.renewLease(seeded.versionId, '00000000-0000-4000-8000-000000000000', 180)).toBe(false);
+      expect(await repo.renewLease(seeded.versionId, claim.claimToken, 180)).toBe(true);
+
+      const after = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(after.leaseExpiresAt!.getTime()).toBeGreaterThan(before.leaseExpiresAt!.getTime());
+
+      await prisma.$executeRaw`
+        UPDATE document_versions
+           SET lease_expires_at = now() - interval '1 second'
+         WHERE id = ${seeded.versionId}::uuid`;
+      expect(await repo.renewLease(seeded.versionId, claim.claimToken, 180)).toBe(false);
+    });
+
+    it('releaseClaim limpia campos con token válido y no modifica con token incorrecto', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const claim = await repo.claimForProcessing(seeded.versionId, 180);
+      if (!claim.acquired) throw new Error('Expected claim');
+
+      expect(await repo.releaseClaim(seeded.versionId, '00000000-0000-4000-8000-000000000000')).toBe(false);
+      expect(await repo.releaseClaim(seeded.versionId, claim.claimToken)).toBe(true);
+
+      const row = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(row.processingStatus).toBe('PENDING');
+      expect(row.claimToken).toBeNull();
+      expect(row.leaseExpiresAt).toBeNull();
+      expect(row.processingStartedAt).toBeNull();
+    });
+
+    it('fencing: ejecución antigua no puede confirmar commitLocked ni marcar FAILED tras perder el claim', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const oldClaim = await repo.claimForProcessing(seeded.versionId, 180);
+      if (!oldClaim.acquired) throw new Error('Expected claim');
+
+      await prisma.$executeRaw`
+        UPDATE document_versions
+           SET lease_expires_at = now() - interval '5 seconds'
+         WHERE id = ${seeded.versionId}::uuid`;
+
+      const newClaim = await repo.claimForProcessing(seeded.versionId, 180);
+      if (!newClaim.acquired) throw new Error('Expected new claim');
+
+      expect(await repo.commitLocked(seeded.versionId, plan, oldClaim.claimToken)).toBe('stale');
+      expect(await repo.markFailed(seeded.versionId, 'tardío', oldClaim.claimToken)).toBe(false);
+      expect(await repo.commitLocked(seeded.versionId, plan, newClaim.claimToken)).toBe('ready');
+
+      const row = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(row.processingStatus).toBe('READY');
+      expect(row.claimToken).toBeNull();
+      expect(row.leaseExpiresAt).toBeNull();
+    });
+  });
 });

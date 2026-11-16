@@ -17,7 +17,7 @@ export interface ProcessDocumentJob {
   opts: { attempts?: number };
 }
 
-export type HandlerOutcome = 'ready' | 'skipped' | 'discarded' | 'failed';
+export type HandlerOutcome = 'ready' | 'skipped' | 'discarded' | 'failed' | 'stale';
 
 export class ProcessDocumentHandler {
   constructor(

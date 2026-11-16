@@ -1,11 +1,15 @@
 /* Implementaciones falsas de los puertos del worker, para testear el servicio sin base ni red. */
+import { randomUUID } from 'node:crypto';
 import { DocumentBytesReader } from '../ports/document-bytes-reader';
 import { EMBEDDING_DIMENSIONS, EmbeddingProvider } from '../ports/embedding-provider';
 import {
   ChunkRow,
+  ClaimResult,
   CommitOutcome,
   LockedState,
+  PROCESSING_LEASE_TTL_SECONDS,
   ProcessingRepository,
+  ReconciliationCandidate,
   VersionRecord,
 } from '../ports/processing-repository';
 
@@ -33,7 +37,13 @@ export class FakeEmbeddings extends EmbeddingProvider {
   }
 }
 
-type StoredVersion = VersionRecord & { status: 'CURRENT' | 'REPLACED' };
+type StoredVersion = VersionRecord & {
+  status: 'CURRENT' | 'REPLACED';
+  processingStartedAt?: Date | null;
+  leaseExpiresAt?: Date | null;
+  claimToken?: string | null;
+  createdAt?: Date;
+};
 
 // Simula la base: el estado vive en memoria y commitLocked replica las reglas de la transacción.
 export class FakeProcessingRepository extends ProcessingRepository {
@@ -61,22 +71,145 @@ export class FakeProcessingRepository extends ProcessingRepository {
     return snapshot;
   }
 
-  async markFailed(versionId: string, message: string): Promise<void> {
+  async claimForProcessing(
+    versionId: string,
+    leaseTtlSeconds = PROCESSING_LEASE_TTL_SECONDS,
+  ): Promise<ClaimResult> {
     const version = this.versions.get(versionId);
-    if (!version) return;
+    if (!version) return { acquired: false, reason: 'not_found' };
+    if (version.processingStatus === 'READY') return { acquired: false, reason: 'already_ready' };
+    if (version.processingStatus === 'FAILED') return { acquired: false, reason: 'failed' };
+
+    const now = new Date();
+    const expired =
+      version.processingStatus === 'PROCESSING' &&
+      version.leaseExpiresAt != null &&
+      version.leaseExpiresAt.getTime() <= now.getTime();
+
+    if (version.processingStatus === 'PENDING' || expired) {
+      const claimToken = randomUUID();
+      version.processingStatus = 'PROCESSING';
+      version.processingStartedAt = now;
+      version.leaseExpiresAt = new Date(now.getTime() + leaseTtlSeconds * 1000);
+      version.claimToken = claimToken;
+      return { acquired: true, claimToken, version: { ...version } };
+    }
+
+    return { acquired: false, reason: 'already_claimed' };
+  }
+
+  async renewLease(
+    versionId: string,
+    claimToken: string,
+    leaseTtlSeconds = PROCESSING_LEASE_TTL_SECONDS,
+  ): Promise<boolean> {
+    const version = this.versions.get(versionId);
+    if (
+      !version ||
+      version.processingStatus !== 'PROCESSING' ||
+      version.claimToken !== claimToken ||
+      !version.leaseExpiresAt ||
+      version.leaseExpiresAt.getTime() <= Date.now()
+    ) {
+      return false;
+    }
+    version.leaseExpiresAt = new Date(Date.now() + leaseTtlSeconds * 1000);
+    return true;
+  }
+
+  async releaseClaim(versionId: string, claimToken: string): Promise<boolean> {
+    const version = this.versions.get(versionId);
+    if (
+      !version ||
+      version.processingStatus !== 'PROCESSING' ||
+      version.claimToken !== claimToken
+    ) {
+      return false;
+    }
+    version.processingStatus = 'PENDING';
+    version.claimToken = null;
+    version.leaseExpiresAt = null;
+    version.processingStartedAt = null;
+    return true;
+  }
+
+  async isClaimValid(versionId: string, claimToken: string): Promise<boolean> {
+    const version = this.versions.get(versionId);
+    return Boolean(
+      version &&
+        version.processingStatus === 'PROCESSING' &&
+        version.claimToken === claimToken &&
+        version.leaseExpiresAt &&
+        version.leaseExpiresAt.getTime() > Date.now(),
+    );
+  }
+
+  async findPendingOrExpiredForReconciliation(
+    pendingMinAgeSeconds: number,
+    limit = 50,
+  ): Promise<ReconciliationCandidate[]> {
+    const now = Date.now();
+    const minCreatedAt = now - pendingMinAgeSeconds * 1000;
+    const out: ReconciliationCandidate[] = [];
+    for (const v of this.versions.values()) {
+      if (v.processingStatus === 'PENDING') {
+        const created = v.createdAt?.getTime() ?? 0;
+        if (created <= minCreatedAt) {
+          out.push({ id: v.id, processingStatus: 'PENDING' });
+        }
+      } else if (
+        v.processingStatus === 'PROCESSING' &&
+        v.leaseExpiresAt &&
+        v.leaseExpiresAt.getTime() <= now
+      ) {
+        out.push({ id: v.id, processingStatus: 'PROCESSING' });
+      }
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
+
+  async markFailed(
+    versionId: string,
+    message: string,
+    claimToken?: string,
+  ): Promise<boolean> {
+    const version = this.versions.get(versionId);
+    if (!version) return false;
+    if (
+      claimToken !== undefined &&
+      (version.processingStatus !== 'PROCESSING' || version.claimToken !== claimToken)
+    ) {
+      return false;
+    }
     version.processingStatus = 'FAILED';
+    version.claimToken = null;
+    version.leaseExpiresAt = null;
     this.failures.set(versionId, message);
+    return true;
   }
 
   async commitLocked(
     versionId: string,
     plan: (state: LockedState) => ChunkRow[],
+    claimToken?: string,
   ): Promise<CommitOutcome> {
     this.lockHeld = true;
     try {
       this.beforeCommit?.(this);
       const version = this.versions.get(versionId);
       if (!version) return 'discarded'; // sin llamar a plan
+
+      if (claimToken !== undefined) {
+        if (
+          version.processingStatus !== 'PROCESSING' ||
+          version.claimToken !== claimToken ||
+          !version.leaseExpiresAt ||
+          version.leaseExpiresAt.getTime() <= Date.now()
+        ) {
+          return 'stale';
+        }
+      }
 
       const state: LockedState = {
         documentStatus: this.documentStatus,
@@ -86,6 +219,8 @@ export class FakeProcessingRepository extends ProcessingRepository {
       const rows = plan(state);
       this.chunksByVersion.set(versionId, rows); // reemplaza los fragmentos previos de la versión
       version.processingStatus = 'READY';
+      version.claimToken = null;
+      version.leaseExpiresAt = null;
       return 'ready';
     } finally {
       this.lockHeld = false;
