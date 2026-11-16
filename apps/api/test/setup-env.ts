@@ -1,6 +1,6 @@
-/* En cada archivo de test: PrismaService y RedisModule leen la configuración aislada de pruebas */
+/* En cada archivo de test: PrismaService y RedisModule leen la configuración aislada de pruebas E2E */
 
-import { useTestDatabase, useTestRedis } from './test-database';
+import { useE2eDatabase, useTestRedis } from './test-database';
 
-useTestDatabase();
+useE2eDatabase();
 useTestRedis();

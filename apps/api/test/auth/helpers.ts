@@ -24,9 +24,10 @@ import { REDIS_CLIENT } from '../../src/redis/redis.constants';
 import { FileStorage } from '../../src/storage/file-storage';
 import { InMemoryFileStorage } from '../../src/storage/in-memory-file-storage';
 import {
+  assertE2eDatabaseConnected,
   assertTestRedisClientOptions,
   assertTestRedisIsolated,
-  useTestDatabase,
+  useE2eDatabase,
   useTestRedis,
 } from '../test-database';
 
@@ -71,42 +72,7 @@ export function signTestJwt(
 export async function assertTestDatabaseConnected(
   prisma: PrismaService,
 ): Promise<void> {
-  const activeUrl = process.env.DATABASE_URL;
-  if (!activeUrl) {
-    throw new Error(
-      'Operación E2E abortada: DATABASE_URL no está configurada',
-    );
-  }
-
-  const testUrl = process.env.TEST_DATABASE_URL;
-  if (!testUrl || activeUrl !== testUrl) {
-    throw new Error(
-      'Operación E2E abortada: DATABASE_URL no coincide con TEST_DATABASE_URL',
-    );
-  }
-
-  const { hostname, pathname } = new URL(activeUrl);
-  const expectedDatabase = decodeURIComponent(pathname.replace(/^\//, ''));
-  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
-  if (!isLocalHost || !expectedDatabase.endsWith('_test')) {
-    throw new Error(
-      `Operación E2E abortada: DATABASE_URL apunta a "${expectedDatabase}" en "${hostname}" (se requiere base local *_test)`,
-    );
-  }
-
-  const rows = await prisma.$queryRawUnsafe<
-    Array<{ current_database: string }>
-  >('SELECT current_database()');
-  const connectedDatabase = rows[0]?.current_database;
-  if (
-    !connectedDatabase ||
-    !connectedDatabase.endsWith('_test') ||
-    connectedDatabase !== expectedDatabase
-  ) {
-    throw new Error(
-      `Operación E2E abortada: la instancia de Prisma está conectada a "${connectedDatabase ?? 'desconocida'}" (se esperaba "${expectedDatabase}")`,
-    );
-  }
+  await assertE2eDatabaseConnected(prisma, 'Operación E2E abortada');
 }
 
 export interface AuthTestApp {
@@ -126,7 +92,7 @@ export interface AuthTestApp {
 export async function createAuthTestApp(
   extraControllers: Type<unknown>[] = [],
 ): Promise<AuthTestApp> {
-  useTestDatabase();
+  useE2eDatabase();
   useTestRedis();
 
   const storage = new InMemoryFileStorage();
