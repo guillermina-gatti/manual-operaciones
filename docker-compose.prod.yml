@@ -1,0 +1,150 @@
+services:
+  # 1. Job one-off de migraciones: aplica migraciones Prisma y finaliza antes de iniciar la API.
+  migrator:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrator
+    command: ["migrate", "deploy"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      SSL_CERT_FILE: ${SSL_CERT_FILE:-/etc/ssl/certs/rds-global-bundle.pem}
+    volumes:
+      - ./certs/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
+    networks:
+      - internal
+
+  # 2. Redis OSS 7 interno: rate limiting y cola BullMQ (sin puertos expuestos al host).
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    mem_limit: 512m
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        umask 077
+        printf 'requirepass "%s"\n' "$$REDIS_PASSWORD" > /tmp/redis-auth.conf
+        exec redis-server /tmp/redis-auth.conf \
+          --appendonly yes \
+          --appendfsync everysec \
+          --save 300 10 \
+          --maxmemory 256mb \
+          --maxmemory-policy noeviction
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD es obligatoria}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD es obligatoria}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - internal
+
+  # 3. Backend NestJS: arranca únicamente si migrator finalizó y Redis está saludable.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD es obligatoria}@redis:6379
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-}
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_REGION: ${AWS_REGION}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      HTTP_TRUSTED_PROXIES: ${HTTP_TRUSTED_PROXIES:-172.28.0.10}
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      PROCESSING_WORKER_ENABLED: ${PROCESSING_WORKER_ENABLED:-true}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      FRONTEND_URL: ${FRONTEND_URL}
+      INVITATION_EMAIL_PROVIDER: ${INVITATION_EMAIL_PROVIDER:-local}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      INVITATION_EMAIL_FROM: ${INVITATION_EMAIL_FROM:-}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-2.5-flash}
+      NODE_EXTRA_CA_CERTS: ${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/rds-global-bundle.pem}
+    volumes:
+      - ./certs/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get('http://127.0.0.1:3000/api/health/live', (r) => { if (r.statusCode !== 200) process.exit(1); })"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - internal
+
+  # 3. Frontend Next.js standalone: compila con API_URL definitiva HTTPS y sirve en puerto 3001.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: ${API_URL}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+      API_URL: ${API_URL}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get('http://127.0.0.1:3001/login', (r) => { if (r.statusCode !== 200) process.exit(1); })"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - internal
+
+  # 4. Caddy Reverse Proxy: único punto de entrada público (puertos 80 y 443 con TLS automático).
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    networks:
+      internal:
+        ipv4_address: 172.28.0.10
+
+networks:
+  internal:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:

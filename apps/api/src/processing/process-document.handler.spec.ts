@@ -100,7 +100,7 @@ describe('ProcessDocumentHandler', () => {
     } as unknown as EmbeddingProvider;
     const { repo, handler } = setup({ embeddings });
 
-    await expect(handler.handle(job(4))).resolves.toBe('failed');
+    await expect(handler.handle(job(4))).rejects.toBeInstanceOf(UnrecoverableError);
     expect(repo.failures.get(VERSION_ID)).toBe('cuota agotada');
   });
 
@@ -113,6 +113,18 @@ describe('ProcessDocumentHandler', () => {
     const { repo, handler } = setup({ embeddings });
 
     await expect(handler.handle(job(0))).rejects.toThrow('cuota agotada');
+    expect(repo.failures.size).toBe(0);
+    expect(repo.versions.get(VERSION_ID)!.processingStatus).toBe('PENDING');
+    expect(repo.versions.get(VERSION_ID)!.claimToken).toBeNull();
+  });
+
+  it('si el claim se perdió durante el commit, devuelve stale sin marcar FAILED', async () => {
+    const { repo, handler } = setup();
+    repo.beforeCommit = (r) => {
+      r.versions.get(VERSION_ID)!.claimToken = 'otro-token';
+    };
+
+    await expect(handler.handle(job(0))).resolves.toBe('stale');
     expect(repo.failures.size).toBe(0);
   });
 });

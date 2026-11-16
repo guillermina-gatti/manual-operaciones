@@ -2,6 +2,7 @@ import { resolveHttpSecurityPolicy } from '../http-security';
 
 const MIN_JWT_SECRET_LENGTH = 32;
 const DEFAULT_S3_FORCE_PATH_STYLE = 'false';
+const AWS_REGION_FORMAT_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*-\d+$/;
 
 type Environment = Record<string, unknown>;
 
@@ -123,6 +124,7 @@ function validateStorage(
 ): void {
   const bucket = optionalString(environment, 'S3_BUCKET');
   const region = optionalString(environment, 'AWS_REGION');
+  validateAwsRegionFormat('AWS_REGION', region);
   const endpoint = optionalString(environment, 'S3_ENDPOINT');
   const forcePathStyle =
     optionalString(environment, 'S3_FORCE_PATH_STYLE') ??
@@ -163,12 +165,34 @@ function validateInvitationDelivery(
   isProduction: boolean,
 ): void {
   const provider = optionalString(environment, 'INVITATION_EMAIL_PROVIDER');
-  if (provider !== undefined && provider !== 'local' && provider !== 'resend') {
-    invalid('INVITATION_EMAIL_PROVIDER', "sólo admite 'local' o 'resend'");
+  const sesRegionOverride = optionalString(environment, 'AWS_SES_REGION');
+  validateAwsRegionFormat('AWS_SES_REGION', sesRegionOverride);
+  if (
+    provider !== undefined &&
+    provider !== 'local' &&
+    provider !== 'resend' &&
+    provider !== 'ses'
+  ) {
+    invalid(
+      'INVITATION_EMAIL_PROVIDER',
+      "sólo admite 'local', 'resend' o 'ses'",
+    );
   }
-  if (provider !== 'resend') return;
+  if (provider !== 'resend' && provider !== 'ses') return;
 
-  requiredString(environment, 'RESEND_API_KEY');
+  if (provider === 'resend') {
+    requiredString(environment, 'RESEND_API_KEY');
+  } else {
+    const sesRegion =
+      sesRegionOverride ?? optionalString(environment, 'AWS_REGION');
+    if (sesRegion === undefined) {
+      required(
+        'AWS_SES_REGION/AWS_REGION',
+        'cuando INVITATION_EMAIL_PROVIDER es ses',
+      );
+    }
+  }
+
   const from = requiredString(environment, 'INVITATION_EMAIL_FROM');
   if (!validEmailFrom(from)) {
     invalid('INVITATION_EMAIL_FROM', 'no tiene un formato válido');
@@ -286,6 +310,19 @@ function validEmailFrom(value: string): boolean {
   const match = value.match(/^[^<>]+<([^<>]+)>$/);
   const email = (match?.[1] ?? value).trim();
   return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
+}
+
+function validateAwsRegionFormat(
+  name: string,
+  value: string | undefined,
+): void {
+  // Valida únicamente formato sintáctico (no consulta existencia real en AWS).
+  if (value !== undefined && !AWS_REGION_FORMAT_REGEX.test(value)) {
+    invalid(
+      name,
+      'no tiene un formato de región AWS válido (ej. us-east-1 o sa-east-1)',
+    );
+  }
 }
 
 function optionalString(

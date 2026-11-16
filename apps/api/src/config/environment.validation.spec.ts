@@ -169,6 +169,125 @@ describe('validateEnvironment', () => {
     ).not.toThrow();
   });
 
+  it('rechaza un proveedor de correo desconocido', () => {
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({ INVITATION_EMAIL_PROVIDER: 'smtp' }),
+      ),
+    ).toThrow(/INVITATION_EMAIL_PROVIDER/);
+  });
+
+  it('valida AWS SES cuando se habilita explícitamente', () => {
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({ INVITATION_EMAIL_PROVIDER: 'ses' }),
+      ),
+    ).toThrow(/INVITATION_EMAIL_FROM/);
+
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'development',
+        INVITATION_EMAIL_PROVIDER: 'ses',
+        INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+        FRONTEND_URL: 'http://localhost:3001',
+      }),
+    ).toThrow(/AWS_SES_REGION\/AWS_REGION/);
+
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({
+          INVITATION_EMAIL_PROVIDER: 'ses',
+          INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+          FRONTEND_URL: 'http://app.example.com',
+        }),
+      ),
+    ).toThrow(/FRONTEND_URL/);
+
+    // Fallback a AWS_REGION cuando AWS_SES_REGION no está definida
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({
+          INVITATION_EMAIL_PROVIDER: 'ses',
+          INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+          FRONTEND_URL: 'https://app.example.com',
+        }),
+      ),
+    ).not.toThrow();
+
+    // Acepta AWS_SES_REGION explícita sin requerir AWS_REGION cuando no hay S3
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'development',
+        INVITATION_EMAIL_PROVIDER: 'ses',
+        AWS_SES_REGION: 'us-east-1',
+        INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+        FRONTEND_URL: 'http://localhost:3001',
+      }),
+    ).not.toThrow();
+
+    // Acepta sa-east-1 explícita y AWS_SES_REGION vacía con fallback a AWS_REGION
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({
+          INVITATION_EMAIL_PROVIDER: 'ses',
+          AWS_REGION: 'sa-east-1',
+          AWS_SES_REGION: '   ',
+          INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+          FRONTEND_URL: 'https://app.example.com',
+        }),
+      ),
+    ).not.toThrow();
+
+    // Acepta identificador sintácticamente válido con segmentos alfanuméricos
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({
+          INVITATION_EMAIL_PROVIDER: 'ses',
+          AWS_SES_REGION: 'ap2-south-1',
+          INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+          FRONTEND_URL: 'https://app.example.com',
+        }),
+      ),
+    ).not.toThrow();
+
+    // Rechaza AWS_REGION inválida
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({
+          INVITATION_EMAIL_PROVIDER: 'ses',
+          AWS_REGION: 'region-invalida',
+          INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+          FRONTEND_URL: 'https://app.example.com',
+        }),
+      ),
+    ).toThrow(/AWS_REGION.*us-east-1/);
+
+    // Rechaza AWS_SES_REGION inválida
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({
+          INVITATION_EMAIL_PROVIDER: 'ses',
+          AWS_SES_REGION: 'sa-east',
+          INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+          FRONTEND_URL: 'https://app.example.com',
+        }),
+      ),
+    ).toThrow(/AWS_SES_REGION.*us-east-1/);
+
+    // Rechaza cuando ambas regiones son inválidas
+    expect(() =>
+      validateEnvironment(
+        productionEnvironment({
+          INVITATION_EMAIL_PROVIDER: 'ses',
+          AWS_REGION: 'invalida-uno',
+          AWS_SES_REGION: 'invalida-dos',
+          INVITATION_EMAIL_FROM: 'PispIAr <invitaciones@example.com>',
+          FRONTEND_URL: 'https://app.example.com',
+        }),
+      ),
+    ).toThrow(/AWS_REGION|AWS_SES_REGION/);
+  });
+
   it('valida la configuración S3 sin exigir credenciales cuando hay rol', () => {
     expect(() =>
       validateEnvironment(

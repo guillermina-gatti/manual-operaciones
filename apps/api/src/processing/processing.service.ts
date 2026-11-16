@@ -1,14 +1,18 @@
-/* Procesa una versión: lee el archivo, extrae, fragmenta y calcula embeddings FUERA de cualquier
-   lock; después abre la transacción solo para releer el estado, insertar y marcar READY (HU14,
-   sección 5.3 del informe y acuerdos con Matías). */
+/* Procesa una versión bajo claim persistente + heartbeat + fencing (M2-B.3):
+   adquiere claim en PostgreSQL antes de S3/Gemini, renueva el lease periódicamente,
+   propaga AbortSignal y confirma resultados de forma condicional con claimToken. */
 import type { FileKind } from '../documents/file-inspector';
+import { StoredFileNotFoundError } from '../storage/file-storage';
 import { chunkPages } from './chunker';
+import { LeaseHeartbeat } from './processing-heartbeat';
 import { DocumentBytesReader } from './ports/document-bytes-reader';
 import { EMBEDDING_DIMENSIONS, EmbeddingProvider } from './ports/embedding-provider';
 import {
   ChunkRow,
   CommitOutcome,
   LockedState,
+  PROCESSING_HEARTBEAT_INTERVAL_MS,
+  PROCESSING_LEASE_TTL_SECONDS,
   ProcessingRepository,
 } from './ports/processing-repository';
 import { extractText } from './text-extraction';
@@ -29,7 +33,25 @@ export class EmptyDocumentError extends Error {
   }
 }
 
-export type ProcessOutcome = 'skipped' | CommitOutcome;
+// El claim se perdió o el heartbeat falló durante la ejecución.
+export class ClaimLostError extends Error {
+  constructor(versionId: string) {
+    super(`El claim de la versión ${versionId} dejó de ser válido`);
+    this.name = 'ClaimLostError';
+  }
+}
+
+export type ProcessOutcome = 'skipped' | 'failed' | CommitOutcome;
+
+export interface ProcessOptions {
+  isLastAttempt?: boolean;
+}
+
+export interface ProcessingServiceOptions {
+  leaseTtlSeconds?: number;
+  heartbeatIntervalMs?: number;
+  onWarn?: (message: string) => void;
+}
 
 const KIND_BY_MIME: Record<string, FileKind> = {
   'application/pdf': 'pdf',
@@ -67,37 +89,113 @@ export class ProcessingService {
     private readonly repository: ProcessingRepository,
     private readonly reader: DocumentBytesReader,
     private readonly embeddings: EmbeddingProvider,
+    private readonly options: ProcessingServiceOptions = {},
   ) {}
 
-  async process(versionId: string): Promise<ProcessOutcome> {
-    const version = await this.repository.findVersion(versionId);
-    if (!version) throw new VersionNotFoundError(versionId);
-    if (version.processingStatus === 'READY') return 'skipped'; // reintento de un trabajo ya hecho
+  async process(
+    versionId: string,
+    processOptions: ProcessOptions = {},
+  ): Promise<ProcessOutcome> {
+    const leaseTtlSeconds =
+      this.options.leaseTtlSeconds ?? PROCESSING_LEASE_TTL_SECONDS;
+    const heartbeatIntervalMs =
+      this.options.heartbeatIntervalMs ?? PROCESSING_HEARTBEAT_INTERVAL_MS;
 
-    const kind = KIND_BY_MIME[version.mimeType];
-    if (!kind) throw new Error(`Tipo de archivo no soportado: ${version.mimeType}`);
-
-    // 1. Leer y extraer: sin lock.
-    const bytes = await this.reader.read(version.storageKey);
-    const pages = await extractText(bytes, kind);
-    const chunks = chunkPages(pages, { kind });
-    if (chunks.length === 0) throw new EmptyDocumentError(versionId);
-
-    // 2. Embeddings: sin lock, antes de abrir la transacción.
-    const texts = chunks.map((c) => c.content);
-    const vectors = await (this.embeddings.embedDocuments?.(texts) ?? this.embeddings.embedMany(texts));
-    if (vectors.length !== chunks.length) {
-      throw new Error(`Se pidieron ${chunks.length} embeddings y llegaron ${vectors.length}`);
-    }
-    for (const vector of vectors) {
-      if (vector.length !== EMBEDDING_DIMENSIONS) {
-        throw new Error(`Embedding de ${vector.length} dimensiones; se espera ${EMBEDDING_DIMENSIONS}`);
-      }
-    }
-
-    // 3. Transacción corta: releer bajo el lock, insertar y marcar READY.
-    return this.repository.commitLocked(versionId, (state) =>
-      buildChunkRows(state, chunks, vectors),
+    const claim = await this.repository.claimForProcessing(
+      versionId,
+      leaseTtlSeconds,
     );
+
+    if (!claim.acquired) {
+      if (claim.reason === 'not_found') {
+        throw new VersionNotFoundError(versionId);
+      }
+      // already_ready, failed o already_claimed: no competir ni alterar estado ajeno.
+      return 'skipped';
+    }
+
+    const { claimToken, version } = claim;
+    const heartbeat = new LeaseHeartbeat(
+      this.repository,
+      versionId,
+      claimToken,
+      {
+        intervalMs: heartbeatIntervalMs,
+        leaseTtlSeconds,
+        onWarn: this.options.onWarn,
+      },
+    );
+
+    const assertClaimActive = () => {
+      if (heartbeat.signal.aborted) {
+        throw new ClaimLostError(versionId);
+      }
+    };
+
+    heartbeat.start();
+    try {
+      const kind = KIND_BY_MIME[version.mimeType];
+      if (!kind) throw new Error(`Tipo de archivo no soportado: ${version.mimeType}`);
+
+      assertClaimActive();
+      // 1. Leer (sin AbortSignal en DocumentBytesReader/S3; protegido por fencing final).
+      const bytes = await this.reader.read(version.storageKey);
+
+      assertClaimActive();
+      const pages = await extractText(bytes, kind);
+      const chunks = chunkPages(pages, { kind });
+      if (chunks.length === 0) throw new EmptyDocumentError(versionId);
+
+      assertClaimActive();
+      // 2. Embeddings con propagación real de AbortSignal hacia AI SDK.
+      const texts = chunks.map((c) => c.content);
+      const vectors = await (this.embeddings.embedDocuments?.(texts, {
+        abortSignal: heartbeat.signal,
+      }) ?? this.embeddings.embedMany(texts, { abortSignal: heartbeat.signal }));
+
+      assertClaimActive();
+      if (vectors.length !== chunks.length) {
+        throw new Error(`Se pidieron ${chunks.length} embeddings y llegaron ${vectors.length}`);
+      }
+      for (const vector of vectors) {
+        if (vector.length !== EMBEDDING_DIMENSIONS) {
+          throw new Error(`Embedding de ${vector.length} dimensiones; se espera ${EMBEDDING_DIMENSIONS}`);
+        }
+      }
+
+      assertClaimActive();
+      // 3. Transacción corta con FOR UPDATE + fencing obligatorio por claimToken.
+      return await this.repository.commitLocked(
+        versionId,
+        (state) => buildChunkRows(state, chunks, vectors),
+        claimToken,
+      );
+    } catch (error) {
+      await heartbeat.stop();
+
+      if (error instanceof ClaimLostError || heartbeat.signal.aborted) {
+        return 'stale';
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      const permanent =
+        error instanceof EmptyDocumentError ||
+        error instanceof StoredFileNotFoundError;
+
+      if (permanent) {
+        await this.repository.markFailed(versionId, message, claimToken);
+        throw error;
+      }
+
+      if (processOptions.isLastAttempt) {
+        await this.repository.markFailed(versionId, message, claimToken);
+        throw error;
+      }
+
+      await this.repository.releaseClaim(versionId, claimToken);
+      throw error;
+    } finally {
+      await heartbeat.stop();
+    }
   }
 }

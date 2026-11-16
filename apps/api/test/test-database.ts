@@ -2,12 +2,15 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { ConnectionOptions } from 'bullmq';
 import { config, parse } from 'dotenv';
 import type Redis from 'ioredis';
+import { redisConnectionFromUrl } from '../src/processing/redis-connection';
 
 const envFile = resolve(__dirname, '../.env');
 
 export const TEST_REDIS_KEY_PREFIX = 'test:e2e:';
+export const E2E_DATABASE_NAME = 'manual_e2e_test';
 
 const LOCAL_REDIS_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 const DEFAULT_DEV_REDIS_URL = 'redis://localhost:6379';
@@ -62,6 +65,32 @@ export function assertLocalTestDatabase(url: string, action: string): void {
     throw new Error(
       `No se corre ${action} contra "${database}" en "${hostname}": ` +
         'la base de tests tiene que estar en localhost y su nombre terminar en _test',
+    );
+  }
+}
+
+// Control estricto para pruebas E2E: exige host local, sufijo _test y nombre exacto manual_e2e_test.
+export function assertLocalE2eDatabase(url: string, action: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(
+      `No se corre ${action}: E2E_DATABASE_URL no tiene un formato de URL válido`,
+    );
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const database = databaseName(url);
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+  if (
+    !isLocalHost ||
+    !database.endsWith('_test') ||
+    database !== E2E_DATABASE_NAME
+  ) {
+    throw new Error(
+      `No se corre ${action} contra "${database || 'desconocida'}" en "${hostname || 'desconocido'}": ` +
+        `las pruebas E2E requieren host local y exactamente la base "${E2E_DATABASE_NAME}"`,
     );
   }
 }
@@ -208,6 +237,67 @@ export function useTestDatabase(): string {
   return testUrl;
 }
 
+// Devuelve E2E_DATABASE_URL y la asigna a DATABASE_URL para las suites E2E.
+// No tiene fallback a TEST_DATABASE_URL ni a DATABASE_URL y exige exactamente manual_e2e_test.
+export function useE2eDatabase(): string {
+  loadEnvPreservingInitialRedisUrl();
+
+  const e2eUrl = process.env.E2E_DATABASE_URL?.trim();
+  if (!e2eUrl) {
+    throw new Error(
+      'Falta E2E_DATABASE_URL: las pruebas E2E requieren una base exclusiva (manual_e2e_test) y no usan DATABASE_URL ni TEST_DATABASE_URL',
+    );
+  }
+
+  assertLocalE2eDatabase(e2eUrl, 'las pruebas E2E');
+
+  const fileVars = existsSync(envFile) ? parse(readFileSync(envFile)) : {};
+  if (fileVars.DATABASE_URL && fileVars.DATABASE_URL === e2eUrl) {
+    throw new Error('E2E_DATABASE_URL es igual a DATABASE_URL de desarrollo');
+  }
+  if (fileVars.TEST_DATABASE_URL && fileVars.TEST_DATABASE_URL === e2eUrl) {
+    throw new Error('E2E_DATABASE_URL es igual a TEST_DATABASE_URL');
+  }
+
+  process.env.DATABASE_URL = e2eUrl;
+  return e2eUrl;
+}
+
+// Verifica en tiempo de ejecución que Prisma esté conectado exclusivamente a manual_e2e_test
+// mediante E2E_DATABASE_URL antes de ejecutar operaciones E2E.
+export async function assertE2eDatabaseConnected(
+  prisma: {
+    $queryRawUnsafe: <T = unknown>(query: string) => Promise<T>;
+  },
+  label = 'Operación E2E abortada',
+): Promise<void> {
+  const activeUrl = process.env.DATABASE_URL?.trim();
+  if (!activeUrl) {
+    throw new Error(`${label}: DATABASE_URL no está configurada`);
+  }
+
+  const e2eUrl = process.env.E2E_DATABASE_URL?.trim();
+  if (!e2eUrl || activeUrl !== e2eUrl) {
+    throw new Error(`${label}: DATABASE_URL no coincide con E2E_DATABASE_URL`);
+  }
+
+  assertLocalE2eDatabase(activeUrl, label);
+
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ current_database: string }>
+  >('SELECT current_database()');
+  const connectedDatabase = rows[0]?.current_database;
+  if (
+    !connectedDatabase ||
+    !connectedDatabase.endsWith('_test') ||
+    connectedDatabase !== E2E_DATABASE_NAME
+  ) {
+    throw new Error(
+      `${label}: la instancia de Prisma está conectada a "${connectedDatabase ?? 'desconocida'}" (se esperaba "${E2E_DATABASE_NAME}")`,
+    );
+  }
+}
+
 // Valida TEST_REDIS_URL asegurando aislamiento respecto de REDIS_URL de desarrollo y
 // rechaza localhost:6379 (DB 0). Asigna REDIS_URL y REDIS_KEY_PREFIX='test:e2e:'.
 export function useTestRedis(): string {
@@ -287,6 +377,21 @@ export function useTestRedis(): string {
   process.env.REDIS_URL = testUrl;
   process.env.REDIS_KEY_PREFIX = TEST_REDIS_KEY_PREFIX;
   return testUrl;
+}
+
+// Devuelve la configuración de conexión BullMQ validada mediante useTestRedis().
+// Garantiza que las suites E2E no usen localhost:6379 (DB 0) ni fallbacks independientes.
+export function getTestBullMqConnection(): {
+  url: string;
+  keyPrefix: string;
+  connection: ConnectionOptions;
+} {
+  const url = useTestRedis();
+  return {
+    url,
+    keyPrefix: TEST_REDIS_KEY_PREFIX,
+    connection: redisConnectionFromUrl(url),
+  };
 }
 
 export function assertTestRedisClientOptions(

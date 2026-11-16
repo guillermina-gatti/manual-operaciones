@@ -1,7 +1,8 @@
-/* Manejador del trabajo process-document (plan 5.1 y 5.3). Decide qué hacer con cada error:
+/* Manejador del trabajo process-document (plan 5.1, 5.3 y M2-B.3). Decide la respuesta para BullMQ:
    - versión inexistente: reintenta; en el último intento descarta sin error (A3);
-   - archivo que no existe o sin texto: no tiene sentido reintentar: FAILED y trabajo fallido;
-   - error transitorio (almacenamiento, IA, base): reintenta; en el último intento, FAILED. */
+   - archivo que no existe o sin texto: FAILED (protegido por claimToken) + UnrecoverableError;
+   - error transitorio: libera el claim y reintenta; en el último intento, FAILED + UnrecoverableError;
+   - claim perdido: devuelve 'stale' sin reintentar ni marcar FAILED. */
 import { UnrecoverableError } from 'bullmq';
 import { StoredFileNotFoundError } from '../storage/file-storage';
 import { EmptyDocumentError, ProcessingService, VersionNotFoundError } from './processing.service';
@@ -17,12 +18,13 @@ export interface ProcessDocumentJob {
   opts: { attempts?: number };
 }
 
-export type HandlerOutcome = 'ready' | 'skipped' | 'discarded' | 'failed';
+export type HandlerOutcome = 'ready' | 'skipped' | 'discarded' | 'failed' | 'stale';
 
 export class ProcessDocumentHandler {
   constructor(
     private readonly service: ProcessingService,
-    private readonly repository: ProcessingRepository,
+    // Conservado en la firma del constructor por compatibilidad de inyección en módulo y tests.
+    private readonly _repository: ProcessingRepository,
   ) {}
 
   async handle(job: ProcessDocumentJob): Promise<HandlerOutcome> {
@@ -30,7 +32,9 @@ export class ProcessDocumentHandler {
     const lastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
     try {
-      return await this.service.process(documentVersionId);
+      return await this.service.process(documentVersionId, {
+        isLastAttempt: lastAttempt,
+      });
     } catch (error) {
       if (error instanceof VersionNotFoundError) {
         if (lastAttempt) return 'discarded'; // la versión nunca apareció: se descarta sin error
@@ -38,16 +42,12 @@ export class ProcessDocumentHandler {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      const permanent =
-        error instanceof EmptyDocumentError || error instanceof StoredFileNotFoundError;
-
-      if (permanent) {
-        await this.repository.markFailed(documentVersionId, message);
+      if (
+        lastAttempt ||
+        error instanceof EmptyDocumentError ||
+        error instanceof StoredFileNotFoundError
+      ) {
         throw new UnrecoverableError(message);
-      }
-      if (lastAttempt) {
-        await this.repository.markFailed(documentVersionId, message);
-        return 'failed';
       }
       throw error;
     }

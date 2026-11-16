@@ -30,6 +30,7 @@ import {
 import { FileStorage } from '../../src/storage/file-storage';
 import { InMemoryFileStorage } from '../../src/storage/in-memory-file-storage';
 import { seedDirectoryFixtures } from '../directory-fixtures';
+import { assertE2eDatabaseConnected } from '../test-database';
 
 export const TEST_FIXTURE_PASSWORD = 'TestOnly-FixturePass!2026';
 
@@ -50,42 +51,7 @@ function resolveTestJwtSecret(): string {
 async function assertTestDatabaseConnected(
   prisma: PrismaService,
 ): Promise<void> {
-  const activeUrl = process.env.DATABASE_URL;
-  if (!activeUrl) {
-    throw new Error(
-      'Operación de fixtures abortada: DATABASE_URL no está configurada',
-    );
-  }
-
-  const testUrl = process.env.TEST_DATABASE_URL;
-  if (!testUrl || activeUrl !== testUrl) {
-    throw new Error(
-      'Operación de fixtures abortada: DATABASE_URL no coincide con TEST_DATABASE_URL',
-    );
-  }
-
-  const { hostname, pathname } = new URL(activeUrl);
-  const expectedDatabase = decodeURIComponent(pathname.replace(/^\//, ''));
-  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
-  if (!isLocalHost || !expectedDatabase.endsWith('_test')) {
-    throw new Error(
-      `Operación de fixtures abortada: DATABASE_URL apunta a "${expectedDatabase}" en "${hostname}" (se requiere base local *_test)`,
-    );
-  }
-
-  const rows = await prisma.$queryRawUnsafe<
-    Array<{ current_database: string }>
-  >('SELECT current_database()');
-  const connectedDatabase = rows[0]?.current_database;
-  if (
-    !connectedDatabase ||
-    !connectedDatabase.endsWith('_test') ||
-    connectedDatabase !== expectedDatabase
-  ) {
-    throw new Error(
-      `Operación de fixtures abortada: la instancia de Prisma está conectada a "${connectedDatabase ?? 'desconocida'}" (se esperaba "${expectedDatabase}")`,
-    );
-  }
+  await assertE2eDatabaseConnected(prisma, 'Operación de fixtures abortada');
 }
 
 export function getTestFixturePasswordHash(): Promise<string> {

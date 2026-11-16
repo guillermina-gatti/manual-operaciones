@@ -4,7 +4,11 @@
    Los fragmentos y las preguntas se embeben con tipos de tarea distintos (RETRIEVAL_DOCUMENT y
    RETRIEVAL_QUERY), que es como Gemini está pensado para buscar. */
 import { embedMany, type EmbeddingModel } from 'ai';
-import { EMBEDDING_DIMENSIONS, EmbeddingProvider } from '../ports/embedding-provider';
+import {
+  EMBEDDING_DIMENSIONS,
+  EmbeddingCallOptions,
+  EmbeddingProvider,
+} from '../ports/embedding-provider';
 
 export const EMBEDDING_MODEL_ID = 'gemini-embedding-001';
 
@@ -16,12 +20,12 @@ export class GeminiEmbeddingProvider extends EmbeddingProvider {
   }
 
   // Sin tipo de tarea: se mantiene por compatibilidad con quien lo llame directamente.
-  async embedMany(texts: string[]): Promise<number[][]> {
-    return this.embed(texts);
+  async embedMany(texts: string[], options?: EmbeddingCallOptions): Promise<number[][]> {
+    return this.embed(texts, undefined, options);
   }
 
-  embedDocuments(texts: string[]): Promise<number[][]> {
-    return this.embed(texts, 'RETRIEVAL_DOCUMENT');
+  embedDocuments(texts: string[], options?: EmbeddingCallOptions): Promise<number[][]> {
+    return this.embed(texts, 'RETRIEVAL_DOCUMENT', options);
   }
 
   async embedQuery(text: string): Promise<number[]> {
@@ -29,12 +33,17 @@ export class GeminiEmbeddingProvider extends EmbeddingProvider {
     return vector;
   }
 
-  private async embed(texts: string[], taskType?: EmbeddingTaskType): Promise<number[][]> {
+  private async embed(
+    texts: string[],
+    taskType?: EmbeddingTaskType,
+    options?: EmbeddingCallOptions,
+  ): Promise<number[][]> {
     if (texts.length === 0) return [];
     const { embeddings } = await embedMany({
       model: this.model,
       values: texts,
       dimensions: EMBEDDING_DIMENSIONS,
+      ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
       // Explícito para el proveedor de Google, además de dimensions.
       providerOptions: {
         google: {

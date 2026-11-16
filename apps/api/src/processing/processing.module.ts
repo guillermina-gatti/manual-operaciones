@@ -2,7 +2,7 @@
    de process-document, worker en el mismo proceso, Gemini para embeddings y repositorio Prisma.
    Exporta ProcessingQueue: DocumentsModule la usa para encolar al subir una versión. */
 import { google } from '@ai-sdk/google';
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ConnectionOptions } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +20,7 @@ import { DocumentBytesReader } from './ports/document-bytes-reader';
 import { EmbeddingProvider } from './ports/embedding-provider';
 import { ProcessingRepository } from './ports/processing-repository';
 import { ProcessDocumentHandler } from './process-document.handler';
+import { ProcessingReconcilerService } from './processing-reconciler.service';
 import {
   PROCESSING_CONNECTION,
   ProcessingQueueClient,
@@ -70,8 +71,12 @@ import { DEFAULT_REDIS_URL, redisConnectionFromUrl } from './redis-connection';
         repository: ProcessingRepository,
         reader: DocumentBytesReader,
         embeddings: EmbeddingProvider,
-      ): ProcessingService =>
-        new ProcessingService(repository, reader, embeddings),
+      ): ProcessingService => {
+        const logger = new Logger(ProcessingService.name);
+        return new ProcessingService(repository, reader, embeddings, {
+          onWarn: (message) => logger.warn(message),
+        });
+      },
     },
     {
       provide: ProcessDocumentHandler,
@@ -81,6 +86,32 @@ import { DEFAULT_REDIS_URL, redisConnectionFromUrl } from './redis-connection';
         repository: ProcessingRepository,
       ): ProcessDocumentHandler =>
         new ProcessDocumentHandler(service, repository),
+    },
+    {
+      provide: ProcessingReconcilerService,
+      inject: [
+        ProcessingRepository,
+        ProcessingQueue,
+        ProcessingQueueClient,
+        ConfigService,
+      ],
+      useFactory: (
+        repository: ProcessingRepository,
+        processingQueue: ProcessingQueue,
+        queueClient: ProcessingQueueClient,
+        config: ConfigService,
+      ): ProcessingReconcilerService => {
+        const logger = new Logger(ProcessingReconcilerService.name);
+        return new ProcessingReconcilerService(
+          repository,
+          processingQueue,
+          queueClient.queue,
+          {
+            enabled: config.get<string>('PROCESSING_WORKER_ENABLED') !== 'false',
+            logger,
+          },
+        );
+      },
     },
     ProcessingWorker,
   ],

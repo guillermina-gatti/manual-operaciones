@@ -6,6 +6,7 @@ const apiUrl = resolveApiUrl(process.env);
 
 const nextConfig: NextConfig = {
   /* Opciones de configuración generales */
+  output: "standalone",
   cacheComponents: true, // Activa la caché de componentes para mayor velocidad
 
   experimental: {

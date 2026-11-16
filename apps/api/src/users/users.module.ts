@@ -6,6 +6,7 @@ import {
   UnavailableInvitationDeliveryService,
 } from './invitation-delivery.service';
 import { ResendInvitationDeliveryService } from './resend-invitation-delivery.service';
+import { SesInvitationDeliveryService } from './ses-invitation-delivery.service';
 import { InvitationsService } from './invitations.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -22,11 +23,13 @@ export const invitationDeliveryProvider: FactoryProvider<InvitationDeliveryServi
       ConfigService,
       LocalInvitationDeliveryService,
       ResendInvitationDeliveryService,
+      SesInvitationDeliveryService,
     ],
     useFactory: (
       configService: ConfigService,
       localDelivery: LocalInvitationDeliveryService,
       resendDelivery: ResendInvitationDeliveryService,
+      sesDelivery: SesInvitationDeliveryService,
     ): InvitationDeliveryService => {
       const environment = configService.get<string>('NODE_ENV');
 
@@ -42,9 +45,13 @@ export const invitationDeliveryProvider: FactoryProvider<InvitationDeliveryServi
         return localDelivery;
       }
 
-      // Los demás entornos requieren Resend explícitamente.
+      // Los demás entornos requieren un proveedor transaccional explícito.
       if (!isLocalEnvironment && provider === 'resend') {
         return resendDelivery;
+      }
+
+      if (!isLocalEnvironment && provider === 'ses') {
+        return sesDelivery;
       }
 
       // Configuración incompatible: no crear invitaciones.
@@ -59,6 +66,7 @@ export const invitationDeliveryProvider: FactoryProvider<InvitationDeliveryServi
     InvitationsService,
     LocalInvitationDeliveryService,
     ResendInvitationDeliveryService,
+    SesInvitationDeliveryService,
     invitationDeliveryProvider,
   ],
   exports: [UsersService, InvitationsService, InvitationDeliveryService],
