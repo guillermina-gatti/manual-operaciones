@@ -38,6 +38,7 @@ describe('Invitaciones con proveedor AWS SES simulado - HU30 (E2E)', () => {
   let rateLimiter: AuthRateLimiterService;
   let sandbox: AuthTestSandbox;
   let adminAccessToken: string;
+  let areaId: string;
 
   const trackedInvitationEmails = new Set<string>();
 
@@ -102,6 +103,11 @@ describe('Invitaciones con proveedor AWS SES simulado - HU30 (E2E)', () => {
       name: 'Admin SES E2E',
       role: 'ADMIN',
     });
+    const area = await sandbox.createArea({
+      name: 'Operaciones SES E2E',
+      isActive: true,
+    });
+    areaId = area.id;
 
     const loginRes = await request(app.getHttpServer())
       .post('/api/auth/login')
@@ -154,6 +160,7 @@ describe('Invitaciones con proveedor AWS SES simulado - HU30 (E2E)', () => {
       .send({
         email: targetEmail,
         role: 'EMPLOYEE',
+        areaIds: [areaId],
       })
       .expect(201);
 
@@ -183,6 +190,7 @@ describe('Invitaciones con proveedor AWS SES simulado - HU30 (E2E)', () => {
       .send({
         email: targetEmail,
         role: 'EMPLOYEE',
+        areaIds: [areaId],
       })
       .expect(503);
 
@@ -205,6 +213,7 @@ describe('Invitaciones con proveedor AWS SES simulado - HU30 (E2E)', () => {
       .send({
         email: targetEmail,
         role: 'EMPLOYEE',
+        areaIds: [areaId],
       })
       .expect(503);
 
