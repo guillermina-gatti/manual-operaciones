@@ -1,0 +1,36 @@
+# PispIAr — Caddyfile de producción
+# {$PUBLIC_DOMAIN} se resuelve desde la variable de entorno (ejemplo: 54.123.45.67.nip.io).
+# Caddy gestiona automáticamente la obtención y renovación del certificado TLS mediante Let's Encrypt.
+
+{$PUBLIC_DOMAIN} {
+	# Registro de accesos en stdout para observabilidad en Docker
+	log {
+		output stdout
+		format json
+	}
+
+	# Cabeceras defensivas de seguridad en el edge
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Límite del cuerpo de la petición (11 MB para admitir documentos PDF de hasta 10 MB)
+	request_body {
+		max_size 11MB
+	}
+
+	# 1. Enrutamiento directo de la API a NestJS (puerto 3000)
+	# Evita el rewrite en memoria de Next.js y previene bucles de redirección con un mismo hostname
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	# 2. Enrutamiento de la Web a Next.js standalone (puerto 3001)
+	handle {
+		reverse_proxy web:3001
+	}
+}
