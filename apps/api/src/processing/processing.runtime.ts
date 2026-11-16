@@ -7,15 +7,21 @@ import { Queue, Worker } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
 import { PROCESSING_QUEUE_NAME, ProcessDocumentJobData } from './adapters/bullmq-processing-queue';
 import { ProcessDocumentHandler } from './process-document.handler';
+import {
+  attachQueueListeners,
+  attachWorkerListeners,
+} from './processing-runtime-listeners';
 
 export const PROCESSING_CONNECTION = 'PROCESSING_CONNECTION';
 
 @Injectable()
 export class ProcessingQueueClient implements OnModuleDestroy {
+  private readonly logger = new Logger(ProcessingQueueClient.name);
   readonly queue: Queue<ProcessDocumentJobData>;
 
   constructor(@Inject(PROCESSING_CONNECTION) connection: ConnectionOptions) {
     this.queue = new Queue<ProcessDocumentJobData>(PROCESSING_QUEUE_NAME, { connection });
+    attachQueueListeners(this.queue, this.logger);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -40,11 +46,7 @@ export class ProcessingWorker implements OnModuleDestroy {
       (job) => handler.handle(job),
       { connection, concurrency: 1 },
     );
-    this.worker.on('failed', (job, error) => {
-      this.logger.warn(
-        `process-document falló para la versión ${job?.data.documentVersionId ?? 'desconocida'}: ${error.message}`,
-      );
-    });
+    attachWorkerListeners(this.worker, this.logger);
   }
 
   async onModuleDestroy(): Promise<void> {
