@@ -78,20 +78,23 @@ model DocumentArea {
 
 // HU13 · HU16 — dueño: Matías (el worker de Guille actualiza el procesamiento)
 model DocumentVersion {
-  id               String                @id @default(uuid()) @db.Uuid
-  documentId       String                @map("document_id") @db.Uuid
-  versionNumber    Int                   @map("version_number")
-  status           DocumentVersionStatus @default(CURRENT)
-  storageKey       String                @unique @map("storage_key") // documents/{documentId}/{versionId}.{pdf|txt|md}
-  originalFileName String                @map("original_file_name") @db.VarChar(255)
-  mimeType         String                @map("mime_type") @db.VarChar(100) // tipo detectado, no el del navegador
-  sizeBytes        Int                   @map("size_bytes")
-  checksum         String                @db.Char(64) // SHA-256 en hexadecimal, minúsculas
-  processingStatus ProcessingStatus      @default(PENDING) @map("processing_status")
-  processingError  String?               @map("processing_error")
-  processedAt      DateTime?             @map("processed_at") @db.Timestamptz(3)
-  uploadedById     String                @map("uploaded_by_id") @db.Uuid
-  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                  String                @id @default(uuid()) @db.Uuid
+  documentId          String                @map("document_id") @db.Uuid
+  versionNumber       Int                   @map("version_number")
+  status              DocumentVersionStatus @default(CURRENT)
+  storageKey          String                @unique @map("storage_key") // documents/{documentId}/{versionId}.{pdf|txt|md}
+  originalFileName    String                @map("original_file_name") @db.VarChar(255)
+  mimeType            String                @map("mime_type") @db.VarChar(100) // tipo detectado, no el del navegador
+  sizeBytes           Int                   @map("size_bytes")
+  checksum            String                @db.Char(64) // SHA-256 en hexadecimal, minúsculas
+  processingStatus    ProcessingStatus      @default(PENDING) @map("processing_status")
+  processingStartedAt DateTime?             @map("processing_started_at") @db.Timestamptz(3)
+  leaseExpiresAt      DateTime?             @map("lease_expires_at") @db.Timestamptz(3)
+  claimToken          String?               @map("claim_token") @db.Uuid
+  processingError     String?               @map("processing_error")
+  processedAt         DateTime?             @map("processed_at") @db.Timestamptz(3)
+  uploadedById        String                @map("uploaded_by_id") @db.Uuid
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   chunks   Chunk[]
@@ -105,6 +108,7 @@ model DocumentVersion {
   // y no a mano en el SQL, para que Prisma no lo borre en la próxima migración (plan 003, D1 y D2).
   @@unique([documentId], map: "document_versions_one_current_idx", where: { status: "CURRENT" })
   @@index([processingStatus])
+  @@index([processingStatus, leaseExpiresAt])
   @@index([checksum]) // duplicados (R8b)
   @@map("document_versions")
 }
