@@ -235,5 +235,27 @@ describe('PrismaProcessingRepository (e2e)', () => {
       expect(row.claimToken).toBeNull();
       expect(row.leaseExpiresAt).toBeNull();
     });
+
+    it('prepareReconciliation recupera PROCESSING con lease vencido y respeta lease vigente', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const claim = await repo.claimForProcessing(seeded.versionId, 180);
+      if (!claim.acquired) throw new Error('Expected claim');
+
+      const activeRes = await repo.prepareReconciliation(seeded.versionId, 120);
+      expect(activeRes).toEqual({ action: 'skip' });
+
+      await prisma.$executeRaw`
+        UPDATE document_versions
+           SET lease_expires_at = now() - interval '5 seconds'
+         WHERE id = ${seeded.versionId}::uuid`;
+
+      const expiredRes = await repo.prepareReconciliation(seeded.versionId, 120);
+      expect(expiredRes).toEqual({ action: 'enqueue', previousStatus: 'PROCESSING' });
+
+      const row = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(row.processingStatus).toBe('PENDING');
+      expect(row.claimToken).toBeNull();
+      expect(row.leaseExpiresAt).toBeNull();
+    });
   });
 });

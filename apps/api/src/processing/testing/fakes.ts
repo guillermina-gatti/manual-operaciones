@@ -10,6 +10,7 @@ import {
   PROCESSING_LEASE_TTL_SECONDS,
   ProcessingRepository,
   ReconciliationCandidate,
+  ReconciliationDecision,
   VersionRecord,
 } from '../ports/processing-repository';
 
@@ -170,6 +171,43 @@ export class FakeProcessingRepository extends ProcessingRepository {
       if (out.length >= limit) break;
     }
     return out;
+  }
+
+  // Simula locks de reconciliación activos para testear concurrencia entre reconciliadores.
+  activeReconcileLocks = new Set<string>();
+
+  async prepareReconciliation(
+    versionId: string,
+    pendingMinAgeSeconds: number,
+  ): Promise<ReconciliationDecision> {
+    if (this.activeReconcileLocks.has(versionId)) {
+      return { action: 'locked_by_other' };
+    }
+    this.activeReconcileLocks.add(versionId);
+    try {
+      const v = this.versions.get(versionId);
+      if (!v) return { action: 'skip' };
+
+      const now = Date.now();
+      if (v.processingStatus === 'PENDING') {
+        const created = v.createdAt?.getTime() ?? 0;
+        if (created > now - pendingMinAgeSeconds * 1000) return { action: 'skip' };
+        return { action: 'enqueue', previousStatus: 'PENDING' };
+      }
+
+      if (v.processingStatus === 'PROCESSING') {
+        if (!v.leaseExpiresAt || v.leaseExpiresAt.getTime() > now) return { action: 'skip' };
+        v.processingStatus = 'PENDING';
+        v.claimToken = null;
+        v.leaseExpiresAt = null;
+        v.processingStartedAt = null;
+        return { action: 'enqueue', previousStatus: 'PROCESSING' };
+      }
+
+      return { action: 'skip' };
+    } finally {
+      this.activeReconcileLocks.delete(versionId);
+    }
   }
 
   async markFailed(

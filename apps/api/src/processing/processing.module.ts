@@ -20,6 +20,7 @@ import { DocumentBytesReader } from './ports/document-bytes-reader';
 import { EmbeddingProvider } from './ports/embedding-provider';
 import { ProcessingRepository } from './ports/processing-repository';
 import { ProcessDocumentHandler } from './process-document.handler';
+import { ProcessingReconcilerService } from './processing-reconciler.service';
 import {
   PROCESSING_CONNECTION,
   ProcessingQueueClient,
@@ -85,6 +86,32 @@ import { DEFAULT_REDIS_URL, redisConnectionFromUrl } from './redis-connection';
         repository: ProcessingRepository,
       ): ProcessDocumentHandler =>
         new ProcessDocumentHandler(service, repository),
+    },
+    {
+      provide: ProcessingReconcilerService,
+      inject: [
+        ProcessingRepository,
+        ProcessingQueue,
+        ProcessingQueueClient,
+        ConfigService,
+      ],
+      useFactory: (
+        repository: ProcessingRepository,
+        processingQueue: ProcessingQueue,
+        queueClient: ProcessingQueueClient,
+        config: ConfigService,
+      ): ProcessingReconcilerService => {
+        const logger = new Logger(ProcessingReconcilerService.name);
+        return new ProcessingReconcilerService(
+          repository,
+          processingQueue,
+          queueClient.queue,
+          {
+            enabled: config.get<string>('PROCESSING_WORKER_ENABLED') !== 'false',
+            logger,
+          },
+        );
+      },
     },
     ProcessingWorker,
   ],

@@ -119,4 +119,40 @@ describe('PrismaProcessingRepository (unit)', () => {
     expect(plan).not.toHaveBeenCalled();
     expect(tx.$executeRaw).not.toHaveBeenCalled();
   });
+
+  it('prepareReconciliation devuelve locked_by_other si otro reconciliador tiene el advisory lock', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValueOnce([{ acquired: false }]),
+      $executeRaw: jest.fn(),
+    };
+    const prisma = {
+      $transaction: jest.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    const repo = new PrismaProcessingRepository(prisma);
+
+    const res = await repo.prepareReconciliation(VERSION_ID, 120);
+
+    expect(res).toEqual({ action: 'locked_by_other' });
+  });
+
+  it('prepareReconciliation transiciona PROCESSING vencido a PENDING y libera el lock sin llamar a Redis', async () => {
+    const tx = {
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValueOnce([{ acquired: true }])
+        .mockResolvedValueOnce([
+          { processingStatus: 'PROCESSING', pendingExpired: true, leaseExpired: true },
+        ]),
+      $executeRaw: jest.fn().mockResolvedValueOnce(1),
+    };
+    const prisma = {
+      $transaction: jest.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    const repo = new PrismaProcessingRepository(prisma);
+
+    const res = await repo.prepareReconciliation(VERSION_ID, 120);
+
+    expect(res).toEqual({ action: 'enqueue', previousStatus: 'PROCESSING' });
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+  });
 });

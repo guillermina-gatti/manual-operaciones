@@ -31,6 +31,11 @@ export interface ReconciliationCandidate {
   processingStatus: 'PENDING' | 'PROCESSING';
 }
 
+export type ReconciliationDecision =
+  | { action: 'enqueue'; previousStatus: 'PENDING' | 'PROCESSING' }
+  | { action: 'skip' }
+  | { action: 'locked_by_other' };
+
 // Lo que se relee DENTRO de la transacción, con FOR SHARE tomado sobre documents.
 // version es null si la versión ya no existe.
 export interface LockedState {
@@ -86,6 +91,14 @@ export abstract class ProcessingRepository {
     pendingMinAgeSeconds: number,
     limit?: number,
   ): Promise<ReconciliationCandidate[]>;
+
+  // Coordina reconciliadores concurrentes mediante advisory lock transaccional por versión,
+  // relee el estado, transiciona condicionalmente PROCESSING vencido -> PENDING y libera
+  // el lock al finalizar la transacción antes de operar sobre Redis.
+  abstract prepareReconciliation(
+    versionId: string,
+    pendingMinAgeSeconds: number,
+  ): Promise<ReconciliationDecision>;
 
   // Transacción: toma FOR SHARE sobre documents y FOR UPDATE sobre document_versions.
   // Exige claimToken válido (PROCESSING, token coincidente y lease vigente) antes de borrar/insertar

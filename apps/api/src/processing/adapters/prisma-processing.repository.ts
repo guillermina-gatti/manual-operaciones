@@ -11,6 +11,7 @@ import {
   PROCESSING_LEASE_TTL_SECONDS,
   ProcessingRepository,
   ReconciliationCandidate,
+  ReconciliationDecision,
   VersionRecord,
   VersionStatusValue,
 } from '../ports/processing-repository';
@@ -135,6 +136,60 @@ export class PrismaProcessingRepository extends ProcessingRepository {
        )
        ORDER BY created_at ASC
        LIMIT ${limit}`;
+  }
+
+  async prepareReconciliation(
+    versionId: string,
+    pendingMinAgeSeconds: number,
+  ): Promise<ReconciliationDecision> {
+    return this.prisma.$transaction(async (tx) => {
+      const lockRows = await tx.$queryRaw<{ acquired: boolean }[]>`
+        SELECT pg_try_advisory_xact_lock(hashtext('pispiar-reconcile'), hashtext(${versionId})) AS acquired`;
+      if (!lockRows[0]?.acquired) {
+        return { action: 'locked_by_other' };
+      }
+
+      const rows = await tx.$queryRaw<
+        {
+          processingStatus: string;
+          pendingExpired: boolean;
+          leaseExpired: boolean;
+        }[]
+      >`
+        SELECT processing_status::text AS "processingStatus",
+               (created_at <= now() - (${pendingMinAgeSeconds} * interval '1 second')) AS "pendingExpired",
+               (lease_expires_at IS NOT NULL AND lease_expires_at <= now()) AS "leaseExpired"
+          FROM document_versions
+         WHERE id = ${versionId}::uuid`;
+
+      if (rows.length === 0) return { action: 'skip' };
+      const current = rows[0];
+
+      if (current.processingStatus === 'PENDING') {
+        if (!current.pendingExpired) return { action: 'skip' };
+        return { action: 'enqueue', previousStatus: 'PENDING' };
+      }
+
+      if (current.processingStatus === 'PROCESSING') {
+        if (!current.leaseExpired) return { action: 'skip' };
+
+        const affected = await tx.$executeRaw`
+          UPDATE document_versions
+             SET processing_status = 'PENDING'::"ProcessingStatus",
+                 claim_token = NULL,
+                 lease_expires_at = NULL,
+                 processing_started_at = NULL
+           WHERE id = ${versionId}::uuid
+             AND processing_status = 'PROCESSING'::"ProcessingStatus"
+             AND lease_expires_at IS NOT NULL
+             AND lease_expires_at <= now()`;
+        if (affected !== 1) return { action: 'skip' };
+
+        return { action: 'enqueue', previousStatus: 'PROCESSING' };
+      }
+
+      return { action: 'skip' };
+    });
   }
 
   async commitLocked(
