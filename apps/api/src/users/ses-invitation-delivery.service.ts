@@ -1,5 +1,9 @@
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2';
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   InvitationDeliveryService,
@@ -27,7 +31,7 @@ export class SesInvitationDeliveryService extends InvitationDeliveryService {
 
   constructor(
     private readonly configService: ConfigService,
-    createClient?: SesClientFactory,
+    @Optional() createClient?: SesClientFactory,
   ) {
     super();
     this.createClient =
