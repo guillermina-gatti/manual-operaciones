@@ -2,7 +2,7 @@
    de process-document, worker en el mismo proceso, Gemini para embeddings y repositorio Prisma.
    Exporta ProcessingQueue: DocumentsModule la usa para encolar al subir una versión. */
 import { google } from '@ai-sdk/google';
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ConnectionOptions } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -70,8 +70,12 @@ import { DEFAULT_REDIS_URL, redisConnectionFromUrl } from './redis-connection';
         repository: ProcessingRepository,
         reader: DocumentBytesReader,
         embeddings: EmbeddingProvider,
-      ): ProcessingService =>
-        new ProcessingService(repository, reader, embeddings),
+      ): ProcessingService => {
+        const logger = new Logger(ProcessingService.name);
+        return new ProcessingService(repository, reader, embeddings, {
+          onWarn: (message) => logger.warn(message),
+        });
+      },
     },
     {
       provide: ProcessDocumentHandler,

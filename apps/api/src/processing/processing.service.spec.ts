@@ -210,6 +210,94 @@ describe('ProcessingService.process', () => {
       await expect(service.process(VERSION_ID)).rejects.toThrow('768');
       expect(repo.chunksByVersion.has(VERSION_ID)).toBe(false);
     });
+
+    it('versión con claim activo vigente: devuelve skipped sin procesar en paralelo', async () => {
+      const { repo, service, embeddings } = setup();
+      const spy = jest.spyOn(embeddings, 'embedMany');
+      const stored = repo.versions.get(VERSION_ID)!;
+      stored.processingStatus = 'PROCESSING';
+      stored.claimToken = 'otro-token';
+      stored.leaseExpiresAt = new Date(Date.now() + 60_000);
+
+      const outcome = await service.process(VERSION_ID);
+
+      expect(outcome).toBe('skipped');
+      expect(spy).not.toHaveBeenCalled();
+      expect(repo.versions.get(VERSION_ID)!.claimToken).toBe('otro-token');
+    });
+
+    it('commitLocked recibe siempre claimToken y un Worker obsoleto devuelve stale sin pisar chunks', async () => {
+      const { repo, service } = setup();
+      const commitSpy = jest.spyOn(repo, 'commitLocked');
+      repo.beforeCommit = (r) => {
+        const stored = r.versions.get(VERSION_ID)!;
+        stored.claimToken = 'nuevo-token-ajeno';
+      };
+
+      const outcome = await service.process(VERSION_ID);
+
+      expect(outcome).toBe('stale');
+      expect(commitSpy).toHaveBeenCalledWith(
+        VERSION_ID,
+        expect.any(Function),
+        expect.any(String),
+      );
+      expect(repo.chunksByVersion.has(VERSION_ID)).toBe(false);
+    });
+
+    it('cuando el heartbeat pierde el claim durante la lectura, aborta y no llama embeddings', async () => {
+      const repo = new FakeProcessingRepository();
+      repo.versions.set(VERSION_ID, {
+        id: VERSION_ID,
+        documentId: 'doc-1',
+        storageKey: KEY,
+        mimeType: 'text/markdown',
+        processingStatus: 'PENDING',
+        status: 'CURRENT',
+      });
+      repo.areaIds = [DOC_AREA_VENTAS];
+      const reader = {
+        read: jest.fn(async () => {
+          const stored = repo.versions.get(VERSION_ID)!;
+          stored.claimToken = 'otro-worker';
+          await new Promise((r) => setTimeout(r, 35));
+          return Buffer.from('# Titulo\n\nContenido.', 'utf8');
+        }),
+      } as unknown as FakeBytesReader;
+      const embeddings = new FakeEmbeddings();
+      const embedSpy = jest.spyOn(embeddings, 'embedMany');
+      const service = new ProcessingService(repo, reader, embeddings, {
+        heartbeatIntervalMs: 10,
+        leaseTtlSeconds: 60,
+      });
+
+      const outcome = await service.process(VERSION_ID);
+
+      expect(outcome).toBe('stale');
+      expect(embedSpy).not.toHaveBeenCalled();
+      expect(repo.versions.get(VERSION_ID)!.claimToken).toBe('otro-worker');
+    });
+
+    it('error permanente tras perder el claim no marca FAILED sobre el claim ajeno', async () => {
+      const repo = new FakeProcessingRepository();
+      repo.versions.set(VERSION_ID, {
+        id: VERSION_ID,
+        documentId: 'doc-1',
+        storageKey: KEY,
+        mimeType: 'text/markdown',
+        processingStatus: 'PENDING',
+        status: 'CURRENT',
+      });
+      const reader = new FakeBytesReader(new Map([[KEY, Buffer.from('   ', 'utf8')]]));
+      const service = new ProcessingService(repo, reader, new FakeEmbeddings());
+      repo.afterClaim = (r) => {
+        r.versions.get(VERSION_ID)!.claimToken = 'nuevo-dueño';
+      };
+
+      await expect(service.process(VERSION_ID)).rejects.toBeInstanceOf(EmptyDocumentError);
+      expect(repo.versions.get(VERSION_ID)!.processingStatus).toBe('PROCESSING');
+      expect(repo.versions.get(VERSION_ID)!.claimToken).toBe('nuevo-dueño');
+    });
   });
 });
 

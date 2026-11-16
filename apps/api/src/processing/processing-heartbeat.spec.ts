@@ -99,4 +99,44 @@ describe('LeaseHeartbeat', () => {
 
     expect(renewLease).not.toHaveBeenCalled();
   });
+
+  it('stop con llamadas concurrentes comparte la misma promesa de cierre', async () => {
+    let resolvePending!: (value: boolean) => void;
+    const renewLease = jest.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolvePending = resolve;
+        }),
+    );
+    const heartbeat = new LeaseHeartbeat(
+      { renewLease },
+      'ver-1',
+      'token-1',
+      { intervalMs: 50 },
+    );
+
+    heartbeat.start();
+    await jest.advanceTimersByTimeAsync(55);
+
+    const stop1 = heartbeat.stop();
+    const stop2 = heartbeat.stop();
+    expect(stop1).toBe(stop2);
+
+    let resolved1 = false;
+    let resolved2 = false;
+    void stop1.then(() => {
+      resolved1 = true;
+    });
+    void stop2.then(() => {
+      resolved2 = true;
+    });
+    await Promise.resolve();
+    expect(resolved1).toBe(false);
+    expect(resolved2).toBe(false);
+
+    resolvePending(true);
+    await Promise.all([stop1, stop2]);
+    expect(resolved1).toBe(true);
+    expect(resolved2).toBe(true);
+  });
 });

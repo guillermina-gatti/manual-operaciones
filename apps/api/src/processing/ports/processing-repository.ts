@@ -88,19 +88,19 @@ export abstract class ProcessingRepository {
   ): Promise<ReconciliationCandidate[]>;
 
   // Transacción: toma FOR SHARE sobre documents y FOR UPDATE sobre document_versions.
-  // Si se provee claimToken, valida fencing (PROCESSING, token coincidente y lease vigente) antes
-  // de borrar/insertar fragmentos. Devuelve 'stale' si el claim ya no es válido.
+  // Exige claimToken válido (PROCESSING, token coincidente y lease vigente) antes de borrar/insertar
+  // fragmentos. Devuelve 'stale' si el claim ya no es válido.
   abstract commitLocked(
     versionId: string,
     plan: (state: LockedState) => ChunkRow[],
-    claimToken?: string,
+    claimToken: string,
   ): Promise<CommitOutcome>;
 
   // Marca la versión FAILED con el motivo visible para el ADMIN (processingError).
-  // Si se provee claimToken, exige estado PROCESSING y token coincidente.
+  // Exige estado PROCESSING y claimToken coincidente.
   abstract markFailed(
     versionId: string,
     message: string,
-    claimToken?: string,
+    claimToken: string,
   ): Promise<boolean>;
 }

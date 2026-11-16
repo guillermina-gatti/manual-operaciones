@@ -54,6 +54,7 @@ export class FakeProcessingRepository extends ProcessingRepository {
   chunksByVersion = new Map<string, ChunkRow[]>();
   // Cambios concurrentes que ocurren en momentos concretos del procesamiento.
   afterFind?: (repo: FakeProcessingRepository) => void;
+  afterClaim?: (repo: FakeProcessingRepository) => void;
   beforeCommit?: (repo: FakeProcessingRepository) => void;
 
   // Motivos de fallo registrados por markFailed, por versión.
@@ -92,7 +93,9 @@ export class FakeProcessingRepository extends ProcessingRepository {
       version.processingStartedAt = now;
       version.leaseExpiresAt = new Date(now.getTime() + leaseTtlSeconds * 1000);
       version.claimToken = claimToken;
-      return { acquired: true, claimToken, version: { ...version } };
+      const result: ClaimResult = { acquired: true, claimToken, version: { ...version } };
+      this.afterClaim?.(this);
+      return result;
     }
 
     return { acquired: false, reason: 'already_claimed' };
@@ -172,13 +175,13 @@ export class FakeProcessingRepository extends ProcessingRepository {
   async markFailed(
     versionId: string,
     message: string,
-    claimToken?: string,
+    claimToken: string,
   ): Promise<boolean> {
     const version = this.versions.get(versionId);
     if (!version) return false;
     if (
-      claimToken !== undefined &&
-      (version.processingStatus !== 'PROCESSING' || version.claimToken !== claimToken)
+      version.processingStatus !== 'PROCESSING' ||
+      version.claimToken !== claimToken
     ) {
       return false;
     }
@@ -192,7 +195,7 @@ export class FakeProcessingRepository extends ProcessingRepository {
   async commitLocked(
     versionId: string,
     plan: (state: LockedState) => ChunkRow[],
-    claimToken?: string,
+    claimToken: string,
   ): Promise<CommitOutcome> {
     this.lockHeld = true;
     try {
@@ -200,15 +203,13 @@ export class FakeProcessingRepository extends ProcessingRepository {
       const version = this.versions.get(versionId);
       if (!version) return 'discarded'; // sin llamar a plan
 
-      if (claimToken !== undefined) {
-        if (
-          version.processingStatus !== 'PROCESSING' ||
-          version.claimToken !== claimToken ||
-          !version.leaseExpiresAt ||
-          version.leaseExpiresAt.getTime() <= Date.now()
-        ) {
-          return 'stale';
-        }
+      if (
+        version.processingStatus !== 'PROCESSING' ||
+        version.claimToken !== claimToken ||
+        !version.leaseExpiresAt ||
+        version.leaseExpiresAt.getTime() <= Date.now()
+      ) {
+        return 'stale';
       }
 
       const state: LockedState = {

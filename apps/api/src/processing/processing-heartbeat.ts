@@ -17,6 +17,7 @@ export class LeaseHeartbeat {
   private readonly controller = new AbortController();
   private timer?: NodeJS.Timeout;
   private inFlight?: Promise<void>;
+  private stopPromise?: Promise<void>;
   private stopped = false;
 
   readonly signal: AbortSignal = this.controller.signal;
@@ -37,14 +38,17 @@ export class LeaseHeartbeat {
     this.timer.unref?.();
   }
 
-  async stop(): Promise<void> {
-    if (this.stopped) return;
+  stop(): Promise<void> {
+    if (this.stopPromise) return this.stopPromise;
     this.stopped = true;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = undefined;
     }
-    await this.inFlight?.catch(() => undefined);
+    this.stopPromise = this.inFlight
+      ? this.inFlight.catch(() => undefined)
+      : Promise.resolve();
+    return this.stopPromise;
   }
 
   private async tick(): Promise<void> {

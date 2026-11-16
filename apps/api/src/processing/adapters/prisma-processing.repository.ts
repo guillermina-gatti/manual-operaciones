@@ -140,7 +140,7 @@ export class PrismaProcessingRepository extends ProcessingRepository {
   async commitLocked(
     versionId: string,
     plan: (state: LockedState) => ChunkRow[],
-    claimToken?: string,
+    claimToken: string,
   ): Promise<CommitOutcome> {
     return this.prisma.$transaction(
       async (tx) => {
@@ -153,7 +153,7 @@ export class PrismaProcessingRepository extends ProcessingRepository {
         // 2. Lock compartido sobre la fila del documento (orden fijo: documents -> document_versions).
         await tx.$queryRaw`SELECT id FROM documents WHERE id = ${documentId}::uuid FOR SHARE`;
 
-        // 3. Lock exclusivo sobre la versión y validación de fencing antes de tocar chunks.
+        // 3. Lock exclusivo sobre la versión y validación obligatoria de fencing antes de tocar chunks.
         const versionLock = await tx.$queryRaw<
           {
             status: string;
@@ -172,14 +172,12 @@ export class PrismaProcessingRepository extends ProcessingRepository {
         if (versionLock.length === 0) return 'discarded';
 
         const lockedVersion = versionLock[0];
-        if (claimToken !== undefined) {
-          if (
-            lockedVersion.processingStatus !== 'PROCESSING' ||
-            lockedVersion.claimToken !== claimToken ||
-            !lockedVersion.leaseValid
-          ) {
-            return 'stale';
-          }
+        if (
+          lockedVersion.processingStatus !== 'PROCESSING' ||
+          lockedVersion.claimToken !== claimToken ||
+          !lockedVersion.leaseValid
+        ) {
+          return 'stale';
         }
 
         // 4. Relectura bajo el lock, cada una en su sentencia.
@@ -211,29 +209,18 @@ export class PrismaProcessingRepository extends ProcessingRepository {
         }
 
         // 7. Transición condicional a READY limpiando los campos del claim.
-        if (claimToken !== undefined) {
-          const updated = await tx.$executeRaw`
-            UPDATE document_versions
-               SET processing_status = 'READY'::"ProcessingStatus",
-                   processed_at = now(),
-                   processing_error = NULL,
-                   claim_token = NULL,
-                   lease_expires_at = NULL
-             WHERE id = ${versionId}::uuid
-               AND processing_status = 'PROCESSING'::"ProcessingStatus"
-               AND claim_token = ${claimToken}::uuid`;
-          if (updated !== 1) {
-            throw new Error('El claim dejó de ser válido al confirmar READY');
-          }
-        } else {
-          await tx.$executeRaw`
-            UPDATE document_versions
-               SET processing_status = 'READY'::"ProcessingStatus",
-                   processed_at = now(),
-                   processing_error = NULL,
-                   claim_token = NULL,
-                   lease_expires_at = NULL
-             WHERE id = ${versionId}::uuid`;
+        const updated = await tx.$executeRaw`
+          UPDATE document_versions
+             SET processing_status = 'READY'::"ProcessingStatus",
+                 processed_at = now(),
+                 processing_error = NULL,
+                 claim_token = NULL,
+                 lease_expires_at = NULL
+           WHERE id = ${versionId}::uuid
+             AND processing_status = 'PROCESSING'::"ProcessingStatus"
+             AND claim_token = ${claimToken}::uuid`;
+        if (updated !== 1) {
+          throw new Error('El claim dejó de ser válido al confirmar READY');
         }
         return 'ready';
       },
@@ -244,28 +231,17 @@ export class PrismaProcessingRepository extends ProcessingRepository {
   async markFailed(
     versionId: string,
     message: string,
-    claimToken?: string,
+    claimToken: string,
   ): Promise<boolean> {
-    if (claimToken !== undefined) {
-      const affected = await this.prisma.$executeRaw`
-        UPDATE document_versions
-           SET processing_status = 'FAILED'::"ProcessingStatus",
-               processing_error = ${message},
-               claim_token = NULL,
-               lease_expires_at = NULL
-         WHERE id = ${versionId}::uuid
-           AND processing_status = 'PROCESSING'::"ProcessingStatus"
-           AND claim_token = ${claimToken}::uuid`;
-      return affected === 1;
-    }
-
     const affected = await this.prisma.$executeRaw`
       UPDATE document_versions
          SET processing_status = 'FAILED'::"ProcessingStatus",
              processing_error = ${message},
              claim_token = NULL,
              lease_expires_at = NULL
-       WHERE id = ${versionId}::uuid`;
+       WHERE id = ${versionId}::uuid
+         AND processing_status = 'PROCESSING'::"ProcessingStatus"
+         AND claim_token = ${claimToken}::uuid`;
     return affected === 1;
   }
 }

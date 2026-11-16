@@ -41,8 +41,10 @@ describe('PrismaProcessingRepository (e2e)', () => {
 
   it('commitLocked guarda los fragmentos con área y sección, y deja la versión READY', async () => {
     const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+    const claim = await repo.claimForProcessing(seeded.versionId, 180);
+    if (!claim.acquired) throw new Error('Expected claim');
 
-    const outcome = await repo.commitLocked(seeded.versionId, plan);
+    const outcome = await repo.commitLocked(seeded.versionId, plan, claim.claimToken);
 
     expect(outcome).toBe('ready');
     const chunks = await prisma.chunk.findMany({ where: { documentVersionId: seeded.versionId } });
@@ -56,8 +58,10 @@ describe('PrismaProcessingRepository (e2e)', () => {
   it('una versión REPLACED se guarda READY pero con fragmentos inactivos', async () => {
     const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
     await prisma.documentVersion.update({ where: { id: seeded.versionId }, data: { status: 'REPLACED' } });
+    const claim = await repo.claimForProcessing(seeded.versionId, 180);
+    if (!claim.acquired) throw new Error('Expected claim');
 
-    await repo.commitLocked(seeded.versionId, plan);
+    await repo.commitLocked(seeded.versionId, plan, claim.claimToken);
 
     const chunks = await prisma.chunk.findMany({ where: { documentVersionId: seeded.versionId } });
     expect(chunks.every((c) => c.isActive === false)).toBe(true);
@@ -66,25 +70,35 @@ describe('PrismaProcessingRepository (e2e)', () => {
   });
 
   it('versión inexistente: descarta sin guardar nada', async () => {
-    const outcome = await repo.commitLocked('00000000-0000-4000-8000-000000000000', plan);
+    const outcome = await repo.commitLocked(
+      '00000000-0000-4000-8000-000000000000',
+      plan,
+      '00000000-0000-4000-8000-000000000001',
+    );
 
     expect(outcome).toBe('discarded');
     expect(await prisma.chunk.count()).toBe(0);
   });
 
-  it('reintentar el commit no duplica fragmentos', async () => {
+  it('reintentar el commit con un nuevo claim tras expirar no duplica fragmentos', async () => {
     const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
-
-    await repo.commitLocked(seeded.versionId, plan);
-    await repo.commitLocked(seeded.versionId, plan);
+    const c1 = await repo.claimForProcessing(seeded.versionId, 180);
+    if (!c1.acquired) throw new Error('Expected claim');
+    await repo.commitLocked(seeded.versionId, plan, c1.claimToken);
+    await prisma.$executeRaw`UPDATE document_versions SET processing_status = 'PENDING'::"ProcessingStatus" WHERE id = ${seeded.versionId}::uuid`;
+    const c2 = await repo.claimForProcessing(seeded.versionId, 180);
+    if (!c2.acquired) throw new Error('Expected claim');
+    await repo.commitLocked(seeded.versionId, plan, c2.claimToken);
 
     expect(await prisma.chunk.count({ where: { documentVersionId: seeded.versionId } })).toBe(1);
   });
 
   it('markFailed deja la versión FAILED con el motivo', async () => {
     const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+    const claim = await repo.claimForProcessing(seeded.versionId, 180);
+    if (!claim.acquired) throw new Error('Expected claim');
 
-    await repo.markFailed(seeded.versionId, 'El PDF no tiene texto extraíble');
+    await repo.markFailed(seeded.versionId, 'El PDF no tiene texto extraíble', claim.claimToken);
 
     const version = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
     expect(version.processingStatus).toBe('FAILED');
@@ -93,6 +107,8 @@ describe('PrismaProcessingRepository (e2e)', () => {
 
   it('cambio de áreas concurrente: el worker espera el lock y guarda las áreas nuevas', async () => {
     const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+    const claim = await repo.claimForProcessing(seeded.versionId, 180);
+    if (!claim.acquired) throw new Error('Expected claim');
 
     // Operación de Matías: toma FOR UPDATE, cambia las áreas y mantiene la transacción abierta.
     const holder = prisma.$transaction(async (tx) => {
@@ -103,7 +119,7 @@ describe('PrismaProcessingRepository (e2e)', () => {
       await new Promise((resolve) => setTimeout(resolve, 800));
     });
     await new Promise((resolve) => setTimeout(resolve, 200)); // el worker llega mientras está tomado
-    const commit = repo.commitLocked(seeded.versionId, plan);
+    const commit = repo.commitLocked(seeded.versionId, plan, claim.claimToken);
 
     await Promise.all([holder, commit]);
 
