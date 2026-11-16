@@ -157,18 +157,24 @@ sha256sum ./certs/rds-global-bundle.pem
 * Crear bucket privado en la misma `AWS_REGION` que la EC2 (`Block all public access = ON`, cifrado SSE-S3 activado).
 * El código (`S3FileStorage`) realiza `PutObject` (con `ChecksumSHA256`), `GetObject` (lectura para embeddings y generación de presigned URLs de 5 minutos) y `DeleteObject` sin necesidad de `AWS_ACCESS_KEY_ID` ni `AWS_SECRET_ACCESS_KEY` cuando la EC2 tiene el IAM Instance Profile.
 
-### 6.5. Correo Electrónico — AWS SES (HU30) `[BLOQUEADO: H-IMP-02]`
-* **Proveedor acordado para HU30:** **AWS SES** (no reemplazar por Resend ni otro proveedor).
-* **Requisitos previos en la consola de AWS SES (región elegida):**
-  1. Verificar identidad del remitente (correo electrónico verificado o dominio con registros DKIM/SPF cuando se disponga de dominio propio).
-  2. Verificar el estado de la cuenta SES: en **SES Sandbox**, AWS únicamente permite enviar correos hacia direcciones de destino previamente verificadas; para enviar invitaciones a cualquier correo corporativo se debe solicitar **Production Access (salida de sandbox)** en AWS Support.
-  3. Otorgar al IAM Instance Profile de la EC2 el permiso mínimo `ses:SendEmail` / `ses:SendRawEmail` (o credenciales SMTP/IAM dedicadas según el adaptador que se implemente).
+### 6.5. Correo Electrónico — AWS SES (HU30) `[PENDIENTE OPERATIVO: H-IMP-02]`
+* **Proveedor acordado para producción:** **AWS SES** (`INVITATION_EMAIL_PROVIDER=ses`, manteniendo `resend` como proveedor alternativo).
+* **Implementado en código (backend):**
+  * Adaptador `SesInvitationDeliveryService` (`@aws-sdk/client-sesv2`) con plantilla y validación de remitente compartidas con Resend (`invitation-email-template.ts`).
+  * Selección del proveedor en `UsersModule` (`ses` y `resend` en entornos no locales; `local` restringido a `development`/`test`).
+  * Validaciones de arranque en `environment.validation.ts` (`INVITATION_EMAIL_PROVIDER=ses`, `AWS_SES_REGION` con fallback a `AWS_REGION`, e `INVITATION_EMAIL_FROM`).
+  * Uso de la cadena de credenciales por defecto del AWS SDK (IAM Instance Profile en EC2, sin credenciales estáticas).
+* **Pendiente operativo en AWS — H-IMP-02 (no resuelto):**
+  1. Definir `INVITATION_EMAIL_FROM` en `.env` de producción.
+  2. Verificar la identidad remitente (correo electrónico verificado o dominio con DKIM/SPF) en la **región SES efectiva** (`AWS_SES_REGION` o, si está vacía, `AWS_REGION`).
+  3. Otorgar al IAM Instance Profile de la EC2 el permiso mínimo `ses:SendEmail`.
+  4. Confirmar **Production Access (salida de SES Sandbox)** en AWS Support o, mientras permanezca en sandbox, verificar las direcciones de destino de prueba.
+  5. Verificar en despliegue la configuración efectiva de región (`AWS_SES_REGION` con fallback a `AWS_REGION`) y ejecutar una **prueba real de envío y recepción**.
 
-> [!CAUTION]
-> **BLOQUEO H-IMP-02 — Brecha entre decisión SES y código actual:**
-> * En el código vigente de `develop`, [`users.module.ts#L45-L51`](../../apps/api/src/users/users.module.ts#L45-L51) y [`environment.validation.ts#L165-L171`](../../apps/api/src/config/environment.validation.ts#L165-L171) **únicamente soportan `INVITATION_EMAIL_PROVIDER` con valor `'local'` o `'resend'`**.
-> * Además, [`.env.production.example#L86`](../../.env.production.example#L86) tiene `INVITATION_EMAIL_PROVIDER=local`, lo que en `NODE_ENV=production` instancia `UnavailableInvitationDeliveryService` y provoca **HTTP `503`** al intentar crear invitaciones.
-> * **Estado actual:** El envío de invitaciones por correo **NO está operativo** en producción con AWS SES hasta que se implemente el adaptador SES en el backend en un microhito específico previo al despliegue real.
+> [!WARNING]
+> **Riesgo de timeout ambiguo (H-IMP-02 / HU30):**
+> * `SesInvitationDeliveryService` utiliza `AbortSignal.timeout(10_000)` en `client.send()`. Si AWS SES acepta el mensaje pero la respuesta no llega antes de los 10 segundos, la aplicación recibe un error de timeout, responde **HTTP `503`** y ejecuta la revocación compensatoria de la invitación en PostgreSQL (sin colas ni reintentos automáticos en esta etapa).
+> * Mientras no se completen los requisitos operativos de **H-IMP-02** en AWS y `.env`, el envío real de invitaciones permanece **no operativo** en producción (`503`).
 
 ---
 
@@ -307,7 +313,7 @@ curl -fsS https://<ELASTIC_IP>.nip.io/api/health/ready
 2. Verificar en DevTools que la cookie `refreshToken` tiene flags `HttpOnly`, `Secure`, `SameSite=Lax` y `Path=/api/auth`.
 3. Crear un área en `/admin/areas`.
 4. Subir un documento PDF y verificar su descarga mediante presigned URL de S3 (confirmando IMDSv2 + IAM Instance Profile).
-5. *(Bloqueado por H-IMP-02)* El envío de invitaciones por correo desde `/admin/invitaciones` permanece inhabilitado hasta implementar el adaptador AWS SES.
+5. *(Pendiente operativo H-IMP-02)* El envío real de invitaciones por correo desde `/admin/invitaciones` permanece pendiente hasta definir `INVITATION_EMAIL_FROM`, verificar la identidad en la región SES efectiva, otorgar `ses:SendEmail` al Instance Profile, confirmar salida de sandbox (o destinatarios verificados) y validar envío y recepción reales.
 
 ---
 
@@ -333,7 +339,7 @@ docker compose -f docker-compose.prod.yml logs migrator
 * **Fallo general de conexión desde `migrator` o `api` / HTTP `503` en `/api/health/ready`:** revisar conectividad de red / Security Groups (`SG-EC2` → `SG-RDS` puerto `5432`, `SG-EC2` → `SG-Redis` puerto `6379`) y confirmar que `DATABASE_URL` mantiene `?sslmode=verify-full&sslaccept=strict`.
 * **Error S3 (`503` al subir/descargar PDF):** verificar que la EC2 tiene asociado el IAM Role y que `HttpPutResponseHopLimit = 2` está configurado en IMDSv2.
 * **Caddy no emite certificado HTTPS:** verificar puertos `80` y `443` abiertos a `0.0.0.0/0` en `SG-EC2` y que `PUBLIC_DOMAIN` coincide con `<ELASTIC_IP>.nip.io`.
-* **HTTP `503` al crear invitación:** esperado mientras persista **H-IMP-02** (`INVITATION_EMAIL_PROVIDER` sin adaptador SES).
+* **HTTP `503` al crear invitación:** esperado mientras permanezca abierto **H-IMP-02** (falta de `INVITATION_EMAIL_FROM`, identidad no verificada en la región SES efectiva, falta de permiso `ses:SendEmail` en IAM, restricción de SES Sandbox o timeout ambiguo de 10s en `client.send()`).
 
 ---
 
@@ -369,7 +375,7 @@ Para detener o dar de baja los recursos al finalizar demostraciones y evitar cos
 
 * [ ] Cotizaciones de `us-east-1` vs `sa-east-1` revisadas en AWS Pricing Calculator y región aprobada.
 * [ ] **Validado H-IMP-01 contra RDS real:** bundle oficial `global-bundle.pem` descargado (`test -f` y `test -s`), montado `:ro` en `migrator` (`SSL_CERT_FILE`) y `api` (`NODE_EXTRA_CA_CERTS`), y conexión TLS `sslmode=verify-full&sslaccept=strict` comprobada en ambos servicios.
-* [ ] **Resuelto H-IMP-02:** Adaptador AWS SES implementado, identidad remitente verificada en SES y alcance sandbox/producción definido (o aprobado explícitamente operar sin invitaciones por correo).
+* [ ] **Resuelto H-IMP-02:** Adaptador AWS SES verificado en despliegue real, `INVITATION_EMAIL_FROM` definido, identidad remitente verificada en la región SES efectiva (`AWS_SES_REGION` / fallback `AWS_REGION`), permiso mínimo `ses:SendEmail` en IAM Instance Profile, alcance sandbox/Production Access confirmado y prueba real de envío y recepción completada (o aprobado explícitamente operar sin invitaciones por correo).
 * [ ] Elastic IP asociada, `HttpPutResponseHopLimit = 2` en EC2, `SG-EC2` (`80/443`), `SG-RDS` (`5432`) y `SG-Redis` (`6379`) configurados.
 * [ ] `.env` creado con `chmod 600`, `API_URL=https://<EIP>.nip.io`, `FRONTEND_URL=https://<EIP>.nip.io` y `HTTP_TRUSTED_PROXIES=172.28.0.10`.
 * [ ] `migrator` completado con código `0` y los 5 índices críticos preservados.

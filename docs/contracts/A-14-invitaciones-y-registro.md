@@ -224,18 +224,18 @@ Incorporar un proveedor de correo transaccional para enviar invitaciones de regi
 
 ### Proveedor elegido
 
-Se propone **Resend**, mediante su API HTTP, para enviar correos de invitación en producción.
-
-La elección busca simplificar la integración y minimizar los costos iniciales de infraestructura.
+Se utiliza **AWS SES** (`INVITATION_EMAIL_PROVIDER=ses`) como proveedor objetivo de producción, manteniendo **Resend** (`INVITATION_EMAIL_PROVIDER=resend`) como proveedor alternativo.
 
 ### Configuración
 
 | Variable | Descripción |
 |---|---|
-| `INVITATION_EMAIL_PROVIDER` | Selecciona `local` o `resend`. |
-| `RESEND_API_KEY` | Credencial privada para autenticar solicitudes al proveedor. |
-| `INVITATION_EMAIL_FROM` | Dirección remitente autorizada en un dominio verificado. |
-| `FRONTEND_URL` | Dirección base del frontend utilizada para generar el enlace de registro. |
+| `INVITATION_EMAIL_PROVIDER` | Selecciona `local` (solo desarrollo/test), `ses` o `resend`. |
+| `AWS_SES_REGION` | Región AWS para SES; si está vacía o ausente, utiliza `AWS_REGION` como fallback. |
+| `AWS_REGION` | Región AWS general usada como fallback cuando `AWS_SES_REGION` no está definida. |
+| `RESEND_API_KEY` | Credencial privada para autenticar solicitudes cuando el proveedor es `resend`. |
+| `INVITATION_EMAIL_FROM` | Dirección remitente verificada en la región SES efectiva (o en Resend). |
+| `FRONTEND_URL` | Dirección base del frontend (HTTPS en producción) utilizada para generar el enlace de registro. |
 
 ### Reglas de funcionamiento
 
@@ -263,33 +263,42 @@ La elección busca simplificar la integración y minimizar los costos iniciales 
 
 **Pendiente:** implementación del adaptador, selección mediante configuración, pruebas unitarias, integración y verificación de envío real.
 
-## 7. A-INV-EMAIL — Verificación y despliegue
+## 7. A-INV-EMAIL y HU30 — Verificación y despliegue
 
-### Estado de implementación
+### Estado de implementación (backend terminado)
 
-Se incorporó `ResendInvitationDeliveryService` como adaptador de correo transaccional y se configuró su selección mediante inyección de dependencias en `UsersModule`.
+- Se incorporó `SesInvitationDeliveryService` (`@aws-sdk/client-sesv2`, HU30) junto a `ResendInvitationDeliveryService`, compartiendo la plantilla de correo y validación de remitente en `invitation-email-template.ts`.
+- `UsersModule` selecciona `SesInvitationDeliveryService` (`provider === 'ses'`) o `ResendInvitationDeliveryService` (`provider === 'resend'`) en entornos no locales, y conserva `LocalInvitationDeliveryService` únicamente en `development` y `test`.
+- `SesInvitationDeliveryService` utiliza la cadena de credenciales por defecto del AWS SDK (IAM Instance Profile en EC2, sin credenciales estáticas) y resuelve la región efectiva mediante `AWS_SES_REGION` con fallback a `AWS_REGION`.
 
-El adaptador local continúa disponible para desarrollo y pruebas. Los entornos no locales requieren la selección explícita de Resend.
-
-### Variables requeridas para producción
+### Variables requeridas para producción con AWS SES
 
 ```dotenv
 NODE_ENV=production
-INVITATION_EMAIL_PROVIDER=resend
-RESEND_API_KEY=<configurar-como-secreto>
+INVITATION_EMAIL_PROVIDER=ses
+AWS_REGION=us-east-1
+AWS_SES_REGION=
 INVITATION_EMAIL_FROM=PispIAr <invitaciones@dominio-verificado.com>
 FRONTEND_URL=https://frontend-del-proyecto.com
 ```
 
+*(Si se utiliza Resend como proveedor alternativo: `INVITATION_EMAIL_PROVIDER=resend` y `RESEND_API_KEY=<configurar-como-secreto>`).*
+
 Estos valores son ilustrativos y no deben copiarse literalmente como credenciales ni dominios reales.
 
-### Requisitos previos para habilitar el envío
+### Pendiente operativo en AWS — H-IMP-02 (aún abierto)
 
-- Registrar y verificar un dominio remitente en Resend.
-- Crear una API key con permisos de envío.
-- Configurar las variables en el entorno seguro del backend, sin subir secretos a GitHub.
-- Confirmar que `FRONTEND_URL` apunta al frontend público mediante HTTPS.
-- Verificar que `/registro` funciona en el dominio del frontend.
+El adaptador backend está implementado, pero el envío real en producción **permanece pendiente de configuración operativa (H-IMP-02)**:
+
+- Definir `INVITATION_EMAIL_FROM` en `.env` de producción.
+- Verificar la identidad remitente en AWS SES dentro de la región efectiva (`AWS_SES_REGION` o `AWS_REGION`).
+- Configurar el IAM Instance Profile de la EC2 con el permiso mínimo `ses:SendEmail`.
+- Confirmar **Production Access** (salida de SES Sandbox) o verificar los destinatarios de prueba mientras se permanezca en sandbox.
+- Verificar la región efectiva y ejecutar una prueba real de envío y recepción.
+
+### Limitación operativa (timeout ambiguo)
+
+`SesInvitationDeliveryService` aplica `AbortSignal.timeout(10_000)` en `client.send()`. Un timeout tiene resultado ambiguo: AWS SES podría haber aceptado el correo aunque el cliente no reciba la confirmación a tiempo, caso en el cual el flujo actual responde HTTP `503` y ejecuta la revocación compensatoria de la invitación en PostgreSQL.
 
 ### Validaciones de seguridad
 
