@@ -4,15 +4,28 @@ import type { EmbeddingModel } from 'ai';
 // usa el adaptador: recibe el modelo, los textos y las opciones, y devuelve { embeddings }.
 // El comportamiento real de embedMany se verificó aparte, con la librería real.
 jest.mock('ai', () => ({
-  embedMany: async ({ model, values, dimensions, providerOptions }: any) => {
-    const { embeddings } = await model.doEmbed({ values, dimensions, providerOptions });
+  embedMany: async ({ model, values, dimensions, providerOptions, abortSignal }: any) => {
+    if (abortSignal?.aborted) {
+      throw abortSignal.reason ?? new Error('Aborted');
+    }
+    const { embeddings } = await model.doEmbed({
+      values,
+      dimensions,
+      providerOptions,
+      abortSignal,
+    });
     return { embeddings };
   },
 }));
 import { EMBEDDING_DIMENSIONS } from '../ports/embedding-provider';
 import { GeminiEmbeddingProvider } from './gemini-embedding-provider';
 
-type DoEmbedCall = { values: string[]; dimensions?: number; providerOptions?: Record<string, Record<string, unknown>> };
+type DoEmbedCall = {
+  values: string[];
+  dimensions?: number;
+  providerOptions?: Record<string, Record<string, unknown>>;
+  abortSignal?: AbortSignal;
+};
 
 // Modelo simulado mínimo: embedMany solo usa estos campos y doEmbed.
 class FakeEmbeddingModel {
@@ -78,5 +91,31 @@ describe('GeminiEmbeddingProvider', () => {
     const provider = new GeminiEmbeddingProvider(model.asModel());
 
     await expect(provider.embedMany(['texto'])).rejects.toThrow('cuota agotada');
+  });
+
+  it('reenvía exactamente el mismo AbortSignal a embedMany', async () => {
+    const model = new FakeEmbeddingModel(async ({ values }) => ({
+      embeddings: values.map(() => vector(0)),
+    }));
+    const provider = new GeminiEmbeddingProvider(model.asModel());
+    const controller = new AbortController();
+
+    await provider.embedMany(['texto'], { abortSignal: controller.signal });
+
+    expect(model.doEmbedCalls[0].abortSignal).toBe(controller.signal);
+  });
+
+  it('propaga el rechazo cuando AbortSignal ya está abortado sin devolver éxito falso', async () => {
+    const model = new FakeEmbeddingModel(async ({ values }) => ({
+      embeddings: values.map(() => vector(0)),
+    }));
+    const provider = new GeminiEmbeddingProvider(model.asModel());
+    const controller = new AbortController();
+    controller.abort(new Error('CLAIM_LOST'));
+
+    await expect(
+      provider.embedMany(['texto'], { abortSignal: controller.signal }),
+    ).rejects.toThrow('CLAIM_LOST');
+    expect(model.doEmbedCalls).toHaveLength(0);
   });
 });

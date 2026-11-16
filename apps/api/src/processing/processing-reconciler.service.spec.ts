@@ -101,6 +101,30 @@ describe('ProcessingReconcilerService', () => {
     },
   );
 
+  it.each(['prioritized', 'waiting-children'])(
+    'PENDING con job %s en BullMQ no se elimina ni se reencola',
+    async (state) => {
+      const { repo, inspector, enqueue, service } = makeReconciler();
+      repo.versions.set('v-prio', {
+        id: 'v-prio',
+        documentId: 'd1',
+        storageKey: 'k',
+        mimeType: 'application/pdf',
+        processingStatus: 'PENDING',
+        status: 'CURRENT',
+        createdAt: new Date(Date.now() - 180_000),
+      });
+      inspector.jobs.set('v-prio', { state, removed: false });
+
+      const summary = await service.reconcileOnce();
+
+      expect(summary).toEqual({ candidates: 1, recovered: 0, skipped: 1, failed: 0 });
+      expect(inspector.jobs.get('v-prio')?.removed).toBe(false);
+      expect(enqueue).not.toHaveBeenCalled();
+      expect(repo.versions.get('v-prio')?.processingStatus).toBe('PENDING');
+    },
+  );
+
   it('6. PROCESSING con lease vigente y job ausente no se recupera', async () => {
     const { repo, enqueue, service } = makeReconciler();
     repo.versions.set('v-active', {

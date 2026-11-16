@@ -90,4 +90,18 @@ describe('processing-runtime-listeners', () => {
     expect(serialized).not.toContain('JWT_SECRET');
     expect(serialized).not.toContain('secret-token-leak');
   });
+
+  it('registra exactamente un listener por evento en Queue y Worker', () => {
+    const queue = new EventEmitter();
+    const worker = new EventEmitter();
+    const logger = { warn: jest.fn(), error: jest.fn() };
+
+    attachQueueListeners(queue, logger);
+    attachWorkerListeners(worker, logger);
+
+    expect(queue.listenerCount('error')).toBe(1);
+    expect(worker.listenerCount('error')).toBe(1);
+    expect(worker.listenerCount('failed')).toBe(1);
+    expect(worker.listenerCount('stalled')).toBe(1);
+  });
 });
