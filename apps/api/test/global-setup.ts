@@ -1,5 +1,6 @@
 /* Antes de la suite e2e: verifica aislamiento en manual_e2e_test y aplica migraciones pendientes sin resetear datos */
 
+import './resolve-js-to-ts.cjs';
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
