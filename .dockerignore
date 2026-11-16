@@ -20,6 +20,10 @@ capturas
 !**/.env.example
 !**/.env.*.example
 
+# Certificados CA operativos descargados localmente
+certs
+**/*.pem
+
 # Archivos temporales
 **/*.log
 **/.cache

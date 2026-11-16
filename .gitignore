@@ -151,3 +151,7 @@ vite.config.ts.timestamp-*
 
 # Capturas de pantalla de antes y después de un cambio visual (ver DESIGN.md): no se suben al repo
 capturas/
+
+# Certificados CA operativos descargados localmente (ej. Amazon RDS global-bundle.pem)
+certs/
+*.pem

@@ -10,7 +10,9 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
-      NODE_EXTRA_CA_CERTS: ${NODE_EXTRA_CA_CERTS:-}
+      SSL_CERT_FILE: ${SSL_CERT_FILE:-/etc/ssl/certs/rds-global-bundle.pem}
+    volumes:
+      - ./certs/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
     networks:
       - internal
 
@@ -47,7 +49,9 @@ services:
       INVITATION_EMAIL_FROM: ${INVITATION_EMAIL_FROM:-}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
       GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-2.5-flash}
-      NODE_EXTRA_CA_CERTS: ${NODE_EXTRA_CA_CERTS:-}
+      NODE_EXTRA_CA_CERTS: ${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/rds-global-bundle.pem}
+    volumes:
+      - ./certs/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
     healthcheck:
       test: ["CMD", "node", "-e", "require('node:http').get('http://127.0.0.1:3000/api/health/live', (r) => { if (r.statusCode !== 200) process.exit(1); })"]
       interval: 10s
