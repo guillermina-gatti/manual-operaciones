@@ -6,6 +6,10 @@ import {
   type DeliverInvitationParams,
   type DeliveryResult,
 } from './invitation-delivery.service';
+import {
+  buildInvitationEmailContent,
+  validateSenderEmail,
+} from './invitation-email-template';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -33,20 +37,7 @@ export class ResendInvitationDeliveryService extends InvitationDeliveryService {
       .update(params.token)
       .digest('hex')}`;
 
-    const message = [
-      'Hola,',
-      '',
-      'Te invitaron a registrarte en PispIAr.',
-      '',
-      'Para crear tu cuenta, abrí este enlace:',
-      params.invitationUrl,
-      '',
-      'El enlace es de un solo uso y vence a las 48 horas.',
-      '',
-      'Si no esperabas esta invitación, ignorá el mensaje.',
-      '',
-      'Equipo PispIAr',
-    ].join('\n');
+    const { subject, text } = buildInvitationEmailContent(params.invitationUrl);
 
     try {
       const response = await fetch(RESEND_API_URL, {
@@ -59,8 +50,8 @@ export class ResendInvitationDeliveryService extends InvitationDeliveryService {
         body: JSON.stringify({
           from,
           to: [params.email],
-          subject: 'Tu invitación para registrarte en PispIAr',
-          text: message,
+          subject,
+          text,
         }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
@@ -105,40 +96,15 @@ export class ResendInvitationDeliveryService extends InvitationDeliveryService {
 
     const apiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
 
-    const from = this.configService
-      .get<string>('INVITATION_EMAIL_FROM')
-      ?.trim();
-
-    if (provider !== 'resend' || !apiKey || !from) {
+    if (provider !== 'resend' || !apiKey) {
       throw new ServiceUnavailableException(
         'El proveedor de correo no está configurado',
       );
     }
 
-    // Admite "correo@dominio.com" y
-    // "PispIAr <correo@dominio.com>".
-    let email = from;
-
-    if (from.includes('<') || from.includes('>')) {
-      const match = from.match(/^[^<>\r\n]+<([^<>\r\n]+)>$/);
-
-      if (!match) {
-        throw new ServiceUnavailableException(
-          'El remitente del correo no es válido',
-        );
-      }
-
-      email = match[1].trim();
-    }
-
-    if (
-      /[\r\n]/.test(from) ||
-      !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)
-    ) {
-      throw new ServiceUnavailableException(
-        'El remitente del correo no es válido',
-      );
-    }
+    const from = validateSenderEmail(
+      this.configService.get<string>('INVITATION_EMAIL_FROM'),
+    );
 
     return { apiKey, from };
   }
