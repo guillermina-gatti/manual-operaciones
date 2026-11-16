@@ -33,9 +33,11 @@ jest.mock('node:fs', () => {
 
 import {
   E2E_DATABASE_NAME,
+  TEST_REDIS_KEY_PREFIX,
   assertE2eDatabaseConnected,
   assertLocalE2eDatabase,
   assertLocalTestDatabase,
+  getTestBullMqConnection,
   useE2eDatabase,
   useTestDatabase,
 } from './test-database';
@@ -262,6 +264,58 @@ describe('Aislamiento de base de datos E2E (HU30.M4.1-C)', () => {
       expect(() =>
         assertLocalTestDatabase(VALID_DEV_URL, 'seed:fixtures'),
       ).toThrow(/manual/);
+    });
+  });
+
+  describe('E. Aislamiento de Redis E2E para BullMQ (getTestBullMqConnection)', () => {
+    const savedRedisEnv = {
+      TEST_REDIS_URL: process.env.TEST_REDIS_URL,
+      TEST_REDIS_HOST: process.env.TEST_REDIS_HOST,
+      TEST_REDIS_PORT: process.env.TEST_REDIS_PORT,
+      REDIS_KEY_PREFIX: process.env.REDIS_KEY_PREFIX,
+    };
+
+    afterEach(() => {
+      for (const [key, val] of Object.entries(savedRedisEnv)) {
+        if (val === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = val;
+        }
+      }
+    });
+
+    it('deriva host, puerto, db y prefijo test:e2e: desde TEST_REDIS_URL e ignora TEST_REDIS_HOST/PORT', () => {
+      process.env.TEST_REDIS_URL = 'redis://127.0.0.1:6380/2';
+      process.env.TEST_REDIS_HOST = 'localhost';
+      process.env.TEST_REDIS_PORT = '6379';
+
+      const res = getTestBullMqConnection();
+
+      expect(res.url).toBe('redis://127.0.0.1:6380/2');
+      expect(res.keyPrefix).toBe(TEST_REDIS_KEY_PREFIX);
+      expect(res.connection).toMatchObject({
+        host: '127.0.0.1',
+        port: 6380,
+        db: 2,
+      });
+      expect(process.env.REDIS_KEY_PREFIX).toBe(TEST_REDIS_KEY_PREFIX);
+    });
+
+    it('falla explícitamente si falta TEST_REDIS_URL sin caer en DB 0', () => {
+      delete process.env.TEST_REDIS_URL;
+      process.env.TEST_REDIS_HOST = 'localhost';
+      process.env.TEST_REDIS_PORT = '6379';
+
+      expect(() => getTestBullMqConnection()).toThrow(/Falta TEST_REDIS_URL/);
+    });
+
+    it('rechaza TEST_REDIS_URL apuntando a localhost:6379 (DB 0) o formato inválido', () => {
+      process.env.TEST_REDIS_URL = 'redis://localhost:6379/0';
+      expect(() => getTestBullMqConnection()).toThrow(/DB 0/);
+
+      process.env.TEST_REDIS_URL = 'http://localhost:6379/1';
+      expect(() => getTestBullMqConnection()).toThrow(/protocolo no admitido/);
     });
   });
 });

@@ -257,5 +257,72 @@ describe('PrismaProcessingRepository (e2e)', () => {
       expect(row.claimToken).toBeNull();
       expect(row.leaseExpiresAt).toBeNull();
     });
+
+    it('commitLocked rechaza un claimToken coincidente si el lease ya venció en PostgreSQL', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const claim = await repo.claimForProcessing(seeded.versionId, 180);
+      if (!claim.acquired) throw new Error('Expected claim');
+
+      await prisma.$executeRaw`
+        UPDATE document_versions
+           SET lease_expires_at = now() - interval '2 seconds'
+         WHERE id = ${seeded.versionId}::uuid`;
+
+      const outcome = await repo.commitLocked(seeded.versionId, plan, claim.claimToken);
+
+      expect(outcome).toBe('stale');
+      expect(await prisma.chunk.count({ where: { documentVersionId: seeded.versionId } })).toBe(0);
+      const row = await prisma.documentVersion.findUniqueOrThrow({ where: { id: seeded.versionId } });
+      expect(row.processingStatus).toBe('PROCESSING');
+    });
+
+    it('dos commitLocked concurrentes con el mismo token: uno confirma READY y el otro devuelve stale sin duplicar chunks', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      const claim = await repo.claimForProcessing(seeded.versionId, 180);
+      if (!claim.acquired) throw new Error('Expected claim');
+
+      const [r1, r2] = await Promise.all([
+        repo.commitLocked(seeded.versionId, plan, claim.claimToken),
+        repo.commitLocked(seeded.versionId, plan, claim.claimToken),
+      ]);
+
+      expect([r1, r2].sort()).toEqual(['ready', 'stale']);
+      expect(await prisma.chunk.count({ where: { documentVersionId: seeded.versionId } })).toBe(1);
+    });
+
+    it('prepareReconciliation devuelve locked_by_other cuando otra conexión mantiene el advisory lock', async () => {
+      const seeded = await seedDocument(prisma, { areaIds: [AREA_IDS.ventas] });
+      await prisma.$executeRaw`
+        UPDATE document_versions
+           SET created_at = now() - interval '5 minutes'
+         WHERE id = ${seeded.versionId}::uuid`;
+
+      let releaseLock!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      let lockAcquired!: () => void;
+      const acquiredSignal = new Promise<void>((resolve) => {
+        lockAcquired = resolve;
+      });
+
+      const holder = prisma.$transaction(async (tx) => {
+        const [{ acquired }] = await tx.$queryRaw<{ acquired: boolean }[]>`
+          SELECT pg_try_advisory_xact_lock(hashtext('pispiar-reconcile'), hashtext(${seeded.versionId})) AS acquired`;
+        expect(acquired).toBe(true);
+        lockAcquired();
+        await gate;
+      });
+
+      await acquiredSignal;
+      const concurrent = await repo.prepareReconciliation(seeded.versionId, 120);
+      expect(concurrent).toEqual({ action: 'locked_by_other' });
+
+      releaseLock();
+      await holder;
+
+      const afterRelease = await repo.prepareReconciliation(seeded.versionId, 120);
+      expect(afterRelease).toEqual({ action: 'enqueue', previousStatus: 'PENDING' });
+    });
   });
 });

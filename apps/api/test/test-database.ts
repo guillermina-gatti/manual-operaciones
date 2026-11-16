@@ -2,8 +2,10 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { ConnectionOptions } from 'bullmq';
 import { config, parse } from 'dotenv';
 import type Redis from 'ioredis';
+import { redisConnectionFromUrl } from '../src/processing/redis-connection';
 
 const envFile = resolve(__dirname, '../.env');
 
@@ -375,6 +377,21 @@ export function useTestRedis(): string {
   process.env.REDIS_URL = testUrl;
   process.env.REDIS_KEY_PREFIX = TEST_REDIS_KEY_PREFIX;
   return testUrl;
+}
+
+// Devuelve la configuración de conexión BullMQ validada mediante useTestRedis().
+// Garantiza que las suites E2E no usen localhost:6379 (DB 0) ni fallbacks independientes.
+export function getTestBullMqConnection(): {
+  url: string;
+  keyPrefix: string;
+  connection: ConnectionOptions;
+} {
+  const url = useTestRedis();
+  return {
+    url,
+    keyPrefix: TEST_REDIS_KEY_PREFIX,
+    connection: redisConnectionFromUrl(url),
+  };
 }
 
 export function assertTestRedisClientOptions(

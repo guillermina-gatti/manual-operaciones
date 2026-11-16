@@ -5,19 +5,19 @@ import {
   PROCESS_DOCUMENT_JOB,
   ProcessDocumentJobData,
 } from '../../src/processing/adapters/bullmq-processing-queue';
-
-const REDIS = {
-  host: process.env.TEST_REDIS_HOST ?? 'localhost',
-  port: Number(process.env.TEST_REDIS_PORT ?? 6379),
-};
+import { getTestBullMqConnection } from '../test-database';
 
 describe('BullMqProcessingQueue (Redis real)', () => {
   let queue: Queue<ProcessDocumentJobData>;
   let name: string;
 
   beforeEach(() => {
+    const { connection, keyPrefix } = getTestBullMqConnection();
     name = `test-documents-${Math.random().toString(36).slice(2)}`;
-    queue = new Queue<ProcessDocumentJobData>(name, { connection: REDIS });
+    queue = new Queue<ProcessDocumentJobData>(name, {
+      connection,
+      prefix: keyPrefix,
+    });
   });
 
   afterEach(async () => {

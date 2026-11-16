@@ -1,16 +1,14 @@
 import 'reflect-metadata';
 import { ConfigService } from '@nestjs/config';
 import { BullMqProcessingQueue } from '../../src/processing/adapters/bullmq-processing-queue';
-import { redisConnectionFromUrl } from '../../src/processing/redis-connection';
 import { ProcessDocumentHandler } from '../../src/processing/process-document.handler';
 import {
   ProcessingQueueClient,
   ProcessingWorker,
 } from '../../src/processing/processing.runtime';
+import { getTestBullMqConnection } from '../test-database';
 
-const connection = redisConnectionFromUrl(
-  process.env.TEST_REDIS_URL ?? 'redis://localhost:6379/1',
-);
+const { connection } = getTestBullMqConnection();
 const configWithWorker = { get: () => undefined } as unknown as ConfigService;
 
 async function waitFor(

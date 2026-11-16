@@ -10,9 +10,10 @@ import {
   ProcessingQueueClient,
   ProcessingWorker,
 } from '../../src/processing/processing.runtime';
+import { getTestBullMqConnection } from '../test-database';
 
 process.env.GOOGLE_GENERATIVE_AI_API_KEY ??= 'clave-de-prueba'; // el modelo no se invoca acá
-const redisUrl = process.env.TEST_REDIS_URL ?? 'redis://localhost:6379/1';
+const { url: redisUrl } = getTestBullMqConnection();
 
 async function buildModule(workerEnabled: boolean) {
   return Test.createTestingModule({
