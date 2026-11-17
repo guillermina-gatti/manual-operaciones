@@ -18,11 +18,9 @@ describe('areaTone', () => {
   });
 
   test('cualquier otra área recibe uno de los tres colores: verde, durazno o azul', () => {
-    const tones = new Set([areaTone('Ventas'), areaTone('Operaciones'), areaTone('zzz')]);
     const others = ['Compras', 'Depósito', 'Caja', 'Atención', 'Logística'].map(areaTone);
 
     others.forEach((tone) => expect(['bg-chip-area', 'bg-durazno', 'bg-[#E3EDFC]'].some((c) => tone.includes(c))).toBe(true));
-    expect(tones.size).toBeGreaterThan(0);
     expect(new Set(others).size).toBeGreaterThan(1);
   });
 

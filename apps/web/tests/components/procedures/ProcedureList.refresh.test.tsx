@@ -74,30 +74,30 @@ async function saveANewTitle() {
 }
 
 // Spec 015, D27 (E30): a second procedure can be created without reloading the page.
-describe('"+ Crear otro procedimiento"', () => {
+describe('"Crear otro procedimiento" (spec 017, D6: sin "+")', () => {
   test('is above the draft and brings back an empty form', async () => {
     await showTheDraft();
 
-    await userEvent.click(screen.getByRole('button', { name: '+ Crear otro procedimiento' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Crear otro procedimiento' }));
 
     expect(screen.getByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toBeVisible();
     expect(screen.getByRole('textbox', { name: 'Título' })).toHaveValue('');
     expect(screen.queryByRole('heading', { level: 2, name: 'Borrador' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Crear otro procedimiento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear otro procedimiento' })).not.toBeInTheDocument();
   });
 
   test('is not there while the form to create is shown', async () => {
     render(<ProcedureList />);
     await screen.findAllByRole('listitem');
 
-    expect(screen.queryByRole('button', { name: '+ Crear otro procedimiento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear otro procedimiento' })).not.toBeInTheDocument();
   });
 
   test('asks the list again', async () => {
     await showTheDraft();
     const asked = mocks.listProcedures.mock.calls.length;
 
-    await userEvent.click(screen.getByRole('button', { name: '+ Crear otro procedimiento' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Crear otro procedimiento' }));
 
     expect(mocks.listProcedures).toHaveBeenCalledTimes(asked + 1);
   });
@@ -136,17 +136,5 @@ describe('the list while the draft changes', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sí, publicar' }));
 
     await vi.waitFor(() => expect(mocks.listProcedures.mock.calls.length).toBeGreaterThan(asked));
-  });
-});
-
-// Spec 017, D6 (E4): el botón se llama exactamente "Crear otro procedimiento", sin "+".
-describe('"Crear otro procedimiento" (spec 017, D6)', () => {
-  test('has no "+" in its name and brings back the form to create', async () => {
-    await showTheDraft();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Crear otro procedimiento' }));
-
-    expect(screen.getByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toBeVisible();
-    expect(screen.getByRole('textbox', { name: 'Título' })).toHaveValue('');
   });
 });
