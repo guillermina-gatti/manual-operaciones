@@ -1,11 +1,13 @@
 import type { ApiClient } from './client';
 
 export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED';
+export type InvitationDeliveryMethod = 'email' | 'link';
 
 export interface CreateInvitationPayload {
   email: string;
   role: 'ADMIN' | 'SUPERVISOR' | 'EMPLOYEE';
   areaIds?: string[];
+  deliveryMethod?: InvitationDeliveryMethod;
 }
 
 export interface CreatedInvitation {

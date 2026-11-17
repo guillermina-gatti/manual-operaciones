@@ -9,6 +9,10 @@ import {
 } from 'class-validator';
 import { ROLES, type Role } from '../../common/auth';
 
+export const INVITATION_DELIVERY_METHODS = ['email', 'link'] as const;
+export type InvitationDeliveryMethod =
+  (typeof INVITATION_DELIVERY_METHODS)[number];
+
 export class CreateInvitationDto {
   @ApiProperty({
     description: 'Correo electrónico de la persona invitada',
@@ -40,4 +44,17 @@ export class CreateInvitationDto {
     message: 'Cada área debe ser un identificador UUID v4 válido',
   })
   areaIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      "Método de entrega de la invitación: 'email' (envía correo) o 'link' (devuelve el enlace sin enviar correo)",
+    enum: INVITATION_DELIVERY_METHODS,
+    default: 'email',
+    example: 'link',
+  })
+  @IsOptional()
+  @IsIn(INVITATION_DELIVERY_METHODS, {
+    message: "deliveryMethod debe ser 'email' o 'link'",
+  })
+  deliveryMethod?: InvitationDeliveryMethod;
 }

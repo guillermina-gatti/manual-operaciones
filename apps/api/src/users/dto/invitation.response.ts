@@ -43,7 +43,7 @@ export class InvitationResponse {
 
   @ApiPropertyOptional({
     description:
-      'Enlace de registro directo disponible únicamente en entornos de desarrollo y pruebas locales. En producción se omite por seguridad.',
+      'Enlace de registro directo disponible en entornos locales/pruebas o cuando se solicita deliveryMethod="link".',
     example: 'http://localhost:3001/registro#token=AbCdEf123456...',
   })
   invitationUrl?: string;
