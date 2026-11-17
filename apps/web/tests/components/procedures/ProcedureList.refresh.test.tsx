@@ -138,3 +138,15 @@ describe('the list while the draft changes', () => {
     await vi.waitFor(() => expect(mocks.listProcedures.mock.calls.length).toBeGreaterThan(asked));
   });
 });
+
+// Spec 017, D6 (E4): el botón se llama exactamente "Crear otro procedimiento", sin "+".
+describe('"Crear otro procedimiento" (spec 017, D6)', () => {
+  test('has no "+" in its name and brings back the form to create', async () => {
+    await showTheDraft();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Crear otro procedimiento' }));
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Título' })).toHaveValue('');
+  });
+});

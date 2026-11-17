@@ -251,3 +251,32 @@ describe('for an ADMIN', () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 });
+
+// Spec 017, D1 (E1): el título "Procedimientos" se ve una sola vez (el de la página); el de la sección
+// queda solo para lectores de pantalla y a la derecha se ve cuántos hay.
+describe('the heading of the list (spec 017, D1)', () => {
+  const THIRD = listItem({ id: '1a000000-0000-4000-8000-000000000003' });
+
+  test('the title of the section is only for screen readers', async () => {
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Procedimientos' })).toHaveClass('sr-only');
+  });
+
+  test('says how many procedures there are, in plural', async () => {
+    mocks.listProcedures.mockResolvedValue(listPage([listItem(), OTHER, THIRD]));
+
+    render(<ProcedureList />);
+
+    expect(await screen.findByText('3 procedimientos')).toBeVisible();
+  });
+
+  test('says "1 procedimiento" in singular', async () => {
+    mocks.listProcedures.mockResolvedValue(listPage([listItem()]));
+
+    render(<ProcedureList />);
+
+    expect(await screen.findByText('1 procedimiento')).toBeVisible();
+  });
+});

@@ -478,3 +478,21 @@ describe('coming back to the screen (Activity)', () => {
     expect(screen.queryByRole('form', { name: 'Editar el paso' })).not.toBeInTheDocument();
   });
 });
+
+// Spec 017, D10 y D11 (E3): sin pasos queda solo "Agregar paso", y el "+" es un ícono, no un carácter.
+describe('a draft without steps (spec 017)', () => {
+  test('does not say "Todavía no tiene pasos." and has "Agregar paso"', () => {
+    setup(editable());
+
+    expect(screen.queryByText('Todavía no tiene pasos.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar paso' })).toBeInTheDocument();
+  });
+
+  test('"Agregar paso" draws its "+" as an icon that screen readers skip', () => {
+    setup(editable());
+
+    const icon = screen.getByRole('button', { name: 'Agregar paso' }).querySelector('svg');
+
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
+  });
+});

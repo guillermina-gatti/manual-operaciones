@@ -75,3 +75,42 @@ describe('VersionTimeline (spec 015, R8)', () => {
     expect(within(items()[1]).getByText('3 pasos')).toBeInTheDocument();
   });
 });
+
+// Spec 017, D14 y D15 (E5): cada estado es un chip lleno con su marca, y el cambio crítico es otro chip.
+describe('VersionTimeline chips (spec 017)', () => {
+  const history = () =>
+    render(
+      <VersionTimeline
+        versions={[
+          published({ id: V1, versionNumber: 1, status: 'SUPERSEDED' }),
+          published({ id: V2, versionNumber: 2, isCritical: true, changeSummary: 'Cambia el límite de caja' }),
+          versionItem({ id: V3, versionNumber: 3 }),
+        ]}
+      />,
+    );
+
+  test.each([
+    [0, '✎ Borrador'],
+    [1, '✓ Publicada'],
+    [2, '↺ Reemplazada'],
+  ])('the version at %i has the chip "%s"', (position, chip) => {
+    history();
+
+    expect(items()[position]).toHaveTextContent(chip);
+  });
+
+  test('a critical change has the chip "⚠ Cambio crítico" with its summary', () => {
+    history();
+
+    expect(within(items()[1]).getByText('Cambio crítico').parentElement).toHaveTextContent('⚠ Cambio crítico');
+    expect(within(items()[1]).getByText('Cambia el límite de caja')).toBeInTheDocument();
+  });
+
+  test('the line below says the date and the steps, separated by a dot', () => {
+    render(<VersionTimeline versions={[published({ stepCount: 3 })]} />);
+
+    expect(within(items()[0]).getByText('3 pasos').parentElement).toHaveTextContent(
+      'Publicada el 10/11/2026, 09:00 por Ana Administradora · 3 pasos',
+    );
+  });
+});
