@@ -2,7 +2,7 @@ name: Deploy EC2 (main)
 
 on:
   push:
-    branches: [main]
+    branches: [main, ci/test-deploy-workflow]
   workflow_dispatch:
 
 concurrency:
