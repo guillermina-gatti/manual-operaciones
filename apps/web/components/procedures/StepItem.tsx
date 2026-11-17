@@ -70,7 +70,7 @@ export function StepItem({
     <li className={`${STEP_ROW} flex flex-wrap items-center gap-x-4 gap-y-3`}>
       <StepNumber>{step.order}</StepNumber>
       <div className="flex min-w-48 flex-1 flex-col gap-1">
-        <h3 className="break-words text-lg font-semibold leading-snug text-texto">
+        <h3 className="break-words text-lg font-bold leading-snug text-texto">
           <span className="sr-only">Paso {step.order}: </span>
           {step.title}
         </h3>

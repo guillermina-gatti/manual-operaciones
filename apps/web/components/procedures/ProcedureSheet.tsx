@@ -3,11 +3,11 @@
 // own: the main of the page lays its parts out.
 import Link from 'next/link';
 import { useId } from 'react';
-import { AreaChips, BACK_LINK } from '@/components/documents/design';
+import { BACK_LINK } from '@/components/documents/design';
 import { META_LABEL, PageHeader } from '@/components/documents/list-design';
 import type { ProcedureDetail } from '@/lib/procedures';
 import { versionSummary } from '@/lib/procedures/versions';
-import { SECTION, SECTION_TITLE } from './design';
+import { ColoredAreaChips, SECTION, SECTION_HEADING } from './design';
 import { ProcedureStepCards } from './ProcedureStepCards';
 
 export function ProcedureSheet({ procedure }: { procedure: ProcedureDetail }) {
@@ -27,20 +27,20 @@ export function ProcedureSheet({ procedure }: { procedure: ProcedureDetail }) {
       />
 
       <section aria-labelledby={`${baseId}-about`} className={SECTION}>
-        <h2 id={`${baseId}-about`} className={SECTION_TITLE}>
+        <h2 id={`${baseId}-about`} className={SECTION_HEADING}>
           Sobre este procedimiento
         </h2>
         {version.description && <p className="whitespace-pre-line break-words">{version.description}</p>}
         <dl className="flex min-w-0 flex-col gap-1">
           <dt className={META_LABEL}>Áreas</dt>
           <dd className="min-w-0">
-            <AreaChips areas={areas} />
+            <ColoredAreaChips areas={areas} />
           </dd>
         </dl>
       </section>
 
       <section aria-labelledby={`${baseId}-steps`} className="flex flex-col gap-4">
-        <h2 id={`${baseId}-steps`} className={SECTION_TITLE}>
+        <h2 id={`${baseId}-steps`} className={SECTION_HEADING}>
           Pasos · {version.steps.length}
         </h2>
         <ProcedureStepCards steps={version.steps} />

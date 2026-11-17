@@ -7,6 +7,7 @@
 import { CHIP, HINT, LABEL } from '@/components/documents/design';
 import type { Area } from '@/lib/directory';
 import { displayAreaName } from '@/lib/directory/areas-directory';
+import { areaTone } from './design';
 
 interface AreaChipsFieldProps {
   areas: Area[];
@@ -35,7 +36,9 @@ export function AreaChipsField({ areas, selected, onChange }: AreaChipsFieldProp
       {visible.map((area) => (
         <label
           key={area.id}
-          className={`${CHIP} min-h-11 cursor-pointer gap-2 border border-borde bg-blanco px-3 has-checked:border-chip-area-texto has-checked:bg-chip-area has-checked:text-chip-area-texto`}
+          className={`${CHIP} min-h-11 cursor-pointer gap-2 border px-3 ${
+            selected.includes(area.id) ? `border-transparent ${areaTone(area.name)}` : 'border-borde bg-blanco'
+          }`}
         >
           <input
             type="checkbox"

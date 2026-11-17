@@ -29,7 +29,7 @@ export function DiscardDraft({ busy, onStart, onDiscard }: DiscardDraftProps) {
     <>
       <button
         type="button"
-        className={`${LIST_BUTTON_DANGER} size-12 px-0!`}
+        className={`${LIST_BUTTON_DANGER} size-12 border-peligro! bg-peligro! px-0! text-blanco! enabled:hover:-translate-y-0.5 enabled:hover:bg-[#A31F1F]! motion-reduce:enabled:hover:translate-y-0`}
         aria-label="Descartar borrador"
         disabled={busy !== null}
         onClick={() => {
