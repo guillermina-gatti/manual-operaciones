@@ -454,6 +454,59 @@ describe('UsersController (HTTP, A-12 y HU29)', () => {
       expect(createInvitation).not.toHaveBeenCalled();
     });
 
+    it('con deliveryMethod="link" en producción devuelve invitationUrl sin exigir proveedor de correo', async () => {
+      assertReady.mockImplementationOnce(() => {
+        throw new ServiceUnavailableException(
+          'El servicio de entrega de invitaciones no está configurado en este entorno',
+        );
+      });
+
+      configGet.mockImplementation((key: string) => {
+        if (key === 'JWT_SECRET') return SPEC_JWT_SECRET;
+        if (key === 'FRONTEND_URL') return 'https://front.empresa.com/';
+        if (key === 'NODE_ENV') return 'production';
+        return undefined;
+      });
+
+      const response = await http()
+        .post('/api/users/invitations')
+        .set(admin())
+        .send({
+          email: 'nuevo@empresa.com',
+          role: 'EMPLOYEE',
+          areaIds: [VENTAS],
+          deliveryMethod: 'link',
+        })
+        .expect(201);
+
+      expect(assertReady).not.toHaveBeenCalled();
+      expect(deliver).not.toHaveBeenCalled();
+      expect(createInvitation).toHaveBeenCalledWith({
+        email: 'nuevo@empresa.com',
+        role: 'EMPLOYEE',
+        areaIds: [VENTAS],
+        createdById: '0b000000-0000-4000-8000-000000000001',
+      });
+      expect(response.body.invitationUrl).toBe(
+        'https://front.empresa.com/registro#token=V1StGXR8_Z5jdHi6B-myTEYWgkUVnxI4463m48EEUIU',
+      );
+    });
+
+    it('rechaza deliveryMethod inválido con 400', async () => {
+      await http()
+        .post('/api/users/invitations')
+        .set(admin())
+        .send({
+          email: 'nuevo@empresa.com',
+          role: 'EMPLOYEE',
+          areaIds: [VENTAS],
+          deliveryMethod: 'sms',
+        })
+        .expect(400);
+
+      expect(createInvitation).not.toHaveBeenCalled();
+    });
+
     it('en staging sin proveedor configurado responde 503 y cero llamadas a createInvitation', async () => {
       assertReady.mockImplementationOnce(() => {
         throw new ServiceUnavailableException(

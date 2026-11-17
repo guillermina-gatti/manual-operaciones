@@ -127,4 +127,42 @@ describe('InviteUserForm — Emisión de invitaciones por ADMIN', () => {
     expect(screen.getByRole('textbox', { name: /correo electrónico/i })).toHaveValue('');
     expect(screen.getByRole('radio', { name: /empleado/i })).toBeChecked();
   });
+
+  test('permite elegir "Generar enlace" y envía deliveryMethod="link"', async () => {
+    const user = userEvent.setup();
+    render(<InviteUserForm />);
+
+    await waitFor(() => expect(screen.getByLabelText('Ventas')).toBeInTheDocument());
+
+    await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'enlace@empresa.com');
+    await user.click(screen.getByRole('radio', { name: /generar enlace/i }));
+    await user.click(screen.getByRole('button', { name: /generar enlace de invitación/i }));
+
+    await waitFor(() => {
+      expect(mocks.createInvitation).toHaveBeenCalledWith({
+        email: 'enlace@empresa.com',
+        role: 'EMPLOYEE',
+        areaIds: ['area-1'],
+        deliveryMethod: 'link',
+      });
+    });
+
+    expect(await screen.findByText('¡Invitación emitida con éxito!')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('http://localhost:3001/registro#token=test-token')).toBeInTheDocument();
+  });
+
+  test('si el correo devuelve 503 sugiere usar la opción Generar enlace', async () => {
+    const user = userEvent.setup();
+    mocks.createInvitation.mockRejectedValueOnce(new ApiError(503));
+
+    render(<InviteUserForm />);
+    await waitFor(() => expect(screen.getByLabelText('Ventas')).toBeInTheDocument());
+
+    await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'sinmail@empresa.com');
+    await user.click(screen.getByRole('button', { name: /enviar invitación/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'El envío por correo no está configurado en este entorno. Podés elegir "Generar enlace" para crear la invitación.',
+    );
+  });
 });

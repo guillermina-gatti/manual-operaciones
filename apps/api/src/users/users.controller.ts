@@ -169,9 +169,12 @@ export class UsersController {
   ): Promise<InvitationResponse> {
     const nodeEnv = this.configService.get<string>('NODE_ENV');
     const isLocal = nodeEnv === 'development' || nodeEnv === 'test';
+    const deliveryMethod = dto.deliveryMethod ?? 'email';
 
-    // 1. En producción, staging o sin proveedor configurado, verificar canal antes de crear/persistir
-    this.deliveryService.assertReady();
+    // 1. Si se entrega por correo, verificar canal antes de crear/persistir en entornos no locales
+    if (deliveryMethod === 'email') {
+      this.deliveryService.assertReady();
+    }
 
     // 2. Resolver y validar FRONTEND_URL estrictamente según el entorno (nunca usar Host header)
     const frontendBaseUrl = resolveFrontendBaseUrl(this.configService);
@@ -185,6 +188,18 @@ export class UsersController {
     });
 
     const invitationUrl = `${frontendBaseUrl}/registro#token=${result.rawToken}`;
+
+    if (deliveryMethod === 'link') {
+      return {
+        id: result.invitation.id,
+        email: result.invitation.email,
+        role: result.invitation.role,
+        areaIds: result.invitation.areaIds,
+        expiresAt: result.invitation.expiresAt,
+        createdAt: result.invitation.createdAt,
+        invitationUrl,
+      };
+    }
 
     // 4. Entregar invitación mediante el canal configurado y validar el resultado
     let deliveryResult;

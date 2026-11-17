@@ -127,6 +127,7 @@ export { INVITATIONS_CHANGED_EVENT, notifyInvitationsChanged } from './invitatio
 export type {
   CreateInvitationPayload,
   CreatedInvitation,
+  InvitationDeliveryMethod,
   InvitationListItem,
   InvitationStatus,
 } from './invitations';
