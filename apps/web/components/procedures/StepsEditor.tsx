@@ -40,9 +40,7 @@ export function StepsEditor({ procedure, onChange, onGone }: StepsEditorProps) {
         </Notice>
       )}
 
-      {steps.length === 0 ? (
-        <p className="text-texto-suave">Todavía no tiene pasos.</p>
-      ) : (
+      {steps.length > 0 && (
         <ol aria-label="Pasos" className="flex flex-col gap-4">
           {steps.map((step, index) => (
             <StepItem

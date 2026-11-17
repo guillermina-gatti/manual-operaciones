@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { ScreenState } from '@/components/ui/ScreenState';
 import type { ApiResource } from '@/lib/api';
 import type { VersionHistoryItem } from '@/lib/procedures';
-import { SECTION, SECTION_TITLE } from './design';
+import { SECTION, SECTION_HEADING } from './design';
 import { Skeleton } from './Skeleton';
 import { VersionTimeline } from './VersionTimeline';
 
@@ -40,7 +40,7 @@ export function VersionsSection({ versions, children }: VersionsSectionProps) {
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className={SECTION}>
-      <h2 id={titleId} className={SECTION_TITLE}>
+      <h2 id={titleId} className={SECTION_HEADING}>
         Versiones
       </h2>
       <Content versions={versions} />

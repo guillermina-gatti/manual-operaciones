@@ -3,6 +3,7 @@
 // Publish the draft (spec 015, R2 and R5): the button "Publicar" and, before anything happens, a
 // confirmation that says what changes, with the mark of a critical change and its summary. The API
 // decides; its errors are said here.
+import Image from 'next/image';
 import { useState } from 'react';
 import { LIST_BUTTON_PRIMARY, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { VersionHistoryItem } from '@/lib/procedures';
@@ -39,8 +40,18 @@ export function PublishVersion({ procedureId, version, replacesPublished, onPubl
 
   if (confirming) {
     return (
-      <fieldset aria-label="Confirmar publicación" className="flex min-w-0 flex-wrap gap-3">
-        <p className="basis-full font-semibold">
+      <fieldset
+        aria-label="Confirmar publicación"
+        className="relative flex min-w-0 flex-wrap gap-3 overflow-hidden rounded-2xl bg-salvia p-5 pb-24 sm:pr-28 sm:pb-5"
+      >
+        <Image
+          src="/hornero.png"
+          alt=""
+          width={352}
+          height={465}
+          className="pointer-events-none absolute right-4 bottom-3 h-auto w-16 select-none"
+        />
+        <p className="basis-full font-bold text-bosque">
           ¿Publicar la versión {version.versionNumber}?{' '}
           {replacesPublished ? 'La versión vigente pasa a reemplazada.' : 'Va a ser la versión vigente.'}
         </p>

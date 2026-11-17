@@ -21,9 +21,12 @@ function Group({ title, count, children }: { title: string; count: number; child
   );
 }
 
-function Step({ title, note }: { title: string; note?: string }) {
+// Added steps are green, removed ones pink and modified ones peach (spec 017, D17).
+const TONES = { added: 'bg-chip-area', removed: 'bg-rosa-alerta', modified: 'bg-durazno' } as const;
+
+function Step({ title, note, tone }: { title: string; note?: string; tone: keyof typeof TONES }) {
   return (
-    <li className="flex min-w-0 flex-col rounded-xl bg-fondo p-3">
+    <li className={`flex min-w-0 flex-col rounded-xl ${TONES[tone]} p-3`}>
       <span className="break-words font-semibold">{title}</span>
       {note && <span className="text-texto-suave">{note}</span>}
     </li>
@@ -40,14 +43,14 @@ export function CompareResult({ comparison }: { comparison: VersionComparison })
       <p className="text-texto-suave">{`De ${side(comparison.from)} a ${side(comparison.to)}`}</p>
       {!hasDifferences(comparison) && <p className="font-semibold">Las dos versiones tienen los mismos pasos.</p>}
       <Group title="Agregados" count={added.length}>
-        {added.map((step) => <Step key={step.id} title={step.title} />)}
+        {added.map((step) => <Step key={step.id} title={step.title} tone="added" />)}
       </Group>
       <Group title="Quitados" count={removed.length}>
-        {removed.map((step) => <Step key={step.id} title={step.title} />)}
+        {removed.map((step) => <Step key={step.id} title={step.title} tone="removed" />)}
       </Group>
       <Group title="Modificados" count={modified.length}>
         {modified.map((item) => (
-          <Step key={item.after.id} title={modifiedTitle(item)} note={describeChange(item)} />
+          <Step key={item.after.id} title={modifiedTitle(item)} note={describeChange(item)} tone="modified" />
         ))}
       </Group>
       {unchanged > 0 && (

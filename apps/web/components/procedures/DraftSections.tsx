@@ -9,7 +9,7 @@ import { useApiResource } from '@/lib/api';
 import { areasDirectory } from '@/lib/directory';
 import type { EditableProcedure } from '@/lib/procedures/editable';
 import { DraftForm } from './DraftForm';
-import { SECTION, SECTION_TITLE } from './design';
+import { SECTION, SECTION_HEADING } from './design';
 import { Skeleton } from './Skeleton';
 import { StepsEditor } from './StepsEditor';
 
@@ -27,7 +27,7 @@ export function DraftSections({ procedure, onChange, onGone }: DraftSectionsProp
   return (
     <>
       <section aria-labelledby={`${baseId}-draft`} className={SECTION}>
-        <h2 id={`${baseId}-draft`} className={SECTION_TITLE}>
+        <h2 id={`${baseId}-draft`} className={SECTION_HEADING}>
           Borrador
         </h2>
         {areas.status === 'success' ? (
@@ -42,7 +42,7 @@ export function DraftSections({ procedure, onChange, onGone }: DraftSectionsProp
       </section>
 
       <section aria-labelledby={`${baseId}-steps`} className={SECTION}>
-        <h2 id={`${baseId}-steps`} className={SECTION_TITLE}>
+        <h2 id={`${baseId}-steps`} className={SECTION_HEADING}>
           Pasos
         </h2>
         <StepsEditor procedure={procedure} onChange={onChange} onGone={onGone} />

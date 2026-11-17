@@ -1,10 +1,10 @@
 'use client';
 
-// "+ Agregar paso" (HU09, R6; spec 015, D24): a button with a dashed border that opens the form of a
+// "Agregar paso" with a "+" icon (HU09, R6; spec 015, D24): a button with a dashed border that opens the form of a
 // new step. The form clears after each step that is added and stays open to add the next one.
 import { useLayoutEffect, useState } from 'react';
 import type { FormValues } from '@/lib/procedures/validate';
-import { ADD_BOX, ADD_BUTTON } from './design';
+import { ADD_BOX, ADD_BUTTON, IconPlus } from './design';
 import { StepForm } from './StepForm';
 
 interface AddStepProps {
@@ -24,7 +24,8 @@ export function AddStep({ disabled, working, onAdd }: AddStepProps) {
   if (!open) {
     return (
       <button type="button" className={ADD_BUTTON} disabled={disabled} onClick={() => setOpen(true)}>
-        + Agregar paso
+        <IconPlus />
+        Agregar paso
       </button>
     );
   }

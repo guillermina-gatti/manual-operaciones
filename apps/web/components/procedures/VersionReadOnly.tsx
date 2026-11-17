@@ -9,7 +9,7 @@ import { useApiResource } from '@/lib/api';
 import { getVersion } from '@/lib/procedures';
 import type { VersionDetail } from '@/lib/procedures';
 import { VERSION_LABELS } from '@/lib/procedures/versions';
-import { SECTION, SECTION_TITLE, StepNumber } from './design';
+import { SECTION, SECTION_HEADING, StepNumber } from './design';
 import { Skeleton } from './Skeleton';
 
 function Steps({ version }: { version: VersionDetail }) {
@@ -51,7 +51,7 @@ export function VersionReadOnly({ procedureId, versionId }: { procedureId: strin
   const { data } = version;
   return (
     <section aria-labelledby={titleId} className={SECTION}>
-      <h2 id={titleId} className={SECTION_TITLE}>
+      <h2 id={titleId} className={SECTION_HEADING}>
         Versión {data.versionNumber} · {VERSION_LABELS[data.status]}
       </h2>
       <p className={`${HINT} -mt-3`}>Esta versión ya no se puede modificar.</p>

@@ -16,9 +16,19 @@ interface TextFieldProps {
   rows?: number;
   // For the box of the field, if the screen lays it out (for example a width).
   className?: string;
+  // For the input or textarea itself, for example to give it the same height as its neighbor.
+  fieldClassName?: string;
 }
 
-export function TextField({ label, value, onChange, error, rows, className = '' }: TextFieldProps) {
+export function TextField({
+  label,
+  value,
+  onChange,
+  error,
+  rows,
+  className = '',
+  fieldClassName = '',
+}: TextFieldProps) {
   const id = useId();
   const errorId = `${id}-error`;
   const shared = {
@@ -35,9 +45,9 @@ export function TextField({ label, value, onChange, error, rows, className = '' 
         {label}
       </label>
       {rows ? (
-        <textarea rows={rows} className={`${INPUT} py-3 text-base`} {...shared} />
+        <textarea rows={rows} className={`${INPUT} py-3 text-base ${fieldClassName}`} {...shared} />
       ) : (
-        <input type="text" className={`${INPUT} text-base`} {...shared} />
+        <input type="text" className={`${INPUT} text-base ${fieldClassName}`} {...shared} />
       )}
       <FieldError id={errorId} message={error} />
     </div>

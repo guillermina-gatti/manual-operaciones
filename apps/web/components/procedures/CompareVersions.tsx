@@ -9,6 +9,7 @@ import { LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { VersionHistoryItem } from '@/lib/procedures';
 import { versionSummary, newestFirst } from '@/lib/procedures/versions';
 import { CompareResult } from './CompareResult';
+import { SECONDARY_LIFT } from './design';
 import { Notice } from './Notice';
 import { useCompareVersions } from './useCompareVersions';
 
@@ -67,7 +68,7 @@ export function CompareVersions({
         <VersionSelect label="Hasta" value={to} versions={sorted} onChange={choose('to')} />
         <button
           type="button"
-          className={LIST_BUTTON_SECONDARY}
+          className={`${LIST_BUTTON_SECONDARY} ${SECONDARY_LIFT}`}
           disabled={busy || from === to}
           aria-busy={busy}
           onClick={() => void compare(from, to)}
