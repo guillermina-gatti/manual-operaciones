@@ -48,7 +48,7 @@ Colores con los tokens de `DESIGN.md`. Donde no hay token se indica el hexadecim
 
 ### Crear
 
-- **D5 · Crear un procedimiento.** Es la única sección con la rayita naranja en el título. En pantallas medianas y grandes tiene al costado el hornero (`/hornero.png`) con "Como el hornero, paso a paso", 4 puntos naranjas y "Título · Pasos · Áreas · Publicar". En el celular el hornero no se ve.
+- **D5 · Crear un procedimiento.** El título "Crear un procedimiento" queda solo para lectores de pantalla (`sr-only`), porque se repite con el botón "Crear procedimiento": ya no hay ninguna rayita naranja visible en la pantalla. En pantallas medianas y grandes tiene al costado el hornero (`/hornero.png`) con "Como el hornero, paso a paso", 4 puntos naranjas y "Título · Pasos · Áreas · Publicar". En el celular el hornero no se ve.
 - **D6 · Borrador creado.** Recuadro salvia con el hornero, "¡Borrador creado!" y "Agregale pasos y áreas abajo. Nadie lo ve hasta que lo publiques." El botón "Crear otro procedimiento" es **verde** (`exito`, más oscuro `#126E3C` al pasar el mouse), con texto blanco y **sin "+"**.
 
 ### Editor del borrador
@@ -60,6 +60,7 @@ Colores con los tokens de `DESIGN.md`. Donde no hay token se indica el hexadecim
 - **D11 · Sin pasos.** Si el borrador no tiene pasos, no se muestra el texto "Todavía no tiene pasos.": queda solo "Agregar paso".
 - **D12 · Áreas.** Se eligen con chips propios de procedimientos (`AreaChipsField`), no con el campo compartido de documentos. Cada chip marcado toma el color de su área (D4). La aclaración "Un procedimiento puede quedar sin áreas, pero no se puede publicar sin al menos una." se mantiene.
 - **D13 · Descartar borrador.** El tachito es un botón cuadrado **rojo lleno** con el ícono blanco, al lado de "Guardar cambios". Al pasar el mouse sube y se oscurece (`#A31F1F`).
+- **D23 · Campos del borrador.** En la tarjeta Borrador, Título y Descripción tienen la misma altura, la de un campo de una línea; la Descripción se puede agrandar arrastrando su esquina.
 
 ### Versiones
 
@@ -124,6 +125,18 @@ Colores con los tokens de `DESIGN.md`. Donde no hay token se indica el hexadecim
 - *Dado* el sistema con "reducir movimiento",
 - *cuando* se pasa el mouse por una tarjeta o un botón,
 - *entonces* cambia el color, pero nada se mueve.
+
+**E8 · Título de crear solo para lectores de pantalla (D5)**
+- *Dado* un admin en `/procedimientos`,
+- *cuando* ve el recuadro para crear un procedimiento,
+- *entonces* el título "Crear un procedimiento" no se ve, pero sigue disponible para los lectores de pantalla,
+- *y* no hay ninguna rayita naranja en la pantalla.
+
+**E9 · Título y Descripción del borrador (D23)**
+- *Dado* un borrador abierto en el editor,
+- *cuando* se ve la tarjeta Borrador,
+- *entonces* Título y Descripción tienen la misma altura, la de un campo de una línea,
+- *y* la Descripción se puede agrandar arrastrando su esquina.
 
 ## 6. Decisiones
 

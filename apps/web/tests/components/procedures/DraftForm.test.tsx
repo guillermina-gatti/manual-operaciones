@@ -400,3 +400,13 @@ describe('coming back to the screen (Activity)', () => {
     expect(screen.queryByText(/¿Descartar el borrador\?/)).not.toBeInTheDocument();
   });
 });
+
+// Spec 017, D23 (E9): Título y Descripción miden lo mismo, la altura de un campo de una línea.
+describe('the fields of the draft (spec 017, D23)', () => {
+  test('the description is a textarea of one row', () => {
+    setup();
+
+    expect(descriptionField().tagName).toBe('TEXTAREA');
+    expect(descriptionField()).toHaveAttribute('rows', '1');
+  });
+});

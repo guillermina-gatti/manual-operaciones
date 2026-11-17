@@ -280,3 +280,16 @@ describe('the heading of the list (spec 017, D1)', () => {
     expect(await screen.findByText('1 procedimiento')).toBeVisible();
   });
 });
+
+// Spec 017, D5 (E8): el título de "Crear un procedimiento" se repite con el botón "Crear procedimiento",
+// así que queda solo para lectores de pantalla (sigue ahí, con su id para el aria-labelledby).
+describe('the heading of the form to create (spec 017, D5)', () => {
+  test('exists for screen readers and is not shown', async () => {
+    mocks.useSession.mockReturnValue(ANA);
+
+    render(<ProcedureList />);
+    await screen.findAllByRole('listitem');
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Crear un procedimiento' })).toHaveClass('sr-only');
+  });
+});

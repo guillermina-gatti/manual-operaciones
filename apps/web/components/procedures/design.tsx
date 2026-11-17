@@ -8,10 +8,9 @@ import { LIST_PANEL } from '@/components/documents/list-design';
 import type { ProcedureAreaView } from '@/lib/api/procedure-view';
 import { formatArea } from '@/lib/documents/format';
 
-// Una sección de la pantalla de un procedimiento: la tarjeta con su título h2. SECTION_TITLE lleva la
-// rayita naranja (solo "Crear un procedimiento", D5); SECTION_HEADING es el del editor y la ficha (D7).
+// Una sección de la pantalla de un procedimiento: la tarjeta con su título h2. SECTION_HEADING es el
+// del editor y la ficha: verde bosque, sin rayita naranja (D7).
 export const SECTION = `${LIST_PANEL} flex min-w-0 flex-col gap-5`;
-export const SECTION_TITLE = 'border-l-4 border-naranja pl-3 text-xl font-bold text-bosque';
 export const SECTION_HEADING = 'text-xl font-bold text-bosque';
 
 // Un botón secundario que al pasar el mouse se llena de verde bosque y sube (D16). Con movimiento

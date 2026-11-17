@@ -3,8 +3,8 @@
 // The home of the procedures screens (spec 006, W1 to W3): the list the API gives for this user and,
 // only for an ADMIN, the form to create a procedure. When it creates one, the same screen shows its
 // draft in place of the form (spec 015, D21). It has no box of its own: the main of the page lays its
-// parts out. Spec 017: the title of the list is only for screen readers (D1), the form has the
-// hornero beside it (D5) and the notice of the new draft has a green button (D6).
+// parts out. Spec 017: the titles of the list (D1) and of the form (D5) are only for screen readers,
+// the form has the hornero beside it (D5) and the notice of the new draft has a green button (D6).
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { useId, useState } from 'react';
@@ -12,7 +12,6 @@ import { LIST_BUTTON_SECONDARY, LIST_PANEL } from '@/components/documents/list-d
 import { parsePageParam } from '@/lib/documents/pagination';
 import { useSession } from '@/lib/session';
 import { CreateProcedureForm } from './CreateProcedureForm';
-import { SECTION_TITLE } from './design';
 import { ProcedureCollection } from './ProcedureCollection';
 import { ProcedureEditorById } from './ProcedureEditor';
 import { useProcedureList } from './useProcedureList';
@@ -88,7 +87,7 @@ export function ProcedureList() {
           className={`${LIST_PANEL} grid gap-6 md:grid-cols-[minmax(0,1fr)_16rem] md:items-center`}
         >
           <div className="flex min-w-0 flex-col gap-5">
-            <h2 id={`${baseId}-create`} className={SECTION_TITLE}>
+            <h2 id={`${baseId}-create`} className="sr-only">
               Crear un procedimiento
             </h2>
             <CreateProcedureForm
