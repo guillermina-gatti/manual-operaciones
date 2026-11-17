@@ -1,0 +1,175 @@
+name: Deploy EC2 (main)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    name: Verify (Lint, Test & Build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check Prisma migration changes
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && git diff --name-only HEAD^ HEAD -- apps/api/prisma/migrations/ | grep -q .; then
+            echo "::warning::Se detectaron nuevas migraciones en apps/api/prisma/migrations/. Recordá haber tomado un snapshot manual de RDS antes del despliegue."
+          else
+            echo "::notice::Recordatorio: ante cualquier cambio futuro de esquema Prisma, tomá un snapshot manual de RDS antes de desplegar."
+          fi
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint API
+        run: pnpm --filter api lint
+
+      - name: Test API
+        run: pnpm --filter api test
+
+      - name: Build API
+        run: pnpm --filter api build
+
+      - name: Lint Web
+        run: pnpm --filter web lint
+
+      - name: Test Web
+        run: pnpm --filter web test
+
+      - name: Build Web
+        run: pnpm --filter web build
+        env:
+          API_URL: https://api.example.invalid
+
+  deploy:
+    name: Deploy to EC2
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Authorize runner IP on EC2 Security Group
+        run: |
+          RUNNER_IP=$(curl -fsS https://checkip.amazonaws.com)
+          echo "RUNNER_IP=$RUNNER_IP" >> "$GITHUB_ENV"
+          aws ec2 authorize-security-group-ingress \
+            --region us-east-2 \
+            --group-id sg-0fc3b9890bf3b65ed \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${RUNNER_IP}/32"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 18m
+          script: |
+            set -euo pipefail
+            cd ~/manual-operaciones
+
+            dump_logs() {
+              echo "=== ESTADO DE CONTENEDORES ==="
+              docker compose -f docker-compose.prod.yml ps -a || true
+              echo "=== LOGS MIGRATOR ==="
+              docker compose -f docker-compose.prod.yml logs --tail=80 migrator || true
+              echo "=== LOGS API ==="
+              docker compose -f docker-compose.prod.yml logs --tail=80 api || true
+              echo "=== LOGS WEB ==="
+              docker compose -f docker-compose.prod.yml logs --tail=80 web || true
+              echo "=== LOGS CADDY ==="
+              docker compose -f docker-compose.prod.yml logs --tail=40 caddy || true
+            }
+            trap 'dump_logs' ERR
+
+            echo "=== 1. Actualizar código (main) sin tocar .env ==="
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            echo "=== 2. Build secuencial (t3.small) ==="
+            docker compose -f docker-compose.prod.yml build migrator
+            docker compose -f docker-compose.prod.yml build api
+            docker compose -f docker-compose.prod.yml build web
+
+            echo "=== 3. Levantar stack ==="
+            docker compose -f docker-compose.prod.yml up -d
+
+            echo "=== 4. Verificar migrator (exit code 0) ==="
+            MIGRATOR_ID=$(docker compose -f docker-compose.prod.yml ps -q -a migrator)
+            MIGRATOR_EXIT=$(docker inspect -f '{{.State.ExitCode}}' "$MIGRATOR_ID")
+            if [ "$MIGRATOR_EXIT" != "0" ]; then
+              echo "ERROR: migrator terminó con código $MIGRATOR_EXIT"
+              exit 1
+            fi
+
+            echo "=== 5. Esperar healthchecks de api y web ==="
+            for i in $(seq 1 30); do
+              API_HEALTH=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose -f docker-compose.prod.yml ps -q api)" || echo "unknown")
+              WEB_HEALTH=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose -f docker-compose.prod.yml ps -q web)" || echo "unknown")
+              echo "Intento $i/30 -> api=$API_HEALTH web=$WEB_HEALTH"
+              if [ "$API_HEALTH" = "healthy" ] && [ "$WEB_HEALTH" = "healthy" ]; then
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$API_HEALTH" != "healthy" ] || [ "$WEB_HEALTH" != "healthy" ]; then
+              echo "ERROR: healthchecks no alcanzaron healthy (api=$API_HEALTH, web=$WEB_HEALTH)"
+              exit 1
+            fi
+
+            echo "=== 6. Verificar endpoints internos de api (/live y /ready) y web (/login) ==="
+            docker compose -f docker-compose.prod.yml exec -T api node -e "
+              Promise.all([
+                fetch('http://127.0.0.1:3000/api/health/live'),
+                fetch('http://127.0.0.1:3000/api/health/ready'),
+              ]).then(([l, r]) => {
+                if (!l.ok || !r.ok) process.exit(1);
+                console.log('API OK:', l.status, r.status);
+              }).catch(() => process.exit(1));
+            "
+            docker compose -f docker-compose.prod.yml exec -T web node -e "
+              fetch('http://127.0.0.1:3001/login')
+                .then((r) => { if (!r.ok) process.exit(1); console.log('WEB OK:', r.status); })
+                .catch(() => process.exit(1));
+            "
+            echo "DEPLOY OK"
+
+      - name: Revoke runner IP from EC2 Security Group
+        if: always()
+        run: |
+          if [ -n "${RUNNER_IP:-}" ]; then
+            aws ec2 revoke-security-group-ingress \
+              --region us-east-2 \
+              --group-id sg-0fc3b9890bf3b65ed \
+              --protocol tcp \
+              --port 22 \
+              --cidr "${RUNNER_IP}/32" || true
+          fi
