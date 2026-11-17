@@ -145,19 +145,37 @@ jobs:
             fi
 
             echo "=== 6. Verificar endpoints internos de api (/live y /ready) y web (/login) ==="
-            docker compose -f docker-compose.prod.yml exec -T api node -e "
-              Promise.all([
-                fetch('http://127.0.0.1:3000/api/health/live'),
-                fetch('http://127.0.0.1:3000/api/health/ready'),
-              ]).then(([l, r]) => {
-                if (!l.ok || !r.ok) process.exit(1);
-                console.log('API OK:', l.status, r.status);
-              }).catch(() => process.exit(1));
-            "
+            for i in $(seq 1 10); do
+              if docker compose -f docker-compose.prod.yml exec -T api node -e "
+                Promise.all([
+                  fetch('http://127.0.0.1:3000/api/health/live'),
+                  fetch('http://127.0.0.1:3000/api/health/ready'),
+                ]).then(([l, r]) => {
+                  console.log('API:', l.status, r.status);
+                  process.exit(l.ok && r.ok ? 0 : 1);
+                }).catch((err) => {
+                  console.error('API fetch error:', err);
+                  process.exit(1);
+                });
+              "; then
+                break
+              fi
+              if [ "$i" = "10" ]; then
+                echo "ERROR: /api/health/live o /api/health/ready no respondieron 200"
+                exit 1
+              fi
+              sleep 3
+            done
             docker compose -f docker-compose.prod.yml exec -T web node -e "
               fetch('http://127.0.0.1:3001/login')
-                .then((r) => { if (!r.ok) process.exit(1); console.log('WEB OK:', r.status); })
-                .catch(() => process.exit(1));
+                .then((r) => {
+                  console.log('WEB:', r.status);
+                  process.exit(r.ok ? 0 : 1);
+                })
+                .catch((err) => {
+                  console.error('WEB fetch error:', err);
+                  process.exit(1);
+                });
             "
             echo "DEPLOY OK"
 
