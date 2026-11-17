@@ -12,7 +12,7 @@ import { versionSummary } from '@/lib/procedures/versions';
 import { CompareVersions } from './CompareVersions';
 import { DraftSections } from './DraftSections';
 import { EditorHeader } from './EditorHeader';
-import { SECTION, SECTION_TITLE } from './design';
+import { SECTION, SECTION_HEADING } from './design';
 import { ProcedureAreasForm } from './ProcedureAreasForm';
 import { useVersions } from './useVersions';
 import { VersionActions } from './VersionActions';
@@ -80,7 +80,7 @@ export function ProcedureEditorBody({
         <>
           <VersionReadOnly procedureId={procedure.id} versionId={procedure.versionId} />
           <section aria-labelledby={`${baseId}-areas`} className={SECTION}>
-            <h2 id={`${baseId}-areas`} className={SECTION_TITLE}>
+            <h2 id={`${baseId}-areas`} className={SECTION_HEADING}>
               Áreas
             </h2>
             <ProcedureAreasForm procedure={procedure} onChange={onChange} />

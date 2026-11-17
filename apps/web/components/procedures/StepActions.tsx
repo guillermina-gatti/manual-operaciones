@@ -5,7 +5,7 @@
 import { LIST_BUTTON_DANGER, LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { EditableStep } from '@/lib/procedures/editable';
 import type { Direction } from '@/lib/procedures/steps';
-import { IconDown, IconTrash, IconUp } from './design';
+import { IconDown, IconPencil, IconTrash, IconUp, STEP_BUTTON, STEP_BUTTON_DANGER } from './design';
 import type { Busy } from './useStepActions';
 
 // A button with only an icon: square, 48 px. It always has an aria-label. The button classes bring
@@ -27,7 +27,7 @@ export function StepActions({ step, isFirst, isLast, busy, onMove, onStartEdit, 
     <footer className="flex flex-wrap gap-2">
       <button
         type="button"
-        className={`${LIST_BUTTON_SECONDARY} ${ICON_ONLY}`}
+        className={`${LIST_BUTTON_SECONDARY} ${STEP_BUTTON} ${ICON_ONLY}`}
         aria-label={`Subir paso: ${step.title}`}
         disabled={busy !== null || isFirst}
         onClick={() => onMove('up')}
@@ -36,7 +36,7 @@ export function StepActions({ step, isFirst, isLast, busy, onMove, onStartEdit, 
       </button>
       <button
         type="button"
-        className={`${LIST_BUTTON_SECONDARY} ${ICON_ONLY}`}
+        className={`${LIST_BUTTON_SECONDARY} ${STEP_BUTTON} ${ICON_ONLY}`}
         aria-label={`Bajar paso: ${step.title}`}
         disabled={busy !== null || isLast}
         onClick={() => onMove('down')}
@@ -45,16 +45,17 @@ export function StepActions({ step, isFirst, isLast, busy, onMove, onStartEdit, 
       </button>
       <button
         type="button"
-        className={LIST_BUTTON_SECONDARY}
+        className={`${LIST_BUTTON_SECONDARY} ${STEP_BUTTON}`}
         aria-label={`Editar paso: ${step.title}`}
         disabled={busy !== null}
         onClick={onStartEdit}
       >
+        <IconPencil />
         Editar
       </button>
       <button
         type="button"
-        className={`${LIST_BUTTON_DANGER} ${ICON_ONLY}`}
+        className={`${LIST_BUTTON_DANGER} ${STEP_BUTTON_DANGER} ${ICON_ONLY}`}
         aria-label={`Borrar el paso ${step.title}`}
         disabled={busy !== null}
         onClick={onAskRemove}

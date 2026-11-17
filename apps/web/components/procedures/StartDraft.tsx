@@ -4,6 +4,7 @@
 // borrador" when there is one that this screen does not have yet.
 import { LIST_BUTTON_SECONDARY } from '@/components/documents/list-design';
 import type { VersionDetail, VersionHistoryItem } from '@/lib/procedures';
+import { SECONDARY_LIFT } from './design';
 import { Notice } from './Notice';
 import { useStartDraft } from './useStartDraft';
 
@@ -26,7 +27,7 @@ export function StartDraft({ procedureId, draft, onStarted }: StartDraftProps) {
       )}
       <button
         type="button"
-        className={`${LIST_BUTTON_SECONDARY} self-start`}
+        className={`${LIST_BUTTON_SECONDARY} ${SECONDARY_LIFT} self-start`}
         disabled={busy}
         aria-busy={busy}
         onClick={() => void start(draft?.id)}

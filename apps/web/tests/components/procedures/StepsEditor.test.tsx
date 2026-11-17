@@ -75,7 +75,7 @@ const stepButton = (verb: string, title: string) =>
   screen.getByRole('button', { name: `${verb} paso: ${title}` });
 const deleteButton = (title: string) => screen.getByRole('button', { name: `Borrar el paso ${title}` });
 const confirmDelete = () => userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }));
-const openAdd = () => userEvent.click(screen.getByRole('button', { name: '+ Agregar paso' }));
+const openAdd = () => userEvent.click(screen.getByRole('button', { name: 'Agregar paso' }));
 const addForm = () => screen.getByRole('form', { name: 'Agregar un paso' });
 const addTitle = () => within(addForm()).getByRole('textbox', { name: 'Título del paso' });
 const addDescription = () =>
@@ -83,12 +83,12 @@ const addDescription = () =>
 const addButton = () => within(addForm()).getByRole('button', { name: /Agregar paso|Agregando…/ });
 
 describe('the list', () => {
-  test('without steps it says so, and "+ Agregar paso" is there', () => {
+  test('without steps there is no list and "Agregar paso" is there', () => {
     setup(editable());
 
-    expect(screen.getByText('Todavía no tiene pasos.')).toBeInTheDocument();
+    expect(screen.queryByText('Todavía no tiene pasos.')).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Pasos' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Agregar paso' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar paso' })).toBeInTheDocument();
   });
 
   test('each step row is sage, with its number in the green circle (E28)', () => {
@@ -98,17 +98,18 @@ describe('the list', () => {
     expect(within(items()[0]).getByText('1')).toHaveClass('bg-bosque', 'rounded-full');
   });
 
-  test('"+ Agregar paso" has a dashed border and opens the form of the step (E28)', async () => {
+  test('"Agregar paso" has a dashed border and opens the form of the step (E28)', async () => {
     setup();
 
-    const opener = screen.getByRole('button', { name: '+ Agregar paso' });
+    const opener = screen.getByRole('button', { name: 'Agregar paso' });
     expect(opener).toHaveClass('border-dashed');
     expect(screen.queryByRole('form', { name: 'Agregar un paso' })).not.toBeInTheDocument();
 
     await userEvent.click(opener);
 
     expect(addForm()).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Agregar paso' })).not.toBeInTheDocument();
+    // The form has its own "Agregar paso" button: what closes is the one that opened it.
+    expect(opener).not.toBeInTheDocument();
   });
 
   test('"Cancelar" in the form of a new step closes it', async () => {
@@ -117,7 +118,7 @@ describe('the list', () => {
     await openAdd();
     await userEvent.click(within(addForm()).getByRole('button', { name: 'Cancelar' }));
 
-    expect(screen.getByRole('button', { name: '+ Agregar paso' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar paso' })).toBeInTheDocument();
   });
 
   test('shows the steps in order, with their description', () => {
@@ -237,12 +238,12 @@ describe('adding a step', () => {
     expect(addTitle()).toHaveValue('Contar el efectivo');
   });
 
-  test('with 50 steps there is no "+ Agregar paso", and it says why', () => {
+  test('with 50 steps there is no "Agregar paso", and it says why', () => {
     const fifty = Array.from({ length: 50 }, (_, i) => step(`1c000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`, i + 1, `Paso ${i + 1}`));
     setup(editable({ steps: fifty }));
 
     expect(screen.getByText('El borrador ya tiene 50 pasos: es el máximo.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Agregar paso' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Agregar paso' })).not.toBeInTheDocument();
   });
 });
 
@@ -370,7 +371,7 @@ describe('deleting a step', () => {
     expect(mocks.deleteStep).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Borrando…' })).toBeDisabled();
     expect(stepButton('Bajar', 'Contar el efectivo')).toBeDisabled();
-    expect(screen.getByRole('button', { name: '+ Agregar paso' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Agregar paso' })).toBeDisabled();
     resolve(undefined);
   });
 });
@@ -476,5 +477,16 @@ describe('coming back to the screen (Activity)', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Editar el paso' })).not.toBeInTheDocument();
+  });
+});
+
+// Spec 017, D10: el "+" de "Agregar paso" es un ícono, no un carácter.
+describe('the button "Agregar paso" (spec 017)', () => {
+  test('"Agregar paso" draws its "+" as an icon that screen readers skip', () => {
+    setup(editable());
+
+    const icon = screen.getByRole('button', { name: 'Agregar paso' }).querySelector('svg');
+
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
   });
 });

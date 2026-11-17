@@ -68,7 +68,9 @@ export function DraftForm({ procedure, areas, onChange, onGone }: DraftFormProps
           />
           <TextField
             label="Descripción (opcional)"
-            rows={2}
+            rows={1}
+            // One line like the title: 48 px, and it can be dragged taller (spec 017, D23).
+            fieldClassName="h-12 py-2.5! resize-y"
             value={description}
             error={errors.description}
             onChange={(event) => {

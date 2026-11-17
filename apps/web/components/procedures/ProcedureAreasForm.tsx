@@ -5,8 +5,6 @@
 // has it, so a new inactive one cannot be chosen (the API says 400 anyway).
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { AreasField } from '@/components/documents/AreasField';
-import { HINT } from '@/components/documents/design';
 import { LIST_BUTTON_PRIMARY } from '@/components/documents/list-design';
 import { ScreenState } from '@/components/ui/ScreenState';
 import { useApiResource } from '@/lib/api';
@@ -15,6 +13,7 @@ import type { Area } from '@/lib/directory';
 import { describeProcedureError, setAreas } from '@/lib/procedures';
 import type { EditableProcedure } from '@/lib/procedures/editable';
 import { withAreas } from '@/lib/procedures/snapshot';
+import { AreaChipsField } from './AreaChipsField';
 import { Notice } from './Notice';
 import { Skeleton } from './Skeleton';
 
@@ -70,10 +69,7 @@ function AreasForm({ procedure, onChange, areas }: ProcedureAreasFormProps & { a
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-5">
-      <AreasField areas={areas} selected={areaIds} onChange={setAreaIds} />
-      <p className={HINT}>
-        Un procedimiento puede quedar sin áreas, pero no se puede publicar sin al menos una.
-      </p>
+      <AreaChipsField areas={areas} selected={areaIds} onChange={setAreaIds} />
 
       {error && (
         <Notice tone="error" role="alert">
