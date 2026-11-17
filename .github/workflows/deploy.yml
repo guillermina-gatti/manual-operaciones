@@ -108,10 +108,9 @@ jobs:
             }
             trap 'dump_logs' ERR
 
-            echo "=== 1. Actualizar código (main) sin tocar .env ==="
-            git fetch origin main
-            git checkout main
-            git pull --ff-only origin main
+            echo "=== 1. Actualizar código (${{ github.ref_name }}) sin tocar .env ==="
+            git fetch origin "${{ github.ref_name }}"
+            git checkout -B "${{ github.ref_name }}" FETCH_HEAD
 
             echo "=== 2. Build secuencial (t3.small) ==="
             docker compose -f docker-compose.prod.yml build migrator
