@@ -10,9 +10,9 @@
 
 | Archivo | Cambio | Reglas |
 |---|---|---|
-| `design.tsx` | Agrega `SECTION_HEADING`, `SECONDARY_LIFT`, `areaTone` y `ColoredAreaChips`, `STEP_BUTTON` y `STEP_BUTTON_DANGER`, `StepTrail` e íconos `IconPencil` e `IconPlus`; actualiza `STEP_ROW` y `ADD_BUTTON` | D3, D4, D7–D10, D16, D20 |
+| `design.tsx` | Agrega `SECTION_HEADING`, `SECONDARY_LIFT`, `areaTone` y `ColoredAreaChips`, `STEP_BUTTON` y `STEP_BUTTON_DANGER` e íconos `IconPencil` e `IconPlus`; actualiza `STEP_ROW` y `ADD_BUTTON` | D4, D7–D10, D16, D20 |
 | `ProcedureList.tsx` | Título de la lista y título "Crear un procedimiento" solo para lectores de pantalla, contador "N procedimientos", recuadro "¡Borrador creado!", botón verde, recuadro del hornero | D1, D5, D6 |
-| `ProcedureCard.tsx` | Sombra y movimiento, chips de estado, `StepTrail`, áreas con color | D2, D3, D4 |
+| `ProcedureCard.tsx` | Sombra y movimiento, chips de estado, `StepTrail` (se define en este mismo archivo, para que `design.tsx` no pase de 120 líneas), áreas con color | D2, D3, D4 |
 | `ProcedureSheet.tsx` | `SECTION_HEADING` y `ColoredAreaChips` | D19 |
 | `DraftSections.tsx`, `ProcedureEditorBody.tsx`, `VersionReadOnly.tsx`, `VersionsSection.tsx` | `SECTION_TITLE` pasa a `SECTION_HEADING` | D7 |
 | `StepsEditor.tsx` | Sin "Todavía no tiene pasos." | D11 |
