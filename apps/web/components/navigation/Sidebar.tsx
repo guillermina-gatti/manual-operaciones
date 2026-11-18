@@ -367,7 +367,7 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
           className="flex items-center gap-3 rounded-xl px-2 py-2 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114]"
         >
           <Image
-            src="/hornero.png"
+            src="/hornero-landing.png"
             alt=""
             width={34}
             height={44}
@@ -425,7 +425,7 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
         >
           <div className="relative -ml-1 size-12 shrink-0">
             <Image
-              src="/hornero.png"
+              src="/hornero-landing.png"
               alt=""
               width={48}
               height={56}
