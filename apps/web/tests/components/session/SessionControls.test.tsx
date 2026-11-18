@@ -62,10 +62,28 @@ describe('A-09: estado de sesión en encabezado', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('no pudimos confirmar el cierre en el servidor');
   });
 
-  test('sin sesión ofrece ingreso', () => {
+  test('sin sesión en ruta privada ofrece ingreso y no renderiza children', () => {
+    mocks.pathname = '/documentos';
     mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
-    render(<SessionControls />);
+    render(
+      <SessionControls>
+        <div>Contenido privado</div>
+      </SessionControls>,
+    );
     expect(screen.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', '/login');
+    expect(screen.queryByText('Contenido privado')).not.toBeInTheDocument();
+  });
+
+  test('sin sesión en / renderiza children directamente sin el header genérico', () => {
+    mocks.pathname = '/';
+    mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
+    render(
+      <SessionControls>
+        <div>Landing pública</div>
+      </SessionControls>,
+    );
+    expect(screen.getByText('Landing pública')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Iniciar sesión' })).not.toBeInTheDocument();
   });
 
   describe('navegación de Asistente y Alertas (spec 009 y spec 011)', () => {

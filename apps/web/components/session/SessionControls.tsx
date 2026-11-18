@@ -49,6 +49,10 @@ export function SessionControls({ children }: { children?: React.ReactNode }) {
       );
     }
 
+    if (pathname === '/') {
+      return <div className="flex flex-1 flex-col">{children}</div>;
+    }
+
     return (
       <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <nav aria-label="Sesión" className="mx-auto flex max-w-6xl items-center justify-between text-sm">

@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
+import { useSession } from '@/lib/session';
 import type { Role } from '@/lib/session';
+import { PublicHomeView } from './PublicHomeView';
 
 interface ModuleCardConfig {
   id: string;
@@ -245,10 +246,13 @@ export function HomeView() {
     );
   }
 
-  const isAuthenticated = status === 'ready' && user !== null;
-  const roleMeta = isAuthenticated ? ROLE_METADATA[user.role] : null;
-  const modules = isAuthenticated ? MODULES_BY_ROLE[user.role] : [];
-  const quickActions = isAuthenticated && user.role === 'ADMIN' ? ADMIN_QUICK_ACTIONS : [];
+  if (status !== 'ready' || user === null) {
+    return <PublicHomeView />;
+  }
+
+  const roleMeta = ROLE_METADATA[user.role];
+  const modules = MODULES_BY_ROLE[user.role];
+  const quickActions = user.role === 'ADMIN' ? ADMIN_QUICK_ACTIONS : [];
 
   return (
     <div className="flex-1 bg-[#F6F7F6] text-[#1E2B27]">
@@ -267,63 +271,20 @@ export function HomeView() {
                 id="home-hero-heading"
                 className="flex flex-col gap-1 text-3xl font-extrabold tracking-[-0.02em] sm:text-[40px] sm:leading-[1.15]"
               >
-                {isAuthenticated ? (
-                  <>
-                    <span className="text-[#0B4233]">¡Buen día, {user.name}!</span>
-                    <span className="text-[#E85114]">
-                      ¿Qué procedimiento o documento necesitás hoy?
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-[#0B4233]">Tu nido de conocimiento operativo</span>
-                    <span className="text-[#E85114]">
-                      Consultá documentos y recorridos paso a paso en pispIAr
-                    </span>
-                  </>
-                )}
+                <span className="text-[#0B4233]">¡Buen día, {user.name}!</span>
+                <span className="text-[#E85114]">
+                  ¿Qué procedimiento o documento necesitás hoy?
+                </span>
               </h1>
-              <p className="text-lg text-[#6B7671]">
-                {isAuthenticated && roleMeta
-                  ? roleMeta.subtitle
-                  : 'Accedé a los manuales vigentes, seguí los procedimientos de tu sector y mantené las operaciones al día.'}
-              </p>
+              <p className="text-lg text-[#6B7671]">{roleMeta.subtitle}</p>
             </div>
             <DecorativeLeaves />
           </div>
-
-          {/* Estado sin sesión: CTA de login real o aviso de selector simulado */}
-          {!isAuthenticated && (
-            <div className="mt-8 border-t border-[#E6E9E7] pt-6">
-              {REAL_AUTH_ENABLED ? (
-                <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-base text-[#1E2B27]">
-                    Entrá con tu cuenta para ver los documentos y herramientas de tu área.
-                  </p>
-                  <Link href="/login" className={PRIMARY_BUTTON}>
-                    Ingresar →
-                  </Link>
-                </div>
-              ) : (
-                <div
-                  role="note"
-                  className="rounded-xl border border-[#E6E9E7] bg-[#EEF3F0] p-4 text-base text-[#1E2B27]"
-                >
-                  <p className="font-semibold text-[#0B4233]">Modo de sesión simulada activo</p>
-                  <p className="mt-1 text-sm text-[#6B7671]">
-                    Elegí un usuario de prueba en el selector disponible abajo a la derecha para
-                    explorar las pantallas según cada rol.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
         </section>
 
         {/* Contenido principal + columna lateral de contexto */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
-          {isAuthenticated && (
-            <div className="flex flex-col gap-8 lg:col-span-8">
+          <div className="flex flex-col gap-8 lg:col-span-8">
               {/* Tarjetas de módulos según rol */}
               <section aria-labelledby="home-modules-heading" className="flex flex-col gap-4">
                 <h2 id="home-modules-heading" className="text-xl font-bold text-[#0B4233]">
@@ -389,32 +350,26 @@ export function HomeView() {
                   </div>
                 </section>
               )}
-            </div>
-          )}
+          </div>
 
           {/* Columna lateral derecha: Rol actual + Tip del hornero */}
-          <aside
-            aria-label="Contexto y ayuda"
-            className={`flex flex-col gap-6 ${isAuthenticated ? 'lg:col-span-4' : 'lg:col-span-12'}`}
-          >
-            {isAuthenticated && roleMeta && (
-              <section
-                aria-labelledby="home-role-card-heading"
-                className="rounded-2xl border border-[#E6E9E7] bg-white p-6 shadow-sm sm:p-8"
-              >
-                <p className="text-sm font-medium text-[#6B7671]">Tu rol actual</p>
-                <div className="mt-2 flex items-center gap-2.5">
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-[#18894C]"
-                  />
-                  <h2 id="home-role-card-heading" className="text-[22px] font-bold text-[#0B4233]">
-                    {roleMeta.label}
-                  </h2>
-                </div>
-                <p className="mt-3 text-sm leading-relaxed text-[#6B7671]">{roleMeta.summary}</p>
-              </section>
-            )}
+          <aside aria-label="Contexto y ayuda" className="flex flex-col gap-6 lg:col-span-4">
+            <section
+              aria-labelledby="home-role-card-heading"
+              className="rounded-2xl border border-[#E6E9E7] bg-white p-6 shadow-sm sm:p-8"
+            >
+              <p className="text-sm font-medium text-[#6B7671]">Tu rol actual</p>
+              <div className="mt-2 flex items-center gap-2.5">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2.5 w-2.5 rounded-full bg-[#18894C]"
+                />
+                <h2 id="home-role-card-heading" className="text-[22px] font-bold text-[#0B4233]">
+                  {roleMeta.label}
+                </h2>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-[#6B7671]">{roleMeta.summary}</p>
+            </section>
 
             <section
               aria-labelledby="home-hornero-tip-heading"
@@ -430,9 +385,7 @@ export function HomeView() {
                 </h2>
               </div>
               <p className="mt-3 text-base leading-relaxed text-[#1E2B27]">
-                {isAuthenticated && roleMeta
-                  ? roleMeta.horneroTip
-                  : 'Cada documento tiene una fecha de revisión para cuidar su frescura y asegurar que siempre trabajes con la versión vigente.'}
+                {roleMeta.horneroTip}
               </p>
             </section>
           </aside>
