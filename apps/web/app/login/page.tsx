@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import { Suspense } from 'react';
+import { AmbientFeathers } from '@/components/home/AmbientFeathers';
 import { LoginForm } from '@/components/session/LoginForm';
 
 export const metadata: Metadata = {
@@ -9,8 +10,9 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-[calc(100vh-65px)] flex-1 items-center justify-center bg-[#F4F6F5] px-4 py-8 sm:py-12">
-      <div className="flex w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-xl shadow-zinc-900/5 border border-zinc-200/80">
+    <main className="relative flex min-h-[calc(100vh-65px)] flex-1 items-center justify-center overflow-hidden bg-[#F4F6F5] px-4 py-8 sm:py-12">
+      <AmbientFeathers />
+      <div className="relative z-10 flex w-full max-w-4xl overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-xl shadow-zinc-900/5">
         {/* Columna Izquierda: Ilustración de marca y hornero */}
         <div className="relative hidden w-1/2 min-h-[580px] bg-[#0B4233] md:block select-none">
           <Image
