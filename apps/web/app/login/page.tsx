@@ -14,15 +14,53 @@ export default function LoginPage() {
       <AmbientFeathers />
       <div className="relative z-10 flex w-full max-w-4xl overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-xl shadow-zinc-900/5">
         {/* Columna Izquierda: Ilustración de marca y hornero */}
-        <div className="relative hidden w-1/2 min-h-[580px] bg-[#0B4233] md:block select-none">
-          <Image
-            src="/login-banner.png"
-            alt="pispIAr - Tu nido de conocimiento. Procedimientos, manuales y respuestas de tu área, siempre en su versión al día."
-            fill
-            sizes="(min-width: 768px) 50vw, 0vw"
-            className="object-cover object-left-top"
-            priority
-          />
+        <div className="relative hidden min-h-[580px] w-1/2 flex-col justify-between overflow-hidden bg-[#0B4233] px-10 pt-10 pb-0 text-white select-none md:flex">
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center gap-3">
+              <Image
+                src="/hornero-landing.png"
+                alt=""
+                width={44}
+                height={52}
+                aria-hidden="true"
+                className="h-11 w-auto object-contain"
+                priority
+              />
+              <span className="text-2xl font-extrabold tracking-tight text-white">
+                pisp<span className="text-[#E85114]">IA</span>r
+              </span>
+            </div>
+
+            <div className="space-y-3 pt-4">
+              <h2 className="text-4xl font-extrabold leading-[1.12] tracking-tight text-white">
+                Tu nido de
+                <br />
+                conocimiento
+              </h2>
+              <p className="max-w-xs text-sm leading-relaxed text-[#EEF3F0]/90">
+                Procedimientos, manuales y respuestas de tu área, siempre en su versión al día.
+              </p>
+            </div>
+          </div>
+
+          <div className="relative flex w-full items-end justify-end pt-6 pr-2">
+            <div
+              aria-hidden="true"
+              className="absolute right-0 bottom-0 h-32 w-60 rounded-t-full bg-[#9C5A2E]"
+            />
+            <div
+              aria-hidden="true"
+              className="absolute right-16 bottom-0 h-18 w-20 rounded-t-full bg-[#5C3420]"
+            />
+            <Image
+              src="/hornero-landing.png"
+              alt="pispIAr - Tu nido de conocimiento. Procedimientos, manuales y respuestas de tu área, siempre en su versión al día."
+              width={240}
+              height={284}
+              className="relative z-10 mr-4 mb-10 h-60 w-auto object-contain drop-shadow-md"
+              priority
+            />
+          </div>
         </div>
 
         {/* Columna Derecha: Formulario de Login */}
