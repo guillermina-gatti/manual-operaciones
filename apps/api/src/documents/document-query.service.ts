@@ -11,6 +11,7 @@ import {
 } from './document-access';
 import {
   AccessSubject,
+  archivedWhere,
   listWhere,
   pendingReviewWhere,
   searchScope,
@@ -125,6 +126,28 @@ export class DocumentQueryService {
       const viewer = await this.viewerFor(user);
       const { data, total } = await this.documents.list(
         listWhere(viewer), // la regla de visibilidad vive en la política (R10, D2)
+        query.page,
+        query.limit,
+      );
+      return {
+        data: await this.summaries(user, data, today),
+        total,
+        page: query.page,
+        limit: query.limit,
+      };
+    });
+  }
+
+  // Spec 003 (R15, 18/11/2026): los archivados, el más reciente primero. Solo el ADMIN llega acá (lo
+  // controla el guard), así que no hace falta el visor ni filtrar por áreas. Con limit=1 sirve de contador.
+  archived(
+    user: AuthUser,
+    query: ListDocumentsQuery,
+  ): Promise<DocumentListResponse> {
+    return this.mapErrors(async () => {
+      const today = this.today();
+      const { data, total } = await this.documents.listArchived(
+        archivedWhere(),
         query.page,
         query.limit,
       );

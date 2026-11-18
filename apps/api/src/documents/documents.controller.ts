@@ -203,11 +203,13 @@ export class DocumentsController {
     return this.uploads.upload(file, dto, user);
   }
 
-  // Ruta GET /documents: Obtener lista paginada de documentos visibles para el usuario
+  // Ruta GET /documents: Obtener lista paginada de documentos vigentes visibles para el usuario.
+  // Spec 003 (R15): solo ACTIVE, también para el ADMIN; los archivados van en GET /documents/archived
   @Get()
   @ApiResponse({
     status: 200,
-    description: 'Página de documentos visibles',
+    description:
+      'Página de documentos vigentes (ACTIVE) visibles, del más nuevo al más viejo',
     type: DocumentListBody,
   })
   @ApiResponse({
@@ -250,6 +252,36 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<DocumentSearchResponse> {
     return this.queries.search(user, query);
+  }
+
+  // Ruta GET /documents/archived: los archivados, el más reciente primero (spec 003, R15). Solo ADMIN.
+  // Va ANTES de GET /documents/:id, como search
+  @Get('archived')
+  @Roles('ADMIN')
+  @ApiResponse({
+    status: 200,
+    description:
+      'Página de documentos archivados, del archivado más reciente al más viejo',
+    type: DocumentListBody,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'page o limit inválidos (limit va de 1 a 100)',
+  })
+  @ApiResponse({ status: 401, description: 'Sin autenticación' })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo el ADMIN ve los documentos archivados',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'La base o el directorio no responden',
+  })
+  archived(
+    @Query() query: ListDocumentsQuery,
+    @CurrentUser() user: AuthUser,
+  ): Promise<DocumentListResponse> {
+    return this.queries.archived(user, query);
   }
 
   // Ruta GET /documents/pending-review: "Por revisar" (spec 005, R5). Va ANTES de GET /documents/:id,

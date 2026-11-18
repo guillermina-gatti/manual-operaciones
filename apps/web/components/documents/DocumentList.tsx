@@ -1,7 +1,8 @@
 'use client';
 
 // Listado de documentos visibles para el usuario (F1, F7; plan 002, sección 1).
-// La API ya filtra por rol y áreas y ordena del más nuevo al más viejo: acá no se filtra ni se reordena.
+// La API ya filtra por rol y áreas, deja solo los vigentes (spec 003, R15) y ordena del más nuevo al
+// más viejo: acá no se filtra ni se reordena.
 // Spec 004 (F1, F2, F3; plan 004, 5.2 y D11): arriba, la caja de búsqueda; con un ?q= válido, en vez
 // del listado se muestran los resultados. La búsqueda vive solo en la dirección.
 // Dos vistas (Lista, por defecto, y Tarjetas), elegidas con ?vista=: la conservan la búsqueda, la
@@ -24,6 +25,7 @@ import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
 import { DocumentCollection } from './DocumentCollection';
 import { DocumentListSkeleton, skeletonFor } from './DocumentListSkeleton';
 import { Pagination } from './Pagination';
+import { ArchivedLink } from './ArchivedLink';
 import { ConflictAlertsLink } from './ConflictAlertsLink';
 import { PendingReviewLink } from './PendingReviewLink';
 import { SearchBox } from './SearchBox';
@@ -78,6 +80,8 @@ export function DocumentList() {
               <PendingReviewLink userId={user.id} isAdmin={user.role === 'ADMIN'} />
               {/* Spec 011 (F5, D11): las alertas de contradicción, solo para el ADMIN. */}
               {user.role === 'ADMIN' && <ConflictAlertsLink userId={user.id} />}
+              {/* Spec 003 (R15): los archivados salen del listado y tienen su propia lista, solo ADMIN. */}
+              {user.role === 'ADMIN' && <ArchivedLink userId={user.id} />}
             </div>
           </div>
         )}

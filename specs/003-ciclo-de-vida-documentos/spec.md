@@ -3,7 +3,7 @@
 - **Historias:** HU15 (asignar áreas a cada documento: la parte de cambiarlas) y HU16 (reemplazar o archivar documentos).
 - **Responsable:** Matías Fauda (pareja C)
 - **Depende de:** spec 001 (tablas y endpoints de documentos), spec 002 (pantallas) y la tabla `chunks` de Guille (ya está en `develop`).
-- **Estado:** Implementada (T01 a T28 y T30). Pendiente: T29, bloqueada por el worker de Guille. Las decisiones de la etapa de aclaración están en la sección 10.
+- **Estado:** Implementada (T01 a T28 y T30). Pendiente: T29, bloqueada por el worker de Guille. Las decisiones de la etapa de aclaración están en la sección 10. **Ajuste del 18/11/2026:** el listado muestra solo los vigentes, también para el ADMIN, y los archivados tienen su propia lista (R10, R15, T31).
 
 ## 1. Problema y objetivo
 
@@ -54,11 +54,12 @@ Esta feature permite al administrador **cambiar las áreas** de un documento, **
 - **R7b · Fecha de revisión.** Al subir una versión nueva, el ADMIN puede indicar una fecha de revisión nueva, opcional. Si la indica, sigue las reglas de la carga (desde mañana, en hora de Argentina; 400 si no). Si no la indica, queda la que estaba.
 - **R8 · Una sola vigente.** Un documento tiene como máximo una versión `CURRENT` en todo momento. (Es el índice pendiente M4 del plan 001.)
 - **R9 · Todo o nada.** Si cualquier paso falla (almacenamiento, base o cola), no queda nada a medias: la versión anterior sigue vigente y activa, y el archivo nuevo se borra. Respuesta: 503.
-- **R10 · Archivar.** El documento pasa a `ARCHIVED` y todos sus fragmentos dejan de estar activos. Los SUPERVISOR y EMPLOYEE dejan de verlo (ya lo dice la regla R10 de la spec 001), y el ADMIN lo sigue viendo marcado como "Archivado".
+- **R10 · Archivar.** El documento pasa a `ARCHIVED` y todos sus fragmentos dejan de estar activos. Los SUPERVISOR y EMPLOYEE dejan de verlo (ya lo dice la regla R10 de la spec 001). El ADMIN lo sigue viendo marcado como "Archivado" en el detalle y en la lista de archivados, pero ya no en el listado principal (R15, 18/11/2026).
 - **R11 · Documento archivado.** Archivar es definitivo: no se puede desarchivar. Sobre un documento archivado no se puede cambiar áreas, subir versiones ni volver a archivar: 409.
 - **R12 · Historial.** Solo el ADMIN puede ver la lista de versiones de un documento: número, nombre del archivo, fecha, quién la subió, estado y estado del procesamiento. Cada versión se puede descargar. Para los demás roles, el historial y la descarga de una versión que no es la vigente responden 403, y en la pantalla no se muestran.
 - **R13 · Auditoría.** Cada cambio de áreas, versión nueva y archivo queda registrado en la auditoría (quién, qué documento, cuándo, resultado).
 - **R14 · Confirmación para archivar.** En la pantalla, archivar pide confirmación ("¿Seguro que querés archivar este documento? Va a dejar de verse para los demás usuarios y no se puede deshacer."), porque no tiene vuelta atrás.
+- **R15 · Archivados aparte (18/11/2026).** El listado de documentos (`GET /api/documents`, `/documentos`) muestra solo los `ACTIVE`, para todos los roles, también para el ADMIN. Los archivados tienen su propia lista, solo para el ADMIN: `GET /api/documents/archived` (otro rol: 403), paginada igual que el listado y ordenada del archivado más reciente al más viejo, y la pantalla `/documentos/archivados`. En `/documentos`, el ADMIN tiene el acceso "Archivados (n)" junto a "Por revisar" y "Alertas", aunque n sea 0. La búsqueda y el asistente siguen sin usar los archivados (spec 004 R3; R10).
 
 ## 7. Estados
 
@@ -149,7 +150,19 @@ Escenario: archivar
   Cuando un ADMIN toca "Archivar" y confirma
   Entonces el documento queda ARCHIVED y todos sus fragmentos inactivos
   Y un EMPLOYEE de Ventas deja de verlo
-  Y el ADMIN lo ve marcado como "Archivado"
+  Y el ADMIN lo ve marcado como "Archivado" en el detalle
+
+Escenario: los archivados en su propia lista (R15)
+  Dado un documento activo y uno archivado, cargado después
+  Cuando un ADMIN abre Documentos
+  Entonces el listado muestra solo el activo
+  Y ve el acceso "Archivados (1)"
+  Y al tocarlo ve solo el archivado, marcado como "Archivado"
+
+Escenario: un empleado no tiene la lista de archivados (R15)
+  Dado un EMPLOYEE con sesión
+  Entonces en Documentos no ve el acceso "Archivados"
+  Y si pide la lista a la API, la respuesta es 403
 
 Escenario: rol sin permiso
   Dado un EMPLOYEE con sesión
