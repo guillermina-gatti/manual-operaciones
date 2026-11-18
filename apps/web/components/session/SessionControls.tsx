@@ -97,7 +97,7 @@ export function SessionControls({ children }: { children?: React.ReactNode }) {
       )}
 
       {/* Área de contenido principal con barra superior */}
-      <div className="flex flex-1 flex-col overflow-y-auto min-w-0">
+      <div className="relative flex flex-1 flex-col overflow-y-auto min-w-0">
         <TopBar
           user={user}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
