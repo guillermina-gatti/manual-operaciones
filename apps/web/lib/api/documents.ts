@@ -171,6 +171,14 @@ export function createDocumentsApi(client: ApiClient) {
       );
     },
 
+    // Spec 003 (R15): los archivados, solo para el ADMIN. Con limit=1 sirve para leer solo la cantidad.
+    listArchivedDocuments(page: number, limit: number, signal?: AbortSignal) {
+      return client.request<DocumentListResponse>(
+        `/api/documents/archived?page=${page}&limit=${limit}`,
+        { signal },
+      );
+    },
+
     // Spec 004: el texto va codificado; la API lo valida y lo trata como texto (R4, E10).
     searchDocuments(q: string, page: number, signal?: AbortSignal) {
       return client.request<DocumentSearchResponse>(

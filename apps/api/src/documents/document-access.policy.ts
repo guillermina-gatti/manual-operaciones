@@ -32,16 +32,23 @@ export function canView(
   );
 }
 
-// 5. Crea un filtro dinámico para Prisma al listar documentos
+// 5. Crea un filtro dinámico para Prisma al listar documentos. Spec 003 (R15, 18/11/2026): el listado
+// es solo de vigentes para todos los roles; los archivados tienen su propia lista (archivedWhere).
 export function listWhere(viewer: AccessSubject): Prisma.DocumentWhereInput {
-  // Si es ADMIN, no aplica ningún filtro (trae todo)
-  if (viewer.role === 'ADMIN') return {};
+  // Si es ADMIN, solo los activos, de cualquier área
+  if (viewer.role === 'ADMIN') return { status: 'ACTIVE' };
 
   // Si es usuario normal, filtra solo los activos y los que pertenecen a sus áreas
   return {
     status: 'ACTIVE',
     areas: { some: { areaId: { in: viewer.areaIds } } },
   };
+}
+
+// Spec 003 (R15): la lista de archivados. Solo la pide el ADMIN (lo controla el guard), así que no
+// filtra por áreas.
+export function archivedWhere(): Prisma.DocumentWhereInput {
+  return { status: 'ARCHIVED' };
 }
 
 // Alcance de la búsqueda (spec 004, R3): por qué áreas se filtra. null = sin filtro (ADMIN).

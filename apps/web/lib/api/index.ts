@@ -19,6 +19,7 @@ export const apiClient = createApiClient(getAuthHeaders, refreshSession);
 // Las llamadas a /api/documents, con ese cliente.
 export const {
   listDocuments,
+  listArchivedDocuments,
   searchDocuments,
   getDocument,
   getDownloadUrl,

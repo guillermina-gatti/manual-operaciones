@@ -257,6 +257,22 @@ describe('Ciclo de vida de documentos (integración)', () => {
         .expect(200);
       expect((detail.body as DocumentBody).status).toBe('ARCHIVED');
     });
+
+    // Spec 003 (R15, 18/11/2026): sale del listado del ADMIN y pasa a la lista de archivados.
+    it('después de archivar, deja el listado del ADMIN y aparece en /archived', async () => {
+      const ids = (body: unknown) =>
+        (body as { data: { id: string }[] }).data.map((d) => d.id);
+
+      await http().post(path(ventas.id)).set(admin).expect(200);
+
+      const list = await http().get('/api/documents').set(admin).expect(200);
+      expect(ids(list.body)).not.toContain(ventas.id);
+      const archived = await http()
+        .get('/api/documents/archived')
+        .set(admin)
+        .expect(200);
+      expect(ids(archived.body)).toContain(ventas.id);
+    });
   });
 
   describe('E8 (parte): un EMPLOYEE no puede', () => {

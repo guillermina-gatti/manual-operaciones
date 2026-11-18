@@ -1,4 +1,5 @@
 import {
+  archivedWhere,
   canBeOwner,
   canReview,
   canView,
@@ -44,10 +45,18 @@ describe('canView', () => {
   });
 });
 
+// Spec 003 (R15): la lista de archivados, solo ARCHIVED y sin áreas (el guard ya exige ADMIN).
+describe('archivedWhere', () => {
+  it('filtra solo los ARCHIVED', () => {
+    expect(archivedWhere()).toEqual({ status: 'ARCHIVED' });
+  });
+});
+
 // Pruebas para listWhere (Generación de filtros de consulta para Prisma)
 describe('listWhere', () => {
-  it('para un ADMIN no filtra', () => {
-    expect(listWhere(admin)).toEqual({});
+  // Spec 003 (R15): el listado es solo de vigentes, también para el ADMIN.
+  it('para un ADMIN filtra solo por ACTIVE, de cualquier área', () => {
+    expect(listWhere(admin)).toEqual({ status: 'ACTIVE' });
   });
 
   it('para un EMPLOYEE filtra por ACTIVE y por sus áreas', () => {

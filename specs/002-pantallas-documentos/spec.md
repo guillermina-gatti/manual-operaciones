@@ -42,12 +42,12 @@ La spec 001 construyó el backend de los documentos, pero nadie puede usarlo sin
 - **F4 · No perder lo completado.** Si la carga falla, el formulario conserva lo que el usuario ya completó, incluido el archivo elegido.
 - **F5 · Un solo envío.** Mientras se sube el archivo, el botón se desactiva y se muestra que está cargando, para no enviar dos veces.
 - **F6 · Estado del procesamiento.** Solo el ADMIN ve, en el detalle, si el documento está pendiente, procesando, listo o con error. Los demás roles no lo ven.
-- **F7 · Listado.** Se muestra como tarjetas, en la computadora y en el celular. Cada tarjeta tiene título, áreas, responsable, fecha de revisión y fecha de carga. Van del más nuevo al más viejo, 20 por página, con paginación por números de página.
+- **F7 · Listado.** Se muestra como tarjetas, en la computadora y en el celular. Cada tarjeta tiene título, áreas, responsable, fecha de revisión y fecha de carga. Van del más nuevo al más viejo, 20 por página, con paginación por números de página. Desde el 18/11/2026 el listado muestra solo los documentos vigentes, también para el ADMIN; los archivados van en su propia lista (spec 003, R15).
 - **F8 · Descarga.** El botón pide el enlace a la API en el momento del clic, porque el enlace vence a los 5 minutos.
 - **F9 · Documento inexistente o ajeno.** Si la API responde 404, se muestra "No se encontró el documento", sin distinguir entre los dos casos.
 - **F10 · Responsive.** Las pantallas se usan desde la computadora y desde el celular.
 - **F11 · Elección del responsable.** El responsable se elige de una lista que muestra solo los usuarios que comparten al menos un área con las áreas elegidas, más los ADMIN. Si el ADMIN cambia las áreas y el responsable elegido deja de cumplir esa condición, la elección se borra y se pide elegir de nuevo. La lista la provee la pareja A; hasta que exista, se usa una lista simulada.
-- **F12 · Rutas.** `/documentos` (listado), `/documentos/nuevo` (carga, solo ADMIN) y `/documentos/[id]` (detalle).
+- **F12 · Rutas.** `/documentos` (listado), `/documentos/nuevo` (carga, solo ADMIN), `/documentos/archivados` (archivados, solo ADMIN; spec 003, R15, 18/11/2026) y `/documentos/[id]` (detalle).
 - **F13 · Después de cargar.** Si la carga sale bien, el usuario va al detalle del documento recién creado.
 - **F14 · Salir del formulario.** Si el usuario sale del formulario con datos completados, no se le pide confirmación. Si vuelve atrás, los datos pueden seguir ahí, salvo después de una carga correcta: entonces el formulario empieza vacío.
 

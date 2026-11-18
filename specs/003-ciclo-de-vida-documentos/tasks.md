@@ -506,6 +506,14 @@ Convenciones:
 - **Depende de:** T26, T27
 - **Commit:** `test(documents): probar el ciclo de vida contra la API real`
 
+## Ajuste del 18/11/2026
+
+### T31 · Archivados fuera del listado (R15)
+
+- **Qué hace:** `listWhere` exige `ACTIVE` también para el ADMIN; `GET /api/documents/archived` (solo ADMIN, `archivedWhere`, `listArchived` ordenado por `archivedAt desc, id desc`); en la web, `ArchivedLink` ("Archivados (n)") en `/documentos` y la pantalla `/documentos/archivados` (`ArchivedList`, con `RequireRole`).
+- **Archivos:** `document-access.policy.ts`, `documents.repository.ts`, `prisma-documents.repository.ts`, `document-query.service.ts`, `documents.controller.ts`; `lib/api/documents.ts`, `components/documents/ArchivedLink.tsx`, `ArchivedList.tsx`, `DocumentList.tsx`, `app/documentos/archivados/page.tsx`.
+- **Verificación:** unitarios de la política y del servicio; `query.e2e-spec.ts` (el ADMIN ya no ve el archivado en el listado; `/archived` ordenado, 403 para EMPLOYEE y SUPERVISOR, 400 con `limit=101`); `lifecycle.e2e-spec.ts` (después de archivar, pasa del listado a `/archived`); en la web, `ArchivedLink`, `ArchivedList` y `DocumentList.archived`.
+
 ## Tareas que estaban bloqueadas
 
 ### T29 · Casos borde con el worker real — DESBLOQUEADA

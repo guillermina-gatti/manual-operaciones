@@ -217,6 +217,13 @@ export abstract class DocumentsRepository {
     limit: number,
   ): Promise<DocumentPage>;
 
+  // Spec 003 (R15): como list, pero del archivado más reciente al más viejo y, a igual fecha, por id.
+  abstract listArchived(
+    where: Prisma.DocumentWhereInput,
+    page: number,
+    limit: number,
+  ): Promise<DocumentPage>;
+
   // Cuántos documentos cumplen el filtro (para saber si alguien es responsable de alguno, D19).
   abstract count(where: Prisma.DocumentWhereInput): Promise<number>;
 
