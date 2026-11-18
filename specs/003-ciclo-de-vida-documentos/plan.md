@@ -558,6 +558,7 @@ Tomadas en la revisión del plan el 23/10/2026.
 | D9 · El dueño de la auditoría (A1 del plan 001) sigue abierto | Seguir con `LoggerAuditLog` y sumar las tres acciones nuevas (1.6); la implementación real las hereda | R13 |
 | D10 · ¿El ADMIN puede descargar una versión vieja de un documento archivado? | Sí: el ADMIN ve todo (R10 de la spec 001) y el historial sigue disponible después de archivar | R10, R12 |
 | D11 · ¿Dónde va el historial en el detalle? | Tomada el 06/11/2026, con el rediseño del detalle. En la columna principal, debajo de los datos, como sección "Versiones", con una línea que explica qué es y "Subir versión nueva" adentro: la versión nueva y las anteriores se ven en el mismo lugar. La columna lateral queda solo para "Revisión". La lista se sigue pidiendo recién al abrir "Historial de versiones" (6.5), y cada versión es una fila compacta con la descarga como botón de ícono. Con el documento archivado, la sección sigue, sin "Subir versión nueva" (D10, R11) | R7, R12 |
+| D12 · ¿Los archivados van en el listado del ADMIN? | Tomada el 18/11/2026. No: el listado es solo de vigentes para todos y los archivados tienen su lista, `GET /api/documents/archived` (solo ADMIN, del archivado más reciente al más viejo) y `/documentos/archivados`, con el acceso "Archivados (n)". Un endpoint aparte y no un `?status=` en el listado, para que la regla de quién ve archivados quede en el guard, como el historial (T31) | R10, R15 |
 
 ### 9.2 Pregunta abierta
 

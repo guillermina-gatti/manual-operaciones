@@ -119,10 +119,11 @@ describe('DocumentQueryService.list', () => {
     });
   });
 
-  it('para un ADMIN no hay filtro', async () => {
+  // Spec 003 (R15): el ADMIN ve todas las áreas, pero solo los vigentes.
+  it('para un ADMIN filtra solo por ACTIVE: los archivados no entran en el listado', async () => {
     await service.list(admin, defaultQuery);
 
-    expect(repository.list).toHaveBeenCalledWith({}, 1, 20);
+    expect(repository.list).toHaveBeenCalledWith({ status: 'ACTIVE' }, 1, 20);
   });
 
   it('devuelve { data, total, page, limit } con data mapeado a la respuesta de T13', async () => {
@@ -181,6 +182,80 @@ describe('DocumentQueryService.list', () => {
       );
       expect(repository.list).not.toHaveBeenCalled();
     });
+  });
+});
+
+// Spec 003 (R15, 18/11/2026): la lista de archivados.
+describe('DocumentQueryService.archived', () => {
+  const archivedRecord: DocumentRecord = {
+    ...record,
+    status: 'ARCHIVED',
+    archivedAt: new Date('2026-11-10T15:00:00.000Z'),
+  };
+  let users: { findById: jest.Mock; findByIds: jest.Mock };
+  let repository: { listArchived: jest.Mock };
+  let service: DocumentQueryService;
+
+  beforeEach(() => {
+    users = {
+      findById: jest.fn(),
+      findByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          Object.values(FIXTURE_USERS).filter((user) => ids.includes(user.id)),
+        ),
+      ),
+    };
+    repository = {
+      listArchived: jest
+        .fn()
+        .mockResolvedValue({ data: [archivedRecord], total: 1 }),
+    };
+    service = new DocumentQueryService(
+      users as unknown as UsersDirectory,
+      new InMemoryAreasDirectory(),
+      repository as unknown as DocumentsRepository,
+      { getDownloadUrl: jest.fn() } as unknown as FileStorage,
+    );
+  });
+
+  it('pide solo los ARCHIVED con la página y el límite pedidos', async () => {
+    await service.archived(admin, { page: 2, limit: 1 });
+
+    expect(repository.listArchived).toHaveBeenCalledWith(
+      { status: 'ARCHIVED' },
+      2,
+      1,
+    );
+  });
+
+  it('no consulta las áreas del usuario: el guard ya exige ADMIN', async () => {
+    await service.archived(admin, defaultQuery);
+
+    expect(users.findById).not.toHaveBeenCalled();
+  });
+
+  it('devuelve { data, total, page, limit } con el documento archivado', async () => {
+    const response = await service.archived(admin, defaultQuery);
+
+    expect(response).toEqual({
+      data: [
+        expect.objectContaining({ id: archivedRecord.id, status: 'ARCHIVED' }),
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+  });
+
+  it('la base no responde: 503', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    repository.listArchived.mockRejectedValue(
+      new RepositoryUnavailableError('caída'),
+    );
+
+    await expect(service.archived(admin, defaultQuery)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
   });
 });
 

@@ -257,6 +257,8 @@ export async function seedDocument(
     areaIds: string[];
     status?: 'ACTIVE' | 'ARCHIVED';
     createdAt?: Date;
+    // Spec 003 (R15): la fecha de archivo, para ordenar la lista de archivados.
+    archivedAt?: Date;
     title?: string;
     description?: string;
     checksum?: string;
@@ -279,6 +281,7 @@ export async function seedDocument(
       reviewDate: new Date(opts.reviewDate ?? '2027-01-15'),
       createdById: FIXTURE_USERS.admin.id,
       ...(opts.createdAt && { createdAt: opts.createdAt }),
+      ...(opts.archivedAt && { archivedAt: opts.archivedAt }),
       ...(opts.lastReview && {
         lastReviewedAt: opts.lastReview.at,
         lastReviewedById: opts.lastReview.byId,

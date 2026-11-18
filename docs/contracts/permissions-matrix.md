@@ -59,7 +59,7 @@ Todos los accesos requieren autenticación, excepto login (`POST /api/auth/login
 | Cargar documentos | ✅ | ❌ | ❌ |
 | Consultar documentos activos de sus áreas | ✅ | 🔒 | 🔒 |
 | Consultar documentos de otras áreas | ✅ | ❌ | ❌ |
-| Consultar documentos archivados | ✅ | ❌ | ❌ |
+| Consultar documentos archivados (detalle y `GET /documents/archived`; spec 003, R15) | ✅ | ❌ (404 en el detalle, 403 en la lista) | ❌ (404 en el detalle, 403 en la lista) |
 | Asignar responsable de un documento | 🔒 | ❌ | ❌ |
 | Gestionar documentos | ✅ | ❌ | ❌ |
 

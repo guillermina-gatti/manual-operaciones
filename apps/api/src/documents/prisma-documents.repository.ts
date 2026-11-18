@@ -377,6 +377,28 @@ export class PrismaDocumentsRepository extends DocumentsRepository {
     });
   }
 
+  // Spec 003 (R15): los archivados, el más reciente primero, y el id para que el orden no cambie entre
+  // páginas. Las dos lecturas en la misma transacción, como list.
+  listArchived(
+    where: Prisma.DocumentWhereInput,
+    page: number,
+    limit: number,
+  ): Promise<DocumentPage> {
+    return this.translate(async () => {
+      const [rows, total] = await this.prisma.$transaction([
+        this.prisma.document.findMany({
+          where,
+          orderBy: [{ archivedAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+          include: documentInclude,
+        }),
+        this.prisma.document.count({ where }),
+      ]);
+      return { data: rows.map(toRecord), total };
+    });
+  }
+
   count(where: Prisma.DocumentWhereInput): Promise<number> {
     return this.translate(() => this.prisma.document.count({ where }));
   }

@@ -95,16 +95,14 @@ describe('Consultas de documentos (integración)', () => {
       );
     });
 
-    it('ordena del más nuevo al más viejo (R13)', async () => {
+    // Spec 003 (R15, 18/11/2026): el archivado es el más nuevo, pero no entra en el listado del ADMIN.
+    it('ordena del más nuevo al más viejo y, también para el ADMIN, solo los vigentes (R13, R15)', async () => {
       const res = await http().get('/api/documents').set(admin).expect(200);
 
       const body = res.body as ListBody;
-      expect(body.data.map((d) => d.id)).toEqual([
-        archivadoVentas.id,
-        operaciones.id,
-        ventas.id,
-      ]);
-      expect(body.total).toBe(3);
+      expect(body.data.map((d) => d.id)).toEqual([operaciones.id, ventas.id]);
+      expect(body.data.every((d) => d.status === 'ACTIVE')).toBe(true);
+      expect(body.total).toBe(2);
     });
 
     it('pagina con page=2&limit=1 (R13)', async () => {
@@ -114,8 +112,8 @@ describe('Consultas de documentos (integración)', () => {
         .expect(200);
 
       expect(res.body).toMatchObject({
-        data: [{ id: operaciones.id }],
-        total: 3,
+        data: [{ id: ventas.id }],
+        total: 2,
         page: 2,
         limit: 1,
       });
@@ -123,6 +121,74 @@ describe('Consultas de documentos (integración)', () => {
 
     it('limit=101 responde 400 (D3)', async () => {
       await http().get('/api/documents?limit=101').set(admin).expect(400);
+    });
+  });
+
+  // Spec 003 (R15, 18/11/2026): la lista de archivados, solo para el ADMIN.
+  describe('GET /api/documents/archived', () => {
+    it('el ADMIN recibe solo los archivados, el archivado más reciente primero', async () => {
+      // Cargado antes que "Caja vieja", pero archivado después: va primero.
+      const archivadoOperaciones = await seedDocument(t.prisma, {
+        title: 'Depósito viejo',
+        areaIds: [AREA_IDS.operaciones],
+        status: 'ARCHIVED',
+        createdAt: new Date('2026-09-01T12:00:00Z'),
+        archivedAt: new Date('2026-11-10T12:00:00Z'),
+      });
+      await t.prisma.document.update({
+        where: { id: archivadoVentas.id },
+        data: { archivedAt: new Date('2026-11-01T12:00:00Z') },
+      });
+
+      const res = await http()
+        .get('/api/documents/archived')
+        .set(admin)
+        .expect(200);
+
+      const body = res.body as ListBody;
+      expect(body.data.map((d) => d.id)).toEqual([
+        archivadoOperaciones.id,
+        archivadoVentas.id,
+      ]);
+      expect(body.data.every((d) => d.status === 'ARCHIVED')).toBe(true);
+      expect(body).toMatchObject({ total: 2, page: 1, limit: 20 });
+    });
+
+    it('con limit=1 sirve de contador: total con todos los archivados', async () => {
+      const res = await http()
+        .get('/api/documents/archived?page=1&limit=1')
+        .set(admin)
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        data: [{ id: archivadoVentas.id }],
+        total: 1,
+        limit: 1,
+      });
+    });
+
+    it.each([
+      ['EMPLOYEE', FIXTURE_USERS.empleadoVentas],
+      ['SUPERVISOR', FIXTURE_USERS.supervisorVentas],
+    ])(
+      'un %s recibe 403, aunque el archivado sea de su área',
+      async (_role, user) => {
+        await http()
+          .get('/api/documents/archived')
+          .set(authHeaders(user))
+          .expect(403);
+      },
+    );
+
+    it('sin sesión responde 401', async () => {
+      await http().get('/api/documents/archived').expect(401);
+    });
+
+    it('limit=101 responde 400 (D3)', async () => {
+      await http()
+        .get('/api/documents/archived?limit=101')
+        .set(admin)
+        .expect(400);
     });
   });
 
