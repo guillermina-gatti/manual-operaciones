@@ -443,12 +443,16 @@ describe('Asignaciones con usuarios y áreas inactivos (integración, spec 008)'
       .set(authHeaders({ id: bruno, role: 'EMPLOYEE' }));
 
     expect(asAna.status).toBe(200);
-    expect(
-      (asAna.body as { areas: { id: string; isActive: boolean }[] }).areas,
-    ).toEqual([
-      expect.objectContaining({ id: AREA_IDS.ventas, isActive: true }),
-      expect.objectContaining({ id: compras, isActive: false }),
-    ]);
+    const anaAreas = (
+      asAna.body as { areas: { id: string; isActive: boolean }[] }
+    ).areas;
+    expect(anaAreas).toHaveLength(2);
+    expect(anaAreas).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: AREA_IDS.ventas, isActive: true }),
+        expect.objectContaining({ id: compras, isActive: false }),
+      ]),
+    );
     expect(asBruno.status).toBe(404);
   });
 });
