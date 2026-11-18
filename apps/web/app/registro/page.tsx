@@ -1,7 +1,9 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
+import { AmbientFeathers } from '@/components/home/AmbientFeathers';
 import { AuthClientError, validateInvitation } from '@/lib/auth/auth-client';
 import type { ValidateInvitationResponse } from '@/lib/auth/auth-client';
 import { useSession } from '@/lib/session';
@@ -18,19 +20,62 @@ type RegistroState =
 
 export default function RegistroPage() {
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-12">
-      <section className="w-full max-w-md rounded-2xl border border-zinc-200 p-6 shadow-sm sm:p-8 dark:border-zinc-800">
-        <div className="mb-8 space-y-2">
-          <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">PispIAr</p>
-          <h1 className="text-3xl font-bold tracking-tight">Registro de cuenta</h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Completá tus datos para activar tu acceso al Manual de operaciones.
-          </p>
+    <main className="relative flex min-h-dvh flex-1 items-center justify-center overflow-hidden bg-fondo px-4 py-8 text-texto sm:py-12">
+      <AmbientFeathers />
+
+      <div className="relative z-10 flex w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-borde bg-blanco shadow-xl shadow-zinc-900/5 md:flex-row">
+        {/* Columna izquierda: identidad PispIAr coherente con /login y la landing */}
+        <div className="relative flex flex-col justify-between overflow-hidden bg-bosque px-6 py-8 text-blanco select-none sm:px-8 md:w-[44%] md:py-10">
+          <div className="flex flex-col gap-3">
+            <div className="inline-flex w-fit items-center gap-2 rounded-lg bg-blanco/10 px-3 py-1.5 text-sm font-semibold tracking-tight text-blanco">
+              <span>
+                pisp<span className="text-naranja">IA</span>r
+              </span>
+              <span aria-hidden="true" className="text-chip-area">
+                ·
+              </span>
+              <span className="font-normal text-salvia">Manual de operaciones</span>
+            </div>
+            <p className="max-w-xs text-sm leading-relaxed text-salvia/90">
+              Activá tu cuenta y sumate al nido de conocimiento operativo de tu área.
+            </p>
+          </div>
+
+          <div className="relative mt-6 hidden items-end justify-center pt-4 md:flex">
+            <div
+              aria-hidden="true"
+              className="absolute bottom-0 h-18 w-40 rounded-t-full bg-barro"
+            />
+            <div
+              aria-hidden="true"
+              className="absolute bottom-0 h-10 w-12 rounded-t-full bg-barro-puerta"
+            />
+            <Image
+              src="/hornero-landing.png"
+              alt="Hornero de pispIAr sobre su nido de barro"
+              width={176}
+              height={208}
+              className="relative z-10 mb-5 h-40 w-auto object-contain drop-shadow-md"
+              priority
+            />
+          </div>
         </div>
-        <Suspense fallback={<p role="status">Cargando…</p>}>
-          <RegistroContent />
-        </Suspense>
-      </section>
+
+        {/* Columna derecha: formulario y estados de invitación */}
+        <section className="flex flex-1 flex-col justify-center p-6 sm:p-10 md:w-[56%]">
+          <div className="mb-6 space-y-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-bosque sm:text-4xl">
+              Registro de cuenta
+            </h1>
+            <p className="text-sm text-texto-suave">
+              Completá tus datos para activar tu acceso al Manual de operaciones.
+            </p>
+          </div>
+          <Suspense fallback={<p role="status" className="text-sm text-texto-suave">Cargando…</p>}>
+            <RegistroContent />
+          </Suspense>
+        </section>
+      </div>
     </main>
   );
 }
@@ -126,7 +171,7 @@ function RegistroContent() {
 
   if (status === 'loading' && state.kind !== 'valid') {
     return (
-      <div className="text-center">
+      <div className="py-4 text-center text-sm text-texto-suave">
         <p role="status">Preparando sesión…</p>
       </div>
     );
@@ -134,11 +179,14 @@ function RegistroContent() {
 
   if (status === 'ready' && user) {
     return (
-      <div className="space-y-3 text-center">
-        <p>
+      <div className="space-y-4 text-center">
+        <p className="text-texto">
           Ya ingresaste como <strong>{user.name}</strong>.
         </p>
-        <Link className="text-blue-700 underline dark:text-blue-300" href="/documentos">
+        <Link
+          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-bosque px-5 py-2.5 text-sm font-semibold text-blanco shadow-sm transition-colors hover:bg-bosque-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja"
+          href="/documentos"
+        >
           Ir a documentos
         </Link>
       </div>
@@ -147,7 +195,7 @@ function RegistroContent() {
 
   if (state.kind === 'initial' || state.kind === 'validating') {
     return (
-      <div className="text-center py-6">
+      <div className="py-6 text-center text-sm text-texto-suave">
         <p role="status">Validando invitación…</p>
       </div>
     );
@@ -158,13 +206,13 @@ function RegistroContent() {
       <div className="space-y-4">
         <p
           role="alert"
-          className="rounded-lg bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950 dark:text-red-200"
+          className="rounded-xl border border-peligro/25 bg-rosa-alerta p-4 text-sm text-rosa-alerta-texto"
         >
           {state.message}
         </p>
         <div className="text-center">
           <Link
-            className="text-sm text-blue-700 underline dark:text-blue-300"
+            className="text-sm font-semibold text-bosque underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja"
             href="/login"
           >
             Ir a iniciar sesión
