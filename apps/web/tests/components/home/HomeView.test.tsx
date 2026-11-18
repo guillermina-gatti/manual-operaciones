@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { HomeView } from '@/components/home/HomeView';
@@ -109,11 +111,12 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       expect(status).toHaveAttribute('aria-busy', 'true');
       expect(screen.getByText('Preparando tu inicio…')).toBeInTheDocument();
       expect(screen.queryByRole('link')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ambient-feathers')).not.toBeInTheDocument();
     });
   });
 
   describe('sin sesión autenticada', () => {
-    test('en modo real muestra el Hero público, CTA "Ingresar →" hacia /login y ningún acceso privado', () => {
+    test('en modo real muestra la landing institucional, acceso a /login, plumas ambientales y ningún acceso privado', () => {
       mocks.realAuthEnabled = true;
       mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
       render(<HomeView />);
@@ -121,19 +124,36 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       expect(
         screen.getByRole('heading', {
           level: 1,
-          name: /Tu nido de conocimiento operativo.*Consultá documentos y recorridos paso a paso en pispIAr/i,
+          name: /El nido donde vive el conocimiento de tu organización/i,
         }),
       ).toBeInTheDocument();
 
-      const loginLink = screen.getByRole('link', { name: 'Ingresar →' });
-      expect(loginLink).toHaveAttribute('href', '/login');
-      expect(allLinkHrefs()).toEqual(['/login']);
+      expect(screen.getByRole('heading', { level: 2, name: '¿Qué es PispIAr?' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'Nuestro objetivo' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: 'Tres pilares de la plataforma' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Documentación organizada y vigente')).toBeInTheDocument();
+      expect(screen.getByText('Procedimientos y recorridos paso a paso')).toBeInTheDocument();
+      expect(screen.getByText('Asistente inteligente con citas respaldadas')).toBeInTheDocument();
+      expect(
+        screen.getByRole('img', { name: 'Hornero de pispIAr sobre su nido de barro' }),
+      ).toBeInTheDocument();
+
+      const feathers = screen.getByTestId('ambient-feathers');
+      expect(feathers).toHaveAttribute('aria-hidden', 'true');
+
+      expect(screen.getByRole('link', { name: 'Ingresar →' })).toHaveAttribute('href', '/login');
+      expect(screen.getByRole('link', { name: 'Ingresar a la plataforma →' })).toHaveAttribute(
+        'href',
+        '/login',
+      );
+      expect(allLinkHrefs()).toEqual(['/login', '/login']);
       expect(screen.queryByText('Tus herramientas disponibles')).not.toBeInTheDocument();
       expect(screen.queryByText('Tu rol actual')).not.toBeInTheDocument();
-      expect(screen.getByText('Tip del hornero')).toBeInTheDocument();
     });
 
-    test('en modo simulado muestra el Hero público, aviso del selector de prueba y ningún acceso privado', () => {
+    test('en modo simulado muestra la landing institucional, aviso del selector de prueba y ningún acceso privado', () => {
       mocks.realAuthEnabled = false;
       mocks.useSession.mockReturnValue({ user: null, status: 'ready' });
       render(<HomeView />);
@@ -141,7 +161,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       expect(
         screen.getByRole('heading', {
           level: 1,
-          name: /Tu nido de conocimiento operativo.*Consultá documentos y recorridos paso a paso en pispIAr/i,
+          name: /El nido donde vive el conocimiento de tu organización/i,
         }),
       ).toBeInTheDocument();
 
@@ -155,7 +175,15 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       render(<HomeView />);
 
       expect(screen.queryByText('Tus herramientas disponibles')).not.toBeInTheDocument();
-      expect(allLinkHrefs()).toEqual(['/login']);
+      expect(allLinkHrefs()).toEqual(['/login', '/login']);
+    });
+
+    test('la animación ambiental respeta prefers-reduced-motion en CSS', () => {
+      const css = readFileSync(
+        resolve(process.cwd(), 'components/home/AmbientFeathers.module.css'),
+        'utf8',
+      );
+      expect(css).toContain('@media (prefers-reduced-motion: no-preference)');
     });
   });
 
@@ -195,6 +223,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       ]);
       expect(screen.queryByText('Métricas')).not.toBeInTheDocument();
       expect(screen.queryByText('Acciones rápidas de administración')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ambient-feathers')).not.toBeInTheDocument();
     });
   });
 
@@ -228,6 +257,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       expect(allLinkHrefs()).toEqual(['/documentos', '/procedimientos', '/metricas']);
       expect(screen.queryByText('Ejecuciones y recorridos')).not.toBeInTheDocument();
       expect(screen.queryByText('Acciones rápidas de administración')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ambient-feathers')).not.toBeInTheDocument();
     });
   });
 
@@ -279,6 +309,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
         '/documentos/alertas',
       ]);
       expect(screen.queryByText('Ejecuciones y recorridos')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ambient-feathers')).not.toBeInTheDocument();
     });
   });
 });

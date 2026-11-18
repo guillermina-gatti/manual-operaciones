@@ -245,6 +245,13 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: ExecutionsIcon,
   },
   {
+    id: 'mi-actividad',
+    label: 'Mi actividad',
+    href: '/ejecuciones/mi-actividad',
+    roles: ['EMPLOYEE'],
+    icon: MetricsIcon,
+  },
+  {
     id: 'metricas',
     label: 'Métricas',
     href: '/metricas',
@@ -325,6 +332,17 @@ function isItemActive(itemHref: string, pathname: string): boolean {
   return pathname === itemHref || pathname.startsWith(`${itemHref}/`);
 }
 
+// When one item hangs from another (/ejecuciones/mi-actividad under /ejecuciones), only the
+// longest match is active.
+function activeHrefOf(items: readonly NavItemConfig[], pathname: string): string | null {
+  return items
+    .filter((item) => isItemActive(item.href, pathname))
+    .reduce<string | null>(
+      (longest, item) => (longest === null || item.href.length > longest.length ? item.href : longest),
+      null,
+    );
+}
+
 export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const navId = useId();
@@ -332,6 +350,7 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
   const visibleItems = NAV_ITEMS.filter(
     (item) => !item.roles || item.roles.includes(user.role),
   );
+  const activeHref = activeHrefOf(visibleItems, pathname);
 
   const initials = getInitials(user.name);
   const roleDescription = formatUserRole(user);
@@ -365,7 +384,7 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
         <nav id={navId} aria-label="Menú principal">
           <ul className="flex flex-col gap-1.5">
             {visibleItems.map((item) => {
-              const active = isItemActive(item.href, pathname);
+              const active = item.href === activeHref;
               const Icon = item.icon;
 
               return (

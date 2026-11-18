@@ -83,23 +83,26 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
 
   if (!REAL_AUTH_ENABLED) {
     return (
-      <p className="rounded-lg border p-4 text-sm">
+      <p className="rounded-xl border border-borde bg-salvia p-4 text-sm text-texto">
         La autenticación real está desactivada en este entorno. Para probarla, configurá
-        <code className="mx-1">NEXT_PUBLIC_REAL_AUTH=true</code> en
-        <code className="mx-1">apps/web/.env.local</code> y reiniciá Next.js.
+        <code className="mx-1 rounded bg-blanco px-1 py-0.5 text-xs">NEXT_PUBLIC_REAL_AUTH=true</code> en
+        <code className="mx-1 rounded bg-blanco px-1 py-0.5 text-xs">apps/web/.env.local</code> y reiniciá Next.js.
       </p>
     );
   }
 
   if (status === 'loading' && !pending) {
-    return <p role="status">Preparando sesión…</p>;
+    return <p role="status" className="text-sm text-texto-suave">Preparando sesión…</p>;
   }
 
   if (user && status === 'ready') {
     return (
-      <div className="space-y-3 text-center">
-        <p>Ya ingresaste como <strong>{user.name}</strong>.</p>
-        <Link className="text-blue-700 underline dark:text-blue-300" href="/documentos">
+      <div className="space-y-4 text-center">
+        <p className="text-texto">Ya ingresaste como <strong>{user.name}</strong>.</p>
+        <Link
+          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-bosque px-5 py-2.5 text-sm font-semibold text-blanco shadow-sm transition-colors hover:bg-bosque-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja"
+          href="/documentos"
+        >
           Ir a documentos
         </Link>
       </div>
@@ -113,9 +116,9 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
   const canSubmit = !pending && isNameValid && isPasswordValid && doPasswordsMatch;
 
   return (
-    <form onSubmit={(event) => void onSubmit(event)} className="space-y-5" noValidate>
+    <form onSubmit={(event) => void onSubmit(event)} className="space-y-4" noValidate>
       <div>
-        <label htmlFor="register-email" className="mb-2 block text-sm font-medium">
+        <label htmlFor="register-email" className="mb-1.5 block text-xs font-semibold tracking-wider text-texto-suave uppercase">
           Correo electrónico
         </label>
         <input
@@ -126,14 +129,14 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
           disabled
           readOnly
           aria-readonly="true"
-          className="min-h-11 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+          className="min-h-11 w-full rounded-xl border border-borde bg-fondo px-3.5 text-sm text-texto-suave"
         />
       </div>
 
       <div>
-        <span className="mb-2 block text-sm font-medium">Rol asignado</span>
+        <span className="mb-1.5 block text-xs font-semibold tracking-wider text-texto-suave uppercase">Rol asignado</span>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-300 dark:ring-blue-400/30">
+          <span className="inline-flex items-center rounded-lg bg-salvia px-3 py-1 text-xs font-semibold text-bosque">
             {ROLE_LABELS[invitation.role]}
           </span>
         </div>
@@ -141,7 +144,7 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
 
       {invitation.areas && invitation.areas.length > 0 && (
         <div>
-          <span className="mb-2 block text-sm font-medium">Áreas asignadas</span>
+          <span className="mb-1.5 block text-xs font-semibold tracking-wider text-texto-suave uppercase">Áreas asignadas</span>
           <div className="flex flex-wrap gap-2">
             {invitation.areas.map((area) => {
               const label = typeof area === 'string' ? area : area.name;
@@ -149,7 +152,7 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
               return (
                 <span
                   key={key}
-                  className="inline-flex items-center rounded-md bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700 ring-1 ring-inset ring-zinc-500/10 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-400/20"
+                  className="inline-flex items-center rounded-lg bg-chip-area px-2.5 py-1 text-xs font-semibold text-chip-area-texto"
                 >
                   {label}
                 </span>
@@ -160,7 +163,7 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
       )}
 
       <div>
-        <label htmlFor="register-name" className="mb-2 block text-sm font-medium">
+        <label htmlFor="register-name" className="mb-1.5 block text-xs font-semibold tracking-wider text-texto-suave uppercase">
           Nombre completo
         </label>
         <input
@@ -172,12 +175,12 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
           value={name}
           onChange={(event) => setName(event.target.value)}
           disabled={pending}
-          className="min-h-11 w-full rounded-lg border border-zinc-400 bg-white px-3 text-zinc-950 focus-visible:outline-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50"
+          className="min-h-11 w-full rounded-xl border border-borde bg-blanco px-3.5 text-sm text-texto transition focus:border-bosque focus:outline-none focus:ring-1 focus:ring-bosque disabled:opacity-60"
         />
       </div>
 
       <div>
-        <label htmlFor="register-password" className="mb-2 block text-sm font-medium">
+        <label htmlFor="register-password" className="mb-1.5 block text-xs font-semibold tracking-wider text-texto-suave uppercase">
           Contraseña
         </label>
         <input
@@ -189,15 +192,15 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           disabled={pending}
-          className="min-h-11 w-full rounded-lg border border-zinc-400 bg-white px-3 text-zinc-950 focus-visible:outline-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50"
+          className="min-h-11 w-full rounded-xl border border-borde bg-blanco px-3.5 text-sm text-texto transition focus:border-bosque focus:outline-none focus:ring-1 focus:ring-bosque disabled:opacity-60"
         />
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1 text-xs text-texto-suave">
           Mínimo 8 caracteres.
         </p>
       </div>
 
       <div>
-        <label htmlFor="register-confirm-password" className="mb-2 block text-sm font-medium">
+        <label htmlFor="register-confirm-password" className="mb-1.5 block text-xs font-semibold tracking-wider text-texto-suave uppercase">
           Confirmar contraseña
         </label>
         <input
@@ -209,12 +212,12 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
           disabled={pending}
-          className="min-h-11 w-full rounded-lg border border-zinc-400 bg-white px-3 text-zinc-950 focus-visible:outline-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50"
+          className="min-h-11 w-full rounded-xl border border-borde bg-blanco px-3.5 text-sm text-texto transition focus:border-bosque focus:outline-none focus:ring-1 focus:ring-bosque disabled:opacity-60"
         />
       </div>
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+        <p role="alert" className="rounded-xl border border-peligro/25 bg-rosa-alerta p-3 text-sm text-rosa-alerta-texto">
           {error}
         </p>
       )}
@@ -222,7 +225,7 @@ export function RegisterForm({ token, invitation }: RegisterFormProps) {
       <button
         type="submit"
         disabled={!canSubmit}
-        className="min-h-11 w-full rounded-lg bg-blue-700 px-4 font-semibold text-white hover:bg-blue-800 disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950"
+        className="min-h-12 w-full rounded-xl bg-bosque px-4 font-semibold text-blanco shadow-sm transition-[background-color,transform] hover:bg-bosque-hover active:translate-y-px motion-reduce:transition-none motion-reduce:active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja disabled:opacity-60"
       >
         {pending ? 'Creando cuenta…' : 'Completar registro'}
       </button>
