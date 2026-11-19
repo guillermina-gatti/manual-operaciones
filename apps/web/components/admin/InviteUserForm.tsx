@@ -5,7 +5,7 @@ import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/api-error';
 import { createInvitation, notifyInvitationsChanged } from '@/lib/api';
-import type { CreatedInvitation, InvitationDeliveryMethod } from '@/lib/api';
+import type { CreatedInvitation } from '@/lib/api';
 import { areasDirectory, displayAreaName } from '@/lib/directory';
 import type { Area } from '@/lib/directory';
 
@@ -38,7 +38,6 @@ function CopyIcon({ className = 'h-5 w-5' }: { className?: string }) {
 export function InviteUserForm() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('EMPLOYEE');
-  const [deliveryMethod, setDeliveryMethod] = useState<InvitationDeliveryMethod>('email');
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [loadingAreas, setLoadingAreas] = useState(true);
@@ -99,7 +98,7 @@ export function InviteUserForm() {
         email: cleanEmail,
         role,
         areaIds: role === 'ADMIN' ? [] : selectedAreaIds,
-        ...(deliveryMethod === 'link' ? { deliveryMethod: 'link' } : {}),
+        deliveryMethod: 'link',
       });
       notifyInvitationsChanged?.();
       setCreatedInvitation(response);
@@ -112,8 +111,6 @@ export function InviteUserForm() {
           setError('Los datos enviados no son válidos. Revisá el correo y las áreas.');
         } else if (cause.status === 403) {
           setError('Solo los usuarios administradores pueden enviar invitaciones.');
-        } else if (cause.status === 503) {
-          setError('El envío por correo no está configurado en este entorno. Podés elegir "Generar enlace" para crear la invitación.');
         } else {
           setError('No pudimos emitir la invitación. Por favor probá de nuevo.');
         }
@@ -139,7 +136,6 @@ export function InviteUserForm() {
   function handleReset() {
     setEmail('');
     setRole('EMPLOYEE');
-    setDeliveryMethod('email');
     if (areas.length > 0) {
       setSelectedAreaIds([areas[0].id]);
     }
@@ -416,54 +412,19 @@ export function InviteUserForm() {
         <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-700">
           Método de entrega
         </span>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label
-            className={`relative flex cursor-pointer flex-col rounded-xl border p-4 transition ${
-              deliveryMethod === 'email'
-                ? 'border-[#0B4233] bg-[#F4FBF2] ring-1 ring-[#0B4233]'
-                : 'border-zinc-200 bg-white hover:bg-zinc-50'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-zinc-900">Enviar por correo</span>
-              <input
-                type="radio"
-                name="deliveryMethod"
-                value="email"
-                checked={deliveryMethod === 'email'}
-                onChange={() => setDeliveryMethod('email')}
-                disabled={pending}
-                className="h-4 w-4 text-[#0B4233] focus:ring-[#0B4233]"
-              />
-            </div>
-            <p className="mt-2 text-xs text-zinc-500">
-              Envía automáticamente el enlace de registro por email al destinatario.
-            </p>
-          </label>
-
-          <label
-            className={`relative flex cursor-pointer flex-col rounded-xl border p-4 transition ${
-              deliveryMethod === 'link'
-                ? 'border-[#0B4233] bg-[#F4FBF2] ring-1 ring-[#0B4233]'
-                : 'border-zinc-200 bg-white hover:bg-zinc-50'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-zinc-900">Generar enlace</span>
-              <input
-                type="radio"
-                name="deliveryMethod"
-                value="link"
-                checked={deliveryMethod === 'link'}
-                onChange={() => setDeliveryMethod('link')}
-                disabled={pending}
-                className="h-4 w-4 text-[#0B4233] focus:ring-[#0B4233]"
-              />
-            </div>
-            <p className="mt-2 text-xs text-zinc-500">
-              Genera un enlace único para copiar y compartir manualmente sin enviar correo.
-            </p>
-          </label>
+        <div className="rounded-xl border border-[#0B4233] bg-[#F4FBF2] p-4 ring-1 ring-[#0B4233]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-bold text-zinc-900">Generar enlace</span>
+            <span
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0B4233] text-white"
+              aria-hidden="true"
+            >
+              <CheckIcon className="h-3.5 w-3.5" />
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            Genera un enlace único para copiar y compartir manualmente sin enviar correo.
+          </p>
         </div>
       </div>
 
@@ -479,13 +440,7 @@ export function InviteUserForm() {
           disabled={pending || !isFormValid}
           className="min-h-11 w-full rounded-xl bg-[#0B4233] px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-[#083327] disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
         >
-          {pending
-            ? deliveryMethod === 'link'
-              ? 'Generando enlace…'
-              : 'Enviando invitación…'
-            : deliveryMethod === 'link'
-              ? 'Generar enlace de invitación'
-              : 'Enviar invitación'}
+          {pending ? 'Generando enlace…' : 'Generar enlace de invitación'}
         </button>
       </div>
     </form>

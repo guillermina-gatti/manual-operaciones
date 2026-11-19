@@ -42,11 +42,17 @@ beforeEach(() => {
 });
 
 describe('InviteUserForm — Emisión de invitaciones por ADMIN', () => {
-  test('renderiza campos del formulario y selecciona la primer área por defecto', async () => {
+  test('renderiza campos del formulario, selecciona la primer área por defecto y muestra solo "Generar enlace" como método de entrega', async () => {
     render(<InviteUserForm />);
 
     expect(screen.getByRole('textbox', { name: /correo electrónico/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /empleado/i })).toBeChecked();
+    expect(screen.getByText('Método de entrega')).toBeInTheDocument();
+    expect(screen.getByText('Generar enlace')).toBeInTheDocument();
+    expect(screen.queryByText(/enviar por correo/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /enviar por correo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /generar enlace/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /generar enlace de invitación/i })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByLabelText('Ventas')).toBeChecked();
@@ -65,37 +71,45 @@ describe('InviteUserForm — Emisión de invitaciones por ADMIN', () => {
     expect(screen.getByText(/Acceso global sin restricción de áreas/i)).toBeInTheDocument();
 
     await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'admin2@empresa.com');
-    await user.click(screen.getByRole('button', { name: /enviar invitación/i }));
+    await user.click(screen.getByRole('button', { name: /generar enlace de invitación/i }));
 
     await waitFor(() => {
       expect(mocks.createInvitation).toHaveBeenCalledWith({
         email: 'admin2@empresa.com',
         role: 'ADMIN',
         areaIds: [],
+        deliveryMethod: 'link',
       });
     });
   });
 
-  test('permite enviar invitación a Empleado con áreas y muestra el estado de éxito con enlace', async () => {
+  test('permite generar enlace de invitación a Empleado con áreas, visualizarlo y copiarlo', async () => {
     const user = userEvent.setup();
+    const writeTextSpy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
     render(<InviteUserForm />);
 
     await waitFor(() => expect(screen.getByLabelText('Ventas')).toBeInTheDocument());
 
     await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'carla@empresa.com');
-    await user.click(screen.getByRole('button', { name: /enviar invitación/i }));
+    await user.click(screen.getByRole('button', { name: /generar enlace de invitación/i }));
 
     await waitFor(() => {
       expect(mocks.createInvitation).toHaveBeenCalledWith({
         email: 'carla@empresa.com',
         role: 'EMPLOYEE',
         areaIds: ['area-1'],
+        deliveryMethod: 'link',
       });
     });
 
     expect(await screen.findByText('¡Invitación emitida con éxito!')).toBeInTheDocument();
     expect(screen.getByText('carla@empresa.com')).toBeInTheDocument();
     expect(screen.getByDisplayValue('http://localhost:3001/registro#token=test-token')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /copiar/i }));
+    expect(writeTextSpy).toHaveBeenCalledWith('http://localhost:3001/registro#token=test-token');
+    expect(await screen.findByRole('button', { name: /¡copiado!/i })).toBeInTheDocument();
+    writeTextSpy.mockRestore();
   });
 
   test('muestra error si la API responde 409 Conflict', async () => {
@@ -106,7 +120,7 @@ describe('InviteUserForm — Emisión de invitaciones por ADMIN', () => {
     await waitFor(() => expect(screen.getByLabelText('Ventas')).toBeInTheDocument());
 
     await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'existente@empresa.com');
-    await user.click(screen.getByRole('button', { name: /enviar invitación/i }));
+    await user.click(screen.getByRole('button', { name: /generar enlace de invitación/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Ya existe un usuario registrado con este correo o una invitación pendiente vigente.',
@@ -119,50 +133,28 @@ describe('InviteUserForm — Emisión de invitaciones por ADMIN', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Ventas')).toBeInTheDocument());
     await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'carla@empresa.com');
-    await user.click(screen.getByRole('button', { name: /enviar invitación/i }));
+    await user.click(screen.getByRole('button', { name: /generar enlace de invitación/i }));
 
     const resetButton = await screen.findByRole('button', { name: /invitar a otra persona/i });
     await user.click(resetButton);
 
     expect(screen.getByRole('textbox', { name: /correo electrónico/i })).toHaveValue('');
     expect(screen.getByRole('radio', { name: /empleado/i })).toBeChecked();
+    expect(screen.queryByText(/enviar por correo/i)).not.toBeInTheDocument();
   });
 
-  test('permite elegir "Generar enlace" y envía deliveryMethod="link"', async () => {
+  test('muestra error genérico si la API responde con un error inesperado', async () => {
     const user = userEvent.setup();
-    render(<InviteUserForm />);
+    mocks.createInvitation.mockRejectedValueOnce(new ApiError(500));
 
+    render(<InviteUserForm />);
     await waitFor(() => expect(screen.getByLabelText('Ventas')).toBeInTheDocument());
 
-    await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'enlace@empresa.com');
-    await user.click(screen.getByRole('radio', { name: /generar enlace/i }));
+    await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'error@empresa.com');
     await user.click(screen.getByRole('button', { name: /generar enlace de invitación/i }));
 
-    await waitFor(() => {
-      expect(mocks.createInvitation).toHaveBeenCalledWith({
-        email: 'enlace@empresa.com',
-        role: 'EMPLOYEE',
-        areaIds: ['area-1'],
-        deliveryMethod: 'link',
-      });
-    });
-
-    expect(await screen.findByText('¡Invitación emitida con éxito!')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('http://localhost:3001/registro#token=test-token')).toBeInTheDocument();
-  });
-
-  test('si el correo devuelve 503 sugiere usar la opción Generar enlace', async () => {
-    const user = userEvent.setup();
-    mocks.createInvitation.mockRejectedValueOnce(new ApiError(503));
-
-    render(<InviteUserForm />);
-    await waitFor(() => expect(screen.getByLabelText('Ventas')).toBeInTheDocument());
-
-    await user.type(screen.getByRole('textbox', { name: /correo electrónico/i }), 'sinmail@empresa.com');
-    await user.click(screen.getByRole('button', { name: /enviar invitación/i }));
-
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'El envío por correo no está configurado en este entorno. Podés elegir "Generar enlace" para crear la invitación.',
+      'No pudimos emitir la invitación. Por favor probá de nuevo.',
     );
   });
 });
