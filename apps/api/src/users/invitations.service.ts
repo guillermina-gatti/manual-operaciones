@@ -77,7 +77,7 @@ function isPendingInvitationUniqueViolation(error: unknown): boolean {
 
 @Injectable()
 export class InvitationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Crea una nueva invitación de usuario con rol y áreas predeterminadas.
@@ -314,6 +314,24 @@ export class InvitationsService {
 
     if (invitation.expiresAt <= new Date()) {
       throw new GoneException('La invitación ha expirado');
+    }
+
+    const areaIds = [...new Set(invitation.areas.map((area) => area.areaId))];
+
+    if (areaIds.length > 0) {
+      const activeAreas = await tx.area.findMany({
+        where: {
+          id: { in: areaIds },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      if (activeAreas.length !== areaIds.length) {
+        throw new BadRequestException(
+          'La invitación contiene áreas inexistentes o inactivas',
+        );
+      }
     }
 
     // Consumo atómico condicional CAS

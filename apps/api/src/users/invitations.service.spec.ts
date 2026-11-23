@@ -481,17 +481,22 @@ describe('InvitationsService (HU29)', () => {
     });
   });
 
+
   describe('consumeInvitation()', () => {
     let mockTx: any;
 
     beforeEach(() => {
       mockTx = {
+        area: {
+          findMany: jest.fn(),
+        },
         userInvitation: {
           findUnique: jest.fn(),
           updateMany: jest.fn(),
         },
       };
     });
+
 
     it('consume atómicamente la invitación dentro de la transacción de registro', async () => {
       const rawToken = 'B'.repeat(43);
@@ -508,6 +513,10 @@ describe('InvitationsService (HU29)', () => {
       });
 
       mockTx.userInvitation.updateMany.mockResolvedValue({ count: 1 });
+
+      mockTx.area.findMany.mockResolvedValue([
+        { id: OPERACIONES },
+      ]);
 
       const result = await service.consumeInvitation(
         rawToken,
@@ -539,6 +548,75 @@ describe('InvitationsService (HU29)', () => {
         areaIds: [OPERACIONES],
       });
     });
+
+    it('H4: permite consumir una invitación ADMIN sin áreas', async () => {
+      const rawToken = 'G'.repeat(43);
+
+      mockTx.userInvitation.findUnique.mockResolvedValue({
+        id: 'invitation-admin-no-areas',
+        email: 'admin.nuevo@empresa.com',
+        role: 'ADMIN',
+        expiresAt: new Date(Date.now() + 3600 * 1000),
+        acceptedAt: null,
+        revokedAt: null,
+        areas: [],
+      });
+
+      mockTx.userInvitation.updateMany.mockResolvedValue({
+        count: 1,
+      });
+
+      const result = await service.consumeInvitation(
+        rawToken,
+        mockTx as unknown as Prisma.TransactionClient,
+      );
+
+      expect(result.role).toBe('ADMIN');
+      expect(result.areaIds).toEqual([]);
+
+      expect(mockTx.area.findMany).not.toHaveBeenCalled();
+      expect(mockTx.userInvitation.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('H4: rechaza consumir una invitación con un área desactivada', async () => {
+      const rawToken = 'F'.repeat(43);
+
+      mockTx.userInvitation.findUnique.mockResolvedValue({
+        id: 'invitation-h4-inactive-area',
+        email: 'empleado.h4@empresa.com',
+        role: 'EMPLOYEE',
+        expiresAt: new Date(Date.now() + 3600 * 1000),
+        acceptedAt: null,
+        revokedAt: null,
+        areas: [{ areaId: INACTIVE_AREA }],
+      });
+
+      mockTx.area.findMany.mockResolvedValue([]);
+
+      mockTx.userInvitation.updateMany.mockResolvedValue({
+        count: 1,
+      });
+
+
+      await expect(
+        service.consumeInvitation(
+          rawToken,
+          mockTx as unknown as Prisma.TransactionClient,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockTx.area.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: [INACTIVE_AREA] },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      // No debe marcarse la invitación como aceptada.
+      expect(mockTx.userInvitation.updateMany).not.toHaveBeenCalled();
+    });
+
 
     it('detecta colisión concurrente si updateMany devuelve count === 0 y lanza ConflictException', async () => {
       const rawToken = 'C'.repeat(43);
