@@ -219,6 +219,68 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
       ).rejects.toThrow('No podés quitarte tu propio rol de administrador');
     });
 
+
+    it('H3: impide autodesactivarse con UUID en distinta grafía', async () => {
+      const sameUserId = adminId.toUpperCase();
+
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: adminId,
+        role: 'ADMIN',
+        isActive: true,
+        areas: [],
+      });
+      mockPrisma.user.count.mockResolvedValue(1);
+
+      await expect(
+        users.updateUserByAdmin(adminId, sameUserId, {
+          isActive: false,
+        }),
+      ).rejects.toThrow(
+        'No podés desactivar tu propia cuenta de administrador',
+      );
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('H3: impide quitarse ADMIN con UUID en distinta grafía', async () => {
+      const sameUserId = adminId.toUpperCase();
+
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: adminId,
+        role: 'ADMIN',
+        isActive: true,
+        areas: [],
+      });
+      mockPrisma.user.count.mockResolvedValue(1);
+      mockPrisma.area.findMany.mockResolvedValue([
+        { id: VENTAS, isActive: true },
+      ]);
+
+      mockPrisma.user.update.mockResolvedValue({
+        id: adminId,
+        name: 'Administrador',
+        email: 'admin@empresa.com',
+        role: 'EMPLOYEE',
+        isActive: true,
+        areas: [{ area: { id: VENTAS, name: 'Ventas' } }],
+        createdAt: new Date(),
+      });
+
+      await expect(
+        users.updateUserByAdmin(adminId, sameUserId, {
+          role: 'EMPLOYEE',
+          areaIds: [VENTAS],
+        }),
+      ).rejects.toThrow(
+        'No podés quitarte tu propio rol de administrador',
+      );
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+
     it('lanza NotFoundException si el usuario no existe', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       await expect(

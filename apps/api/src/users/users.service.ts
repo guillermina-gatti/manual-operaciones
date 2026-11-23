@@ -34,7 +34,7 @@ function isDatabaseUnavailable(error: unknown): boolean {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async listOwnerCandidates(areaIds: string[]): Promise<UserCandidateResponse[]> {
     const uniqueAreaIds = [...new Set(areaIds)];
@@ -140,7 +140,9 @@ export class UsersService {
     }
 
     // Auto-protección de la cuenta de administrador que opera
-    if (adminId === userId) {
+
+    if (adminId.toLowerCase() === user.id.toLowerCase()) {
+
       if (dto.isActive === false) {
         throw new BadRequestException('No podés desactivar tu propia cuenta de administrador');
       }
