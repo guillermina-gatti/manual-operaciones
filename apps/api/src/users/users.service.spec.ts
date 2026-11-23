@@ -281,6 +281,77 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
     });
 
 
+    it('H1: editar solo el estado no sobrescribe rol ni áreas', async () => {
+      const existingAdmin = {
+        id: targetUserId,
+        name: 'Segundo Admin',
+        email: 'admin2@empresa.com',
+        role: 'ADMIN',
+        isActive: true,
+        createdAt: new Date(),
+        areas: [],
+      };
+
+      mockPrisma.user.findUnique.mockResolvedValue(existingAdmin);
+      mockPrisma.user.count.mockResolvedValue(1);
+      mockPrisma.user.update.mockResolvedValue(existingAdmin);
+
+      await users.updateUserByAdmin(adminId, targetUserId, {
+        isActive: true,
+      });
+
+      // Una edición parcial solamente debe escribir isActive.
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: targetUserId },
+          data: { isActive: true },
+        }),
+      );
+
+      // No debe modificar áreas si no se solicitaron cambios.
+      expect(mockPrisma.userArea.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.userArea.createMany).not.toHaveBeenCalled();
+    });
+
+
+    it('H1: al promover a ADMIN elimina las áreas anteriores', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: targetUserId,
+        name: 'Empleado',
+        email: 'empleado@empresa.com',
+        role: 'EMPLOYEE',
+        isActive: true,
+        createdAt: new Date(),
+        areas: [{ area: { id: VENTAS, name: 'Ventas' } }],
+      });
+
+      mockPrisma.user.update.mockResolvedValue({
+        id: targetUserId,
+        name: 'Administrador',
+        email: 'empleado@empresa.com',
+        role: 'ADMIN',
+        isActive: true,
+        createdAt: new Date(),
+        areas: [],
+      });
+
+      await users.updateUserByAdmin(adminId, targetUserId, {
+        role: 'ADMIN',
+      });
+
+      expect(mockPrisma.userArea.deleteMany).toHaveBeenCalledWith({
+        where: { userId: targetUserId },
+      });
+
+      expect(mockPrisma.userArea.createMany).not.toHaveBeenCalled();
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { role: 'ADMIN' },
+        }),
+      );
+    });
+
     it('lanza NotFoundException si el usuario no existe', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       await expect(

@@ -199,7 +199,7 @@ export class UsersService {
 
     return this.prisma.$transaction(async (tx) => {
       // Si se especificaron áreas o el nuevo rol es ADMIN (se vacían)
-      if (dto.areaIds !== undefined || targetRole === 'ADMIN') {
+      if (dto.areaIds !== undefined || dto.role === 'ADMIN') {
         const newAreaIds = targetRole === 'ADMIN' ? [] : dto.areaIds!;
         await tx.userArea.deleteMany({ where: { userId } });
         if (newAreaIds.length > 0) {
@@ -212,7 +212,7 @@ export class UsersService {
       const updated = await tx.user.update({
         where: { id: userId },
         data: {
-          role: targetRole,
+          ...(dto.role !== undefined ? { role: dto.role } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         },
         include: {
