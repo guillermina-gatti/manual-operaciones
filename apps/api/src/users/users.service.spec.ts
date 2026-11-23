@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   InternalServerErrorException,
   Logger,
   ServiceUnavailableException,
@@ -185,6 +186,10 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
   });
 
   describe('updateUserByAdmin', () => {
+    const lastAdminMessage = 'No se puede desactivar ni modificar el rol del único administrador activo del sistema';
+    const prismaError = (code: string) =>
+      new Prisma.PrismaClientKnownRequestError('Detalle interno de prueba', { code, clientVersion: '7.10.0' });
+
     const existingEmployee = {
       id: targetUserId,
       name: 'Empleado',
@@ -220,6 +225,90 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
     });
 
 
+    it('H2: dos bajas concurrentes no deben eliminar todos los ADMIN', async () => {
+      const firstId = adminId;
+      const secondId = targetUserId;
+
+      const accounts = new Map([
+        [firstId, {
+          id: firstId,
+          name: 'Ana',
+          email: 'ana@example.com',
+          role: 'ADMIN',
+          isActive: true,
+          areas: [],
+          createdAt: new Date(),
+        }],
+        [secondId, {
+          id: secondId,
+          name: 'Bruno',
+          email: 'bruno@example.com',
+          role: 'ADMIN',
+          isActive: true,
+          areas: [],
+          createdAt: new Date(),
+        }],
+      ]);
+
+      let committed = { accounts, sessions: new Set(accounts.keys()) };
+      let revision = 0;
+      let ready = 0;
+      let release!: () => void;
+      const bothReady = new Promise<void>((resolve) => { release = resolve; });
+      const counts: number[] = [];
+
+      mockPrisma.$transaction.mockImplementation(async (run: (tx: unknown) => Promise<unknown>,
+        options: { isolationLevel: Prisma.TransactionIsolationLevel }) => {
+        expect(options.isolationLevel).toBe(Prisma.TransactionIsolationLevel.Serializable);
+        const startRevision = revision;
+        const draft = structuredClone(committed);
+        const result = await run({
+          user: {
+            findUnique: ({ where }: { where: { id: string } }) => draft.accounts.get(where.id),
+            count: ({ where }: { where: { role: string; isActive: boolean; id: { not: string } } }) => {
+              const count = [...draft.accounts.values()].filter((account) =>
+                account.role === where.role && account.isActive === where.isActive &&
+                account.id !== where.id.not,
+              ).length;
+              counts.push(count);
+              return count;
+            },
+            update: ({ where, data }: { where: { id: string }; data: { isActive: boolean } }) =>
+              Object.assign(draft.accounts.get(where.id)!, data),
+          },
+          session: {
+            deleteMany: ({ where }: { where: { userId: string } }) => draft.sessions.delete(where.userId),
+          },
+        });
+
+        // Ambas bajas llegan a la confirmación con sus escrituras todavía privadas.
+        if (startRevision === 0) {
+          if (++ready === 2) release();
+          await bothReady;
+        }
+        if (startRevision !== revision) throw prismaError('P2034');
+        committed = draft;
+        revision++;
+        return result;
+      });
+
+      const results = await Promise.allSettled([
+        users.updateUserByAdmin(firstId, secondId, { isActive: false }),
+        users.updateUserByAdmin(secondId, firstId, { isActive: false }),
+      ]);
+
+      const active = [...committed.accounts.values()].filter((u) => u.role === 'ADMIN' && u.isActive);
+      expect(active).toHaveLength(1);
+      expect(committed.sessions).toEqual(new Set([active[0].id]));
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.find((r) => r.status === 'rejected')?.reason).toMatchObject({
+        status: 409, message: lastAdminMessage,
+      });
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(3);
+      expect(counts).toEqual([1, 1, 0]);
+      expect(revision).toBe(1);
+    });
+
     it('H3: impide autodesactivarse con UUID en distinta grafía', async () => {
       const sameUserId = adminId.toUpperCase();
 
@@ -239,8 +328,10 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
         'No podés desactivar tu propia cuenta de administrador',
       );
 
-      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.userArea.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.userArea.createMany).not.toHaveBeenCalled();
+      expect(mockPrisma.session.deleteMany).not.toHaveBeenCalled();
     });
 
     it('H3: impide quitarse ADMIN con UUID en distinta grafía', async () => {
@@ -276,8 +367,10 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
         'No podés quitarte tu propio rol de administrador',
       );
 
-      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.userArea.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.userArea.createMany).not.toHaveBeenCalled();
+      expect(mockPrisma.session.deleteMany).not.toHaveBeenCalled();
     });
 
 
@@ -394,9 +487,44 @@ describe('UsersService - listAllUsersForAdmin y updateUserByAdmin', () => {
       mockPrisma.user.findUnique.mockResolvedValue(existingAdmin);
       mockPrisma.user.count.mockResolvedValue(0); // 0 other active admins
 
-      await expect(
-        users.updateUserByAdmin(adminId, targetUserId, { isActive: false }),
-      ).rejects.toThrow('No se puede desactivar ni modificar el rol del único administrador activo del sistema');
+      const result = users.updateUserByAdmin(adminId, targetUserId, { isActive: false });
+      await expect(result).rejects.toBeInstanceOf(ConflictException);
+      await expect(result).rejects.toThrow(lastAdminMessage);
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('reintenta la edición completa si el primer commit devuelve P2034', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(existingEmployee);
+      mockPrisma.user.update.mockResolvedValueOnce(existingEmployee)
+        .mockResolvedValueOnce({ ...existingEmployee, name: 'Resultado confirmado' });
+      mockPrisma.$transaction.mockImplementationOnce(async (run: (tx: unknown) => Promise<unknown>) => {
+        await run(mockPrisma);
+        throw prismaError('P2034');
+      });
+
+      await expect(users.updateUserByAdmin(adminId, targetUserId, { isActive: true }))
+        .resolves.toMatchObject({ name: 'Resultado confirmado' });
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.user.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('devuelve un 409 controlado al agotar tres intentos con P2034', async () => {
+      mockPrisma.$transaction.mockRejectedValue(prismaError('P2034'));
+      const result = users.updateUserByAdmin(adminId, targetUserId, { isActive: true });
+      await expect(result).rejects.toBeInstanceOf(ConflictException);
+      await expect(result).rejects.toMatchObject({
+        status: 409,
+        message: 'No se pudo confirmar la edición por cambios simultáneos. Intentá de nuevo.',
+      });
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(3);
+    });
+
+    it('propaga un error Prisma distinto de P2034 sin reintentar', async () => {
+      const error = prismaError('P2024');
+      mockPrisma.user.findUnique.mockRejectedValue(error);
+      await expect(users.updateUserByAdmin(adminId, targetUserId, { isActive: true })).rejects.toBe(error);
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('actualiza rol, áreas y estado correctamente dentro de una transacción e invalida sesiones al desactivar', async () => {
