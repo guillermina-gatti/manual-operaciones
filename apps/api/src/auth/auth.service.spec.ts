@@ -745,6 +745,28 @@ describe('AuthService', () => {
       mockJwtService.signAsync.mockResolvedValue('fresh-signed-jwt-access-token');
     });
 
+    it('H4: no crea usuario, áreas ni sesión si la invitación tiene áreas inactivas', async () => {
+      mockInvitationsService.consumeInvitation.mockRejectedValue(
+        new BadRequestException(
+          'La invitación contiene áreas inexistentes o inactivas',
+        ),
+      );
+
+      await expect(
+        service.registerWithInvitation(registerDto, metadata),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockInvitationsService.consumeInvitation).toHaveBeenCalledWith(
+        validToken,
+        mockTx,
+      );
+
+      expect(mockTx.user.create).not.toHaveBeenCalled();
+      expect(mockTx.userArea.createMany).not.toHaveBeenCalled();
+      expect(mockSessionService.createSession).not.toHaveBeenCalled();
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    });
+
     it('debe registrar exitosamente un usuario consumiendo la invitación y creando sesión', async () => {
       const result = await service.registerWithInvitation(registerDto, metadata);
 

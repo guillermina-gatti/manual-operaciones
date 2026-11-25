@@ -34,7 +34,7 @@ function isDatabaseUnavailable(error: unknown): boolean {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async listOwnerCandidates(areaIds: string[]): Promise<UserCandidateResponse[]> {
     const uniqueAreaIds = [...new Set(areaIds)];
@@ -122,7 +122,32 @@ export class UsersService {
       throw new BadRequestException('ID de usuario inválido');
     }
 
-    const user = await this.prisma.user.findUnique({
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.prisma.$transaction(
+          (tx) => this.applyAdminUpdate(tx, adminId, userId, dto),
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034') {
+          throw error;
+        }
+      }
+    }
+
+    throw new ConflictException(
+      'No se pudo confirmar la edición por cambios simultáneos. Intentá de nuevo.',
+    );
+  }
+
+  private async applyAdminUpdate(
+    tx: Prisma.TransactionClient,
+    adminId: string,
+    userId: string,
+    dto: UpdateUserDto,
+  ): Promise<AdminUserResponse> {
+    const user = await tx.user.findUnique({
       where: { id: userId },
       include: {
         areas: {
@@ -140,7 +165,9 @@ export class UsersService {
     }
 
     // Auto-protección de la cuenta de administrador que opera
-    if (adminId === userId) {
+
+    if (adminId.toLowerCase() === user.id.toLowerCase()) {
+
       if (dto.isActive === false) {
         throw new BadRequestException('No podés desactivar tu propia cuenta de administrador');
       }
@@ -162,7 +189,7 @@ export class UsersService {
           throw new BadRequestException('Los empleados y supervisores deben tener al menos un área asignada');
         }
 
-        const areas = await this.prisma.area.findMany({
+        const areas = await tx.area.findMany({
           where: { id: { in: dto.areaIds } },
           select: { id: true, isActive: true },
         });
@@ -180,7 +207,7 @@ export class UsersService {
 
     // Protección del último administrador activo del sistema
     if (user.role === 'ADMIN' && (targetRole !== 'ADMIN' || dto.isActive === false)) {
-      const activeAdminsCount = await this.prisma.user.count({
+      const activeAdminsCount = await tx.user.count({
         where: {
           role: 'ADMIN',
           isActive: true,
@@ -195,49 +222,47 @@ export class UsersService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Si se especificaron áreas o el nuevo rol es ADMIN (se vacían)
-      if (dto.areaIds !== undefined || targetRole === 'ADMIN') {
-        const newAreaIds = targetRole === 'ADMIN' ? [] : dto.areaIds!;
-        await tx.userArea.deleteMany({ where: { userId } });
-        if (newAreaIds.length > 0) {
-          await tx.userArea.createMany({
-            data: newAreaIds.map((areaId) => ({ userId, areaId })),
-          });
-        }
+    // Si se especificaron áreas o el nuevo rol es ADMIN (se vacían)
+    if (dto.areaIds !== undefined || dto.role === 'ADMIN') {
+      const newAreaIds = targetRole === 'ADMIN' ? [] : dto.areaIds!;
+      await tx.userArea.deleteMany({ where: { userId } });
+      if (newAreaIds.length > 0) {
+        await tx.userArea.createMany({
+          data: newAreaIds.map((areaId) => ({ userId, areaId })),
+        });
       }
+    }
 
-      const updated = await tx.user.update({
-        where: { id: userId },
-        data: {
-          role: targetRole,
-          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-        },
-        include: {
-          areas: {
-            include: {
-              area: {
-                select: { id: true, name: true },
-              },
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.role !== undefined ? { role: dto.role } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+      include: {
+        areas: {
+          include: {
+            area: {
+              select: { id: true, name: true },
             },
           },
         },
-      });
-
-      // Si se desactiva, invalidar sus sesiones activas
-      if (dto.isActive === false) {
-        await tx.session.deleteMany({ where: { userId } });
-      }
-
-      return {
-        id: updated.id,
-        name: updated.name,
-        email: updated.email,
-        role: updated.role,
-        isActive: updated.isActive,
-        areas: updated.areas.map((a) => ({ id: a.area.id, name: a.area.name })),
-        createdAt: updated.createdAt,
-      };
+      },
     });
+
+    // Si se desactiva, invalidar sus sesiones activas
+    if (dto.isActive === false) {
+      await tx.session.deleteMany({ where: { userId } });
+    }
+
+    return {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+      isActive: updated.isActive,
+      areas: updated.areas.map((a) => ({ id: a.area.id, name: a.area.name })),
+      createdAt: updated.createdAt,
+    };
   }
 }
