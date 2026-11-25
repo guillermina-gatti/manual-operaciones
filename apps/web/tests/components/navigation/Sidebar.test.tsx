@@ -45,7 +45,7 @@ describe('Sidebar (diseño v2)', () => {
       expect(screen.getByRole('link', { name: 'Inicio' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Documentos' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Procedimientos' })).toHaveAttribute('href', '/procedimientos');
-      expect(screen.getByRole('link', { name: 'Ejecuciones' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Ejecuciones' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Métricas' })).toHaveAttribute('href', '/metricas');
       expect(screen.getByRole('link', { name: 'Usuarios y roles' })).toHaveAttribute('href', '/usuarios');
       expect(screen.getByRole('link', { name: 'Asistente' })).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe('Sidebar (diseño v2)', () => {
       expect(screen.getByRole('link', { name: 'Inicio' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Documentos' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Procedimientos' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Ejecuciones' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Ejecuciones' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Métricas' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Usuarios y roles' })).toHaveAttribute('href', '/usuarios');
       expect(screen.getByRole('link', { name: 'Invitar usuario' })).toHaveAttribute(

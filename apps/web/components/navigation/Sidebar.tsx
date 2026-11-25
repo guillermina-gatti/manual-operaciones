@@ -241,6 +241,7 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'ejecuciones',
     label: 'Ejecuciones',
     href: '/ejecuciones',
+    roles: ['EMPLOYEE'],
     icon: ExecutionsIcon,
   },
   {
