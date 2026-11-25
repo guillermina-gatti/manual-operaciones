@@ -1,4 +1,4 @@
-// El modelo de chat de Gemini sale de GEMINI_CHAT_MODEL, con "gemini-2.5-flash" por defecto. Lo usan
+// El modelo de chat de Gemini sale de GEMINI_CHAT_MODEL, con "gemini-3.5-flash-lite" por defecto. Lo usan
 // las dos rutas (POST /api/chat y POST /api/chat/stream), porque comparten el proveedor ChatLlm.
 // El modelo de embeddings no cambia.
 import { ConfigService } from '@nestjs/config';
@@ -24,12 +24,12 @@ function recordingModel() {
 
 describe('chatModelId', () => {
     it('sin la variable, el modelo por defecto', () => {
-        expect(DEFAULT_CHAT_MODEL_ID).toBe('gemini-2.5-flash');
-        expect(chatModelId(undefined)).toBe('gemini-2.5-flash');
+        expect(DEFAULT_CHAT_MODEL_ID).toBe('gemini-3.5-flash-lite');
+        expect(chatModelId(undefined)).toBe('gemini-3.5-flash-lite');
     });
 
     it.each(['', '   '])('vacía (%j) cuenta como sin definir', (value) => {
-        expect(chatModelId(value)).toBe('gemini-2.5-flash');
+        expect(chatModelId(value)).toBe('gemini-3.5-flash-lite');
     });
 
     it('con la variable, ese modelo, sin espacios alrededor', () => {
@@ -38,13 +38,13 @@ describe('chatModelId', () => {
 });
 
 describe('createChatLlm', () => {
-    it('sin GEMINI_CHAT_MODEL pide gemini-2.5-flash', () => {
+    it('sin GEMINI_CHAT_MODEL pide gemini-3.5-flash-lite', () => {
         const { ids, make } = recordingModel();
 
         const llm = createChatLlm(configWith({}), make);
 
         expect(llm).toBeInstanceOf(GeminiChatLlm);
-        expect(ids).toEqual(['gemini-2.5-flash']);
+        expect(ids).toEqual(['gemini-3.5-flash-lite']);
     });
 
     it('con GEMINI_CHAT_MODEL pide ese modelo y lo guarda como modelName', async () => {
@@ -83,6 +83,6 @@ describe('ChatModule', () => {
         const withoutVar = llm!.useFactory(configWith({})) as GeminiChatLlm;
 
         expect(withVar['modelName']).toBe('gemini-3.8-flash');
-        expect(withoutVar['modelName']).toBe('gemini-2.5-flash');
+        expect(withoutVar['modelName']).toBe('gemini-3.5-flash-lite');
     });
 });
