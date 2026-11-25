@@ -80,7 +80,8 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       INVITATION_EMAIL_FROM: ${INVITATION_EMAIL_FROM:-}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
-      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-2.5-flash}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-}
       NODE_EXTRA_CA_CERTS: ${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/rds-global-bundle.pem}
     volumes:
       - ./certs/rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
@@ -148,3 +149,4 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
+  

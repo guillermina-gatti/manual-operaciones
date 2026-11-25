@@ -15,7 +15,7 @@ import {
 // El modelo de chat sale de GEMINI_CHAT_MODEL; sin ella (o vacía), este. Se lee al crear el proveedor
 // (createChatLlm, con ConfigService), no al importar el archivo: a esa altura el .env ya está cargado.
 // El modelo de embeddings es otro y no cambia (processing/adapters/gemini-embedding-provider.ts).
-export const DEFAULT_CHAT_MODEL_ID = 'gemini-2.5-flash';
+export const DEFAULT_CHAT_MODEL_ID = 'gemini-3.5-flash-lite';
 export const CHAT_TIMEOUT_MS = 15_000;
 // Razonamiento bajo en las dos rutas: los modelos de la familia 3 razonan por defecto antes del primer
 // texto, sin mandar partes, y eso puede comerse el corte de 15 s. El SDK lo traduce por familia:
@@ -27,6 +27,12 @@ export function chatModelId(value: string | undefined): string {
     return id ? id : DEFAULT_CHAT_MODEL_ID;
 }
 
+// GEMINI_FALLBACK_MODEL: modelo de respaldo. Sin valor (o vacío), no hay respaldo.
+export function fallbackModelId(value: string | undefined): string | undefined {
+    const id = value?.trim();
+    return id ? id : undefined;
+}
+
 // El ChatLlm de las dos rutas (POST /api/chat y POST /api/chat/stream). makeModel se reemplaza en
 // los tests; en la app es el proveedor de Google.
 export function createChatLlm(
@@ -34,19 +40,30 @@ export function createChatLlm(
     makeModel: (modelId: string) => LanguageModel = (modelId) => google(modelId),
 ): GeminiChatLlm {
     const modelId = chatModelId(config.get<string>('GEMINI_CHAT_MODEL'));
-    return new GeminiChatLlm(makeModel(modelId), modelId);
+    const primary = makeModel(modelId);
+    const backupId = fallbackModelId(config.get<string>('GEMINI_FALLBACK_MODEL'));
+    const fallback: Attempt | undefined =
+        backupId && backupId !== modelId ? { model: makeModel(backupId), modelName: backupId } : undefined;
+    return new GeminiChatLlm(primary, modelId, fallback);
 }
 
-// El SYSTEM_PROMPT de develop (3d3dc15, Guille), dividido en tres partes sin cambiar su texto, para que las
-// reglas de CONFLICT vayan solo con pasajes de al menos dos documentos (spec 011, ajuste del 11/11/2026).
+// El SYSTEM_PROMPT de develop (3d3dc15, Guille), dividido en tres partes para que las reglas de CONFLICT
+// vayan solo con pasajes de al menos dos documentos (spec 011, ajuste del 11/11/2026).
 // Ajuste del 12/11/2026: la línea de la excepción explícita, antes de la de NO_INFO.
+// Ajuste de estilo: respuesta directa primero, formato según el tipo de pregunta y brevedad por defecto.
+// Las marcas [Sn], la frase exacta NO_INFO y las reglas de CONFLICT no cambian: las lee el código.
 const SYSTEM_START = `Sos el asistente de un manual de operaciones. Respondé en español usando solo los pasajes provistos.
-- Los pasajes pueden decir lo mismo con otras palabras (sinónimos, términos más formales o más coloquiales). Buscá el significado de la pregunta, no solo las palabras exactas.
+- Empezá por la respuesta directa a la pregunta, en la primera oración. El detalle va después.
+- Usá lista numerada para pasos de un procedimiento, viñetas para enumeraciones, y negrita para plazos, montos y fechas.
+- Sé breve: por defecto, unas pocas oraciones o una lista corta. Solo ampliá si la pregunta pide detalle.
+- Nombrá el documento de donde sale la respuesta una sola vez, por su título.
 - Cada afirmación debe llevar la marca del pasaje que la respalda, por ejemplo [S1].
 - Copiá tal cual las cifras, plazos, fechas y nombres de los pasajes. No los redondees ni los cambies.
-- Si un pasaje responde solo una parte de la pregunta, respondé esa parte y decí qué falta.
+- Si la pregunta es ambigua (por ejemplo, no dice de qué procedimiento o área habla), pedí la aclaración en una sola línea en vez de responder.
+- Si un pasaje responde solo una parte de la pregunta, respondé esa parte, y en un bloque aparte decí qué falta.
 - Si un pasaje responde directamente lo que se pregunta (nombra el producto, el caso o la persona), respondé con ese pasaje. Una regla general ("cualquier producto") no anula una excepción explícita. Respondé NO_INFO solo si ningún pasaje responde.
-- Si los pasajes no alcanzan para responder, respondé exactamente: NO_INFO`;
+- Si los pasajes no alcanzan para responder, respondé exactamente: NO_INFO
+- No uses frases de cortesía ni de relleno.`;
 
 // Spec 011 (R4): las reglas de la marca, con el texto de develop. Solo con pasajes de al menos dos documentos.
 const CONFLICT_RULES = `- CONFLICT solo si dos pasajes de documentos distintos dan valores o reglas incompatibles para el MISMO concepto que se pregunta (por ejemplo, dos plazos distintos para la misma cosa). Si la marca corresponde, la primera línea de tu respuesta debe ser exactamente: CONFLICT [Sx] [Sy], con las marcas de esos dos pasajes. Después, explicá en pocas líneas qué dice cada uno, citando solo [Sx] y [Sy], sin elegir uno.
@@ -81,10 +98,27 @@ function mayConflict(passages: Passage[]): boolean {
     return new Set(passages.map((p) => p.documentId)).size >= 2;
 }
 
+// Un modelo con su nombre para el log y para modelName.
+interface Attempt {
+    model: LanguageModel;
+    modelName: string;
+}
+
+// Fallo que justifica cambiar al respaldo: el modelo no existe (404), cuota o alta demanda (429) o error
+// del servidor (5xx). Errores de la clave (401/403) o de la petición (400) no cambian con otro modelo.
+// Con reintentos agotados, el SDK envuelve el último error en RetryError: se mira ese.
+export function isRetryableProviderError(error: unknown): boolean {
+    const last = RetryError.isInstance(error) ? error.lastError : error;
+    if (!APICallError.isInstance(last)) return false;
+    const status = last.statusCode;
+    return status === 404 || status === 429 || (status !== undefined && status >= 500);
+}
+
 export class GeminiChatLlm extends ChatLlm {
     constructor(
         private readonly model: LanguageModel,
         private readonly modelName: string,
+        private readonly fallback?: Attempt,
     ) {
         super();
     }
@@ -95,23 +129,18 @@ export class GeminiChatLlm extends ChatLlm {
         context?: StepContext,
         options?: LlmRequestOptions,
     ): Promise<LlmAnswer> {
-        const result = await generateText({
-            model: this.model,
+        // Un solo plazo para el principal y el respaldo: el respaldo no suma tiempo al límite de 15 s.
+        const deadline = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+        const request = {
             system: systemPrompt(passages, options),
             prompt: buildPrompt(question, passages, context),
-            abortSignal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
-            maxRetries: 1,
-            reasoning: CHAT_REASONING,
-            // Misma pregunta, misma respuesta: sin aleatoriedad en el texto.
-            temperature: 0,
-        });
-
-        return {
-            text: result.text.trim(),
-            modelName: this.modelName,
-            inputTokens: result.usage?.inputTokens,
-            outputTokens: result.usage?.outputTokens,
         };
+        try {
+            return await generateAnswer({ model: this.model, modelName: this.modelName }, request, deadline);
+        } catch (error) {
+            if (!this.fallback || deadline.aborted || !isRetryableProviderError(error)) throw error;
+            return generateAnswer(this.fallback, request, deadline);
+        }
     }
 
     // Spec 009 (R13): el mismo modelo, sistema y prompt que answer, en partes. Los tiempos los maneja
@@ -120,6 +149,8 @@ export class GeminiChatLlm extends ChatLlm {
     // Si el pedido se corta, rechaza con LlmCutError, con el último error del proveedor: los errores
     // de cada intento (también los que el SDK reintenta) se anotan envolviendo el modelo. Sin error del
     // proveedor, el LlmCutError dice si Gemini había contestado y qué mandó (solo para el log).
+    // Respaldo (spec GEMINI_FALLBACK_MODEL): si el principal falla con un error que lo justifica y todavía
+    // no mandó texto, se pide el mismo pedido al respaldo. Con texto ya enviado, no se cambia de modelo.
     stream(
         question: string,
         passages: Passage[],
@@ -133,23 +164,28 @@ export class GeminiChatLlm extends ChatLlm {
             if (!isAbort(error) && !signal.aborted) lastProviderError = error;
         };
         const progress = new CutProgress(typeof this.model !== 'string');
-        const result = streamText({
-            model: withErrorTracking(this.model, remember, () => progress.responded()),
-            system: systemPrompt(passages, options),
-            prompt: buildPrompt(question, passages, context),
-            abortSignal: signal,
-            maxRetries: 1,
-            reasoning: CHAT_REASONING,
-            temperature: 0,
-            onError: ({ error }) => remember(error), // el error se lanza desde las partes
-        });
+        const system = systemPrompt(passages, options);
+        const prompt = buildPrompt(question, passages, context);
+        const open = (attempt: Attempt) =>
+            streamText({
+                model: withErrorTracking(attempt.model, remember, () => progress.responded()),
+                system,
+                prompt,
+                abortSignal: signal,
+                maxRetries: 1,
+                reasoning: CHAT_REASONING,
+                temperature: 0,
+                onError: ({ error }) => remember(error), // el error se lanza desde las partes
+            });
+        const attempts: Attempt[] = [{ model: this.model, modelName: this.modelName }];
+        if (this.fallback) attempts.push(this.fallback);
+        const first = open(attempts[0]);
         const cutError = () =>
             new LlmCutError(
                 reasonOf(signal.reason),
                 lastProviderError === undefined ? undefined : describeProviderError(lastProviderError),
                 lastProviderError === undefined ? progress.describe() : undefined,
             );
-        const modelName = this.modelName;
 
         let resolveFinal!: (answer: LlmAnswer) => void;
         let rejectFinal!: (error: unknown) => void;
@@ -162,27 +198,44 @@ export class GeminiChatLlm extends ChatLlm {
         // final se resuelve al terminar de leer las partes.
         async function* parts(): AsyncGenerator<string> {
             let text = '';
+            let emitted = false; // ya salió texto hacia quien consume: no se cambia de modelo
             try {
-                for await (const part of result.fullStream) {
-                    progress.saw(part.type);
-                    if (part.type === 'text-delta') {
-                        text += part.text;
-                        yield part.text;
-                    } else if (part.type === 'error') {
+                for (let index = 0; index < attempts.length; index++) {
+                    const run = index === 0 ? first : open(attempts[index]);
+                    const usedName = attempts[index].modelName;
+                    let failed: { error: unknown } | undefined;
+                    for await (const part of run.fullStream) {
+                        progress.saw(part.type);
+                        if (part.type === 'text-delta') {
+                            emitted = true;
+                            text += part.text;
+                            yield part.text;
+                        } else if (part.type === 'error') {
+                            failed = { error: part.error };
+                            break;
+                        } else if (part.type === 'abort') {
+                            throw cutError();
+                        }
+                    }
+                    if (!failed) {
                         if (signal.aborted) throw cutError();
-                        throw part.error instanceof Error ? part.error : new Error(String(part.error));
-                    } else if (part.type === 'abort') {
-                        throw cutError();
+                        const usage = await run.usage;
+                        resolveFinal({
+                            text: text.trim(),
+                            modelName: usedName,
+                            inputTokens: usage?.inputTokens,
+                            outputTokens: usage?.outputTokens,
+                        });
+                        return;
+                    }
+                    if (signal.aborted) throw cutError();
+                    const canFallBack = !emitted && index + 1 < attempts.length && isRetryableProviderError(failed.error);
+                    if (!canFallBack) {
+                        throw failed.error instanceof Error ? failed.error : new Error(String(failed.error));
                     }
                 }
-                if (signal.aborted) throw cutError();
-                const usage = await result.usage;
-                resolveFinal({
-                    text: text.trim(),
-                    modelName,
-                    inputTokens: usage?.inputTokens,
-                    outputTokens: usage?.outputTokens,
-                });
+                // Inalcanzable: el bucle siempre sale por return o por throw.
+                throw new Error('Sin respuesta del modelo');
             } catch (error) {
                 const failure = signal.aborted && !(error instanceof LlmCutError) ? cutError() : error;
                 rejectFinal(failure);
@@ -192,6 +245,31 @@ export class GeminiChatLlm extends ChatLlm {
 
         return { textStream: parts(), final };
     }
+}
+
+// Una respuesta completa (answer) con un modelo; el plazo es el compartido por el principal y el respaldo.
+async function generateAnswer(
+    attempt: Attempt,
+    request: { system: string; prompt: string },
+    signal: AbortSignal,
+): Promise<LlmAnswer> {
+    const result = await generateText({
+        model: attempt.model,
+        system: request.system,
+        prompt: request.prompt,
+        abortSignal: signal,
+        maxRetries: 1,
+        reasoning: CHAT_REASONING,
+        // Misma pregunta, misma respuesta: sin aleatoriedad en el texto.
+        temperature: 0,
+    });
+
+    return {
+        text: result.text.trim(),
+        modelName: attempt.modelName,
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+    };
 }
 
 // El modelo envuelto: cada intento de doStream que falla se anota (el SDK reintenta por fuera del
