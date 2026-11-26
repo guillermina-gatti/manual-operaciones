@@ -194,17 +194,6 @@ export function UsersAndRolesView({ user, catalog = DEFAULT_MANAGED_USERS }: Use
   return (
     <main className="min-h-full px-4 py-8 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-6xl space-y-6">
-        {/* Breadcrumb */}
-        <nav aria-label="Miga de pan" className="flex items-center gap-2 text-xs text-[#646F6A]">
-          <Link href="/" className="hover:text-[#0B4233] hover:underline">
-            Inicio
-          </Link>
-          <span>/</span>
-          <span className="font-medium text-[#1E2B27]">Administración</span>
-          <span>/</span>
-          <span className="font-semibold text-[#0B4233]">Usuarios y roles a cargo</span>
-        </nav>
-
         {/* Encabezado con título y acción */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

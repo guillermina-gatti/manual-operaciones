@@ -148,7 +148,9 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
         'href',
         '/login',
       );
-      expect(allLinkHrefs()).toEqual(['/login', '/login']);
+      // El logo del encabezado lleva al inicio ('/'); los demás accesos son solo a /login.
+      expect(screen.getByRole('link', { name: 'Ir al inicio' })).toHaveAttribute('href', '/');
+      expect(allLinkHrefs()).toEqual(['/', '/login', '/login']);
       expect(screen.queryByText('Tus herramientas disponibles')).not.toBeInTheDocument();
       expect(screen.queryByText('Tu rol actual')).not.toBeInTheDocument();
     });
@@ -166,7 +168,8 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       ).toBeInTheDocument();
 
       expect(screen.getByText(/Elegí un usuario de prueba en el selector disponible/i)).toBeInTheDocument();
-      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+      // Sin acceso a /login en modo simulado: el único link es el del logo, hacia el inicio.
+      expect(allLinkHrefs()).toEqual(['/']);
       expect(screen.queryByText('Tus herramientas disponibles')).not.toBeInTheDocument();
     });
 
@@ -175,7 +178,7 @@ describe('HomeView — A-10b.3 Home de PispIAr', () => {
       render(<HomeView />);
 
       expect(screen.queryByText('Tus herramientas disponibles')).not.toBeInTheDocument();
-      expect(allLinkHrefs()).toEqual(['/login', '/login']);
+      expect(allLinkHrefs()).toEqual(['/', '/login', '/login']);
     });
 
     test('la animación ambiental respeta prefers-reduced-motion en CSS', () => {

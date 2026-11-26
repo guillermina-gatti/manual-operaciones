@@ -16,6 +16,7 @@ interface ModuleCardConfig {
 
 interface QuickActionConfig {
   id: string;
+  title: string;
   label: string;
   description: string;
   href: string;
@@ -160,6 +161,7 @@ const MODULES_BY_ROLE: Record<Role, readonly ModuleCardConfig[]> = {
 const ADMIN_QUICK_ACTIONS: readonly QuickActionConfig[] = [
   {
     id: 'cargar-documento',
+    title: 'Cargar documento',
     label: '+ Cargar documento →',
     description: 'Subí un nuevo PDF, Markdown o texto al catálogo y asignale áreas y responsable.',
     href: '/documentos/nuevo',
@@ -167,6 +169,7 @@ const ADMIN_QUICK_ACTIONS: readonly QuickActionConfig[] = [
   },
   {
     id: 'por-revisar',
+    title: 'Documentos por revisar',
     label: 'Por revisar →',
     description: 'Revisá los documentos vencidos o próximos a vencer para mantener su frescura.',
     href: '/documentos/por-revisar',
@@ -174,6 +177,7 @@ const ADMIN_QUICK_ACTIONS: readonly QuickActionConfig[] = [
   },
   {
     id: 'alertas',
+    title: 'Alertas del asistente',
     label: 'Alertas →',
     description: 'Revisá los documentos que el asistente encontró contradictorios.',
     href: '/documentos/alertas',
@@ -184,44 +188,64 @@ const ADMIN_QUICK_ACTIONS: readonly QuickActionConfig[] = [
 const FOCUS_RING =
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114]';
 
-const PRIMARY_BUTTON = `inline-flex min-h-12 items-center justify-center rounded-xl bg-[#0B4233] px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-[#1F5848] ${FOCUS_RING}`;
+const PRIMARY_BUTTON = `inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-lg bg-[#0B4233] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1F5848] ${FOCUS_RING}`;
 
-const SECONDARY_BUTTON = `inline-flex min-h-12 items-center justify-center rounded-xl border border-[#0B4233] bg-white px-6 py-3 text-base font-semibold text-[#0B4233] transition-colors hover:bg-[#EEF3F0] ${FOCUS_RING}`;
+const SECONDARY_BUTTON = `inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-lg border border-[#0B4233] bg-white px-4 py-2 text-sm font-semibold text-[#0B4233] transition-colors hover:bg-[#EEF3F0] ${FOCUS_RING}`;
+
+const QUICK_ACTION_ICON_PATHS: Record<string, readonly string[]> = {
+  'cargar-documento': ['M12 16V4', 'm7 9 5-5 5 5', 'M4 20h16'],
+  'por-revisar': ['M12 7v5l3 2', 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z'],
+  alertas: [
+    'M12 9v4',
+    'M12 17h.01',
+    'M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
+  ],
+};
+
+function QuickActionIcon({ id }: { id: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="size-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {(QUICK_ACTION_ICON_PATHS[id] ?? []).map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
+}
 
 function DecorativeLeaves() {
   return (
     <svg
       aria-hidden="true"
       viewBox="0 0 120 56"
-      className="h-12 w-24 shrink-0 select-none"
+      className="h-9 w-[76px] shrink-0 select-none"
       fill="none"
     >
-      <path
-        d="M16 46C16 24 38 10 64 10C64 32 42 46 16 46Z"
-        fill="#1F5848"
-      />
-      <path
-        d="M44 48C44 30 62 16 86 16C86 34 68 48 44 48Z"
-        fill="#2E7D5B"
-      />
-      <path
-        d="M72 50C72 36 86 24 106 24C106 38 92 50 72 50Z"
-        fill="#6FAF86"
-      />
+      <path d="M16 46C16 24 38 10 64 10C64 32 42 46 16 46Z" fill="#1F5848" />
+      <path d="M44 48C44 30 62 16 86 16C86 34 68 48 44 48Z" fill="#2E7D5B" />
+      <path d="M72 50C72 36 86 24 106 24C106 38 92 50 72 50Z" fill="#6FAF86" />
     </svg>
   );
 }
 
 function BrandBadge() {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B4233] px-3 py-1.5 text-sm font-semibold tracking-tight text-white">
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E9E7] bg-white px-2 py-1 text-[11px] font-semibold tracking-tight text-[#0B4233]">
       <span>
         pisp<span className="text-[#E85114]">IA</span>r
       </span>
-      <span aria-hidden="true" className="text-[#6FAF86]">
+      <span aria-hidden="true" className="text-[#9AA5A0]">
         ·
       </span>
-      <span className="font-normal text-[#EEF3F0]">Manual de operaciones</span>
+      <span className="font-normal text-[#6B7671]">Manual de operaciones</span>
     </span>
   );
 }
@@ -253,140 +277,155 @@ export function HomeView() {
   const roleMeta = ROLE_METADATA[user.role];
   const modules = MODULES_BY_ROLE[user.role];
   const quickActions = user.role === 'ADMIN' ? ADMIN_QUICK_ACTIONS : [];
+  const hasQuickActions = quickActions.length > 0;
 
   return (
     <div className="flex-1 bg-[#F6F7F6] text-[#1E2B27]">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:py-12">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6">
         {/* Hero principal */}
         <section
           aria-labelledby="home-hero-heading"
-          className="relative overflow-hidden rounded-2xl border border-[#E6E9E7] bg-white p-6 shadow-sm sm:p-8"
+          className="relative overflow-hidden rounded-2xl border border-[#E6E9E7] bg-white p-5 shadow-sm sm:p-6"
         >
-          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
-            <div className="flex max-w-3xl flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex max-w-3xl flex-col gap-3">
               <div>
                 <BrandBadge />
               </div>
               <h1
                 id="home-hero-heading"
-                className="flex flex-col gap-1 text-3xl font-extrabold tracking-[-0.02em] sm:text-[40px] sm:leading-[1.15]"
+                className="flex flex-col text-2xl font-extrabold tracking-[-0.02em] sm:text-[28px] sm:leading-[1.15]"
               >
                 <span className="text-[#0B4233]">¡Buen día, {user.name}!</span>
                 <span className="text-[#E85114]">
                   ¿Qué procedimiento o documento necesitás hoy?
                 </span>
               </h1>
-              <p className="text-lg text-[#6B7671]">{roleMeta.subtitle}</p>
+              <p className="text-sm text-[#6B7671]">{roleMeta.subtitle}</p>
             </div>
             <DecorativeLeaves />
           </div>
         </section>
 
-        {/* Contenido principal + columna lateral de contexto */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
-          <div className="flex flex-col gap-8 lg:col-span-8">
-              {/* Tarjetas de módulos según rol */}
-              <section aria-labelledby="home-modules-heading" className="flex flex-col gap-4">
-                <h2 id="home-modules-heading" className="text-xl font-bold text-[#0B4233]">
-                  Tus herramientas disponibles
-                </h2>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  {modules.map((mod) => (
-                    <article
-                      key={mod.id}
-                      className="flex flex-col justify-between rounded-2xl border border-[#E6E9E7] bg-white p-6 shadow-sm sm:p-8"
-                    >
-                      <div className="flex flex-col gap-2">
-                        <span className="text-sm font-semibold text-[#E85114]">{mod.subtitle}</span>
-                        <h3 className="text-[22px] font-bold text-[#0B4233]">{mod.title}</h3>
-                        <p className="mt-1 text-base text-[#6B7671]">{mod.description}</p>
-                      </div>
-                      <div className="mt-6 pt-2">
-                        <Link href={mod.href} className={PRIMARY_BUTTON}>
-                          {mod.ctaLabel}
-                        </Link>
-                      </div>
-                    </article>
-                  ))}
+        {/* Herramientas según rol: una fila a todo el ancho */}
+        <section aria-labelledby="home-modules-heading" className="flex flex-col gap-3">
+          <h2 id="home-modules-heading" className="text-sm font-semibold text-[#0B4233]">
+            Tus herramientas disponibles
+          </h2>
+          <div
+            className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+              modules.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+            }`}
+          >
+            {modules.map((mod) => (
+              <article
+                key={mod.id}
+                className="flex flex-col justify-between gap-4 rounded-2xl border border-[#E6E9E7] bg-white p-4 shadow-sm"
+              >
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-[#E85114]">{mod.subtitle}</span>
+                  <h3 className="text-lg font-bold text-[#0B4233]">{mod.title}</h3>
+                  <p className="text-[13px] leading-relaxed text-[#6B7671]">{mod.description}</p>
                 </div>
-              </section>
-
-              {/* Acciones rápidas exclusivas cuando correspondan al rol */}
-              {quickActions.length > 0 && (
-                <section
-                  aria-labelledby="home-quick-actions-heading"
-                  className="flex flex-col gap-4 rounded-2xl border border-[#E6E9E7] bg-white p-6 shadow-sm sm:p-8"
-                >
-                  <div>
-                    <h2
-                      id="home-quick-actions-heading"
-                      className="text-[22px] font-bold text-[#0B4233]"
-                    >
-                      Acciones rápidas de administración
-                    </h2>
-                    <p className="mt-1 text-sm text-[#6B7671]">
-                      Atajos directos para mantener el catálogo actualizado y al día.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {quickActions.map((action) => (
-                      <div
-                        key={action.id}
-                        className="flex flex-col justify-between gap-4 rounded-xl border border-[#E6E9E7] bg-[#F6F7F6] p-4"
-                      >
-                        <p className="text-sm text-[#6B7671]">{action.description}</p>
-                        <div>
-                          <Link
-                            href={action.href}
-                            className={
-                              action.variant === 'primary' ? PRIMARY_BUTTON : SECONDARY_BUTTON
-                            }
-                          >
-                            {action.label}
-                          </Link>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+                <div>
+                  <Link href={mod.href} className={PRIMARY_BUTTON}>
+                    {mod.ctaLabel}
+                  </Link>
+                </div>
+              </article>
+            ))}
           </div>
+        </section>
 
-          {/* Columna lateral derecha: Rol actual + Tip del hornero */}
-          <aside aria-label="Contexto y ayuda" className="flex flex-col gap-6 lg:col-span-4">
+        {/* Acciones rápidas (solo administración) + contexto del rol */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {hasQuickActions && (
+            <section
+              aria-labelledby="home-quick-actions-heading"
+              className="flex flex-col gap-3 rounded-2xl border border-[#E6E9E7] bg-white p-4 shadow-sm sm:p-5 lg:col-span-8"
+            >
+              <div>
+                <h2 id="home-quick-actions-heading" className="text-base font-bold text-[#0B4233]">
+                  Acciones rápidas de administración
+                </h2>
+                <p className="mt-0.5 text-xs text-[#6B7671]">
+                  Atajos directos para mantener el catálogo actualizado y al día.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                {quickActions.map((action) => (
+                  <div
+                    key={action.id}
+                    className="flex flex-col gap-3 rounded-xl border border-[#E6E9E7] bg-[#F6F7F6] p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#EEF3F0] text-[#0B4233]"
+                      >
+                        <QuickActionIcon id={action.id} />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-bold text-[#0B4233]">{action.title}</h3>
+                        <p className="text-xs leading-relaxed text-[#6B7671]">
+                          {action.description}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0">
+                      <Link
+                        href={action.href}
+                        className={action.variant === 'primary' ? PRIMARY_BUTTON : SECONDARY_BUTTON}
+                      >
+                        {action.label}
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Rol actual + Tip del hornero */}
+          <aside
+            aria-label="Contexto y ayuda"
+            className={
+              hasQuickActions
+                ? 'flex flex-col gap-4 lg:col-span-4'
+                : 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-12'
+            }
+          >
             <section
               aria-labelledby="home-role-card-heading"
-              className="rounded-2xl border border-[#E6E9E7] bg-white p-6 shadow-sm sm:p-8"
+              className="rounded-2xl border border-[#E6E9E7] bg-white p-4 shadow-sm"
             >
-              <p className="text-sm font-medium text-[#6B7671]">Tu rol actual</p>
-              <div className="mt-2 flex items-center gap-2.5">
+              <p className="text-xs font-medium text-[#6B7671]">Tu rol actual</p>
+              <div className="mt-1.5 flex items-center gap-2">
                 <span
                   aria-hidden="true"
-                  className="inline-block h-2.5 w-2.5 rounded-full bg-[#18894C]"
+                  className="inline-block size-2 rounded-full bg-[#18894C]"
                 />
-                <h2 id="home-role-card-heading" className="text-[22px] font-bold text-[#0B4233]">
+                <h2 id="home-role-card-heading" className="text-lg font-bold text-[#0B4233]">
                   {roleMeta.label}
                 </h2>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-[#6B7671]">{roleMeta.summary}</p>
+              <p className="mt-2 text-xs leading-relaxed text-[#6B7671]">{roleMeta.summary}</p>
             </section>
 
             <section
               aria-labelledby="home-hornero-tip-heading"
-              className="rounded-2xl border border-[#E6E9E7] bg-[#EEF3F0] p-6 sm:p-8"
+              className="rounded-2xl border border-[#E6E9E7] bg-[#EEF3F0] p-4"
             >
               <div className="flex items-center gap-2">
                 <span
                   aria-hidden="true"
-                  className="inline-block h-2.5 w-2.5 rounded-full bg-[#E85114]"
+                  className="inline-block size-2 rounded-full bg-[#E85114]"
                 />
-                <h2 id="home-hornero-tip-heading" className="text-lg font-bold text-[#0B4233]">
+                <h2 id="home-hornero-tip-heading" className="text-sm font-bold text-[#0B4233]">
                   Tip del hornero
                 </h2>
               </div>
-              <p className="mt-3 text-base leading-relaxed text-[#1E2B27]">
-                {roleMeta.horneroTip}
-              </p>
+              <p className="mt-2 text-xs leading-relaxed text-[#1E2B27]">{roleMeta.horneroTip}</p>
             </section>
           </aside>
         </div>

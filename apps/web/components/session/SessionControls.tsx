@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { AssistantFloatingButton } from '@/components/navigation/AssistantFloatingButton';
 import { Sidebar } from '@/components/navigation/Sidebar';
 import { TopBar } from '@/components/navigation/TopBar';
 import { REAL_AUTH_ENABLED, useSession } from '@/lib/session';
@@ -113,6 +114,9 @@ export function SessionControls({ children }: { children?: React.ReactNode }) {
         )}
         <div className="flex-1">{children}</div>
       </div>
+
+      {/* Botón flotante para ir al asistente, en todas las pantallas con sesión */}
+      <AssistantFloatingButton />
     </div>
   );
 }

@@ -20,8 +20,8 @@ const apiError = (statusCode: number) =>
     });
 
 const okResult = (text: string) => ({
-    content: [{ type: 'text', text }],
-    finishReason: { unified: 'stop', raw: undefined },
+    content: [{ type: 'text' as const, text }],
+    finishReason: { unified: 'stop' as const, raw: undefined },
     usage: {
         inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
         outputTokens: { total: 1, text: 1, reasoning: undefined },

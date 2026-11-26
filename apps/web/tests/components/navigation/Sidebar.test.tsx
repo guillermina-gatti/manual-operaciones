@@ -145,17 +145,7 @@ describe('Sidebar (diseño v2)', () => {
     });
   });
 
-  describe('tarjeta del hornero y perfil de usuario', () => {
-    test('la tarjeta de ayuda lleva a /asistente con el texto "¿Dudas? Preguntale al hornero"', () => {
-      const user: SessionUser = { id: 'emp-1', name: 'Elena Díaz', role: 'EMPLOYEE' };
-      render(<Sidebar user={user} onLogout={onLogout} onNavigate={onNavigate} />);
-
-      const card = screen.getByRole('link', { name: 'Preguntale al asistente' });
-      expect(card).toHaveAttribute('href', '/asistente');
-      expect(card).toHaveTextContent('¿Dudas?');
-      expect(card).toHaveTextContent('Preguntale al hornero');
-    });
-
+  describe('perfil de usuario', () => {
     test('muestra las iniciales en el avatar y la descripción del usuario', () => {
       const user: SessionUser = { id: 'emp-1', name: 'Elena Díaz', role: 'EMPLOYEE' };
       render(<Sidebar user={user} onLogout={onLogout} onNavigate={onNavigate} />);
