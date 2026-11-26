@@ -5,8 +5,15 @@ import { HEADER_BUTTON } from './design';
 export function ChatHeader({ onNewConversation }: { onNewConversation: () => void }) {
   return (
     <header className="flex shrink-0 flex-wrap items-center gap-4 rounded-t-2xl bg-bosque px-6 py-5">
-      {/* eslint-disable-next-line @next/next/no-img-element -- SVG chico y estático: no necesita optimización */}
-      <img src="/logo-hornero.svg" alt="" aria-hidden="true" width={48} height={48} className="size-12 shrink-0 rounded-xl" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- imagen chica y estática */}
+      <img
+        src="/hornero-landing.png"
+        alt=""
+        aria-hidden="true"
+        width={48}
+        height={48}
+        className="size-12 shrink-0 rounded-xl object-contain"
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <h1 className="text-2xl font-extrabold tracking-[-0.02em] text-blanco">El hornero</h1>
         <p className="text-sm text-salvia">Responde solo con lo vigente de tus áreas y cita la fuente</p>

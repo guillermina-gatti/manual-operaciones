@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { FIXTURE_USERS } from '@/lib/directory/fixtures';
 import type { Role, SessionUser } from '@/lib/session';
 
@@ -217,19 +217,26 @@ function BuildingIcon({ className = 'size-5' }: { className?: string }) {
   );
 }
 
+function ChevronIcon({ direction, className = 'size-5' }: { direction: 'left' | 'right'; className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {direction === 'left' ? <path d="m15 18-6-6 6-6" /> : <path d="m9 18 6-6-6-6" />}
+    </svg>
+  );
+}
+
 const NAV_ITEMS: readonly NavItemConfig[] = [
-  {
-    id: 'inicio',
-    label: 'Inicio',
-    href: '/',
-    icon: HomeIcon,
-  },
-  {
-    id: 'documentos',
-    label: 'Documentos',
-    href: '/documentos',
-    icon: DocumentsIcon,
-  },
+  { id: 'inicio', label: 'Inicio', href: '/', icon: HomeIcon },
+  { id: 'documentos', label: 'Documentos', href: '/documentos', icon: DocumentsIcon },
   {
     id: 'procedimientos',
     label: 'Procedimientos',
@@ -272,19 +279,8 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
     roles: ['ADMIN'],
     icon: InviteIcon,
   },
-  {
-    id: 'areas',
-    label: 'Áreas',
-    href: '/admin/areas',
-    roles: ['ADMIN'],
-    icon: BuildingIcon,
-  },
-  {
-    id: 'asistente',
-    label: 'Asistente',
-    href: '/asistente',
-    icon: AssistantIcon,
-  },
+  { id: 'areas', label: 'Áreas', href: '/admin/areas', roles: ['ADMIN'], icon: BuildingIcon },
+  { id: 'asistente', label: 'Asistente', href: '/asistente', icon: AssistantIcon },
 ];
 
 export function getInitials(name: string): string {
@@ -346,36 +342,56 @@ function activeHrefOf(items: readonly NavItemConfig[], pathname: string): string
 export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const navId = useId();
+  const [collapsed, setCollapsed] = useState(false);
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(user.role),
-  );
+  const visibleItems = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user.role));
   const activeHref = activeHrefOf(visibleItems, pathname);
 
   const initials = getInitials(user.name);
   const roleDescription = formatUserRole(user);
 
+  // La versión contraída solo aplica en escritorio (md en adelante).
+  // En el cajón del celular la barra siempre se ve completa.
+  const hideText = collapsed ? 'md:sr-only' : '';
+
   return (
     <aside
       aria-label="Navegación principal"
-      className="flex h-full w-64 lg:w-72 flex-col justify-between bg-[#0B4233] p-5 text-white select-none shrink-0"
+      className={`flex h-full w-64 shrink-0 flex-col justify-between gap-6 bg-[#0B4233] p-5 text-white select-none transition-[width] duration-200 ${collapsed ? 'md:w-24' : 'lg:w-72'
+        }`}
     >
       <div className="flex flex-col gap-6">
+        {/* Botón para contraer y expandir (solo escritorio) */}
+        <div className={`hidden md:flex ${collapsed ? 'md:justify-center' : 'md:justify-end'}`}>
+          <button
+            type="button"
+            onClick={() => setCollapsed((value) => !value)}
+            aria-expanded={!collapsed}
+            aria-controls={navId}
+            aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}
+            title={collapsed ? 'Expandir menú' : 'Contraer menú'}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#E85114] text-white shadow-xs transition-colors hover:bg-[#cf4610] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114]"
+          >
+            <ChevronIcon direction={collapsed ? 'right' : 'left'} className="size-4" />
+          </button>
+        </div>
+
         {/* Logo de marca */}
         <Link
           href="/"
           onClick={onNavigate}
-          className="flex items-center gap-3 rounded-xl px-2 py-2 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114]"
+          className={`inline-flex items-center gap-2 self-start rounded-lg bg-black/30 pl-2 pr-4 py-1.5 transition-colors active:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114] ${collapsed ? 'md:flex md:w-full md:self-stretch md:justify-center md:gap-0 md:px-0' : ''
+            }`}
         >
           <Image
             src="/hornero-landing.png"
             alt=""
             width={34}
             height={44}
-            className="h-10 w-auto object-contain shrink-0"
+            className="h-10 w-auto shrink-0 object-contain"
             priority
           />
-          <span className="text-2xl font-extrabold tracking-tight text-white">
+          <span className={`text-2xl font-extrabold tracking-tight text-white ${hideText}`}>
             pisp<span className="text-[#E85114]">IA</span>r
           </span>
         </Link>
@@ -394,11 +410,12 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
                     onClick={onNavigate}
                     aria-current={active ? 'page' : undefined}
                     aria-label={item.id === 'invitaciones' ? 'Invitar usuario' : undefined}
-                    className={`relative flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114] ${
-                      active
+                    title={collapsed ? item.label : undefined}
+                    className={`relative flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114] ${collapsed ? 'md:justify-center md:gap-0 md:px-0' : ''
+                      } ${active
                         ? 'bg-[#135040] font-semibold text-white'
                         : 'text-[#9CC0B6] hover:bg-white/10 hover:text-white'
-                    }`}
+                      }`}
                   >
                     {active && (
                       <span
@@ -407,7 +424,7 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
                       />
                     )}
                     <Icon className="size-5 shrink-0" />
-                    <span>{item.label}</span>
+                    <span className={hideText}>{item.label}</span>
                   </Link>
                 </li>
               );
@@ -416,60 +433,39 @@ export function Sidebar({ user, onLogout, pendingLogout = false, onNavigate }: S
         </nav>
       </div>
 
-      <div className="flex flex-col gap-4">
-        {/* Tarjeta ¿Dudas? Preguntale al hornero */}
-        <Link
-          href="/asistente"
-          onClick={onNavigate}
-          aria-label="Preguntale al asistente"
-          className="relative flex items-center gap-3 overflow-hidden rounded-2xl bg-[#135040] p-3.5 transition-colors hover:bg-[#185d4b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114]"
+      {/* Separador y perfil de usuario */}
+      <div className="border-t border-[#135040]/70 pt-4">
+        <div
+          className={`flex items-center justify-between gap-3 ${collapsed ? 'md:flex-col md:justify-center' : ''
+            }`}
         >
-          <div className="relative -ml-1 size-12 shrink-0">
-            <Image
-              src="/hornero-landing.png"
-              alt=""
-              width={48}
-              height={56}
-              className="absolute bottom-0 left-0 h-14 w-auto max-w-none object-contain"
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-[#9CC0B6]">¿Dudas?</p>
-            <p className="text-sm font-bold leading-tight text-white">Preguntale al hornero</p>
-          </div>
-        </Link>
-
-        {/* Separador y perfil de usuario */}
-        <div className="border-t border-[#135040]/70 pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#E85114] text-sm font-bold text-white shadow-xs"
-              >
-                {initials}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-white" title={user.name}>
-                  {user.name}
-                </p>
-                <p className="truncate text-xs text-[#9CC0B6]" title={roleDescription}>
-                  {roleDescription}
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void onLogout()}
-              disabled={pendingLogout}
-              aria-label="Cerrar sesión"
-              title="Cerrar sesión"
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#9CC0B6] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114] disabled:opacity-50"
+          <div className={`flex min-w-0 items-center gap-3 ${collapsed ? 'md:justify-center' : ''}`}>
+            <span
+              aria-hidden="true"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#E85114] text-sm font-bold text-white shadow-xs"
             >
-              <LogoutIcon />
-            </button>
+              {initials}
+            </span>
+            <div className={`min-w-0 flex-1 ${hideText}`}>
+              <p className="truncate text-sm font-bold text-white" title={user.name}>
+                {user.name}
+              </p>
+              <p className="truncate text-xs text-[#9CC0B6]" title={roleDescription}>
+                {roleDescription}
+              </p>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => void onLogout()}
+            disabled={pendingLogout}
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#9CC0B6] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114] disabled:opacity-50"
+          >
+            <LogoutIcon />
+          </button>
         </div>
       </div>
     </aside>

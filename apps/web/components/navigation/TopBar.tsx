@@ -13,6 +13,9 @@ import { formatUserRole, getInitials } from './Sidebar';
 interface TopBarProps {
   user: SessionUser;
   onOpenMobileMenu: () => void;
+  // Panel izquierdo de escritorio: sin onToggleSidebar, no se muestra el botón.
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 const describeOpen = (total: number) =>
@@ -51,6 +54,24 @@ function MenuIcon({ className = 'size-6' }: { className?: string }) {
       <line x1="4" y1="12" x2="20" y2="12" />
       <line x1="4" y1="6" x2="20" y2="6" />
       <line x1="4" y1="18" x2="20" y2="18" />
+    </svg>
+  );
+}
+
+function SidebarIcon({ className = 'size-5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <path d="M9 4v16" />
     </svg>
   );
 }
@@ -137,7 +158,7 @@ const DEV_FIXTURES = [
   { id: FIXTURE_USERS.empleadoVentas.id, name: 'Elena', role: 'EMPLOYEE' as const },
 ];
 
-export function TopBar({ user, onOpenMobileMenu }: TopBarProps) {
+export function TopBar({ user, onOpenMobileMenu, sidebarOpen = true, onToggleSidebar }: TopBarProps) {
   const currentShortName =
     DEV_FIXTURES.find((f) => f.id === user.id)?.name ||
     ROLE_SHORT_NAMES[user.role] ||
@@ -147,7 +168,7 @@ export function TopBar({ user, onOpenMobileMenu }: TopBarProps) {
   const roleDescription = formatUserRole(user);
 
   return (
-    <header className="flex h-16 w-full items-center justify-between border-b border-[#E6E9E7]/60 bg-transparent px-4 sm:px-6">
+    <header className="mt-4 flex h-16 w-full items-center justify-between border-b border-[#E6E9E7]/60 bg-transparent px-4 sm:px-6">
       {/* Botón hamburguesa en móvil */}
       <div className="flex items-center gap-3 md:hidden">
         <button
@@ -163,7 +184,21 @@ export function TopBar({ user, onOpenMobileMenu }: TopBarProps) {
         </span>
       </div>
 
-      <div className="hidden md:block" />
+      {/* Botón para desplegar u ocultar el panel izquierdo (escritorio) */}
+      <div className="hidden md:flex">
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            aria-label={sidebarOpen ? 'Ocultar panel lateral' : 'Mostrar panel lateral'}
+            aria-expanded={sidebarOpen}
+            title={sidebarOpen ? 'Ocultar panel lateral' : 'Mostrar panel lateral'}
+            className="flex size-10 items-center justify-center rounded-xl border border-[#E6E9E7] bg-white text-[#646F6A] shadow-xs transition-colors hover:bg-[#EEF3F0] hover:text-[#1E2B27] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E85114]"
+          >
+            <SidebarIcon className="size-5" />
+          </button>
+        )}
+      </div>
 
       {/* Acciones superiores derechas: Ver como + Campana de Alertas + Perfil de usuario */}
       <div className="flex items-center gap-3">

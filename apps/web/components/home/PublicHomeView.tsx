@@ -36,18 +36,24 @@ export function PublicHomeView() {
       <header className="border-b border-borde bg-blanco">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <Image
-              src="/hornero-landing.png"
-              alt=""
-              width={32}
-              height={38}
-              aria-hidden="true"
-              className="h-8 w-auto object-contain"
-              priority
-            />
-            <span className="text-lg font-extrabold tracking-tight text-bosque">
-              pisp<span className="text-naranja">IA</span>r
-            </span>
+            <Link
+              href="/"
+              aria-label="Ir al inicio"
+              className="flex items-center gap-2.5 rounded-xl border border-borde px-3 py-1.5 transition-colors hover:bg-fondo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-naranja"
+            >
+              <Image
+                src="/hornero-landing.png"
+                alt=""
+                width={32}
+                height={38}
+                aria-hidden="true"
+                className="h-8 w-auto object-contain"
+                priority
+              />
+              <span className="text-lg font-extrabold tracking-tight text-bosque">
+                pisp<span className="text-naranja">IA</span>r
+              </span>
+            </Link>
             <span className="hidden text-sm text-texto-suave sm:inline">
               · Manual de operaciones
             </span>
